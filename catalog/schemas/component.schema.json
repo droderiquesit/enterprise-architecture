@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "component.schema.json",
+  "title": "Component registry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "components"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "layer",
+          "kind",
+          "path"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,62}$"
+          },
+          "layer": {
+            "enum": [
+              "bootstrap",
+              "foundation",
+              "platform",
+              "applications",
+              "observability",
+              "docs"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "terraform",
+              "artifact",
+              "docs"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "pipeline": {
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "default": "auto"
+          },
+          "produces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "consumes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "optional_consumes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifact": {
+            "type": "object",
+            "required": [
+              "type",
+              "name"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "container-image",
+                  "zip-package",
+                  "static-bundle"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "also": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "container-image",
+                    "zip-package",
+                    "static-bundle"
+                  ]
+                }
+              }
+            }
+          },
+          "inputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "all",
+                "minimal",
+                "enterprise",
+                "full",
+                "specialized",
+                "observability-only",
+                "custom"
+              ]
+            }
+          },
+          "catalog_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "discovers_resources": {
+            "type": "boolean"
+          },
+          "after_deployments": {
+            "type": "boolean"
+          },
+          "timeout_minutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 360
+          }
+        }
+      }
+    }
+  }
+}

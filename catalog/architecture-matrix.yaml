@@ -1,0 +1,173 @@
+# Deliberate compute-architecture -> workload and database -> workload mapping.
+# Avoids a compute x database Cartesian product: every architecture runs one real workload and
+# every database family receives real operations from at least one owner service.
+# Columns completed per entry: workload, artifact, runtime_config, data, telemetry, smoke, rollback.
+schema_version: 1
+messaging:
+  service_bus:
+    topic: order-events
+    subscriptions:
+      fulfillment: {consumer: hello-durable, purpose: start OrderProcessing orchestration}
+      notifications: {consumer: hello-worker, purpose: write notification record to Table Storage}
+      audit: {consumer: hello-functions, purpose: append audit entry to Confidential Ledger (or Table Storage when ledger disabled)}
+    queues:
+      batch-items: {consumer: hello-jobs (ACA event-driven job), producers: [hello-durable BatchProcessing, logic-apps-consumption]}
+architectures:
+  aks:
+    workloads: [hello-bff, hello-orders-api, hello-catalog-api, hello-worker]
+    deployment: deploy-core-aks
+    artifact: container-image
+    runtime_config: Kubernetes Deployment env + workload identity ServiceAccount
+    telemetry: {logs: fluent-bit-daemonset, traces: datadog-agent-otlp (hostPort 4317 via node IP), metrics: datadog-agent + otel}
+    smoke: GET /readyz via in-cluster job + public ingress /api/healthz
+    rollback: re-apply previous image digest (Deployment rolling update)
+  container-apps-consumption:
+    workloads: [hello-bff, hello-orders-api, hello-catalog-api, hello-dbadapter-*]
+    deployment: [deploy-core-aca, deploy-dbadapters]
+    artifact: container-image
+    runtime_config: container app env + secret refs (Key Vault) + user-assigned identity
+    telemetry: {logs: fluent-bit-sidecar (shared EmptyDir file), traces: otel-gateway (ACA internal), metrics: azure-integration + otel}
+    smoke: GET /readyz on revision FQDN
+    rollback: shift traffic to previous revision (multiple revision mode)
+  container-apps-dedicated:
+    workloads: [hello-dbadapter-sqlmi, hello-dbadapter-redis, obs-otel-gateway, obs-fluentbit-aggregator]
+    deployment: [deploy-dbadapters, obs-telemetry-transport]
+    artifact: container-image
+    runtime_config: workload_profile_name = "dedicated-d4"
+    telemetry: same as consumption
+    smoke: GET /readyz
+    rollback: previous revision
+  container-apps-job-manual:
+    workloads: [hello-jobs seed]
+    deployment: deploy-jobs
+    smoke: start job execution, wait for Succeeded
+    rollback: previous image digest
+  container-apps-job-scheduled:
+    workloads: [hello-jobs reconcile-trigger, hello-traffic]
+    deployment: deploy-jobs
+    smoke: execution history shows Succeeded within schedule window
+    rollback: previous image digest
+  container-apps-job-event:
+    workloads: [hello-jobs batch-item-processor (KEDA azure-servicebus scaler on batch-items)]
+    deployment: deploy-jobs
+    smoke: enqueue message, wait for execution Succeeded and record written
+    rollback: previous image digest
+  container-instances:
+    workloads: [hello-partner-sim]
+    deployment: deploy-partner-sim
+    artifact: container-image
+    telemetry: {logs: fluent-bit-sidecar (shared emptyDir volume), traces: otel-gateway}
+    smoke: GET /readyz from VNet (private IP)
+    rollback: recreate container group with previous digest
+  app-service-linux-code:
+    workloads: [hello-dbadapter-mysql]
+    deployment: deploy-dbadapters
+    artifact: zip-package
+    telemetry: {logs: AppServiceConsoleLogs -> Event Hubs -> fluent-bit-aggregator, traces: otel-gateway via VNet integration}
+    rollback: staging slot swap back (Standard+ SKUs) else redeploy previous zip
+  app-service-linux-container:
+    workloads: [hello-dbadapter-redis-appsvc (optional), hello-catalog-api-container (optional)]
+    deployment: deploy-appservice
+    artifact: container-image
+    rollback: slot swap / previous digest
+  app-service-windows-code:
+    workloads: [hello-inventory-api]
+    deployment: deploy-appservice
+    artifact: zip-package
+    data: cosmos-nosql (inventory db)
+    rollback: slot swap
+  app-service-windows-container:
+    workloads: [hello-inventory-api (windows container)]
+    deployment: deploy-appservice
+    status_default: disabled   # Premium v3 Windows container plan cost
+  functions-flex-consumption:
+    workloads: [hello-durable (OrderProcessing, BatchProcessing, Reconciliation)]
+    deployment: deploy-durable
+    artifact: zip-package (blob container deployment)
+    telemetry: {logs: FunctionAppLogs -> Event Hubs -> fluent-bit-aggregator, traces: OTel SDK -> otel-gateway}
+    rollback: redeploy previous package (no slots on Flex)
+  functions-premium:
+    workloads: [hello-functions audit (Service Bus subscription trigger)]
+    deployment: deploy-functions
+    artifact: zip-package
+  functions-dedicated:
+    workloads: [hello-functions cache-warmer (timer)]
+    deployment: deploy-functions
+  functions-consumption-windows:
+    workloads: [hello-durable Reconciliation only (.NET isolated; Python unsupported on Windows)]
+    deployment: deploy-durable
+    note: Windows Consumption is legacy-but-supported; Linux Consumption is retiring 2028-09-30 and is cataloged as legacy/disabled.
+  functions-on-container-apps:
+    workloads: [hello-functions http quote (container image)]
+    deployment: deploy-functions
+  durable-functions:
+    workloads: [hello-durable]
+  static-web-apps:
+    workloads: [hello-frontend]
+    deployment: deploy-frontend
+    artifact: static-bundle + runtime config.json
+    rollback: redeploy previous bundle
+  logic-apps-consumption:
+    workloads: [hourly batch request -> Service Bus batch-items]
+    deployment: deploy-logicapps
+  logic-apps-standard:
+    workloads: [order-events audit-archive workflow -> Blob Storage]
+    deployment: deploy-logicapps
+  vm-linux:
+    workloads: [hello-worker (systemd)]
+    deployment: deploy-vm-workloads
+    artifact: zip-package via VM run command
+    telemetry: {logs: fluent-bit service tail, traces: datadog-agent OTLP localhost:4317, metrics: datadog-agent}
+    rollback: run command installs previous package
+  vm-windows:
+    workloads: [hello-inventory-api (Windows service)]
+    deployment: deploy-vm-workloads
+  vmss-flexible:
+    workloads: [hello-worker]
+    deployment: deploy-vm-workloads
+    rollback: rolling run-command reinstall of previous package
+  vmss-uniform:
+    workloads: [hello-dbadapter-sqlvm]
+    deployment: deploy-vm-workloads
+    rollback: model update with previous package version + rolling upgrade
+  batch:
+    workloads: [hello-jobs daily-aggregate task]
+    deployment: deploy-jobs
+  service-fabric-managed:
+    workloads: [hello-inventory-api guest executable]
+    deployment: deploy-specialized
+  aro:
+    workloads: [hello-catalog-api]
+    deployment: deploy-specialized
+  vm-confidential:
+    workloads: [hello-worker]
+    deployment: deploy-specialized
+  automation:
+    workloads: [health-probe runbook]
+    deployment: deploy-specialized
+databases:
+  sql-database-provisioned: {owner: hello-orders-api, boundary: "db orders / schema orders", also: [hello-dbadapter-sql]}
+  sql-database-serverless: {owner: hello-durable, boundary: "db fulfillment / schemas fulfillment", also: [hello-jobs]}
+  sql-elastic-pool: {owner: hello-dbadapter-sql-pool, boundary: "db adapter_pool", default: disabled}
+  sql-hyperscale: {owner: hello-dbadapter-sql-hyperscale, boundary: "db adapter_hs", default: disabled}
+  sql-managed-instance: {owner: hello-dbadapter-sqlmi, boundary: "db adapter"}
+  sql-server-on-vm: {owner: hello-dbadapter-sqlvm, boundary: "db adapter"}
+  postgresql-flexible: {owner: hello-catalog-api, boundary: "db catalog", also: [hello-dbadapter-postgresql (db adapter)]}
+  postgresql-elastic-cluster: {owner: hello-dbadapter-postgresql-elastic, boundary: "distributed table adapter.records"}
+  mysql-flexible: {owner: hello-dbadapter-mysql, boundary: "db adapter"}
+  cosmos-nosql: {owner: hello-inventory-api, boundary: "db inventory / container items", also: [hello-dbadapter-cosmos-nosql (container adapter)]}
+  cosmos-mongodb-ru: {owner: hello-dbadapter-cosmos-mongo, boundary: "db adapter / collection records"}
+  cosmos-cassandra: {owner: hello-dbadapter-cosmos-cassandra, boundary: "keyspace adapter"}
+  cosmos-gremlin: {owner: hello-dbadapter-cosmos-gremlin, boundary: "db adapter / graph records"}
+  cosmos-table: {owner: hello-dbadapter-cosmos-table, boundary: "table adapterrecords"}
+  documentdb: {owner: hello-dbadapter-documentdb, boundary: "db adapter / collection records"}
+  managed-cassandra: {owner: hello-dbadapter-cassandra-mi, boundary: "keyspace adapter"}
+  managed-redis: {owner: hello-catalog-api (cache-aside, not durable), boundary: "key prefix catalog:", also: [hello-dbadapter-redis (key prefix adapter:)]}
+  table-storage: {owner: hello-worker, boundary: "table notifications", also: [hello-dbadapter-table-storage (table adapterrecords)]}
+  confidential-ledger: {owner: hello-functions audit, boundary: "collection order-audit", also: [hello-dbadapter-ledger]}
+  horizondb: {owner: hello-dbadapter-horizondb, boundary: "db adapter", default: blocked-unless-preview-access}
+  data-explorer: {owner: hello-dbadapter-adx, boundary: "database adapter / table Records"}
+  ai-search: {owner: hello-dbadapter-search, boundary: "index adapter-records"}
+  blob-storage: {owner: hello-dbadapter-blob, boundary: "container adapter"}
+  adls-gen2: {owner: hello-dbadapter-adls, boundary: "filesystem adapter"}
+  synapse-sql: {owner: none, default: cataloged-only}

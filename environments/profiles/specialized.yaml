@@ -1,0 +1,40 @@
+# Deployment profile: specialized
+# Generated initially from the component registry; this file is canonical.
+profile: specialized
+description: Expensive, restricted, partner or preview services. Explicit opt-in; each entry needs its prerequisites satisfied.
+expensive: true
+requires_confirmation: true
+components:
+- foundation-network
+- foundation-identity
+- foundation-governance
+- foundation-deploy-agents
+- platform-shared
+- platform-servicefabric
+- platform-aro
+- platform-specialized-compute
+- platform-db-sqlmi
+- platform-db-cassandra-mi
+- platform-db-horizondb
+- obs-prereqs
+- obs-azure-integration
+- obs-telemetry-transport
+- obs-diagnostics
+- obs-monitoring
+- deploy-specialized
+- svc-catalog-api
+- svc-inventory-api
+- svc-jobs
+features:
+  topology: hub-spoke
+  egress: nat-gateway
+  firewall: true
+  bastion: true
+  app_gateway: true
+  front_door: false
+  apim: false
+  service_bus_sku: Premium
+  private_endpoints: true
+  session_replay: false
+  rum_session_sample_rate: 50
+  trace_sample_rate: 0.5

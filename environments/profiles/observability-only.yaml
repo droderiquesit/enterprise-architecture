@@ -1,0 +1,12 @@
+# Deployment profile: observability-only
+# Generated initially from the component registry; this file is canonical.
+profile: observability-only
+description: Monitoring applied to existing resources; deploys no sample applications or lab infrastructure.
+expensive: false
+requires_confirmation: false
+components:
+- obs-prereqs
+- obs-azure-integration
+- obs-monitoring
+features:
+  deploy_lab_infrastructure: false

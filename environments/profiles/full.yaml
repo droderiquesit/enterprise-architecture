@@ -1,0 +1,159 @@
+# Deployment profile: full
+# Generated initially from the component registry; this file is canonical.
+profile: full
+description: Every implemented and eligible catalog entry, deployed in groups (see groups).
+expensive: true
+requires_confirmation: true
+components:
+- foundation-network
+- foundation-identity
+- foundation-governance
+- foundation-deploy-agents
+- foundation-edge
+- platform-shared
+- platform-messaging
+- platform-aks
+- platform-containerapps
+- platform-appservice
+- platform-functions
+- platform-vm
+- platform-vmss
+- platform-batch
+- platform-servicefabric
+- platform-db-sql
+- platform-db-sqlvm
+- platform-db-postgresql
+- platform-db-mysql
+- platform-db-cosmos-nosql
+- platform-db-cosmos-mongo
+- platform-db-cosmos-cassandra
+- platform-db-cosmos-gremlin
+- platform-db-cosmos-table
+- platform-db-documentdb
+- platform-db-redis
+- platform-db-table-storage
+- platform-db-ledger
+- platform-data-analytics
+- obs-prereqs
+- obs-azure-integration
+- obs-telemetry-transport
+- obs-diagnostics
+- obs-hosts
+- obs-kubernetes
+- obs-dbm
+- obs-monitoring
+- deploy-core-aks
+- deploy-frontend
+- deploy-durable
+- deploy-functions
+- deploy-partner-sim
+- deploy-dbadapters
+- deploy-appservice
+- deploy-jobs
+- deploy-vm-workloads
+- deploy-logicapps
+- svc-bff
+- svc-catalog-api
+- svc-dbadapter
+- svc-durable
+- svc-frontend
+- svc-functions
+- svc-inventory-api
+- svc-jobs
+- svc-logicapps
+- svc-orders-api
+- svc-partner-sim
+- svc-traffic
+- svc-worker
+features:
+  topology: hub-spoke
+  egress: nat-gateway
+  firewall: false
+  bastion: true
+  app_gateway: true
+  front_door: false
+  apim: false
+  service_bus_sku: Premium
+  private_endpoints: true
+  session_replay: false
+  rum_session_sample_rate: 50
+  trace_sample_rate: 0.5
+groups:
+- name: g1-foundation
+  components:
+  - foundation-network
+  - foundation-identity
+  - foundation-governance
+  - foundation-deploy-agents
+  - foundation-edge
+- name: g2-core-platform
+  components:
+  - platform-shared
+  - platform-messaging
+  - platform-containerapps
+  - platform-functions
+  - platform-appservice
+  - platform-aks
+  - platform-db-sql
+  - platform-db-postgresql
+  - platform-db-redis
+  - obs-prereqs
+  - obs-azure-integration
+  - obs-telemetry-transport
+- name: g3-compute
+  components:
+  - platform-vm
+  - platform-vmss
+  - platform-batch
+  - platform-servicefabric
+- name: g4-data
+  components:
+  - platform-db-sql
+  - platform-db-sqlvm
+  - platform-db-postgresql
+  - platform-db-mysql
+  - platform-db-cosmos-nosql
+  - platform-db-cosmos-mongo
+  - platform-db-cosmos-cassandra
+  - platform-db-cosmos-gremlin
+  - platform-db-cosmos-table
+  - platform-db-documentdb
+  - platform-db-redis
+  - platform-db-table-storage
+  - platform-db-ledger
+  - platform-data-analytics
+- name: g5-apps
+  components:
+  - deploy-core-aks
+  - deploy-frontend
+  - deploy-durable
+  - deploy-functions
+  - deploy-partner-sim
+  - deploy-dbadapters
+  - deploy-appservice
+  - deploy-jobs
+  - deploy-vm-workloads
+  - deploy-logicapps
+  - svc-bff
+  - svc-catalog-api
+  - svc-dbadapter
+  - svc-durable
+  - svc-frontend
+  - svc-functions
+  - svc-inventory-api
+  - svc-jobs
+  - svc-logicapps
+  - svc-orders-api
+  - svc-partner-sim
+  - svc-traffic
+  - svc-worker
+- name: g6-observability
+  components:
+  - obs-prereqs
+  - obs-azure-integration
+  - obs-telemetry-transport
+  - obs-diagnostics
+  - obs-hosts
+  - obs-kubernetes
+  - obs-dbm
+  - obs-monitoring

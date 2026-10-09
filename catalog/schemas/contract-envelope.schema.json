@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contract-envelope.schema.json",
+  "title": "Published contract envelope",
+  "type": "object",
+  "required": [
+    "contract",
+    "version",
+    "environment",
+    "produced_by",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "environment": {
+      "type": "string"
+    },
+    "produced_by": {
+      "type": "object",
+      "required": [
+        "component",
+        "commit"
+      ],
+      "properties": {
+        "component": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "produced_at": {
+          "type": "string"
+        }
+      }
+    },
+    "data": {
+      "type": "object"
+    }
+  }
+}

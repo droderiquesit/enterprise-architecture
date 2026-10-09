@@ -1,0 +1,22 @@
+# Machine-readable toolchain/runtime pins (see docs/architecture/ADR-0001-design-contract.md §2).
+verified_on: "2026-10-09"
+terraform:
+  cli: "1.16.5"
+  required_version: ">= 1.14.0, < 2.0.0"
+  providers:
+    hashicorp/azurerm: {version: "5.9.0", constraint: "~> 5.9"}
+    Azure/azapi: {version: "2.13.0", constraint: "~> 2.13"}
+    DataDog/datadog: {version: "4.25.0", constraint: "~> 4.25"}
+    hashicorp/helm: {version: "3.3.0", constraint: "~> 3.3"}
+    hashicorp/kubernetes: {version: "3.3.0", constraint: "~> 3.3"}
+    hashicorp/random: {version: "3.9.1", constraint: "~> 3.9"}
+    hashicorp/time: {version: "0.14.2", constraint: "~> 0.14"}
+runtimes:
+  dotnet: {version: "10.0", sdk: "10.0.401", support: "LTS", end_of_support: "2028-11-14"}
+  python: {version: "3.13", end_of_support_functions: "2029-10"}
+  node_build: {version: "24", minimum: "22"}
+images:
+  fluent_bit: "fluent/fluent-bit:5.1.3"
+  datadog_agent: "gcr.io/datadoghq/agent:7.84.2"
+  ddot_collector: "datadog/ddot-collector:7.84.2"
+  otel_collector_contrib: "otel/opentelemetry-collector-contrib:0.162.0"

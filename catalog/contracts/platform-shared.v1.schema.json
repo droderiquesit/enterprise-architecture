@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-shared contract v1",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "acr_id",
+    "acr_login_server",
+    "log_analytics_workspace_id"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "acr_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "acr_login_server": {
+      "type": "string"
+    },
+    "log_analytics_workspace_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "log_analytics_customer_id": {
+      "type": "string"
+    }
+  }
+}

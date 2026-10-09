@@ -1,0 +1,28 @@
+# Lab environment "dev". Values here are inputs, not secrets.
+# Schema: environments/schema/environment.schema.json
+environment:
+  name: dev
+  location: swedencentral          # verified to offer Flex Consumption, Managed Redis, DocumentDB, AKS, ACA workload profiles
+  subscription_id: "00000000-0000-0000-0000-000000000000"   # replace; never commit real secrets (IDs are not secrets)
+  tenant_id: "00000000-0000-0000-0000-000000000000"
+  name_prefix: eh
+  owner: platform-team@example.com
+  team: platform-engineering
+  cost_center: lab-0001
+  expires_on: "2026-12-31"
+  tags: {}
+profile: minimal
+custom_components: []
+datadog:
+  site: datadoghq.com
+  api_key_secret_name: datadog-api-key       # Key Vault secret names (values set out-of-band)
+  app_key_secret_name: datadog-app-key
+network:
+  hub_address_space: 10.40.0.0/20
+  spoke_address_space: 10.41.0.0/16
+budget:
+  monthly_amount: 300
+  currency: USD
+  contact_emails: [platform-team@example.com]
+# Per-component overrides of each root's `settings` defaults (see <root>/variables.tf).
+components: {}

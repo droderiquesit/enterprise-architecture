@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "foundation-network contract v1",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "location",
+    "spoke_vnet_id",
+    "spoke_vnet_name",
+    "subnets",
+    "private_dns_zones",
+    "egress"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "resource_group_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "location": {
+      "type": "string"
+    },
+    "hub_vnet_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "spoke_vnet_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "spoke_vnet_name": {
+      "type": "string"
+    },
+    "topology": {
+      "enum": [
+        "hub-spoke",
+        "single-spoke"
+      ]
+    },
+    "subnets": {
+      "type": "object",
+      "required": [
+        "compute",
+        "private-endpoints",
+        "aca-infra",
+        "appsvc-integration",
+        "deploy-agents",
+        "observability"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "address_prefix"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address_prefix": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "private_dns_zones": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "egress": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "nat-gateway",
+            "firewall"
+          ]
+        },
+        "public_ips": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "firewall_private_ip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "internal_dns_zone": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Deployment profile: custom
+# Explicit component selection. Copy into environments/<env>/environment.yaml as
+#   profile: custom
+#   custom_components: [...]
+# tools/config/resolve.py adds required upstream dependencies automatically and
+# fails if a selected component's hard dependency is excluded.
+profile: custom
+description: Explicit selection of components (custom_components in environment.yaml).
+expensive: false
+requires_confirmation: false
+components: []
+features: {}

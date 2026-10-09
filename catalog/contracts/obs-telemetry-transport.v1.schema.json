@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Instrumentation / telemetry transport contract v1 (also emitted by the portable package for existing environments)",
+  "type": "object",
+  "required": [
+    "datadog_site",
+    "otlp",
+    "fluentbit",
+    "env",
+    "api_key_secret_id"
+  ],
+  "properties": {
+    "datadog_site": {
+      "type": "string"
+    },
+    "api_key_secret_id": {
+      "type": "string",
+      "description": "Key Vault versionless secret id holding the Datadog API key"
+    },
+    "otlp": {
+      "type": "object",
+      "required": [
+        "grpc_endpoint",
+        "http_endpoint"
+      ],
+      "properties": {
+        "grpc_endpoint": {
+          "type": "string"
+        },
+        "http_endpoint": {
+          "type": "string"
+        }
+      }
+    },
+    "fluentbit": {
+      "type": "object",
+      "required": [
+        "forward_host",
+        "forward_port"
+      ],
+      "properties": {
+        "forward_host": {
+          "type": "string"
+        },
+        "forward_port": {
+          "type": "integer"
+        },
+        "sidecar_image": {
+          "type": "string"
+        },
+        "sidecar_config": {
+          "type": "string",
+          "description": "fluent-bit YAML config for file-tail sidecars (no secrets; API key via env from secret ref)"
+        }
+      }
+    },
+    "event_hub": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "namespace_id": {
+          "type": "string"
+        },
+        "authorization_rule_id": {
+          "type": "string"
+        },
+        "app_logs_hub": {
+          "type": "string"
+        },
+        "platform_logs_hub": {
+          "type": "string"
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "description": "env var maps per runtime: common, dotnet, python, browser",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      }
+    },
+    "collector_identity_principal_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

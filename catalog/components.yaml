@@ -1,0 +1,488 @@
+# Component registry — the single source of truth for change detection, state boundaries,
+# dependency ordering and pipeline stage generation. Schema: catalog/schemas/component.schema.json
+#
+# kind:
+#   terraform  - independently planned/applied Terraform root (state <env>/<id>.tfstate)
+#   artifact   - application build producing an immutable image/package (built once per commit)
+#   docs       - documentation only; never deploys
+# depends_on:  hard ordering (upstream must be applied first when both are selected)
+# consumes:    contracts read as inputs (implies depends_on on the producer)
+# artifacts:   artifact components whose digests are inputs of this deployment root
+# inputs:      extra repo globs that change this component (shared modules are discovered
+#              automatically by tools/changeset from module "source" paths)
+schema_version: 1
+components:
+  # ---------------------------------------------------------------- bootstrap
+  - id: bootstrap
+    layer: bootstrap
+    kind: terraform
+    path: bootstrap
+    pipeline: manual          # bootstrap is never applied by the universal pipeline
+    produces: [bootstrap]
+
+  # --------------------------------------------------------------- foundation
+  - id: foundation-network
+    layer: foundation
+    kind: terraform
+    path: foundation/network
+    produces: [foundation-network]
+  - id: foundation-identity
+    layer: foundation
+    kind: terraform
+    path: foundation/identity
+    consumes: [foundation-network]
+    produces: [foundation-identity]
+  - id: foundation-governance
+    layer: foundation
+    kind: terraform
+    path: foundation/governance
+    produces: [foundation-governance]
+  - id: foundation-deploy-agents
+    layer: foundation
+    kind: terraform
+    path: foundation/deploy-agents
+    consumes: [foundation-network, foundation-identity]
+    produces: [foundation-deploy-agents]
+  - id: foundation-edge
+    layer: foundation
+    kind: terraform
+    path: foundation/edge
+    consumes: [foundation-network, foundation-identity]
+    produces: [foundation-edge]
+
+  # ----------------------------------------------------------------- platform
+  - id: platform-shared
+    layer: platform
+    kind: terraform
+    path: platform/shared
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-shared]
+    catalog_refs: [container-registry, log-analytics]
+  - id: platform-messaging
+    layer: platform
+    kind: terraform
+    path: platform/messaging
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-messaging]
+    catalog_refs: [service-bus]
+  - id: platform-aks
+    layer: platform
+    kind: terraform
+    path: platform/compute/aks
+    consumes: [foundation-network, foundation-identity, platform-shared]
+    produces: [platform-aks]
+    catalog_refs: [aks]
+  - id: platform-containerapps
+    layer: platform
+    kind: terraform
+    path: platform/compute/containerapps
+    consumes: [foundation-network, foundation-identity, platform-shared]
+    produces: [platform-containerapps]
+    catalog_refs: [container-apps-consumption, container-apps-dedicated, container-apps-jobs]
+  - id: platform-appservice
+    layer: platform
+    kind: terraform
+    path: platform/compute/appservice
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-appservice]
+    catalog_refs: [app-service-linux, app-service-windows, functions-dedicated, logic-apps-standard]
+  - id: platform-functions
+    layer: platform
+    kind: terraform
+    path: platform/compute/functions
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-functions]
+    catalog_refs: [functions-flex-consumption, functions-premium, functions-consumption-windows, durable-functions, durable-task-scheduler]
+  - id: platform-vm
+    layer: platform
+    kind: terraform
+    path: platform/compute/vm
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-vm]
+    catalog_refs: [vm-linux, vm-windows]
+  - id: platform-vmss
+    layer: platform
+    kind: terraform
+    path: platform/compute/vmss
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-vmss]
+    catalog_refs: [vmss-flexible, vmss-uniform]
+  - id: platform-batch
+    layer: platform
+    kind: terraform
+    path: platform/compute/batch
+    consumes: [foundation-network, foundation-identity, platform-shared]
+    produces: [platform-batch]
+    catalog_refs: [batch]
+  - id: platform-servicefabric
+    layer: platform
+    kind: terraform
+    path: platform/compute/servicefabric
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-servicefabric]
+    catalog_refs: [service-fabric-managed]
+  - id: platform-aro
+    layer: platform
+    kind: terraform
+    path: platform/compute/aro
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-aro]
+    catalog_refs: [aro]
+  - id: platform-specialized-compute
+    layer: platform
+    kind: terraform
+    path: platform/compute/specialized
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-specialized-compute]
+    catalog_refs: [vm-confidential, dedicated-host, vm-gpu, automation, ml-compute]
+
+  - id: platform-db-sql
+    layer: platform
+    kind: terraform
+    path: platform/data/sql
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-sql]
+    catalog_refs: [sql-database-provisioned, sql-database-serverless, sql-elastic-pool, sql-hyperscale]
+  - id: platform-db-sqlmi
+    layer: platform
+    kind: terraform
+    path: platform/data/sqlmi
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-sqlmi]
+    catalog_refs: [sql-managed-instance]
+  - id: platform-db-sqlvm
+    layer: platform
+    kind: terraform
+    path: platform/data/sqlvm
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-sqlvm]
+    catalog_refs: [sql-server-on-vm]
+  - id: platform-db-postgresql
+    layer: platform
+    kind: terraform
+    path: platform/data/postgresql
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-postgresql]
+    catalog_refs: [postgresql-flexible, postgresql-elastic-cluster]
+  - id: platform-db-mysql
+    layer: platform
+    kind: terraform
+    path: platform/data/mysql
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-mysql]
+    catalog_refs: [mysql-flexible]
+  - id: platform-db-cosmos-nosql
+    layer: platform
+    kind: terraform
+    path: platform/data/cosmos-nosql
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-cosmos-nosql]
+    catalog_refs: [cosmos-nosql]
+  - id: platform-db-cosmos-mongo
+    layer: platform
+    kind: terraform
+    path: platform/data/cosmos-mongo
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-cosmos-mongo]
+    catalog_refs: [cosmos-mongodb-ru]
+  - id: platform-db-cosmos-cassandra
+    layer: platform
+    kind: terraform
+    path: platform/data/cosmos-cassandra
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-cosmos-cassandra]
+    catalog_refs: [cosmos-cassandra]
+  - id: platform-db-cosmos-gremlin
+    layer: platform
+    kind: terraform
+    path: platform/data/cosmos-gremlin
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-cosmos-gremlin]
+    catalog_refs: [cosmos-gremlin]
+  - id: platform-db-cosmos-table
+    layer: platform
+    kind: terraform
+    path: platform/data/cosmos-table
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-cosmos-table]
+    catalog_refs: [cosmos-table]
+  - id: platform-db-documentdb
+    layer: platform
+    kind: terraform
+    path: platform/data/documentdb
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-documentdb]
+    catalog_refs: [documentdb]
+  - id: platform-db-cassandra-mi
+    layer: platform
+    kind: terraform
+    path: platform/data/cassandra-mi
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-cassandra-mi]
+    catalog_refs: [managed-cassandra]
+  - id: platform-db-redis
+    layer: platform
+    kind: terraform
+    path: platform/data/redis
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-redis]
+    catalog_refs: [managed-redis]
+  - id: platform-db-table-storage
+    layer: platform
+    kind: terraform
+    path: platform/data/table-storage
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-table-storage]
+    catalog_refs: [table-storage]
+  - id: platform-db-ledger
+    layer: platform
+    kind: terraform
+    path: platform/data/ledger
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-ledger]
+    catalog_refs: [confidential-ledger]
+  - id: platform-db-horizondb
+    layer: platform
+    kind: terraform
+    path: platform/data/horizondb
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-db-horizondb]
+    catalog_refs: [horizondb]
+  - id: platform-data-analytics
+    layer: platform
+    kind: terraform
+    path: platform/data/analytics
+    consumes: [foundation-network, foundation-identity]
+    produces: [platform-data-analytics]
+    catalog_refs: [data-explorer, synapse-sql, synapse-spark, ai-search, blob-storage, adls-gen2]
+
+  # ------------------------------------------------------- observability (lab)
+  # Lab roots under observability/lab/ are thin consumers of the portable package
+  # in observability/modules; the package never reads lab state.
+  - id: obs-prereqs
+    layer: observability
+    kind: terraform
+    path: observability/lab/prereqs
+    produces: [obs-prereqs]
+  - id: obs-azure-integration
+    layer: observability
+    kind: terraform
+    path: observability/lab/azure-integration
+  - id: obs-telemetry-transport
+    layer: observability
+    kind: terraform
+    path: observability/lab/telemetry-transport
+    consumes: [foundation-network, foundation-identity, platform-containerapps]
+    produces: [obs-telemetry-transport]
+  - id: obs-diagnostics
+    layer: observability
+    kind: terraform
+    path: observability/lab/diagnostics
+    consumes: [obs-telemetry-transport]
+    discovers_resources: true   # reads every enabled platform/deployment contract (resource ids)
+  - id: obs-hosts
+    layer: observability
+    kind: terraform
+    path: observability/lab/hosts
+    consumes: [obs-telemetry-transport, platform-vm, platform-vmss]
+    optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm]
+  - id: obs-kubernetes
+    layer: observability
+    kind: terraform
+    path: observability/lab/kubernetes
+    consumes: [obs-telemetry-transport, platform-aks]
+    produces: [obs-kubernetes]
+  - id: obs-dbm
+    layer: observability
+    kind: terraform
+    path: observability/lab/dbm
+    consumes: [obs-telemetry-transport, foundation-network]
+    optional_consumes: [platform-db-postgresql, platform-db-mysql, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm]
+  - id: obs-monitoring
+    layer: observability
+    kind: terraform
+    path: observability/lab/monitoring
+    consumes: [obs-prereqs]
+    optional_consumes: [deploy-core-aks, deploy-core-aca, deploy-frontend, deploy-durable, deploy-functions, deploy-partner-sim, deploy-dbadapters, deploy-appservice, deploy-jobs, deploy-vm-workloads, deploy-logicapps, deploy-specialized, obs-telemetry-transport]
+    after_deployments: true     # runs after every selected applications deployment (needs endpoints)
+    inputs: [observability/onboarding/**, observability/archetypes/**]
+
+  # ------------------------------------------------------ application builds
+  - id: svc-frontend
+    layer: applications
+    kind: artifact
+    path: applications/services/frontend
+    artifact: {type: static-bundle, name: hello-frontend}
+  - id: svc-bff
+    layer: applications
+    kind: artifact
+    path: applications/services/bff
+    inputs: [applications/shared/dotnet/**]
+    artifact: {type: container-image, name: hello-bff}
+  - id: svc-orders-api
+    layer: applications
+    kind: artifact
+    path: applications/services/orders-api
+    inputs: [applications/shared/dotnet/**]
+    artifact: {type: container-image, name: hello-orders-api}
+  - id: svc-inventory-api
+    layer: applications
+    kind: artifact
+    path: applications/services/inventory-api
+    inputs: [applications/shared/dotnet/**]
+    artifact: {type: zip-package, name: hello-inventory-api, also: [container-image]}
+  - id: svc-catalog-api
+    layer: applications
+    kind: artifact
+    path: applications/services/catalog-api
+    inputs: [applications/shared/python/**]
+    artifact: {type: container-image, name: hello-catalog-api, also: [zip-package]}
+  - id: svc-dbadapter
+    layer: applications
+    kind: artifact
+    path: applications/services/dbadapter
+    inputs: [applications/shared/python/**]
+    artifact: {type: container-image, name: hello-dbadapter, also: [zip-package]}
+  - id: svc-worker
+    layer: applications
+    kind: artifact
+    path: applications/services/worker
+    inputs: [applications/shared/python/**]
+    artifact: {type: container-image, name: hello-worker, also: [zip-package]}
+  - id: svc-partner-sim
+    layer: applications
+    kind: artifact
+    path: applications/services/partner-sim
+    inputs: [applications/shared/python/**]
+    artifact: {type: container-image, name: hello-partner-sim}
+  - id: svc-durable
+    layer: applications
+    kind: artifact
+    path: applications/services/durable
+    inputs: [applications/shared/dotnet/**]
+    artifact: {type: zip-package, name: hello-durable, also: [container-image]}
+  - id: svc-functions
+    layer: applications
+    kind: artifact
+    path: applications/services/functions
+    inputs: [applications/shared/python/**]
+    artifact: {type: zip-package, name: hello-functions, also: [container-image]}
+  - id: svc-jobs
+    layer: applications
+    kind: artifact
+    path: applications/services/jobs
+    inputs: [applications/shared/python/**]
+    artifact: {type: container-image, name: hello-jobs, also: [zip-package]}
+  - id: svc-traffic
+    layer: applications
+    kind: artifact
+    path: applications/services/traffic
+    artifact: {type: container-image, name: hello-traffic}
+  - id: svc-logicapps
+    layer: applications
+    kind: artifact
+    path: applications/services/logicapps
+    artifact: {type: zip-package, name: hello-logicapps}
+
+  # --------------------------------------------------- application deployments
+  - id: deploy-core-aks
+    produces: [deploy-core-aks]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/core-aks
+    consumes: [platform-aks, platform-shared, platform-messaging, platform-db-sql, platform-db-postgresql, obs-telemetry-transport, foundation-identity]
+    optional_consumes: [platform-db-redis, obs-kubernetes]
+    artifacts: [svc-bff, svc-orders-api, svc-catalog-api, svc-worker]
+  - id: deploy-core-aca
+    produces: [deploy-core-aca]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/core-aca
+    consumes: [platform-containerapps, platform-shared, platform-messaging, platform-db-sql, platform-db-postgresql, obs-telemetry-transport, foundation-identity]
+    optional_consumes: [platform-db-redis]
+    artifacts: [svc-bff, svc-orders-api, svc-catalog-api]
+  - id: deploy-frontend
+    produces: [deploy-frontend]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/frontend
+    consumes: [obs-prereqs, foundation-identity]
+    optional_consumes: [deploy-core-aks, deploy-core-aca, foundation-edge]
+    artifacts: [svc-frontend]
+  - id: deploy-durable
+    produces: [deploy-durable]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/durable
+    consumes: [platform-functions, platform-messaging, platform-db-sql, obs-telemetry-transport, foundation-identity]
+    optional_consumes: [deploy-partner-sim]
+    artifacts: [svc-durable]
+  - id: deploy-functions
+    produces: [deploy-functions]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/functions
+    consumes: [platform-functions, platform-messaging, obs-telemetry-transport, foundation-identity]
+    optional_consumes: [platform-appservice, platform-containerapps]
+    artifacts: [svc-functions]
+  - id: deploy-partner-sim
+    produces: [deploy-partner-sim]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/partner-sim
+    consumes: [foundation-network, platform-shared, obs-telemetry-transport, foundation-identity]
+    artifacts: [svc-partner-sim]
+  - id: deploy-dbadapters
+    produces: [deploy-dbadapters]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/dbadapters
+    consumes: [platform-containerapps, platform-shared, obs-telemetry-transport, foundation-identity]
+    optional_consumes: [platform-appservice, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm, platform-db-postgresql, platform-db-mysql, platform-db-cosmos-nosql, platform-db-cosmos-mongo, platform-db-cosmos-cassandra, platform-db-cosmos-gremlin, platform-db-cosmos-table, platform-db-documentdb, platform-db-cassandra-mi, platform-db-redis, platform-db-table-storage, platform-db-ledger, platform-db-horizondb, platform-data-analytics]
+    artifacts: [svc-dbadapter]
+  - id: deploy-appservice
+    produces: [deploy-appservice]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/appservice
+    consumes: [platform-appservice, platform-shared, obs-telemetry-transport, foundation-identity]
+    optional_consumes: [platform-db-cosmos-nosql, platform-db-postgresql, platform-db-redis]
+    artifacts: [svc-inventory-api, svc-catalog-api]
+  - id: deploy-jobs
+    produces: [deploy-jobs]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/jobs
+    consumes: [platform-containerapps, platform-shared, platform-messaging, platform-db-sql, obs-telemetry-transport, foundation-identity]
+    optional_consumes: [platform-batch, deploy-core-aks, deploy-core-aca, deploy-frontend]
+    artifacts: [svc-jobs, svc-traffic]
+  - id: deploy-vm-workloads
+    produces: [deploy-vm-workloads]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/vm-workloads
+    consumes: [platform-messaging, obs-telemetry-transport, foundation-identity]
+    optional_consumes: [platform-vm, platform-vmss, platform-db-table-storage]
+    artifacts: [svc-worker, svc-inventory-api]
+  - id: deploy-logicapps
+    produces: [deploy-logicapps]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/logicapps
+    consumes: [platform-appservice, platform-messaging, obs-telemetry-transport, foundation-identity]
+    artifacts: [svc-logicapps]
+  - id: deploy-specialized
+    produces: [deploy-specialized]
+    layer: applications
+    kind: terraform
+    path: applications/deployments/specialized
+    optional_consumes: [platform-servicefabric, platform-aro, platform-specialized-compute]
+    consumes: [obs-telemetry-transport]
+    artifacts: [svc-catalog-api, svc-inventory-api, svc-jobs]
+
+  # ------------------------------------------------------------------- docs
+  - id: docs
+    layer: docs
+    kind: docs
+    path: docs
+    inputs: ["**/*.md", "!observability/**/*.md"]

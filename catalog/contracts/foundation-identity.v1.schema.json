@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "foundation-identity contract v1",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "key_vault_id",
+    "key_vault_uri",
+    "identities",
+    "secret_ids"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "key_vault_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "key_vault_uri": {
+      "type": "string",
+      "format": "uri"
+    },
+    "key_vault_name": {
+      "type": "string"
+    },
+    "identities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "principal_id",
+          "client_id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "principal_id": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "secret_ids": {
+      "type": "object",
+      "description": "versionless Key Vault secret IDs (never values)",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^https://"
+      }
+    }
+  }
+}

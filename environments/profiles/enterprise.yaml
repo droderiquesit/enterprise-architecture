@@ -1,0 +1,69 @@
+# Deployment profile: enterprise
+# Generated initially from the component registry; this file is canonical.
+profile: enterprise
+description: 'Common enterprise patterns: VM, VMSS, AKS, App Service, Container Apps, Functions (Flex/Premium/Dedicated),
+  SQL, PostgreSQL, MySQL, Cosmos NoSQL, Managed Redis, Table Storage.'
+expensive: false
+requires_confirmation: false
+components:
+- foundation-network
+- foundation-identity
+- foundation-governance
+- foundation-deploy-agents
+- foundation-edge
+- platform-shared
+- platform-messaging
+- platform-aks
+- platform-containerapps
+- platform-appservice
+- platform-functions
+- platform-vm
+- platform-vmss
+- platform-db-sql
+- platform-db-postgresql
+- platform-db-mysql
+- platform-db-cosmos-nosql
+- platform-db-redis
+- platform-db-table-storage
+- obs-prereqs
+- obs-azure-integration
+- obs-telemetry-transport
+- obs-diagnostics
+- obs-hosts
+- obs-kubernetes
+- obs-dbm
+- obs-monitoring
+- deploy-core-aks
+- deploy-frontend
+- deploy-durable
+- deploy-functions
+- deploy-partner-sim
+- deploy-dbadapters
+- deploy-appservice
+- deploy-jobs
+- deploy-vm-workloads
+- svc-bff
+- svc-catalog-api
+- svc-dbadapter
+- svc-durable
+- svc-frontend
+- svc-functions
+- svc-inventory-api
+- svc-jobs
+- svc-orders-api
+- svc-partner-sim
+- svc-traffic
+- svc-worker
+features:
+  topology: hub-spoke
+  egress: nat-gateway
+  firewall: false
+  bastion: true
+  app_gateway: false
+  front_door: false
+  apim: false
+  service_bus_sku: Premium
+  private_endpoints: true
+  session_replay: false
+  rum_session_sample_rate: 50
+  trace_sample_rate: 0.5

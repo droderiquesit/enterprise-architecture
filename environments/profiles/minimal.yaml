@@ -1,0 +1,49 @@
+# Deployment profile: minimal
+# Generated initially from the component registry; this file is canonical.
+profile: minimal
+description: 'Smallest useful slice: SWA frontend -> BFF/APIs on Container Apps -> Azure SQL + PostgreSQL, Service Bus, Durable
+  Functions (Flex Consumption), partner-sim on ACI, scheduled jobs, full telemetry.'
+expensive: false
+requires_confirmation: false
+components:
+- foundation-network
+- foundation-identity
+- foundation-governance
+- platform-shared
+- platform-messaging
+- platform-containerapps
+- platform-functions
+- platform-db-sql
+- platform-db-postgresql
+- obs-prereqs
+- obs-azure-integration
+- obs-telemetry-transport
+- obs-diagnostics
+- obs-dbm
+- obs-monitoring
+- deploy-core-aca
+- deploy-frontend
+- deploy-durable
+- deploy-partner-sim
+- deploy-jobs
+- svc-bff
+- svc-catalog-api
+- svc-durable
+- svc-frontend
+- svc-jobs
+- svc-orders-api
+- svc-partner-sim
+- svc-traffic
+features:
+  topology: single-spoke
+  egress: nat-gateway
+  firewall: false
+  bastion: false
+  app_gateway: false
+  front_door: false
+  apim: false
+  service_bus_sku: Standard
+  private_endpoints: true
+  session_replay: false
+  rum_session_sample_rate: 100
+  trace_sample_rate: 1.0
