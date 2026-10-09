@@ -205,7 +205,9 @@ def artifacts_tfvars(repo: Path, component: str, metadata_dir: Path, write: bool
             missing.append(a)
             continue
         m = json.loads(f.read_text())
-        entries[a] = {k: m.get(k) for k in ("name", "image", "digest", "package_url", "package_sha256", "source_fp", "tag")}
+        entries[a] = {k: m.get(k) for k in ("name", "image", "digest", "package_url", "package_sha256", "source_fp", "tag", "commit")}
+        # Deployment roots set DD_VERSION / build metadata from these (version = immutable tag derived from source_fp).
+        entries[a]["version"] = m.get("version") or m.get("tag")
     if missing:
         raise SystemExit(f"ERROR: artifact metadata missing for {', '.join(missing)} (Build stage output)")
     text = json.dumps({"artifacts": entries}, sort_keys=True, separators=(",", ":"))
