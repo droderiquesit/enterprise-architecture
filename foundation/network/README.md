@@ -75,7 +75,7 @@ rules (SQL MI network intent policy) are never removed by Terraform.
 
 ## Private DNS zones (contract `private_dns_zones` short keys)
 
-`blob file queue table dfs vault sql postgres mysql cosmos_sql cosmos_mongo cosmos_cassandra cosmos_gremlin cosmos_table
+`blob file queue table dfs sql postgres mysql cosmos_sql cosmos_mongo cosmos_cassandra cosmos_gremlin cosmos_table
 mongocluster redis servicebus acr webapps aca aks search kusto batch apim postgres_vnet mysql_vnet` (+ `monitor oms ods
 agentsvc` with `ampls_zones = true`, `documentdb` = alias of `mongocluster`, + `private_dns_zones_extra`, − `private_dns_zones_exclude`).
 

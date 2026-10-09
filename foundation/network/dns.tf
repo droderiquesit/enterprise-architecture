@@ -17,7 +17,6 @@ locals {
     queue            = "privatelink.queue.core.windows.net"
     table            = "privatelink.table.core.windows.net"
     dfs              = "privatelink.dfs.core.windows.net"
-    vault            = "privatelink.vaultcore.azure.net"
     sql              = "privatelink.database.windows.net"
     postgres         = "privatelink.postgres.database.azure.com"
     mysql            = "privatelink.mysql.database.azure.com"

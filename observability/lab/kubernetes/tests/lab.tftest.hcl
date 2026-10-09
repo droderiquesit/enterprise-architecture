@@ -43,6 +43,9 @@ variables {
       fetch_image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
     }
   }
+  artifacts = {
+    "img-dsv-fetch" = { image = "ehacrdev.azurecr.io/dsv-fetch@sha256:4444444444444444444444444444444444444444444444444444444444444444" }
+  }
   foundation_identity = {
     identities = {
       "obs-collector" = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-obs-collector-dev-sec", principal_id = "11111111-1111-1111-1111-111111111111", client_id = "22222222-2222-2222-2222-222222222222", name = "eh-id-obs-collector-dev-sec" }
@@ -76,8 +79,8 @@ run "lab_kubernetes" {
     error_message = "Workload identity federation for the Agent, cluster-checks runner and Fluent Bit service accounts."
   }
   assert {
-    condition     = yamldecode(module.kubernetes.datadog_values).datadog.apiKey == "ENC[dsv://eh/dev/datadog-api-key#value]" && yamldecode(module.kubernetes.fluent_bit_values).initContainers[0].image == "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
-    error_message = "DSV reference + dsv-fetch image from the transport contract; no API key input exists."
+    condition     = yamldecode(module.kubernetes.datadog_values).datadog.apiKey == "ENC[dsv://eh/dev/datadog-api-key#value]" && yamldecode(module.kubernetes.fluent_bit_values).initContainers[0].image == "ehacrdev.azurecr.io/dsv-fetch@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    error_message = "DSV reference; dsv-fetch image from this root's artifacts (img-dsv-fetch); no API key input exists."
   }
 }
 

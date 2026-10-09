@@ -54,7 +54,8 @@ locals {
     managed_identity_client_id = d.auth_mode == "entra-managed-identity" ? coalesce(try(d.identity_client_id, null), local.dbm_identity.client_id) : null
     password_ref = d.auth_mode == "entra-managed-identity" ? null : {
       kind = "dsv"
-      name = startswith(try(d.password_ref, ""), "dsv://") ? d.password_ref : "dsv://${var.foundation_identity.secrets.base_path}/${coalesce(try(d.password_secret_name, null), try(element(split("/", d.password_secret_id), length(split("/", d.password_secret_id)) - 1), null), "dbm-${k}-password")}#value"
+      # platform contracts keep the field name password_secret_id; its value is a dsv:// reference
+      name = startswith(try(d.password_ref, ""), "dsv://") ? d.password_ref : startswith(try(d.password_secret_id, ""), "dsv://") ? d.password_secret_id : "dsv://${var.foundation_identity.secrets.base_path}/${coalesce(try(d.password_secret_name, null), try(element(split("/", d.password_secret_id), length(split("/", d.password_secret_id)) - 1), null), "dbm-${k}-password")}#value"
     }
     resource_id = try(d.resource_id, null)
     tags        = { platform_contract = k }

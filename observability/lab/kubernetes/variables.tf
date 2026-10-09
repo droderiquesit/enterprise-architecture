@@ -64,3 +64,22 @@ variable "platform_aks" {
     })
   })
 }
+
+variable "artifacts" {
+  description = "Immutable build outputs keyed by artifact component id (tools/deploy/artifacts.py tfvars); this root uses img-dsv-fetch (digest-pinned)."
+  type = map(object({
+    name    = optional(string)
+    image   = optional(string)
+    digest  = optional(string)
+    version = optional(string)
+    commit  = optional(string)
+    tag     = optional(string)
+  }))
+  default = {}
+  validation {
+    condition = alltrue([for a in values(var.artifacts) : a.image == null || can(regex(
+      "^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$", coalesce(a.image, "x")
+    ))])
+    error_message = "artifacts[*].image must be digest-pinned (<registry>/<repo>@sha256:<64 hex>)."
+  }
+}

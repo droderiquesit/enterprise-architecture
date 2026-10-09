@@ -36,11 +36,12 @@ module "kubernetes" {
     cluster_agent_secret_name = var.settings.cluster_agent_secret_name
   }
   dsv = {
-    api_key_ref        = var.obs_telemetry_transport.api_key_ref
-    tenant             = var.obs_telemetry_transport.secrets.tenant
-    tld                = var.obs_telemetry_transport.secrets.tld
-    base_url           = var.obs_telemetry_transport.secrets.base_url
-    fetch_image        = var.obs_telemetry_transport.secrets.fetch_image
+    api_key_ref = var.obs_telemetry_transport.api_key_ref
+    tenant      = var.obs_telemetry_transport.secrets.tenant
+    tld         = var.obs_telemetry_transport.secrets.tld
+    base_url    = var.obs_telemetry_transport.secrets.base_url
+    # registry artifact img-dsv-fetch (digest-pinned) of this root; the transport contract's image as fallback
+    fetch_image        = try(coalesce(try(var.artifacts["img-dsv-fetch"].image, null), var.obs_telemetry_transport.secrets.fetch_image), null)
     identity_client_id = local.collector.client_id
   }
   charts = {

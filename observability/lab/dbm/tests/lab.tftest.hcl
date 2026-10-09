@@ -42,7 +42,7 @@ variables {
     dbm = { supported = true, engine = "postgres", deployment_type = "flexible_server", auth_mode = "entra-managed-identity", identity_name = "obs-dbm", identity_client_id = "33333333-3333-3333-3333-333333333333", host = "eh-psql-dev.postgres.database.azure.com", port = 5432, databases = ["catalog"] }
   }
   platform_db_mysql = {
-    dbm = { supported = true, engine = "mysql", deployment_type = "flexible_server", auth_mode = "native-password", host = "eh-mysql-dev.mysql.database.azure.com", port = 3306, databases = ["adapter"], password_ref = "dsv://eh/dev/dbm-mysql-password#value" }
+    dbm = { supported = true, engine = "mysql", deployment_type = "flexible_server", auth_mode = "native-password", host = "eh-mysql-dev.mysql.database.azure.com", port = 3306, databases = ["adapter"], password_secret_id = "dsv://eh/dev/dbm-mysql-password#value" }
   }
   platform_db_sql = {
     dbm = { supported = true, engine = "sqlserver", deployment_type = "sql_database", auth_mode = "entra-managed-identity", identity_name = "obs-dbm", host = "eh-sql-dev.database.windows.net", port = 1433, databases = ["orders", "fulfillment"] }

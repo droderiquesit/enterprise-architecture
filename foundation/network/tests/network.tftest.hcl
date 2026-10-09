@@ -122,7 +122,6 @@ run "minimal_single_spoke_defaults" {
   }
   assert {
     condition = alltrue([for k, n in {
-      vault        = "privatelink.vaultcore.azure.net"
       blob         = "privatelink.blob.core.windows.net"
       redis        = "privatelink.redis.azure.net"
       mongocluster = "privatelink.mongocluster.cosmos.azure.com"
@@ -145,7 +144,7 @@ run "minimal_single_spoke_defaults" {
     error_message = "contract must expose required subnets with ARM ids"
   }
   assert {
-    condition     = can(regex("^/subscriptions/[^/]+/", output.contract.private_dns_zones["vault"].id)) && output.contract.internal_dns_zone == "dev.eh.lab.internal"
+    condition     = can(regex("^/subscriptions/[^/]+/", output.contract.private_dns_zones["blob"].id)) && output.contract.internal_dns_zone == "dev.eh.lab.internal"
     error_message = "contract DNS zones"
   }
   assert {
