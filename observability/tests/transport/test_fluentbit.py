@@ -62,7 +62,26 @@ def _by_id(events: list[dict]) -> dict[str, list[dict]]:
     return out
 
 
+PIPELINE_TAG = "telemetry.pipeline:fluent-bit"
+
+
+def _is_canary(ev: dict) -> bool:
+    return ev.get("canary") is True or ev.get("service") == "telemetry-canary"
+
+
+def _assert_canary(events: list[dict]) -> None:
+    can = [e for e in events if _is_canary(e)]
+    assert can, "no pipeline canary received"
+    for c in can:
+        assert c["service"] == "telemetry-canary" and c["canary"] is True
+        tags = c["ddtags"].split(",")
+        assert PIPELINE_TAG in tags and "env:test" in tags, c["ddtags"]
+
+
 def _assert_app_events(events: list[dict], expect_source: str = "csharp") -> None:
+    for ev in events:
+        assert PIPELINE_TAG in ev.get("ddtags", "").split(","), f"pipeline tag missing: {ev}"
+    events = [e for e in events if not _is_canary(e)]
     ids = _by_id(events)
     # every sample event arrived exactly once (no duplicates, nothing split)
     for eid in SIDECAR_IDS:
@@ -164,10 +183,12 @@ def test_sidecar_direct_to_datadog(stack, tmp_path):
     got = received(base)
     print(json.dumps(got["events"], indent=1)[:6000])
     _assert_app_events(got["events"])
+    assert not any(_is_canary(e) for e in got["events"]), "sidecars do not emit the canary"
     _requests_ok(got["requests"])
     # self-metrics endpoint exposed for the OTel gateway / Agent to scrape
     metrics = subprocess.run(["curl", "-sf", f"{hc}/api/v2/metrics/prometheus"], capture_output=True, text=True).stdout
-    assert "fluentbit_output_proc_records_total" in metrics
+    # Prometheus names keep the _total suffix (monitors use e.g. fluentbit_output_errors_total)
+    assert "fluentbit_output_proc_records_total" in metrics and "fluentbit_output_errors_total" in metrics
 
 
 def _kafka(stack: Stack, conn_str: str, workdir: Path) -> str:
@@ -260,12 +281,14 @@ def test_aggregator_forward_and_eventhub_kafka(stack, tmp_path):
 
     expected = len(SIDECAR_IDS) + 3
     try:
-        wait_for(lambda: len(received(base)["events"]) >= expected, 120, interval=2, what="aggregator events")
+        wait_for(lambda: len([e for e in received(base)["events"] if not _is_canary(e)]) >= expected, 120, interval=2,
+                 what="aggregator events")
     finally:
         print(stack.logs(agg)[-3000:])
     time.sleep(5)
     got = received(base)
-    events = got["events"]
+    _assert_canary(got["events"])
+    events = [e for e in got["events"] if not _is_canary(e)]
     print(json.dumps(events, indent=1)[:8000])
     assert len(events) == expected, f"expected {expected} events, got {len(events)}"
     fwd = [e for e in events if (_event_id(e) or "") in SIDECAR_IDS]
@@ -288,3 +311,27 @@ def test_aggregator_forward_and_eventhub_kafka(stack, tmp_path):
     c = ids["evt-0201"][0]
     assert c["ddsource"] == "azure.app" and "category:ContainerAppSystemLogs" in c["ddtags"]
     assert "eventhub:platform-logs" in c["ddtags"]
+    assert all(PIPELINE_TAG in e["ddtags"].split(",") for e in events)
+
+
+def test_linux_host_config_with_canary(stack, tmp_path):
+    """linux-host.yaml (VM/VMSS service): tails the app log glob, emits the canary, tags the pipeline."""
+    _, base = start_mock_intake(stack)
+    logdir = tmp_path / "hostlogs"
+    logdir.mkdir()
+    logdir.chmod(0o777)
+    stack.run(
+        "host", FLUENT_BIT_IMAGE,
+        env=fluent_bit_env(FLB_LOG_PATHS="/var/log/enterprise-hello/*.log", HOSTNAME="vm-test"),
+        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logdir}:/var/log/enterprise-hello"],
+        cmd=["-c", "/fluent-bit/etc/eh/linux-host.yaml"],
+    )
+    target = logdir / "hello-worker.log"
+    target.write_text((SAMPLES / "app.log").read_text())
+    wait_for(lambda: len([e for e in received(base)["events"] if not _is_canary(e)]) >= len(SIDECAR_IDS)
+             and any(_is_canary(e) for e in received(base)["events"]), 60, what="host events + canary")
+    time.sleep(3)
+    got = received(base)
+    _assert_app_events(got["events"])
+    _assert_canary(got["events"])
+    assert all(e.get("log.file.path", "").startswith("/var/log/enterprise-hello/") for e in got["events"] if not _is_canary(e))

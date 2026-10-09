@@ -75,3 +75,13 @@ variable "tls" {
     error_message = "TLS to the Datadog intake cannot be disabled in deployed configurations."
   }
 }
+
+variable "canary_interval_seconds" {
+  description = "Interval of the pipeline canary record (service telemetry-canary, canary:true) for aggregator/daemonset/host roles."
+  type        = number
+  default     = 60
+  validation {
+    condition     = var.canary_interval_seconds >= 10 && var.canary_interval_seconds <= 3600
+    error_message = "canary_interval_seconds must be 10-3600."
+  }
+}

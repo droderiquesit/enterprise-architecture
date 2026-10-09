@@ -69,6 +69,14 @@ pipeline:
       rdkafka.auto.offset.reset: earliest
       storage.type: filesystem
 
+    # canary: 1 synthetic record per minute proving the pipeline end to end (monitors alert on its absence)
+    - name: dummy
+      tag: canary.fluentbit
+      dummy: '{"message":"fluent-bit pipeline canary","service":"telemetry-canary","canary":true,"ddsource":"fluent-bit"}'
+      interval_sec: ${FLB_CANARY_INTERVAL_SEC}
+      interval_nsec: 0
+      samples: 0
+
   filters:
     # Azure batches -> one record per entry; app console lines become "message"
     - name: lua
@@ -96,6 +104,16 @@ pipeline:
       window: 5
       interval: 1s
       print_status: false
+
+    - name: lua
+      match: canary.*
+      script: lua/enterprise_hello.lua
+      call: eh_static_tags
+
+    - name: lua
+      match: '*'
+      script: lua/enterprise_hello.lua
+      call: eh_finalize
 
   outputs:
     - name: datadog

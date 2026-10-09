@@ -70,6 +70,11 @@ pipeline:
       script: lua/enterprise_hello.lua
       call: eh_static_tags
 
+    - name: lua
+      match: '*'
+      script: lua/enterprise_hello.lua
+      call: eh_finalize
+
   outputs:
     - name: forward
       match: app.*

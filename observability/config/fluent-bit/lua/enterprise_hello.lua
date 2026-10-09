@@ -328,3 +328,27 @@ function eh_azure_split(tag, ts, record)
   end
   return 1, ts, out
 end
+
+-- ---------------------------------------------------------------------------------------------
+-- Last filter of every config: mark the collection path (monitors/verifiers filter on it) and make
+-- sure the canary carries env. Idempotent (records forwarded sidecar -> aggregator are not re-tagged).
+local PIPELINE_TAG = "telemetry.pipeline:fluent-bit"
+
+function eh_finalize(tag, ts, record)
+  local t = record["ddtags"]
+  if t == nil or t == "" then
+    t = STATIC_TAGS
+  end
+  if t == nil or t == "" then
+    t = PIPELINE_TAG
+  elseif not string.find("," .. t .. ",", "," .. PIPELINE_TAG .. ",", 1, true) then
+    t = t .. "," .. PIPELINE_TAG
+  end
+  if record["canary"] == true or record["canary"] == "true" then
+    if not string.find("," .. t .. ",", ",env:", 1, true) and os.getenv("FLB_DD_TAGS") == nil then
+      t = t .. ",env:unknown"
+    end
+  end
+  record["ddtags"] = t
+  return 2, ts, record
+end

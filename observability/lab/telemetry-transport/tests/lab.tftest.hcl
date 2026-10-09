@@ -98,10 +98,10 @@ run "reject_public_receiver_via_lab" {
   }
 }
 
-run "reject_bad_event_hub_mode" {
+run "reject_lab_cost_ceiling" {
   command = plan
   variables {
-    settings = { event_hub_mode = "kafka" }
+    settings = { event_hub_capacity = 10 }
   }
-  expect_failures = [module.transport.var.event_hub]
+  expect_failures = [var.settings]
 }

@@ -130,6 +130,7 @@ def fluent_bit_env(**overrides: str) -> dict[str, str]:
         "FLB_FORWARD_TLS_CRT": "",
         "FLB_FORWARD_TLS_KEY": "",
         "FLB_FORWARD_SHARED_KEY": "test-shared-key",
+        "FLB_CANARY_INTERVAL_SEC": "2",  # 60 in deployments
     }
     env.update(overrides)
     return env

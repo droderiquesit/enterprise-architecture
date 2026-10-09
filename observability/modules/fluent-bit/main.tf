@@ -49,6 +49,7 @@ locals {
     },
     var.dd_source != null ? { FLB_DD_SOURCE = var.dd_source } : {},
     var.dd_service != null ? { FLB_DD_SERVICE = var.dd_service } : {},
+    contains(["aggregator", "aggregator-forward", "k8s-daemonset", "linux-host", "windows-host"], var.role) ? { FLB_CANARY_INTERVAL_SEC = tostring(var.canary_interval_seconds) } : {},
     local.is_host ? { FLB_LOG_PATHS = join(",", var.log_paths) } : {},
     var.role == "linux-host" && var.systemd_unit != null ? { FLB_SYSTEMD_UNIT = var.systemd_unit } : {},
     var.role == "k8s-daemonset" ? {

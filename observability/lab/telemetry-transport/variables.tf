@@ -21,6 +21,14 @@ variable "settings" {
     grant_key_vault_secrets_user   = optional(bool, false) # foundation-identity already grants obs-collector
   })
   default = {}
+  validation {
+    condition     = contains(["create", "existing", "none"], var.settings.event_hub_mode) && contains(["container_app", "none"], var.settings.aggregator_hosting) && contains(["container_app", "none"], var.settings.gateway_hosting)
+    error_message = "event_hub_mode: create|existing|none; aggregator_hosting/gateway_hosting: container_app|none."
+  }
+  validation {
+    condition     = var.settings.event_hub_capacity >= 1 && var.settings.event_hub_capacity <= 2 && var.settings.gateway_max_replicas <= 5 && var.settings.aggregator_max_replicas <= 5
+    error_message = "Lab cost ceiling: event_hub_capacity 1-2 TU, gateway/aggregator max_replicas <= 5 (raise in the portable module for production)."
+  }
 }
 
 variable "foundation_network" {
