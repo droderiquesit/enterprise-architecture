@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "profile.schema.json",
+  "title": "Deployment profile (environments/profiles/<profile>.yaml)",
+  "type": "object",
+  "required": ["profile", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "profile": {"enum": ["minimal", "enterprise", "full", "specialized", "observability-only", "custom"]},
+    "description": {"type": "string"},
+    "expensive": {"type": "boolean"},
+    "requires_confirmation": {"type": "boolean"},
+    "components": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"},
+      "uniqueItems": true
+    },
+    "features": {"type": "object"},
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "components"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string"},
+          "components": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

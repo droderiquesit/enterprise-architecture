@@ -1,0 +1,46 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: appservice
+  layer: platform
+  description: App Service web apps (Linux/Windows, code/container).
+match:
+  architectures: [appservice]
+defaults:
+  spec:
+    telemetry:
+      logs: {route: eventhub}
+params:
+  http_5xx_pct: 5
+  response_time_s: 4
+monitors:
+  appsvc.http_5xx_ratio:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Web/sites]}
+    name: "[[[env]]] [[service]] App Service [[resource.name]] 5xx ratio above [[critical]]%"
+    type: query alert
+    # Shape of Datadog's recommended "Azure App Services" 5xx monitor.
+    query: "sum(last_15m):sum:azure.app_services.http5xx{[[resource.scope]]}.as_count() / sum:azure.app_services.requests{[[resource.scope]]}.as_count() * 100 > [[critical]]"
+    thresholds: {critical: "[[params.http_5xx_pct]]"}
+    severity: critical
+    priority: 2
+    summary: The App Service front end reports a high share of HTTP 5xx responses.
+    troubleshooting: |-
+      1. Compare with APM: platform-only 5xx (APM healthy) usually means worker crash/restart or 502/503 from the front end.
+      2. Check AppServiceConsoleLogs and AppServiceHTTPLogs in the log pipeline.
+      3. az webapp log tail -n <app> -g <rg>.
+    runbook_section: appservice-5xx
+  appsvc.response_time:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Web/sites]}
+    name: "[[[env]]] [[service]] App Service [[resource.name]] response time above [[critical]]s"
+    type: query alert
+    query: "avg(last_15m):avg:azure.app_services.response_time{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.response_time_s]]"}
+    severity: warning
+    priority: 3
+    summary: Average platform response time is high.
+    troubleshooting: |-
+      1. Check the plan CPU/memory (azure.web_serverfarms.cpu_percentage / memory_percentage).
+      2. Check downstream latency in the APM service map.
+    runbook_section: appservice-latency

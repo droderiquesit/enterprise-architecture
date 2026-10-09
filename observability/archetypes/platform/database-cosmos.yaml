@@ -1,0 +1,37 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: database-cosmos
+  layer: resource
+  description: Azure Cosmos DB accounts (all APIs).
+match:
+  resource_types: [Microsoft.DocumentDB/databaseAccounts]
+monitors:
+  cosmos.ru_saturation:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DocumentDB/databaseAccounts]}
+    name: "[[[env]]] [[service]] Cosmos DB [[resource.name]] normalized RU above [[critical]]%"
+    type: query alert
+    # Datadog recommended Azure CosmosDB monitor shape.
+    query: "avg(last_15m):max:azure.cosmosdb.normalized_ru_consumption{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: 95}
+    severity: warning
+    priority: 3
+    summary: Provisioned throughput is exhausted on at least one partition; expect 429 throttling.
+    troubleshooting: |-
+      1. Check hot partitions (PartitionKeyRUConsumption diagnostic logs).
+      2. Raise RU/s or autoscale max; check retry-after handling in the SDK.
+    runbook_section: cosmos-ru
+  cosmos.availability:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DocumentDB/databaseAccounts]}
+    name: "[[[env]]] [[service]] Cosmos DB [[resource.name]] availability below [[critical]]%"
+    type: query alert
+    query: "avg(last_1h):avg:azure.cosmosdb.service_availability{[[resource.scope]]} < [[critical]]"
+    thresholds: {critical: 99.9}
+    severity: critical
+    priority: 2
+    summary: The account reports reduced service availability.
+    troubleshooting: |-
+      1. Check Azure Service Health and Resource Health for the account region.
+    runbook_section: cosmos-availability

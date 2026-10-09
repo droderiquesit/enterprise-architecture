@@ -1,0 +1,44 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: logicapp
+  layer: platform
+  description: Logic Apps Consumption (Microsoft.Logic/workflows) and Standard (Microsoft.Web/sites, workflow plan).
+match:
+  architectures: [logicapp]
+defaults:
+  spec:
+    telemetry:
+      logs: {route: eventhub}
+      traces: {enabled: false}
+    idle_behavior: {scale_to_zero: true}
+params:
+  standard_failure_rate_pct: 10
+monitors:
+  logic.runs_failed:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Logic/workflows]}
+    name: "[[[env]]] [[service]] Logic App [[resource.name]] runs failed"
+    type: query alert
+    query: "sum(last_30m):sum:azure.logic_workflows.runs_failed{[[resource.scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: 0}
+    severity: warning
+    priority: 3
+    summary: One or more workflow runs failed.
+    troubleshooting: |-
+      1. Portal -> Logic App -> Runs history; open the failed action.
+      2. Check WorkflowRuntime diagnostic logs in the log pipeline.
+    runbook_section: logicapp-failed
+  logic.standard_failure_rate:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Web/sites]}
+    name: "[[[env]]] [[service]] Logic App Standard [[resource.name]] run failure rate above [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.functions.workflow_runs_failure_rate{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.standard_failure_rate_pct]]"}
+    severity: warning
+    priority: 3
+    summary: Logic Apps Standard workflow runs are failing.
+    troubleshooting: |-
+      1. Check WorkflowRuntime logs; filter by workflow name.
+    runbook_section: logicapp-failed

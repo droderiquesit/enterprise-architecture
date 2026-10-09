@@ -1,0 +1,14 @@
+fastapi>=0.143
+uvicorn>=0.54
+httpx>=0.28
+pydantic>=2.14
+opentelemetry-api>=1.45
+opentelemetry-sdk>=1.45
+opentelemetry-exporter-otlp-proto-grpc>=1.45
+opentelemetry-exporter-otlp-proto-http>=1.45
+opentelemetry-instrumentation-fastapi>=0.66b1
+opentelemetry-instrumentation-httpx>=0.66b1
+opentelemetry-instrumentation-logging>=0.66b1
+azure-identity>=1.26
+azure-core>=1.41
+azure-core-tracing-opentelemetry>=1.0.0b13

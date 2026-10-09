@@ -1,0 +1,7 @@
+-r ../../shared/python/hello_common/requirements.in
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
+redis==8.1.0
+redis-entraid==1.2.2
+opentelemetry-instrumentation-psycopg==0.66b1
+opentelemetry-instrumentation-redis==0.66b1

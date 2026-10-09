@@ -1,0 +1,20 @@
+Metadata-Version: 2.4
+Name: hello-common
+Version: 1.0.0
+Summary: Shared runtime for Enterprise Hello Python services: config, JSON logging, OpenTelemetry, FastAPI app factory, fault injection, resilient HTTP, RFC 7807 problems, Azure credentials.
+License: MIT
+Requires-Python: <3.14,>=3.13
+Requires-Dist: fastapi>=0.143
+Requires-Dist: uvicorn>=0.54
+Requires-Dist: httpx>=0.28
+Requires-Dist: pydantic>=2.14
+Requires-Dist: opentelemetry-api>=1.45
+Requires-Dist: opentelemetry-sdk>=1.45
+Requires-Dist: opentelemetry-exporter-otlp-proto-grpc>=1.45
+Requires-Dist: opentelemetry-exporter-otlp-proto-http>=1.45
+Requires-Dist: opentelemetry-instrumentation-fastapi>=0.66b1
+Requires-Dist: opentelemetry-instrumentation-httpx>=0.66b1
+Requires-Dist: opentelemetry-instrumentation-logging>=0.66b1
+Requires-Dist: azure-identity>=1.26
+Requires-Dist: azure-core>=1.41
+Requires-Dist: azure-core-tracing-opentelemetry>=1.0.0b13

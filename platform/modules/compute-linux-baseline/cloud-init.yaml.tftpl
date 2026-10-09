@@ -1,0 +1,40 @@
+#cloud-config
+# OS preparation only (platform). The application (systemd unit, package, config) is installed
+# later by applications/deployments/vm-workloads via VM Run Command; the Datadog Agent and
+# Fluent Bit are VM extensions owned by observability (ADR-0001 §3).
+package_update: true
+package_upgrade: false
+packages:
+  - ca-certificates
+  - curl
+  - unzip
+  - jq
+  - software-properties-common
+groups:
+  - ${app_group}
+users:
+  - default
+  - name: ${app_user}
+    system: true
+    shell: /usr/sbin/nologin
+    primary_group: ${app_group}
+    homedir: /opt/${app_dir}
+write_files:
+  - path: /etc/${app_dir}/README
+    permissions: "0644"
+    content: |
+      Prepared by platform (${component}). Application layout:
+        /opt/${app_dir}/releases/<version>   unpacked packages (owned by ${app_user})
+        /opt/${app_dir}/current              symlink to the active release
+        /var/log/${app_dir}/<service>.log    JSON log file tailed by Fluent Bit (LOG_FILE_PATH)
+      Python ${python_version} is installed from the deadsnakes PPA (Ubuntu 24.04 ships 3.12).
+runcmd:
+  - [mkdir, -p, /opt/${app_dir}/releases, /var/log/${app_dir}, /etc/${app_dir}]
+  - [chown, -R, "${app_user}:${app_group}", /opt/${app_dir}, /var/log/${app_dir}]
+  - [chmod, "0750", /var/log/${app_dir}]
+%{ if install_python ~}
+  # Python ${python_version} runtime (deadsnakes PPA; requires outbound HTTPS via NAT/firewall).
+  - [add-apt-repository, -y, "ppa:deadsnakes/ppa"]
+  - [apt-get, update]
+  - [apt-get, install, -y, "python${python_version}", "python${python_version}-venv"]
+%{ endif ~}

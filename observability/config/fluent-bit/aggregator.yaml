@@ -1,0 +1,114 @@
+# Fluent Bit aggregator (observability subnet; Container App with internal ingress, or any VM/pod).
+#   - forward input: remote Fluent Bit senders (sidecar-forward.yaml, hosts that may not reach Datadog)
+#   - kafka input:   Azure diagnostic settings -> Event Hubs (Kafka endpoint, SASL_SSL) for App Service,
+#                    Functions and Logic Apps console/app logs (app-logs hub) and platform logs
+#                    (platform-logs hub). Batches {"records":[...]} are split one event per entry.
+#   - datadog output with gzip + TLS, filesystem buffering bounded by storage.total_limit_size.
+#
+# Environment contract:
+#   FLB_STATE_DIR               writable dir (buffer); ephemeral storage on ACA
+#   FLB_FORWARD_SHARED_KEY      secret ref; FLB_FORWARD_TLS on|off; FLB_FORWARD_TLS_CRT / FLB_FORWARD_TLS_KEY file paths
+#   EVENTHUB_BROKERS            <namespace>.servicebus.windows.net:9093
+#   EVENTHUB_TOPICS             app-logs,platform-logs
+#   EVENTHUB_CONSUMER_GROUP     fluent-bit (dedicated consumer group per hub)
+#   KAFKA_SECURITY_PROTOCOL     SASL_SSL (Event Hubs); tests use SASL_PLAINTEXT against a local broker
+#   EVENTHUB_CONNECTION_STRING  secret ref: Listen-only SAS rule connection string (see README exception)
+#   FLB_DD_HOST/FLB_DD_PORT/FLB_DD_TLS/DD_API_KEY/FLB_DD_TAGS as in sidecar.yaml
+service:
+  flush: 1
+  grace: 15
+  log_level: info
+  http_server: on
+  http_listen: 0.0.0.0
+  http_port: 2020
+  health_check: on
+  hc_errors_count: 5
+  hc_retry_failure_count: 5
+  hc_period: 60
+  storage.path: ${FLB_STATE_DIR}/buffer
+  storage.sync: normal
+  storage.backlog.mem_limit: 32M
+  storage.max_chunks_up: 128
+
+includes:
+  - parsers.yaml
+
+pipeline:
+  inputs:
+    - name: forward
+      tag_prefix: fwd.
+      listen: 0.0.0.0
+      port: 24224
+      shared_key: ${FLB_FORWARD_SHARED_KEY}
+      self_hostname: fluent-bit-aggregator
+      tls: ${FLB_FORWARD_TLS}
+      tls.crt_file: ${FLB_FORWARD_TLS_CRT}
+      tls.key_file: ${FLB_FORWARD_TLS_KEY}
+      buffer_chunk_size: 1M
+      buffer_max_size: 6M
+      mem_buf_limit: 64MB
+      storage.type: filesystem
+
+    - name: kafka
+      tag: azure.eventhub
+      brokers: ${EVENTHUB_BROKERS}
+      topics: ${EVENTHUB_TOPICS}
+      group_id: ${EVENTHUB_CONSUMER_GROUP}
+      client_id: fluent-bit-aggregator
+      format: json
+      poll_ms: 500
+      buffer_max_size: 4M
+      threaded: true
+      rdkafka.security.protocol: ${KAFKA_SECURITY_PROTOCOL}
+      rdkafka.sasl.mechanism: PLAIN
+      rdkafka.sasl.username: $ConnectionString
+      rdkafka.sasl.password: ${EVENTHUB_CONNECTION_STRING}
+      rdkafka.request.timeout.ms: 60000
+      rdkafka.session.timeout.ms: 30000
+      rdkafka.metadata.max.age.ms: 180000
+      rdkafka.auto.offset.reset: earliest
+      storage.type: filesystem
+
+  filters:
+    # Azure batches -> one record per entry; app console lines become "message"
+    - name: lua
+      match: azure.*
+      script: lua/enterprise_hello.lua
+      call: eh_azure_split
+    # App Service / Functions console lines are the app's own JSON log lines: lift their fields
+    - name: parser
+      match: azure.*
+      key_name: message
+      parser: eh_json
+      reserve_data: on
+      preserve_key: off
+    - name: lua
+      match: '*'
+      script: lua/enterprise_hello.lua
+      call: eh_normalize
+    - name: lua
+      match: '*'
+      script: lua/enterprise_hello.lua
+      call: eh_redact
+    - name: throttle
+      match: '*'
+      rate: 5000
+      window: 5
+      interval: 1s
+      print_status: false
+
+  outputs:
+    - name: datadog
+      match: '*'
+      host: ${FLB_DD_HOST}
+      port: ${FLB_DD_PORT}
+      tls: ${FLB_DD_TLS}
+      tls.verify: on
+      compress: gzip
+      apikey: ${DD_API_KEY}
+      dd_message_key: message
+      json_date_key: timestamp
+      retry_limit: 10
+      storage.total_limit_size: 1G
+      net.keepalive: on
+      workers: 2

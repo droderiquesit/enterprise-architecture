@@ -1,0 +1,105 @@
+# Fluent Bit DaemonSet for AKS (and any CRI-based Kubernetes): the ONLY collector of container
+# stdout/stderr (Datadog Agent has logs.enabled=false / containerCollectAll=false, ADR-0001 §10).
+#
+# Mounted by the fluent-bit Helm chart at /fluent-bit/etc/eh/ (config + parsers + lua) through
+# observability/modules/kubernetes. Environment contract:
+#   FLB_EXCLUDE_PATHS   comma list, e.g. /var/log/containers/*_kube-system_*.log,/var/log/containers/*_datadog_*.log
+#   FLB_DD_HOST / FLB_DD_PORT / FLB_DD_TLS / DD_API_KEY (secretKeyRef) / FLB_DD_TAGS (cluster-level static tags)
+#   FLB_DD_SOURCE       default ddsource when a pod has no logs.datadoghq.com/source label
+#   FLB_THROTTLE_RATE   records per interval per node before throttling (e.g. 2000)
+# Pods can opt out with the annotation fluentbit.io/exclude: "true" (k8s-logging.exclude).
+service:
+  flush: 1
+  grace: 10
+  log_level: info
+  http_server: on
+  http_listen: 0.0.0.0
+  http_port: 2020
+  health_check: on
+  hc_errors_count: 5
+  hc_retry_failure_count: 5
+  hc_period: 60
+  storage.path: /var/fluent-bit/state/buffer
+  storage.sync: normal
+  storage.checksum: off
+  storage.backlog.mem_limit: 16M
+  storage.max_chunks_up: 64
+
+includes:
+  - parsers.yaml
+
+pipeline:
+  inputs:
+    - name: tail
+      tag: kube.*
+      path: /var/log/containers/*.log
+      exclude_path: ${FLB_EXCLUDE_PATHS}
+      multiline.parser: cri
+      db: /var/fluent-bit/state/flb_kube.db
+      db.locking: true
+      refresh_interval: 10
+      rotate_wait: 15
+      skip_long_lines: on
+      buffer_max_size: 256k
+      mem_buf_limit: 32MB
+      storage.type: filesystem
+
+  filters:
+    # glue plain-text stack traces (unhandled exceptions on stderr) before JSON parsing
+    - name: multiline
+      match: kube.*
+      multiline.key_content: log
+      multiline.parser: eh_stack
+      flush_ms: 1000
+      emitter_mem_buf_limit: 16M
+    - name: kubernetes
+      match: kube.*
+      kube_tag_prefix: kube.var.log.containers.
+      merge_log: off
+      keep_log: on
+      labels: on
+      annotations: off
+      k8s-logging.parser: off
+      k8s-logging.exclude: on
+      buffer_size: 0
+      kube_meta_cache_ttl: 300s
+    - name: parser
+      match: kube.*
+      key_name: log
+      parser: eh_json
+      reserve_data: on
+      preserve_key: off
+    - name: lua
+      match: kube.*
+      script: lua/enterprise_hello.lua
+      call: eh_normalize
+    - name: lua
+      match: kube.*
+      script: lua/enterprise_hello.lua
+      call: eh_k8s
+    - name: lua
+      match: kube.*
+      script: lua/enterprise_hello.lua
+      call: eh_redact
+    - name: throttle
+      match: kube.*
+      rate: ${FLB_THROTTLE_RATE}
+      window: 5
+      interval: 1s
+      print_status: false
+
+  outputs:
+    - name: datadog
+      match: kube.*
+      host: ${FLB_DD_HOST}
+      port: ${FLB_DD_PORT}
+      tls: ${FLB_DD_TLS}
+      tls.verify: on
+      compress: gzip
+      apikey: ${DD_API_KEY}
+      dd_message_key: message
+      json_date_key: timestamp
+      retry_limit: 8
+      storage.total_limit_size: 512M
+      net.keepalive: on
+      workers: 2

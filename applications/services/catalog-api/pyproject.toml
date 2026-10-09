@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hello-catalog-api"
+version = "1.0.0"
+description = "Enterprise Hello catalog API (FastAPI, PostgreSQL + Azure Managed Redis cache-aside)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "hello-common",
+  "psycopg[binary]>=3.3",
+  "psycopg-pool>=3.3",
+  "redis>=8.1",
+  "redis-entraid>=1.2",
+  "opentelemetry-instrumentation-psycopg>=0.66b1",
+  "opentelemetry-instrumentation-redis>=0.66b1",
+]
+
+[project.scripts]
+hello-catalog-api = "hello_catalog.__main__:main"
+
+[tool.uv.sources]
+hello-common = { path = "../../shared/python/hello_common", editable = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: runs against real local docker containers (postgres, redis)"]
+addopts = "-m 'not integration'"

@@ -6,3 +6,5 @@ provider "azurerm" {
   # Pipeline identities hold no provider-registration rights; bootstrap/scripts/bootstrap.sh registers providers.
   resource_provider_registrations = "none"
 }
+
+provider "time" {}

@@ -1,0 +1,48 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: database-mysql
+  layer: resource
+  description: Azure Database for MySQL flexible server.
+match:
+  resource_types: [Microsoft.DBforMySQL/flexibleServers]
+monitors:
+  mysql.cpu:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DBforMySQL/flexibleServers]}
+    name: "[[[env]]] [[service]] MySQL [[resource.name]] CPU above [[critical]]%"
+    type: query alert
+    query: "avg(last_15m):avg:azure.dbformysql_flexibleservers.cpu_percent{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: 90}
+    severity: warning
+    priority: 3
+    summary: Server CPU is saturated.
+    troubleshooting: |-
+      1. DBM query metrics; slow query log via diagnostic settings.
+    runbook_section: mysql-cpu
+  mysql.aborted_connections:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DBforMySQL/flexibleServers]}
+    name: "[[[env]]] [[service]] MySQL [[resource.name]] aborted connections"
+    type: query alert
+    query: "sum(last_15m):sum:azure.dbformysql_flexibleservers.aborted_connections{[[resource.scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: 10}
+    severity: warning
+    priority: 3
+    summary: Clients fail to connect or connections are aborted.
+    troubleshooting: |-
+      1. Check TLS settings and credentials of the client.
+    runbook_section: mysql-connections
+  mysql.storage:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DBforMySQL/flexibleServers]}
+    name: "[[[env]]] [[service]] MySQL [[resource.name]] storage above [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.dbformysql_flexibleservers.storage_percent{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: 90}
+    severity: warning
+    priority: 3
+    summary: Storage almost full.
+    troubleshooting: |-
+      1. Enable storage auto-grow.
+    runbook_section: mysql-storage

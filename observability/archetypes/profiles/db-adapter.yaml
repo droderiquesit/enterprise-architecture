@@ -1,0 +1,21 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: db-adapter
+  layer: profile
+  description: Thin data-access API per database family (CRUD + roundtrip). Lower tier than customer-facing APIs.
+extends: http-api
+defaults:
+  metadata:
+    tier: low
+  spec:
+    catalog: {type: db}
+    slos:
+      - {name: availability, type: availability, target: 99.0, timeframe: 7d}
+params:
+  error_rate_pct: 10
+  error_rate_warn_pct: 5
+  latency_p95_s: 2
+  latency_p95_warn_s: 1
+monitors:
+  apm.http_5xx: {enabled: false}

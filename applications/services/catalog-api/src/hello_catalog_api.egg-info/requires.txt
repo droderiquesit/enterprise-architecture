@@ -1,0 +1,7 @@
+hello-common
+psycopg[binary]>=3.3
+psycopg-pool>=3.3
+redis>=8.1
+redis-entraid>=1.2
+opentelemetry-instrumentation-psycopg>=0.66b1
+opentelemetry-instrumentation-redis>=0.66b1

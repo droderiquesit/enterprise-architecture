@@ -1,0 +1,46 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: aca
+  layer: platform
+  description: Azure Container Apps (apps and jobs). Platform metrics via the Datadog Azure integration.
+match:
+  architectures: [aca]
+defaults:
+  spec:
+    telemetry:
+      logs: {route: sidecar}
+params:
+  http_5xx_pct: 5
+  max_restarts_15m: 3
+monitors:
+  aca.http_5xx_ratio:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.App/containerApps]}
+    name: "[[[env]]] [[service]] Container App [[resource.name]] 5xx ratio above [[critical]]%"
+    type: query alert
+    # Query shape from Datadog's recommended Azure Container Apps monitor (statuscodecategory tag).
+    query: "sum(last_15m):sum:azure.app_containerapps.requests{[[resource.scope]],statuscodecategory:5xx}.as_count() / sum:azure.app_containerapps.requests{[[resource.scope]]}.as_count() * 100 > [[critical]]"
+    thresholds: {critical: "[[params.http_5xx_pct]]"}
+    severity: critical
+    priority: 2
+    summary: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).
+    troubleshooting: |-
+      1. Compare with the APM error rate; if APM is healthy the failures are at ingress/revision level.
+      2. az containerapp revision list -n <app> -g <rg> -o table; check the active revision is healthy.
+      3. Review ContainerAppSystemLogs (diagnostic settings) for probe failures and scaling events.
+    runbook_section: aca-5xx
+  aca.restarts:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.App/containerApps]}
+    name: "[[[env]]] [[service]] Container App [[resource.name]] replicas restarting"
+    type: query alert
+    query: "sum(last_15m):sum:azure.app_containerapps.restart_count{[[resource.scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: "[[params.max_restarts_15m]]"}
+    severity: warning
+    priority: 3
+    summary: Container replicas restarted repeatedly (probe failures, crashes or OOM).
+    troubleshooting: |-
+      1. az containerapp logs show -n <app> -g <rg> --type system to read restart reasons.
+      2. Check the Fluent Bit sidecar is not the restarting container (telemetry pipeline dashboard).
+    runbook_section: aca-restarts

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "environment.schema.json",
+  "title": "Lab environment (environments/<env>/environment.yaml)",
+  "description": "Globals and per-component settings of one lab environment. See ADR-0001 §6. Values are inputs, never secrets.",
+  "type": "object",
+  "required": ["environment", "profile"],
+  "additionalProperties": true,
+  "properties": {
+    "environment": {
+      "type": "object",
+      "required": ["name", "location", "subscription_id", "tenant_id", "name_prefix", "owner", "team", "cost_center", "expires_on"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9]{1,7}$"},
+        "location": {"type": "string", "pattern": "^[a-z0-9]+$"},
+        "subscription_id": {"$ref": "#/$defs/guid"},
+        "tenant_id": {"$ref": "#/$defs/guid"},
+        "name_prefix": {"type": "string", "pattern": "^[a-z][a-z0-9]{1,5}$"},
+        "owner": {"type": "string", "minLength": 1},
+        "team": {"type": "string", "minLength": 1},
+        "cost_center": {"type": "string", "minLength": 1},
+        "expires_on": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "tags": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "profile": {"enum": ["minimal", "enterprise", "full", "specialized", "observability-only", "custom"]},
+    "custom_components": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/componentId"},
+      "uniqueItems": true
+    },
+    "datadog": {
+      "type": "object",
+      "properties": {
+        "site": {"enum": ["datadoghq.com", "us3.datadoghq.com", "us5.datadoghq.com", "datadoghq.eu", "ap1.datadoghq.com", "ap2.datadoghq.com", "ddog-gov.com", "uk1.datadoghq.com"]},
+        "api_key_secret_name": {"type": "string"},
+        "app_key_secret_name": {"type": "string"}
+      },
+      "not": {"anyOf": [{"required": ["api_key"]}, {"required": ["app_key"]}]}
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "hub_address_space": {"$ref": "#/$defs/cidr"},
+        "spoke_address_space": {"$ref": "#/$defs/cidr"}
+      }
+    },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "monthly_amount": {"type": "number", "minimum": 0},
+        "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "contact_emails": {"type": "array", "items": {"type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$"}}
+      }
+    },
+    "components": {
+      "description": "Per-component settings blocks, rendered as var.settings of that root.",
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/componentId"},
+      "additionalProperties": {"type": "object"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"profile": {"const": "custom"}}},
+      "then": {"required": ["custom_components"], "properties": {"custom_components": {"minItems": 1}}}
+    }
+  ],
+  "$defs": {
+    "guid": {"type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "cidr": {"type": "string", "pattern": "^\\d{1,3}(\\.\\d{1,3}){3}/\\d{1,2}$"},
+    "componentId": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"}
+  }
+}

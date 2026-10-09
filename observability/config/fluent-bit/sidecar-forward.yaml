@@ -1,0 +1,86 @@
+# Fluent Bit sidecar, forward variant: tails LOG_FILE_PATH and ships to the Fluent Bit aggregator
+# (Forward protocol, shared key, optional TLS) instead of straight to Datadog. Use it when egress to
+# the Datadog intake is only allowed from the observability subnet. Same parsing/redaction as sidecar.yaml.
+#
+# Environment contract (set by the instrumentation hook, never hard-coded here):
+#   LOG_FILE_PATH        file written by the app (e.g. /var/log/app/app.log; rotation 10MB x 3 by the app)
+#   FLB_STATE_DIR        writable dir for tail offsets + filesystem buffer (e.g. /var/log/app/.flb)
+#   FLB_FORWARD_HOST     aggregator host (contract fluentbit.forward_host)
+#   FLB_FORWARD_PORT     24224 (contract fluentbit.forward_port)
+#   FLB_FORWARD_TLS      on | off (on when the aggregator exposes TLS)
+#   FLB_FORWARD_TLS_VERIFY on | off
+#   FLB_FORWARD_SHARED_KEY from a secret reference (Key Vault)
+#   FLB_DD_SERVICE       fallback service when a line carries none (plain-text stack traces)
+#   FLB_DD_SOURCE        ddsource (csharp | python | nodejs ...)
+#   FLB_DD_TAGS          static tags, comma separated (env:dev,version:1.2.3,team:...)
+service:
+  flush: 1
+  grace: 10
+  log_level: info
+  http_server: on
+  http_listen: 0.0.0.0
+  http_port: 2020
+  health_check: on
+  hc_errors_count: 5
+  hc_retry_failure_count: 5
+  hc_period: 60
+  storage.path: ${FLB_STATE_DIR}/buffer
+  storage.sync: normal
+  storage.checksum: off
+  storage.backlog.mem_limit: 8M
+  storage.max_chunks_up: 32
+
+includes:
+  - parsers.yaml
+
+pipeline:
+  inputs:
+    - name: tail
+      tag: app.sidecar
+      path: ${LOG_FILE_PATH}*
+      exclude_path: '*.gz,*.zip'
+      db: ${FLB_STATE_DIR}/tail.db
+      db.locking: true
+      read_from_head: true
+      refresh_interval: 5
+      rotate_wait: 15
+      skip_long_lines: on
+      buffer_max_size: 256k
+      mem_buf_limit: 16MB
+      storage.type: filesystem
+      multiline.parser: eh_stack
+
+  filters:
+    - name: parser
+      match: app.*
+      key_name: log
+      parser: eh_json
+      reserve_data: on
+      preserve_key: off
+    - name: lua
+      match: app.*
+      script: lua/enterprise_hello.lua
+      call: eh_normalize
+    - name: lua
+      match: app.*
+      script: lua/enterprise_hello.lua
+      call: eh_redact
+    - name: lua
+      match: app.*
+      script: lua/enterprise_hello.lua
+      call: eh_static_tags
+
+  outputs:
+    - name: forward
+      match: app.*
+      host: ${FLB_FORWARD_HOST}
+      port: ${FLB_FORWARD_PORT}
+      shared_key: ${FLB_FORWARD_SHARED_KEY}
+      self_hostname: ${HOSTNAME}
+      tls: ${FLB_FORWARD_TLS}
+      tls.verify: ${FLB_FORWARD_TLS_VERIFY}
+      require_ack_response: true
+      compress: gzip
+      retry_limit: 8
+      storage.total_limit_size: 256M
+      net.keepalive: on

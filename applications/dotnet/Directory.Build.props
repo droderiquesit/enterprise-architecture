@@ -26,6 +26,11 @@
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>moderate</NuGetAuditLevel>
+    <!--
+      CA1727: log template placeholders are snake_case on purpose — they become JSON log field names (ADR-0001 §9).
+      CA1848/CA1873: LoggerMessage source generation is used on hot paths; template logging elsewhere is acceptable.
+    -->
+    <NoWarn>$(NoWarn);CA1727;CA1848;CA1873</NoWarn>
   </PropertyGroup>
 
   <!-- src projects: warnings are errors. Test projects keep warnings visible but non-fatal. -->

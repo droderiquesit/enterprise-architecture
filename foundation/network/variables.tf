@@ -53,7 +53,7 @@ variable "settings" {
     private_dns_zones_extra   = optional(map(string), {})
     ampls_zones               = optional(bool, false) # Azure Monitor Private Link Scope zones (changes DNS for all Azure Monitor endpoints)
 
-    internal_dns_zone              = optional(string)    # default "<env>.<prefix>.lab.internal"
+    internal_dns_zone              = optional(string)     # default "<env>.<prefix>.lab.internal"
     internal_dns_zone_registration = optional(bool, true) # VM auto-registration in the spoke
 
     aks_public_ingress    = optional(bool, false) # allow Internet 80/443 to aks-nodes (public LoadBalancer services)

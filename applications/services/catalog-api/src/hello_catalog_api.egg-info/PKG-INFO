@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: hello-catalog-api
+Version: 1.0.0
+Summary: Enterprise Hello catalog API (FastAPI, PostgreSQL + Azure Managed Redis cache-aside)
+Requires-Python: <3.14,>=3.13
+Requires-Dist: hello-common
+Requires-Dist: psycopg[binary]>=3.3
+Requires-Dist: psycopg-pool>=3.3
+Requires-Dist: redis>=8.1
+Requires-Dist: redis-entraid>=1.2
+Requires-Dist: opentelemetry-instrumentation-psycopg>=0.66b1
+Requires-Dist: opentelemetry-instrumentation-redis>=0.66b1

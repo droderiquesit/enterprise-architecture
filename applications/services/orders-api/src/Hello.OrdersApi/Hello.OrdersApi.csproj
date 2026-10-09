@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Hello.OrdersApi</RootNamespace>
+    <AssemblyName>Hello.OrdersApi</AssemblyName>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../shared/dotnet/Hello.Common/Hello.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Data.SqlClient.Extensions.Azure" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" />
+    <PackageReference Include="Azure.Messaging.ServiceBus" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data/Migrations/*.sql" />
+    <InternalsVisibleTo Include="Hello.OrdersApi.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "onboarding-manifest.v1.schema.json",
+  "title": "ServiceOnboarding manifest v1 (one per service)",
+  "description": "Declares how one service is monitored. Merged by tools/onboarding/render.py over archetypes: global-defaults -> platform (architecture) -> resource archetypes -> application profile -> this manifest. String values may contain ${contract:<contract-name>.<dot.path>} or ${var:<name>} references (see README 'References').",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "$defs": {
+    "ref_or_string": {"type": "string", "minLength": 1},
+    "slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+    "contact": {
+      "type": "object",
+      "required": ["type", "contact"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "type": {"enum": ["email", "slack", "microsoft-teams", "pagerduty", "opsgenie", "link", "other"]},
+        "contact": {"type": "string", "minLength": 1}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "required": ["id", "type", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/ref_or_string", "description": "Azure resource id (verbatim) or a ${contract:...} reference."},
+        "type": {"type": "string", "pattern": "^[A-Za-z]+\\.[A-Za-z]+/[A-Za-z/]+$", "description": "ARM resource type, e.g. Microsoft.Sql/servers/databases"},
+        "role": {"$ref": "#/$defs/slug", "description": "Unique within the manifest; used in monitor keys (<monitor>@<role>)."},
+        "required": {"type": "boolean", "default": true, "description": "false: an unresolved reference drops the resource with a warning instead of failing."},
+        "entities": {"type": "array", "items": {"type": "string"}, "description": "Messaging entities (queue / topic / topic/subscription) to monitor for backlog and dead-letter."},
+        "tags": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "required": ["name", "url", "visibility"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"$ref": "#/$defs/slug"},
+        "url": {"$ref": "#/$defs/ref_or_string"},
+        "visibility": {"enum": ["public", "private"]},
+        "health_path": {"type": "string", "default": "/healthz"},
+        "required": {"type": "boolean", "default": true},
+        "browser_journey": {"type": "boolean", "default": false, "description": "Create a browser synthetic for this endpoint (frontends)."},
+        "synthetic": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "locations": {"type": "array", "items": {"type": "string"}},
+            "private_location": {"type": "boolean", "description": "Run from the private location supplied to the Terraform module (private_location_id)."},
+            "tick_every": {"type": "integer", "minimum": 60, "maximum": 604800}
+          }
+        }
+      }
+    },
+    "slo": {
+      "type": "object",
+      "required": ["name", "type", "target", "timeframe"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"$ref": "#/$defs/slug"},
+        "type": {"enum": ["availability", "latency"]},
+        "target": {"type": "number", "exclusiveMinimum": 50, "exclusiveMaximum": 100},
+        "warning": {"type": "number", "exclusiveMinimum": 50, "exclusiveMaximum": 100},
+        "timeframe": {"enum": ["7d", "30d", "90d"]},
+        "threshold_ms": {"type": "integer", "minimum": 1},
+        "burn_rate_alerts": {"type": "boolean", "default": true}
+      },
+      "allOf": [{"if": {"properties": {"type": {"const": "latency"}}}, "then": {"required": ["threshold_ms"]}}]
+    }
+  },
+  "properties": {
+    "apiVersion": {"const": "observability/v1"},
+    "kind": {"const": "ServiceOnboarding"},
+    "metadata": {
+      "type": "object",
+      "required": ["service", "team", "owner", "env", "runbook_url"],
+      "additionalProperties": false,
+      "properties": {
+        "service": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$", "description": "Datadog unified service tag value (DD_SERVICE)."},
+        "display_name": {"type": "string"},
+        "team": {"$ref": "#/$defs/slug"},
+        "owner": {"type": "string", "minLength": 1},
+        "application": {"type": "string"},
+        "domain": {"type": "string"},
+        "tier": {"type": "string", "enum": ["critical", "high", "medium", "low"]},
+        "env": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}], "description": "Environment(s) this manifest applies to."},
+        "repository": {"type": "string"},
+        "runbook_url": {"type": "string", "pattern": "^https?://"},
+        "description": {"type": "string"},
+        "languages": {"type": "array", "items": {"type": "string"}},
+        "depends_on": {"type": "array", "items": {"type": "string", "pattern": "^(service|datastore|queue|library):[a-z0-9._-]+$"}},
+        "contacts": {"type": "array", "items": {"$ref": "#/$defs/contact"}},
+        "tags": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["architecture", "telemetry"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean", "default": true},
+        "architecture": {"enum": ["aks", "aca", "aci", "appservice", "functions", "vm", "vmss", "logicapp", "batch", "swa", "sfmc", "aro", "external"]},
+        "runtime": {"type": "string", "description": "dotnet | python | node | browser | java | go | other"},
+        "resources": {"type": "array", "items": {"$ref": "#/$defs/resource"}},
+        "endpoints": {"type": "array", "items": {"$ref": "#/$defs/endpoint"}},
+        "telemetry": {
+          "type": "object",
+          "required": ["profile"],
+          "additionalProperties": false,
+          "properties": {
+            "profile": {"type": "string", "description": "Application profile file name under archetypes/profiles (without .yaml)."},
+            "logs": {"type": "object", "additionalProperties": false, "properties": {"route": {"enum": ["daemonset", "sidecar", "eventhub", "host", "none"]}}},
+            "traces": {"type": "object", "additionalProperties": false, "properties": {"enabled": {"type": "boolean"}, "sample_rate": {"type": "number", "minimum": 0, "maximum": 1}, "server_operation": {"type": "string"}}},
+            "rum": {"type": "object", "additionalProperties": false, "properties": {"enabled": {"type": "boolean"}, "application_ref": {"type": "string"}}},
+            "dbm": {"type": "object", "additionalProperties": false, "properties": {"enabled": {"type": "boolean"}, "engine": {"enum": ["postgres", "sqlserver", "mysql"]}, "endpoint_ref": {"type": "string"}}}
+          }
+        },
+        "slos": {"type": "array", "items": {"$ref": "#/$defs/slo"}},
+        "monitors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "overrides": {"type": "object", "additionalProperties": {"type": "object"}, "description": "<monitor_key> (or <monitor_key>@<role>) -> partial monitor spec merged last."},
+            "disabled": {"type": "array", "items": {"type": "string"}, "description": "Monitor keys to drop (glob * allowed)."},
+            "params": {"type": "object", "description": "Overrides of archetype params used in query templates."}
+          }
+        },
+        "notifications": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default": {"type": "array", "items": {"type": "string"}},
+            "critical": {"type": "array", "items": {"type": "string"}},
+            "warning": {"type": "array", "items": {"type": "string"}}
+          },
+          "description": "Route keys resolved by the notification-routing module (never raw handles)."
+        },
+        "idle_behavior": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scale_to_zero": {"type": "boolean", "default": false},
+            "expected_quiet_hours": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["rrule", "duration", "timezone"],
+              "properties": {
+                "rrule": {"type": "string", "pattern": "^FREQ="},
+                "start": {"type": "string"},
+                "duration": {"type": "string", "pattern": "^[0-9]+[mhd]$"},
+                "timezone": {"type": "string"}
+              }
+            }
+          }
+        },
+        "dashboards": {"type": "object", "additionalProperties": false, "properties": {"enabled": {"type": "boolean"}}},
+        "catalog": {"type": "object", "additionalProperties": false, "properties": {"enabled": {"type": "boolean"}, "lifecycle": {"type": "string"}, "type": {"type": "string"}, "component_of": {"type": "array", "items": {"type": "string"}}}}
+      }
+    }
+  }
+}

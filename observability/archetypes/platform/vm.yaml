@@ -1,0 +1,32 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: vm
+  layer: platform
+  description: Virtual machines and VM scale sets running the Datadog Agent and a Fluent Bit service.
+match:
+  architectures: [vm, vmss, sfmc]
+defaults:
+  spec:
+    telemetry:
+      logs: {route: host}
+params:
+  cpu_busy_pct: 90
+monitors:
+  host.cpu_high:
+    scope: service
+    name: "[[[env]]] [[service]] host CPU above [[critical]]%"
+    type: query alert
+    # Datadog recommended "CPU usage is high" monitor shape (system.cpu.idle from the Agent).
+    # notify_no_data: the Agent on an always-on host must report; silence = agent/host down.
+    query: "avg(last_10m):100 - avg:system.cpu.idle{[[service_scope]]} by {host} > [[critical]]"
+    thresholds: {critical: "[[params.cpu_busy_pct]]"}
+    notify_no_data: true
+    no_data_timeframe: 20
+    severity: warning
+    priority: 3
+    summary: Host CPU is saturated, or the Datadog Agent stopped reporting (no data).
+    troubleshooting: |-
+      1. No data: check the VM is running (az vm get-instance-view) and the datadog-agent service status.
+      2. High CPU: Live Processes for host:{{host.name}}.
+    runbook_section: host-cpu

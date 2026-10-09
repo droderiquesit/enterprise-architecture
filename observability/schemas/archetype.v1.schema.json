@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "archetype.v1.schema.json",
+  "title": "Monitoring archetype v1 (global defaults, platform, resource or application profile layer)",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata"],
+  "additionalProperties": false,
+  "$defs": {
+    "monitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "scope": {"enum": ["service", "resource"]},
+        "applies_to": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resource_types"],
+          "properties": {
+            "resource_types": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+            "role_pattern": {"type": "string"}
+          }
+        },
+        "when": {"type": "array", "items": {"type": "string", "pattern": "^!?[a-z_.]+((!=|=)[A-Za-z0-9_.-]+)?$"}},
+        "name": {"type": "string"},
+        "type": {"enum": ["query alert", "metric alert", "log alert", "rum alert", "trace-analytics alert", "service check", "event-v2 alert", "composite"]},
+        "query": {"type": "string"},
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "critical": {"type": ["number", "string"]},
+            "warning": {"type": ["number", "string"]},
+            "critical_recovery": {"type": ["number", "string"]},
+            "warning_recovery": {"type": ["number", "string"]}
+          }
+        },
+        "notify_no_data": {"type": "boolean"},
+        "no_data_timeframe": {"type": "integer", "minimum": 2},
+        "require_full_window": {"type": "boolean"},
+        "evaluation_delay": {"type": "integer", "minimum": 0},
+        "new_group_delay": {"type": "integer", "minimum": 0},
+        "renotify_interval": {"type": "integer", "minimum": 0},
+        "severity": {"enum": ["critical", "warning"]},
+        "priority": {"type": "integer", "minimum": 1, "maximum": 5},
+        "summary": {"type": "string"},
+        "troubleshooting": {"type": "string"},
+        "runbook_section": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "tags+": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "properties": {
+    "apiVersion": {"const": "observability/v1"},
+    "kind": {"const": "Archetype"},
+    "metadata": {
+      "type": "object",
+      "required": ["name", "layer"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "layer": {"enum": ["global", "platform", "resource", "profile"]},
+        "description": {"type": "string"}
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "architectures": {"type": "array", "items": {"type": "string"}},
+        "resource_types": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "extends": {"type": "string", "description": "Profiles only: another profile merged before this one."},
+    "defaults": {"type": "object", "description": "Partial manifest (metadata/spec) merged under the service manifest."},
+    "params": {"type": "object"},
+    "synthetics": {"type": "object"},
+    "slo_burn_rate": {"type": "object"},
+    "monitors": {"type": "object", "additionalProperties": {"$ref": "#/$defs/monitor"}}
+  }
+}

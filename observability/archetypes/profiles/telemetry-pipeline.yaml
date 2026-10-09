@@ -1,0 +1,121 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: telemetry-pipeline
+  layer: profile
+  description: Health of the telemetry transport itself (Fluent Bit + OpenTelemetry gateway) and the pipeline canary.
+    The canary is what separates "the pipeline is broken" from "the application is idle".
+defaults:
+  metadata:
+    tier: critical
+  spec:
+    telemetry:
+      traces: {enabled: false}
+      logs: {route: none}
+    catalog: {type: custom}
+params:
+  # Metric names as emitted by Fluent Bit's Prometheus endpoint (/api/v2/metrics/prometheus) and scraped by the
+  # OTel gateway prometheus receiver (trim_metric_suffixes=false keeps "_total"); collector self-metrics from
+  # service.telemetry.metrics scraped by a prometheus/internal receiver (without_type_suffix: true).
+  # The collector must set resource attribute deployment.environment(.name)=<env> so the env tag exists.
+  pipeline_scope: "env:[[env]]"
+  fluentbit_error_threshold: 10
+  fluentbit_retry_failed_threshold: 0
+  otel_failed_threshold: 10
+  # Canary: Fluent Bit `dummy` input emits one record per minute with these attributes (see README).
+  canary_log_query: "service:telemetry-canary @canary:true env:[[env]]"
+  canary_window: 15m
+monitors:
+  pipeline.canary_logs_missing:
+    scope: service
+    name: "[[[env]]] telemetry pipeline canary logs missing"
+    type: log alert
+    query: 'logs("[[params.canary_log_query]]").index("*").rollup("count").last("[[params.canary_window]]") < [[critical]]'
+    thresholds: {critical: 1}
+    severity: critical
+    priority: 1
+    summary: The heartbeat record emitted every minute by Fluent Bit did not arrive. Application "no data" alerts during this window are pipeline failures, not idleness.
+    troubleshooting: |-
+      1. Fluent Bit health: GET http://<fluent-bit>:2020/api/v2/health on the aggregator / DaemonSet / sidecars.
+      2. Check fluentbit_output_errors_total and retries below; 403 from Datadog = wrong API key or site.
+      3. Check egress (NAT/firewall) to the Datadog logs intake for the configured site.
+    runbook_section: pipeline-canary
+  pipeline.fluentbit_output_errors:
+    scope: service
+    name: "[[[env]]] Fluent Bit output errors"
+    type: query alert
+    query: "sum(last_15m):sum:fluentbit_output_errors_total{[[params.pipeline_scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: "[[params.fluentbit_error_threshold]]"}
+    severity: warning
+    priority: 3
+    summary: Fluent Bit outputs return errors (records are retried).
+    troubleshooting: |-
+      1. kubectl logs / container logs of Fluent Bit; look for "[output:datadog" or "[output:http" errors.
+    runbook_section: fluentbit-errors
+  pipeline.fluentbit_dropped:
+    scope: service
+    name: "[[[env]]] Fluent Bit dropped or retry-exhausted records"
+    type: query alert
+    query: "sum(last_15m):sum:fluentbit_output_retries_failed_total{[[params.pipeline_scope]]}.as_count() + sum:fluentbit_output_dropped_records_total{[[params.pipeline_scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: "[[params.fluentbit_retry_failed_threshold]]"}
+    severity: critical
+    priority: 2
+    summary: Log records were lost after exhausting retries.
+    troubleshooting: |-
+      1. Check storage.total_limit_size / filesystem buffering and Datadog intake reachability.
+    runbook_section: fluentbit-dropped
+  pipeline.fluentbit_not_reporting:
+    scope: service
+    name: "[[[env]]] Fluent Bit metrics not reporting"
+    type: query alert
+    # The canary dummy input guarantees input records every minute, so silence here is a real failure.
+    query: "sum(last_15m):sum:fluentbit_input_records_total{[[params.pipeline_scope]]}.as_count() < [[critical]]"
+    thresholds: {critical: 1}
+    notify_no_data: true
+    no_data_timeframe: 20
+    severity: critical
+    priority: 2
+    summary: No Fluent Bit metrics arrive (Fluent Bit down, or the gateway stopped scraping it).
+    troubleshooting: |-
+      1. Check the OTel gateway prometheus receiver target list and Fluent Bit HTTP server (port 2020).
+    runbook_section: fluentbit-not-reporting
+  pipeline.otel_export_failures:
+    scope: service
+    name: "[[[env]]] OTel gateway export failures"
+    type: query alert
+    query: "sum(last_15m):sum:otelcol_exporter_send_failed_spans{[[params.pipeline_scope]]}.as_count() + sum:otelcol_exporter_send_failed_metric_points{[[params.pipeline_scope]]}.as_count() + sum:otelcol_exporter_send_failed_log_records{[[params.pipeline_scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: "[[params.otel_failed_threshold]]"}
+    severity: critical
+    priority: 2
+    summary: The collector fails to export telemetry to Datadog.
+    troubleshooting: |-
+      1. Collector logs: look for 403 (API key), 413 (payload), DNS/TLS errors.
+      2. otelcol_exporter_queue_size close to otelcol_exporter_queue_capacity = backpressure.
+    runbook_section: otel-export
+  pipeline.otel_refused:
+    scope: service
+    name: "[[[env]]] OTel gateway refusing data"
+    type: query alert
+    query: "sum(last_15m):sum:otelcol_receiver_refused_spans{[[params.pipeline_scope]]}.as_count() + sum:otelcol_receiver_refused_metric_points{[[params.pipeline_scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: 0}
+    severity: warning
+    priority: 3
+    summary: Receivers refuse data (memory_limiter engaged or invalid payloads).
+    troubleshooting: |-
+      1. Check otelcol_process_memory_rss against the memory_limiter settings; scale the gateway.
+    runbook_section: otel-refused
+  pipeline.otel_not_reporting:
+    scope: service
+    name: "[[[env]]] OTel gateway self-metrics missing"
+    type: query alert
+    query: "avg(last_15m):avg:otelcol_process_uptime{[[params.pipeline_scope]]} < [[critical]]"
+    thresholds: {critical: 0}
+    notify_no_data: true
+    no_data_timeframe: 20
+    severity: critical
+    priority: 2
+    summary: The collector stopped reporting its own metrics (collector down or metrics path broken).
+    troubleshooting: |-
+      1. Check the gateway replicas (Container App / Deployment) and its internal telemetry endpoint :8888.
+    runbook_section: otel-not-reporting
+  logs.error_spike: {enabled: false}

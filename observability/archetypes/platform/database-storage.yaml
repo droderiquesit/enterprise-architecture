@@ -1,0 +1,35 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: database-storage
+  layer: resource
+  description: Storage accounts used as data stores (Table / Blob).
+match:
+  resource_types: [Microsoft.Storage/storageAccounts]
+monitors:
+  storage.table_availability:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Storage/storageAccounts], role_pattern: "*table*"}
+    name: "[[[env]]] [[service]] Table storage [[resource.name]] availability below [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.storage_storageaccounts_tableservices.availability{[[resource.scope]]} < [[critical]]"
+    thresholds: {critical: 99}
+    severity: warning
+    priority: 3
+    summary: Table service requests are failing (availability counts server and auth/network errors).
+    troubleshooting: |-
+      1. Check StorageRead/StorageWrite diagnostic logs for status codes (403 = RBAC / firewall).
+    runbook_section: storage-availability
+  storage.blob_latency:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Storage/storageAccounts], role_pattern: "*blob*"}
+    name: "[[[env]]] [[service]] Blob storage [[resource.name]] E2E latency above [[critical]]ms"
+    type: query alert
+    query: "avg(last_15m):avg:azure.storage_storageaccounts_blobservices.success_e2_e_latency{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: 2000}
+    severity: warning
+    priority: 4
+    summary: Blob requests are slow end-to-end.
+    troubleshooting: |-
+      1. Compare E2E with server latency; a large gap points at client/network.
+    runbook_section: storage-latency

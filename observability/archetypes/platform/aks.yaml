@@ -1,0 +1,44 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: aks
+  layer: platform
+  description: Kubernetes workloads (AKS, ARO) monitored by the Datadog Agent DaemonSet + kube-state-metrics core check.
+match:
+  architectures: [aks, aro]
+defaults:
+  spec:
+    telemetry:
+      logs: {route: daemonset}
+params:
+  max_container_restarts_10m: 3
+monitors:
+  k8s.replicas_unavailable:
+    scope: service
+    name: "[[[env]]] [[service]] has unavailable replicas"
+    type: query alert
+    # kubernetes_state_core metric; service/env tags come from Unified Service Tagging labels on the Deployment.
+    query: "max(last_15m):max:kubernetes_state.deployment.replicas_unavailable{[[service_scope]]} by {kube_cluster_name,kube_namespace,kube_deployment} > [[critical]]"
+    thresholds: {critical: 0}
+    severity: critical
+    priority: 2
+    summary: One or more replicas of the Deployment have been unavailable for 15 minutes.
+    troubleshooting: |-
+      1. kubectl -n <namespace> describe deployment <deployment>; check events for ImagePullBackOff / FailedScheduling.
+      2. kubectl -n <namespace> get pods -l app=<deployment> -o wide; inspect readiness probe failures (/readyz).
+      3. Check node pressure in the Kubernetes overview dashboard.
+    runbook_section: replicas-unavailable
+  k8s.container_restarts:
+    scope: service
+    name: "[[[env]]] [[service]] containers restarting"
+    type: query alert
+    query: "change(max(last_10m),last_10m):sum:kubernetes_state.container.restarts{[[service_scope]]} by {kube_cluster_name,kube_namespace,pod_name} > [[critical]]"
+    thresholds: {critical: "[[params.max_container_restarts_10m]]"}
+    severity: warning
+    priority: 3
+    summary: Containers of this service restarted repeatedly in the last 10 minutes (crash loop or OOM).
+    troubleshooting: |-
+      1. kubectl -n <namespace> logs <pod> --previous to read the last crash.
+      2. Check kubernetes_state.container.status_report.count.waiting by reason (CrashLoopBackOff / OOMKilled).
+      3. Compare memory limits with container.memory.usage.
+    runbook_section: container-restarts

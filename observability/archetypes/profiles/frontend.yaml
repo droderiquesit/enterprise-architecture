@@ -1,0 +1,49 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: frontend
+  layer: profile
+  description: Browser single-page application monitored with Datadog RUM + browser synthetics.
+defaults:
+  metadata:
+    tier: high
+  spec:
+    runtime: browser
+    telemetry:
+      traces: {enabled: false}
+      logs: {route: none}
+      rum: {enabled: true}
+    idle_behavior: {scale_to_zero: true}
+    catalog: {type: web}
+params:
+  rum_errors_15m: 25
+  lcp_p75_ns: 4000000000
+monitors:
+  rum.error_count:
+    scope: service
+    when: ["spec.telemetry.rum.enabled"]
+    name: "[[[env]]] [[service]] browser errors above [[critical]] in 15m"
+    type: rum alert
+    query: 'rum("@type:error service:[[service]] env:[[env]]").rollup("count").last("15m") > [[critical]]'
+    thresholds: {critical: "[[params.rum_errors_15m]]"}
+    severity: warning
+    priority: 3
+    summary: Users hit JavaScript or network errors.
+    troubleshooting: |-
+      1. RUM -> Error Tracking for [[service]]; group by @error.source (network vs source).
+      2. Network errors on API calls: open the linked backend trace (resource -> APM).
+      3. CORS failures: check CORS_ALLOWED_ORIGINS on the BFF includes the frontend origin.
+    runbook_section: rum-errors
+  rum.lcp_p75:
+    scope: service
+    when: ["spec.telemetry.rum.enabled"]
+    name: "[[[env]]] [[service]] LCP p75 above 4s"
+    type: rum alert
+    query: 'rum("@type:view service:[[service]] env:[[env]]").rollup("pc75", "@view.largest_contentful_paint").last("30m") > [[critical]]'
+    thresholds: {critical: "[[params.lcp_p75_ns]]"}
+    severity: warning
+    priority: 4
+    summary: Page load performance (Largest Contentful Paint, nanoseconds) degraded.
+    troubleshooting: |-
+      1. RUM view performance: compare by @view.url_path and @geo.country.
+    runbook_section: rum-performance

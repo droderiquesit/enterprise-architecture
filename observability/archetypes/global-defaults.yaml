@@ -1,0 +1,77 @@
+# Layer 1 of 5 (lowest precedence). Merge order, applied by tools/onboarding/render.py:
+#   global-defaults -> platform/<architecture> -> platform resource archetypes (by resource type)
+#   -> profiles/<telemetry.profile> (with its `extends`) -> the service manifest.
+# Maps deep-merge; lists are REPLACED unless the key ends with "+" (then appended).
+# Template placeholders use [[...]] so they never collide with Datadog {{...}} or HCL ${...}:
+#   rendered by render.py: [[service]] [[env]] [[team]] [[service_scope]] [[server_operation]] [[params.<x>]]
+#                         [[critical]] [[warning]]
+#   rendered by Terraform after reference resolution: [[resource.scope]] [[resource.name]] [[resource.role]]
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: global-defaults
+  layer: global
+  description: Organisation-wide defaults for every onboarded service.
+defaults:
+  metadata:
+    tier: medium
+    application: unspecified
+    domain: unspecified
+  spec:
+    enabled: true
+    runtime: other
+    telemetry:
+      logs: {route: none}
+      traces: {enabled: true, sample_rate: 1.0, server_operation: http.server.request}
+      rum: {enabled: false}
+      dbm: {enabled: false}
+    idle_behavior: {scale_to_zero: false}
+    notifications:
+      default: [default]
+      critical: [critical]
+      warning: [default]
+    dashboards: {enabled: true}
+    catalog: {enabled: true, lifecycle: production, type: web}
+    slos: []
+params:
+  # Operation names follow Datadog's OTel operation-name logic v2 (default on Agent >= 7.66,
+  # DDOT >= 7.65, OTel Collector >= 0.126): HTTP server spans -> http.server.request.
+  # https://docs.datadoghq.com/opentelemetry/guide/migrate/migrate_operation_names/
+  error_log_threshold: 50
+  priority_default: 3
+synthetics:
+  tick_every: 300
+  locations: ["aws:eu-central-1"]
+  # Tests in non-production envs are created paused unless the root sets synthetics_paused=false.
+  min_failure_duration: 120
+  min_location_failed: 1
+  retry: {count: 1, interval: 300}
+slo_burn_rate:
+  # Datadog recommended multi-window burn-rate pairs (99.9% reference table):
+  # https://docs.datadoghq.com/service_management/service_level_objectives/burn_rate/
+  # render.py clamps a threshold to 90% of the maximum 1/(1-target) and drops pairs that cannot fire.
+  "7d":
+    - {severity: critical, long_window: 1h, short_window: 5m, threshold: 16.8}
+    - {severity: warning, long_window: 6h, short_window: 30m, threshold: 5.6}
+  "30d":
+    - {severity: critical, long_window: 1h, short_window: 5m, threshold: 14.4}
+    - {severity: warning, long_window: 6h, short_window: 30m, threshold: 6}
+  "90d":
+    - {severity: critical, long_window: 1h, short_window: 5m, threshold: 21.6}
+    - {severity: warning, long_window: 6h, short_window: 30m, threshold: 10.8}
+monitors:
+  logs.error_spike:
+    scope: service
+    when: ["spec.telemetry.logs.route!=none"]
+    name: "[[[env]]] [[service]] error log volume above [[critical]] in 10m"
+    type: log alert
+    query: 'logs("service:[[service]] env:[[env]] status:error").index("*").rollup("count").last("10m") > [[critical]]'
+    thresholds: {critical: "[[params.error_log_threshold]]"}
+    severity: warning
+    priority: 3
+    summary: The service is writing an unusual number of error-level log lines.
+    troubleshooting: |-
+      1. Open Logs for service:[[service]] env:[[env]] status:error and group by error.kind.
+      2. Pivot to the trace via trace_id / dd.trace_id on a sample line.
+      3. Check the deployment events for [[service]] in the last hour (a new version is the usual cause).
+    runbook_section: error-logs

@@ -1,0 +1,102 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: messaging
+  layer: resource
+  description: Service Bus namespaces (queues, topic subscriptions) and Event Hubs namespaces.
+match:
+  resource_types: [Microsoft.ServiceBus/namespaces, Microsoft.EventHub/namespaces]
+params:
+  # Azure dimension EntityName -> Datadog tag "entityname" (lower-cased dimension name, same pattern as
+  # the verified statuscodecategory tag on azure.app_containerapps.requests). Override if your org differs.
+  entity_tag: entityname
+  backlog_threshold: 500
+  lag_threshold: 100
+  dead_letter_threshold: 0
+monitors:
+  queue.backlog:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.ServiceBus/namespaces]}
+    name: "[[[env]]] [[service]] Service Bus [[resource.name]] backlog above [[critical]] on {{[[params.entity_tag]].name}}"
+    type: query alert
+    query: "avg(last_10m):max:azure.servicebus_namespaces.count_of_active_messages_in_a_topic_subscription{[[resource.scope]]} by {[[params.entity_tag]]} > [[critical]]"
+    thresholds: {critical: "[[params.backlog_threshold]]"}
+    severity: warning
+    priority: 3
+    summary: Active (deliverable) messages are accumulating in a topic subscription.
+    troubleshooting: |-
+      1. Is the consumer running? Check its APM consumer spans and replica/instance count.
+      2. Compare incoming_messages vs outgoing_messages on the namespace.
+      3. Check consumer errors and abandon/dead-letter rate.
+    runbook_section: queue-backlog
+  queue.processing_lag:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.ServiceBus/namespaces]}
+    name: "[[[env]]] [[service]] Service Bus [[resource.name]] backlog not draining on {{[[params.entity_tag]].name}}"
+    type: query alert
+    # Lag proxy: the backlog never dropped below the threshold during 30 minutes => consumers stalled
+    # or slower than producers. Service Bus exposes no oldest-message-age metric.
+    query: "min(last_30m):min:azure.servicebus_namespaces.count_of_active_messages_in_a_topic_subscription{[[resource.scope]]} by {[[params.entity_tag]]} > [[critical]]"
+    thresholds: {critical: "[[params.lag_threshold]]"}
+    severity: critical
+    priority: 2
+    summary: Consumers are not keeping up; messages have waited for at least 30 minutes.
+    troubleshooting: |-
+      1. Scale out the consumer (KEDA / Functions scale) or fix the failing dependency.
+      2. Check for lock-lost errors (processing longer than the lock duration).
+    runbook_section: queue-lag
+  queue.dead_letters_subscription:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.ServiceBus/namespaces]}
+    name: "[[[env]]] [[service]] Service Bus [[resource.name]] dead-lettered messages on {{[[params.entity_tag]].name}}"
+    type: query alert
+    query: "max(last_15m):max:azure.servicebus_namespaces.count_of_dead_lettered_messages_in_a_topic_subscription{[[resource.scope]]} by {[[params.entity_tag]]} > [[critical]]"
+    thresholds: {critical: "[[params.dead_letter_threshold]]"}
+    severity: warning
+    priority: 3
+    summary: Messages were dead-lettered (poison message or MaxDeliveryCount exceeded).
+    troubleshooting: |-
+      1. Peek the DLQ (Service Bus Explorer) and read DeadLetterReason / DeadLetterErrorDescription.
+      2. Find the consumer span via the traceparent application property of the message.
+      3. Fix and resubmit, or purge with change approval.
+    runbook_section: queue-dead-letter
+  queue.dead_letters_queue:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.ServiceBus/namespaces]}
+    name: "[[[env]]] [[service]] Service Bus [[resource.name]] dead-lettered messages in queue {{[[params.entity_tag]].name}}"
+    type: query alert
+    query: "max(last_15m):max:azure.servicebus_namespaces.count_of_dead_lettered_messages_in_a_queue_topic{[[resource.scope]]} by {[[params.entity_tag]]} > [[critical]]"
+    thresholds: {critical: "[[params.dead_letter_threshold]]"}
+    severity: warning
+    priority: 3
+    summary: Messages were dead-lettered in a queue.
+    troubleshooting: |-
+      1. Peek the DLQ and read DeadLetterReason.
+    runbook_section: queue-dead-letter
+  queue.server_errors:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.ServiceBus/namespaces]}
+    name: "[[[env]]] [[service]] Service Bus [[resource.name]] server errors / throttling"
+    type: query alert
+    query: "sum(last_15m):sum:azure.servicebus_namespaces.server_errors{[[resource.scope]]}.as_count() + sum:azure.servicebus_namespaces.throttled_requests{[[resource.scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: 10}
+    severity: warning
+    priority: 3
+    summary: The namespace returns server errors or throttles requests.
+    troubleshooting: |-
+      1. Standard tier throttling: check operation rate; consider Premium.
+    runbook_section: queue-errors
+  eventhub.throttled:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.EventHub/namespaces]}
+    name: "[[[env]]] [[service]] Event Hubs [[resource.name]] throttled requests"
+    type: query alert
+    query: "sum(last_15m):sum:azure.eventhub_namespaces.throttled_requests{[[resource.scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: 0}
+    severity: warning
+    priority: 3
+    summary: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).
+    troubleshooting: |-
+      1. Increase throughput units / enable auto-inflate.
+      2. Check the Fluent Bit kafka input lag on the telemetry pipeline dashboard.
+    runbook_section: eventhub-throttled

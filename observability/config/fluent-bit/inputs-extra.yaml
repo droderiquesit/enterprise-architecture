@@ -1,0 +1,4 @@
+# Placeholder include for linux-host.yaml / windows-host.yaml. The host installer overwrites this file
+# with linux-host-systemd.yaml or windows-host-winevtlog.yaml content when that collection is enabled.
+pipeline:
+  inputs: []

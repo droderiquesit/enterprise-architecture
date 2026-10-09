@@ -1,0 +1,44 @@
+# Shared parsers for every Enterprise Hello Fluent Bit config (included with `includes: [parsers.yaml]`).
+# Validated with fluent/fluent-bit:5.1.3 (observability/tests/transport/).
+parsers:
+  # Application JSON log line (ADR-0001 §9): {"timestamp":"2026-10-09T12:00:00.123Z","level":...}
+  - name: eh_json
+    format: json
+    time_key: timestamp
+    time_format: "%Y-%m-%dT%H:%M:%S.%L%z"
+    time_keep: off
+    time_strict: off
+
+  # Azure resource-log entries keep their own "time" field; nothing to parse at record level.
+  - name: eh_json_notime
+    format: json
+
+multiline_parsers:
+  # Plain-text stack traces written outside the JSON logger (unhandled .NET exceptions on stderr,
+  # Python tracebacks printed by the interpreter). JSON lines never match a continuation rule, so
+  # each JSON line stays a single event; indented frames are glued to the line that started them.
+  - name: eh_stack
+    type: regex
+    flush_timeout: 1000
+    rules:
+      - state: start_state
+        regex: '/^Traceback \(most recent call last\):\s*$/'
+        next_state: python_frames
+      - state: start_state
+        regex: '/^[^\s{\[].*/'
+        next_state: dotnet_frames
+      - state: python_frames
+        regex: '/^\s+.*/'
+        next_state: python_frames
+      - state: python_frames
+        regex: '/^[A-Za-z_][\w.]*(Error|Exception|Exit|Interrupt|Warning)(:.*)?$/'
+        next_state: dotnet_frames
+      - state: dotnet_frames
+        regex: '/^\s+(at |--- |File ").*/'
+        next_state: dotnet_frames
+      - state: dotnet_frames
+        regex: '/^\s*--- End of .*/'
+        next_state: dotnet_frames
+      - state: dotnet_frames
+        regex: '/^\s+\S.*/'
+        next_state: dotnet_frames

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retirements.schema.json",
+  "title": "Approved component retirements (environments/<env>/retirements.yaml)",
+  "description": "A component that has a deployment record but is no longer enabled is 'retire-pending'. It is destroyed only when listed here with confirm == component, and still behind the lab-<env>-retire environment approval.",
+  "type": "object",
+  "required": ["retirements"],
+  "additionalProperties": false,
+  "properties": {
+    "retirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["component", "confirm", "approved_by", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "component": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"},
+          "confirm": {"type": "string", "description": "Must repeat the component id exactly."},
+          "approved_by": {"type": "string", "minLength": 3},
+          "reason": {"type": "string", "minLength": 3},
+          "change_ref": {"type": "string"}
+        }
+      }
+    }
+  }
+}

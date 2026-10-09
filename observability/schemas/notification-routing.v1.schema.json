@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "notification-routing.v1.schema.json",
+  "title": "Notification routing v1: route keys -> Datadog notification handles, per environment",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "routes"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {"const": "observability/v1"},
+    "kind": {"const": "NotificationRouting"},
+    "metadata": {
+      "type": "object",
+      "required": ["env"],
+      "additionalProperties": false,
+      "properties": {"env": {"type": "string"}, "description": {"type": "string"}}
+    },
+    "routes": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9-]*$"},
+      "additionalProperties": {
+        "type": "object",
+        "required": ["handles"],
+        "additionalProperties": false,
+        "properties": {
+          "description": {"type": "string"},
+          "handles": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^@[A-Za-z0-9_.@+-]+$"},
+            "description": "Datadog @-mentions: @slack-<channel>, @pagerduty-<service>, @opsgenie-<team>, @teams-<channel>, @webhook-<name>, @user@example.com. Empty list = route intentionally silent (e.g. dev)."
+          }
+        }
+      }
+    },
+    "webhooks": {
+      "type": "object",
+      "description": "Optional datadog_webhook resources created by the notification-routing module (name -> spec). URLs must not contain secrets; use custom_headers_secret_env for tokens.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["url"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {"type": "string", "pattern": "^https://"},
+          "encode_as": {"enum": ["json", "form"]},
+          "payload": {"type": "string"}
+        }
+      }
+    }
+  }
+}

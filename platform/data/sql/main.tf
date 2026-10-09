@@ -66,11 +66,13 @@ locals {
         identity_name = local.identities[d.owner].name
         client_id     = local.identities[d.owner].client_id
         roles         = ["db_datareader", "db_datawriter", "db_ddladmin"]
+        schema        = d.schemas[0]
       }] : [],
       [for i in d.readers_writers : {
         identity_name = local.identities[i].name
         client_id     = local.identities[i].client_id
         roles         = ["db_datareader", "db_datawriter"]
+        schema        = d.schemas[0]
       } if contains(keys(local.identities), i)],
     )
   }

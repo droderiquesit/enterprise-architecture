@@ -1,0 +1,87 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: http-api
+  layer: profile
+  description: Synchronous HTTP API instrumented with OpenTelemetry (server spans -> trace metrics).
+defaults:
+  metadata:
+    tier: high
+  spec:
+    catalog: {type: web}
+    slos:
+      - {name: availability, type: availability, target: 99.5, warning: 99.8, timeframe: 30d}
+      - {name: latency, type: latency, target: 99.0, timeframe: 30d, threshold_ms: 750}
+params:
+  error_rate_pct: 5
+  error_rate_warn_pct: 2
+  min_hits_10m: 20
+  latency_p95_s: 1.5
+  latency_p95_warn_s: 0.75
+  no_traffic_minutes: 30
+monitors:
+  apm.error_rate:
+    scope: service
+    when: ["spec.telemetry.traces.enabled"]
+    name: "[[[env]]] [[service]] error rate above [[critical]]%"
+    type: query alert
+    # Trace metrics: https://docs.datadoghq.com/tracing/metrics/metrics_namespace/
+    # The hits floor avoids alerting on 1 error out of 2 requests in a quiet lab.
+    query: "sum(last_10m):( sum:trace.[[server_operation]].errors{[[service_scope]]}.as_count() / clamp_min(sum:trace.[[server_operation]].hits{[[service_scope]]}.as_count(), [[params.min_hits_10m]]) ) * 100 > [[critical]]"
+    thresholds: {critical: "[[params.error_rate_pct]]", warning: "[[params.error_rate_warn_pct]]"}
+    severity: critical
+    priority: 2
+    summary: A high share of server requests fail (availability SLI is burning).
+    troubleshooting: |-
+      1. APM -> Service [[service]] -> Errors; group by resource_name and error.type.
+      2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.
+      3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).
+    runbook_section: error-rate
+  apm.http_5xx:
+    scope: service
+    when: ["spec.telemetry.traces.enabled"]
+    name: "[[[env]]] [[service]] returning HTTP 5xx"
+    type: query alert
+    query: "sum(last_10m):sum:trace.[[server_operation]].hits.by_http_status{[[service_scope]],http.status_class:5xx}.as_count() > [[critical]]"
+    thresholds: {critical: 10, warning: 3}
+    severity: warning
+    priority: 3
+    summary: The service answered requests with HTTP 5xx.
+    troubleshooting: |-
+      1. Filter traces by http.status_code:5* for [[service]]; open the error span.
+      2. 503 from /readyz-gated dependencies means a dependency is down; 500 means an unhandled exception.
+    runbook_section: http-5xx
+  apm.latency_p95:
+    scope: service
+    when: ["spec.telemetry.traces.enabled"]
+    name: "[[[env]]] [[service]] p95 latency above [[critical]]s"
+    type: query alert
+    # Distribution trace metric supports percentiles; value in seconds.
+    query: "percentile(last_15m):p95:trace.[[server_operation]]{[[service_scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.latency_p95_s]]", warning: "[[params.latency_p95_warn_s]]"}
+    severity: warning
+    priority: 3
+    summary: Server latency p95 is above the objective.
+    troubleshooting: |-
+      1. APM latency breakdown by resource; find the slow span type (db, http client, cache).
+      2. Check database/cache saturation monitors and connection pool waits.
+    runbook_section: latency
+  apm.no_traffic:
+    scope: service
+    # Only for always-on services: silence there means a broken pipeline or a dead service.
+    # Scale-to-zero services rely on synthetics + the pipeline canary instead.
+    when: ["spec.telemetry.traces.enabled", "!spec.idle_behavior.scale_to_zero"]
+    name: "[[[env]]] [[service]] stopped reporting traces"
+    type: query alert
+    query: "sum(last_[[params.no_traffic_minutes]]m):sum:trace.[[server_operation]].hits{[[service_scope]]}.as_count() < [[critical]]"
+    thresholds: {critical: 1}
+    notify_no_data: true
+    no_data_timeframe: 30
+    severity: critical
+    priority: 2
+    summary: No server spans were received although this service is declared always-on.
+    troubleshooting: |-
+      1. Is the pipeline healthy? Check the "telemetry pipeline canary" monitor first - if it is also alerting, the problem is the collector/agent, not the service.
+      2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?
+      3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.
+    runbook_section: missing-telemetry

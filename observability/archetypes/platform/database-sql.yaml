@@ -1,0 +1,96 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: database-sql
+  layer: resource
+  description: Azure SQL Database and SQL Managed Instance (Azure integration platform metrics). DBM is separate (Agent check).
+match:
+  resource_types: [Microsoft.Sql/servers/databases, Microsoft.Sql/managedInstances]
+params:
+  sql_cpu_pct: 90
+  sql_storage_pct: 90
+  sql_failed_connections_15m: 10
+monitors:
+  sql.cpu:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Sql/servers/databases]}
+    name: "[[[env]]] [[service]] SQL database [[resource.name]] CPU above [[critical]]%"
+    type: query alert
+    query: "avg(last_15m):avg:azure.sql_servers_databases.cpu_percent{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.sql_cpu_pct]]", warning: 80}
+    severity: warning
+    priority: 3
+    summary: Database CPU is saturated (vCore/serverless); queries will queue.
+    troubleshooting: |-
+      1. Open Database Monitoring -> Query metrics for this database; sort by CPU.
+      2. Check azure.sql_servers_databases.workers_percent and sessions_percent.
+      3. Serverless: confirm max vCores; DTU SKU: see the DTU monitor.
+    runbook_section: sql-cpu
+  sql.dtu:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Sql/servers/databases]}
+    enabled: false   # enable via manifest override for DTU-based SKUs only
+    name: "[[[env]]] [[service]] SQL database [[resource.name]] DTU above [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.sql_servers_databases.dtu_consumption_percent{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: 90}
+    severity: warning
+    priority: 3
+    summary: DTU consumption is at the SKU ceiling.
+    troubleshooting: |-
+      1. Identify top queries in DBM; consider scaling the SKU.
+    runbook_section: sql-cpu
+  sql.connection_failures:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Sql/servers/databases]}
+    name: "[[[env]]] [[service]] SQL database [[resource.name]] connection failures"
+    type: query alert
+    query: "sum(last_15m):sum:azure.sql_servers_databases.connection_failed{[[resource.scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: "[[params.sql_failed_connections_15m]]"}
+    severity: critical
+    priority: 2
+    summary: Clients fail to connect (firewall/private endpoint, Entra auth, or exhausted workers).
+    troubleshooting: |-
+      1. Check the app logs for SqlException numbers (18456 login failed, 40613 unavailable, 10928 limits).
+      2. Verify the managed identity still has a database user (CREATE USER ... FROM EXTERNAL PROVIDER).
+      3. Verify private endpoint DNS resolves to a private IP from the workload subnet.
+    runbook_section: sql-connections
+  sql.deadlocks:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Sql/servers/databases]}
+    name: "[[[env]]] [[service]] SQL database [[resource.name]] deadlocks"
+    type: query alert
+    query: "sum(last_15m):sum:azure.sql_servers_databases.deadlock{[[resource.scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: 0}
+    severity: warning
+    priority: 4
+    summary: Deadlocks were detected.
+    troubleshooting: |-
+      1. Read the deadlock graph from the SQL diagnostic logs (Deadlocks category) or DBM samples.
+    runbook_section: sql-deadlocks
+  sql.storage:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Sql/servers/databases]}
+    name: "[[[env]]] [[service]] SQL database [[resource.name]] storage above [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.sql_servers_databases.storage_percent{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.sql_storage_pct]]"}
+    severity: warning
+    priority: 3
+    summary: The database is close to its max size.
+    troubleshooting: |-
+      1. Check retention jobs (history purge) and raise max size if growth is expected.
+    runbook_section: sql-storage
+  sqlmi.cpu:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Sql/managedInstances]}
+    name: "[[[env]]] [[service]] SQL MI [[resource.name]] CPU above [[critical]]%"
+    type: query alert
+    query: "avg(last_15m):avg:azure.sql_managedinstances.avg_cpu_percent{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.sql_cpu_pct]]"}
+    severity: warning
+    priority: 3
+    summary: Managed instance CPU is saturated.
+    troubleshooting: |-
+      1. Use DBM query metrics for the instance.
+    runbook_section: sql-cpu

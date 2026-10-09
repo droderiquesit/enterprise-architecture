@@ -1,0 +1,44 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: job
+  layer: profile
+  description: Scheduled / event-driven batch jobs (ACA Jobs, Batch tasks). Expected to log on every run.
+defaults:
+  metadata:
+    tier: low
+  spec:
+    catalog: {type: custom}
+    idle_behavior: {scale_to_zero: true}
+params:
+  expected_run_window: 2h
+monitors:
+  job.missed_run:
+    scope: service
+    when: ["spec.telemetry.logs.route!=none"]
+    name: "[[[env]]] [[service]] job produced no logs in [[params.expected_run_window]]"
+    type: log alert
+    # A scheduled job MUST run; absence of any log line within the window = missed run or broken log path.
+    query: 'logs("service:[[service]] env:[[env]]").index("*").rollup("count").last("[[params.expected_run_window]]") < [[critical]]'
+    thresholds: {critical: 1}
+    severity: warning
+    priority: 3
+    summary: The job did not run (or its logs are not reaching Datadog) within the expected schedule window.
+    troubleshooting: |-
+      1. az containerapp job execution list -n <job> -g <rg> -o table
+      2. If executions succeeded, check the Fluent Bit sidecar of the job (telemetry pipeline dashboard).
+    runbook_section: job-missed
+  job.errors:
+    scope: service
+    when: ["spec.telemetry.logs.route!=none"]
+    name: "[[[env]]] [[service]] job logged errors"
+    type: log alert
+    query: 'logs("service:[[service]] env:[[env]] status:error").index("*").rollup("count").last("1h") > [[critical]]'
+    thresholds: {critical: 0}
+    severity: warning
+    priority: 3
+    summary: The job logged errors in its last run.
+    troubleshooting: |-
+      1. Open the job logs and the job's root span in APM.
+    runbook_section: job-errors
+  logs.error_spike: {enabled: false}

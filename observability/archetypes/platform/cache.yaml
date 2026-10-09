@@ -1,0 +1,66 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: cache
+  layer: resource
+  description: Azure Managed Redis (Microsoft.Cache/redisEnterprise) and Azure Cache for Redis (Microsoft.Cache/Redis).
+match:
+  resource_types: [Microsoft.Cache/redisEnterprise, Microsoft.Cache/Redis]
+params:
+  redis_server_load_pct: 90
+  redis_memory_pct: 90
+monitors:
+  redis.server_load:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Cache/redisEnterprise]}
+    name: "[[[env]]] [[service]] Managed Redis [[resource.name]] server load above [[critical]]%"
+    type: query alert
+    # Datadog recommended "Azure Managed Redis server load is high" shape.
+    query: "avg(last_30m):avg:azure.cache_redisenterprise.server_load{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.redis_server_load_pct]]"}
+    severity: warning
+    priority: 3
+    summary: The cache is CPU-bound; latency increases and cache-aside callers fall back to the database.
+    troubleshooting: |-
+      1. Check azure.cache_redisenterprise.operations_per_second and expensive commands.
+      2. Watch the database CPU: cache saturation shifts load to the origin.
+    runbook_section: redis-load
+  redis.memory:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Cache/redisEnterprise]}
+    name: "[[[env]]] [[service]] Managed Redis [[resource.name]] memory above [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.cache_redisenterprise.usedmemorypercentage{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.redis_memory_pct]]"}
+    severity: warning
+    priority: 3
+    summary: Memory is nearly full; evictions (evictedkeys) will rise.
+    troubleshooting: |-
+      1. Check TTLs (cache-aside keys must expire) and evictedkeys.
+    runbook_section: redis-memory
+  redis_classic.server_load:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Cache/Redis]}
+    name: "[[[env]]] [[service]] Azure Cache for Redis [[resource.name]] server load above [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.cache_redis.server_load{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.redis_server_load_pct]]"}
+    severity: warning
+    priority: 3
+    summary: The cache is CPU-bound.
+    troubleshooting: |-
+      1. Check connected clients and expensive commands.
+    runbook_section: redis-load
+  redis_classic.memory:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Cache/Redis]}
+    name: "[[[env]]] [[service]] Azure Cache for Redis [[resource.name]] memory above [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.cache_redis.usedmemorypercentage{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.redis_memory_pct]]"}
+    severity: warning
+    priority: 3
+    summary: Memory is nearly full.
+    troubleshooting: |-
+      1. Check TTLs and evictions.
+    runbook_section: redis-memory

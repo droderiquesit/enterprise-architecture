@@ -1,0 +1,13 @@
+# Optional journald input for linux-host.yaml (installed as inputs-extra.yaml when enabled).
+# Only selected units are read: app services must not ALSO log to journald AND to the tailed file,
+# otherwise lines are shipped twice. FLB_SYSTEMD_UNIT is a single unit (e.g. hello-worker.service).
+pipeline:
+  inputs:
+    - name: systemd
+      tag: host.journal
+      systemd_filter: _SYSTEMD_UNIT=${FLB_SYSTEMD_UNIT}
+      read_from_tail: on
+      strip_underscores: on
+      db: ${FLB_STATE_DIR}/journal.db
+      mem_buf_limit: 8MB
+      storage.type: filesystem

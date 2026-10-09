@@ -1,0 +1,52 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: durable-workflow
+  layer: profile
+  description: Durable Functions orchestrations. Workflow outcome/duration come from application metrics because
+    orchestration spans (Durable distributed tracing V2) are not service-entry HTTP spans with stable names.
+extends: http-api
+defaults:
+  metadata:
+    tier: high
+  spec:
+    catalog: {type: function}
+    slos:
+      - {name: availability, type: availability, target: 99.0, timeframe: 30d}
+params:
+  # Application custom metrics (OTel SDK -> Datadog). Counter <prefix>.workflow.completed{workflow,outcome}
+  # and histogram <prefix>.workflow.duration (milliseconds, exported as a distribution).
+  workflow_metric_prefix: app
+  workflow_failed_outcome: failed
+  workflow_failure_pct: 5
+  workflow_min_runs_30m: 5
+  workflow_duration_p95_ms: 60000
+monitors:
+  workflow.failure_rate:
+    scope: service
+    name: "[[[env]]] [[service]] workflow {{workflow.name}} failure rate above [[critical]]%"
+    type: query alert
+    query: "sum(last_30m):( sum:[[params.workflow_metric_prefix]].workflow.completed{[[service_scope]],outcome:[[params.workflow_failed_outcome]]} by {workflow}.as_count() / clamp_min(sum:[[params.workflow_metric_prefix]].workflow.completed{[[service_scope]]} by {workflow}.as_count(), [[params.workflow_min_runs_30m]]) ) * 100 > [[critical]]"
+    thresholds: {critical: "[[params.workflow_failure_pct]]"}
+    severity: critical
+    priority: 2
+    summary: Orchestrations end in the failed state (compensation ran).
+    troubleshooting: |-
+      1. GET /api/workflows/{instanceId} for a failed instance; read the failure details and history.
+      2. Check the activity that failed (partner API, SQL fulfillment, inventory reservation) in APM.
+      3. Replay-safe logs: filter logs by workflow instance id.
+    runbook_section: workflow-failures
+  workflow.duration_p95:
+    scope: service
+    name: "[[[env]]] [[service]] workflow {{workflow.name}} p95 duration above [[critical]]ms"
+    type: query alert
+    query: "percentile(last_30m):p95:[[params.workflow_metric_prefix]].workflow.duration{[[service_scope]]} by {workflow} > [[critical]]"
+    thresholds: {critical: "[[params.workflow_duration_p95_ms]]"}
+    severity: warning
+    priority: 3
+    summary: Orchestrations take longer than expected (retries, durable timers, slow partner API).
+    troubleshooting: |-
+      1. Check partner-sim latency and the retry policy (3 attempts, exponential backoff).
+      2. Check the Durable task hub storage throttling.
+    runbook_section: workflow-duration
+  apm.http_5xx: {enabled: false}

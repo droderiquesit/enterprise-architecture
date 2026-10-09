@@ -1,0 +1,12 @@
+# Optional Windows Event Log input for windows-host.yaml (installed as inputs-extra.yaml when enabled).
+# winevtlog exists only in Windows builds of Fluent Bit, so this snippet is not dry-run in the Linux
+# container tests (see observability/tests/transport/README.md).
+pipeline:
+  inputs:
+    - name: winevtlog
+      tag: host.winevt
+      channels: Application,System
+      interval_sec: 5
+      db: ${FLB_STATE_DIR}\winevtlog.db
+      render_event_as_xml: false
+      use_ansi: false

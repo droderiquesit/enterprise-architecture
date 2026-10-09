@@ -1,0 +1,69 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: database-postgresql
+  layer: resource
+  description: Azure Database for PostgreSQL flexible server (platform metrics).
+match:
+  resource_types: [Microsoft.DBforPostgreSQL/flexibleServers]
+params:
+  pg_cpu_pct: 90
+  pg_storage_pct: 90
+  pg_failed_connections_15m: 10
+monitors:
+  pg.alive:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DBforPostgreSQL/flexibleServers]}
+    name: "[[[env]]] [[service]] PostgreSQL [[resource.name]] is down"
+    type: query alert
+    # Datadog recommended Azure DB for PostgreSQL monitor (is_db_alive).
+    query: "min(last_5m):avg:azure.dbforpostgresql_flexibleservers.is_db_alive{[[resource.scope]]} < [[critical]]"
+    thresholds: {critical: 1}
+    severity: critical
+    priority: 1
+    summary: The server reports it is not alive.
+    troubleshooting: |-
+      1. az postgres flexible-server show -n <server> -g <rg> --query state (Stopped? auto-stopped after 7 days?).
+      2. Check Azure Resource Health for the server.
+    runbook_section: postgres-down
+  pg.cpu:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DBforPostgreSQL/flexibleServers]}
+    name: "[[[env]]] [[service]] PostgreSQL [[resource.name]] CPU above [[critical]]%"
+    type: query alert
+    query: "avg(last_15m):avg:azure.dbforpostgresql_flexibleservers.cpu_percent{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.pg_cpu_pct]]", warning: 80}
+    severity: warning
+    priority: 3
+    summary: Server CPU is saturated (Burstable SKUs also exhaust CPU credits).
+    troubleshooting: |-
+      1. DBM -> Query metrics for this host; look for sequential scans.
+      2. Burstable SKU: check azure.dbforpostgresql_flexibleservers.cpu_credits_remaining.
+    runbook_section: postgres-cpu
+  pg.connections_failed:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DBforPostgreSQL/flexibleServers]}
+    name: "[[[env]]] [[service]] PostgreSQL [[resource.name]] failed connections"
+    type: query alert
+    query: "sum(last_15m):sum:azure.dbforpostgresql_flexibleservers.connections_failed{[[resource.scope]]}.as_count() > [[critical]]"
+    thresholds: {critical: "[[params.pg_failed_connections_15m]]"}
+    severity: critical
+    priority: 2
+    summary: Connections are being rejected (auth, max_connections, network).
+    troubleshooting: |-
+      1. Check active_connections vs max_connections.
+      2. Entra auth: verify the managed identity role (pgaadauth_create_principal) and token audience.
+    runbook_section: postgres-connections
+  pg.storage:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.DBforPostgreSQL/flexibleServers]}
+    name: "[[[env]]] [[service]] PostgreSQL [[resource.name]] storage above [[critical]]%"
+    type: query alert
+    query: "avg(last_30m):avg:azure.dbforpostgresql_flexibleservers.storage_percent{[[resource.scope]]} > [[critical]]"
+    thresholds: {critical: "[[params.pg_storage_pct]]"}
+    severity: warning
+    priority: 3
+    summary: Storage is almost full (server becomes read-only at the limit).
+    troubleshooting: |-
+      1. Enable storage auto-grow or scale storage.
+    runbook_section: postgres-storage

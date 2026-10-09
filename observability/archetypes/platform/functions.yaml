@@ -1,0 +1,31 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: functions
+  layer: platform
+  description: Azure Functions (Flex Consumption, Premium, Dedicated, Consumption).
+match:
+  architectures: [functions]
+defaults:
+  spec:
+    telemetry:
+      logs: {route: eventhub}
+    idle_behavior: {scale_to_zero: true}
+params:
+  http_5xx_pct: 5
+monitors:
+  func.http_5xx_ratio:
+    scope: resource
+    applies_to: {resource_types: [Microsoft.Web/sites]}
+    name: "[[[env]]] [[service]] Function App [[resource.name]] 5xx ratio above [[critical]]%"
+    type: query alert
+    # Shape of Datadog's recommended "Azure Functions" 5xx monitor.
+    query: "sum(last_15m):sum:azure.functions.http5xx{[[resource.scope]]}.as_count() / sum:azure.functions.requests{[[resource.scope]]}.as_count() * 100 > [[critical]]"
+    thresholds: {critical: "[[params.http_5xx_pct]]"}
+    severity: warning
+    priority: 3
+    summary: HTTP-triggered functions return server errors.
+    troubleshooting: |-
+      1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.
+      2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.
+    runbook_section: functions-5xx

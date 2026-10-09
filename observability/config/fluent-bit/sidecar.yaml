@@ -1,0 +1,86 @@
+# Fluent Bit sidecar (ACA / ACI / any container platform without a node agent).
+# Tails the shared-volume file the app writes when LOG_FILE_PATH is set (ADR-0001 §10) and ships it
+# straight to the Datadog logs intake. Variant sidecar-forward.yaml ships to the aggregator instead.
+#
+# Environment contract (set by the instrumentation hook, never hard-coded here):
+#   LOG_FILE_PATH        file written by the app (e.g. /var/log/app/app.log; rotation 10MB x 3 by the app)
+#   FLB_STATE_DIR        writable dir for tail offsets + filesystem buffer (e.g. /var/log/app/.flb)
+#   FLB_DD_HOST          http-intake.logs.<site>  (datadoghq.com -> http-intake.logs.datadoghq.com)
+#   FLB_DD_PORT          443
+#   FLB_DD_TLS           on   (only the local docker test sets off, against a mock intake)
+#   DD_API_KEY           from a secret reference (Key Vault) - never a literal in config
+#   FLB_DD_SERVICE       fallback service when a line carries none (plain-text stack traces)
+#   FLB_DD_SOURCE        ddsource (csharp | python | nodejs ...)
+#   FLB_DD_TAGS          static tags, comma separated (env:dev,version:1.2.3,team:...)
+service:
+  flush: 1
+  grace: 10
+  log_level: info
+  http_server: on
+  http_listen: 0.0.0.0
+  http_port: 2020
+  health_check: on
+  hc_errors_count: 5
+  hc_retry_failure_count: 5
+  hc_period: 60
+  storage.path: ${FLB_STATE_DIR}/buffer
+  storage.sync: normal
+  storage.checksum: off
+  storage.backlog.mem_limit: 8M
+  storage.max_chunks_up: 32
+
+includes:
+  - parsers.yaml
+
+pipeline:
+  inputs:
+    - name: tail
+      tag: app.sidecar
+      path: ${LOG_FILE_PATH}*
+      exclude_path: '*.gz,*.zip'
+      db: ${FLB_STATE_DIR}/tail.db
+      db.locking: true
+      read_from_head: true
+      refresh_interval: 5
+      rotate_wait: 15
+      skip_long_lines: on
+      buffer_max_size: 256k
+      mem_buf_limit: 16MB
+      storage.type: filesystem
+      multiline.parser: eh_stack
+
+  filters:
+    - name: parser
+      match: app.*
+      key_name: log
+      parser: eh_json
+      reserve_data: on
+      preserve_key: off
+    - name: lua
+      match: app.*
+      script: lua/enterprise_hello.lua
+      call: eh_normalize
+    - name: lua
+      match: app.*
+      script: lua/enterprise_hello.lua
+      call: eh_redact
+    - name: lua
+      match: app.*
+      script: lua/enterprise_hello.lua
+      call: eh_static_tags
+
+  outputs:
+    - name: datadog
+      match: app.*
+      host: ${FLB_DD_HOST}
+      port: ${FLB_DD_PORT}
+      tls: ${FLB_DD_TLS}
+      tls.verify: on
+      compress: gzip
+      apikey: ${DD_API_KEY}
+      dd_message_key: message
+      json_date_key: timestamp
+      retry_limit: 8
+      storage.total_limit_size: 256M
+      net.keepalive: on
+      workers: 1

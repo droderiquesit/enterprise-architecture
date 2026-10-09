@@ -1,0 +1,81 @@
+# Fluent Bit on Windows VMs / VMSS instances (Windows service installed by observability/modules/host-agents).
+# App logs on hosts are collected ONLY here (the Datadog Agent on the host has logs_enabled=false).
+# Installed at C:\ProgramData\fluent-bit-eh\ with parsers.yaml, lua\ and inputs-extra.yaml (empty, or the
+# winevtlog input from windows-host-winevtlog.yaml when Windows event collection is enabled).
+#
+# Environment (service-scoped registry Environment value, readable by SYSTEM/Administrators only):
+#   FLB_LOG_PATHS   comma list, e.g. C:\ProgramData\enterprise-hello\logs\*.log
+#   FLB_STATE_DIR   C:\ProgramData\fluent-bit-eh\state
+#   FLB_DD_HOST / FLB_DD_PORT / FLB_DD_TLS / DD_API_KEY / FLB_DD_SOURCE / FLB_DD_SERVICE / FLB_DD_TAGS
+service:
+  flush: 1
+  grace: 10
+  log_level: info
+  http_server: on
+  http_listen: 127.0.0.1
+  http_port: 2020
+  health_check: on
+  hc_errors_count: 5
+  hc_retry_failure_count: 5
+  hc_period: 60
+  storage.path: ${FLB_STATE_DIR}/buffer
+  storage.sync: normal
+  storage.backlog.mem_limit: 16M
+  storage.max_chunks_up: 64
+
+includes:
+  - parsers.yaml
+  - inputs-extra.yaml
+
+pipeline:
+  inputs:
+    - name: tail
+      tag: app.winhost
+      path: ${FLB_LOG_PATHS}
+      exclude_path: '*.gz,*.zip'
+      path_key: log.file.path
+      db: ${FLB_STATE_DIR}/tail.db
+      db.locking: true
+      refresh_interval: 5
+      rotate_wait: 15
+      skip_long_lines: on
+      buffer_max_size: 256k
+      mem_buf_limit: 32MB
+      storage.type: filesystem
+      multiline.parser: eh_stack
+
+  filters:
+    - name: parser
+      match: app.*
+      key_name: log
+      parser: eh_json
+      reserve_data: on
+      preserve_key: off
+    - name: lua
+      match: '*'
+      script: lua/enterprise_hello.lua
+      call: eh_normalize
+    - name: lua
+      match: '*'
+      script: lua/enterprise_hello.lua
+      call: eh_redact
+    - name: lua
+      match: '*'
+      script: lua/enterprise_hello.lua
+      call: eh_static_tags
+
+  outputs:
+    - name: datadog
+      match: '*'
+      host: ${FLB_DD_HOST}
+      port: ${FLB_DD_PORT}
+      tls: ${FLB_DD_TLS}
+      tls.verify: on
+      compress: gzip
+      apikey: ${DD_API_KEY}
+      dd_message_key: message
+      dd_hostname: ${COMPUTERNAME}
+      json_date_key: timestamp
+      retry_limit: 8
+      storage.total_limit_size: 512M
+      net.keepalive: on

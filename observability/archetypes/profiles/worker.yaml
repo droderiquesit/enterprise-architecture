@@ -1,0 +1,33 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: worker
+  layer: profile
+  description: Long-running message consumer (Service Bus). Consumer spans are service-entry spans with links to producers.
+defaults:
+  metadata:
+    tier: medium
+  spec:
+    catalog: {type: queue-consumer}
+    telemetry:
+      traces:
+        # OTel operation-name logic v2: messaging system + operation, e.g. servicebus.process.
+        server_operation: servicebus.process
+params:
+  consumer_error_pct: 10
+  min_hits_15m: 5
+monitors:
+  apm.consumer_error_rate:
+    scope: service
+    when: ["spec.telemetry.traces.enabled"]
+    name: "[[[env]]] [[service]] message processing failure rate above [[critical]]%"
+    type: query alert
+    query: "sum(last_15m):( sum:trace.[[server_operation]].errors{[[service_scope]]}.as_count() / clamp_min(sum:trace.[[server_operation]].hits{[[service_scope]]}.as_count(), [[params.min_hits_15m]]) ) * 100 > [[critical]]"
+    thresholds: {critical: "[[params.consumer_error_pct]]"}
+    severity: critical
+    priority: 2
+    summary: Messages fail processing; they will be retried and eventually dead-lettered.
+    troubleshooting: |-
+      1. APM consumer spans for [[service]]; follow the span link to the producer trace.
+      2. Check the dead-letter monitor of the Service Bus namespace.
+    runbook_section: consumer-errors
