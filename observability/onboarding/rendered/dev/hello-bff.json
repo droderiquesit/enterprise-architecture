@@ -1,0 +1,523 @@
+{
+  "architecture": "aca",
+  "catalog": {
+    "component_of": [
+      "system:enterprise-hello"
+    ],
+    "enabled": true,
+    "lifecycle": "production",
+    "type": "web"
+  },
+  "dashboards": {
+    "enabled": true
+  },
+  "enabled": true,
+  "endpoints": [
+    {
+      "browser_journey": false,
+      "health_path": "/api/healthz",
+      "name": "api",
+      "required": false,
+      "synthetic": {
+        "enabled": true,
+        "locations": [
+          "aws:eu-central-1"
+        ],
+        "private_location": false,
+        "tick_every": 300
+      },
+      "url": "${contract:deploy-core-aca.apps.hello-bff.url}",
+      "visibility": "public"
+    }
+  ],
+  "env": "dev",
+  "generated_from": {
+    "layers": [
+      "global-defaults",
+      "platform/aca",
+      "profiles/http-api",
+      "manifest"
+    ],
+    "manifest": "dev/hello-bff.yaml",
+    "sha256": "fb73417efb6600717da7fc99cf35613914d6cb972af0da218130264c01d62b04"
+  },
+  "idle_behavior": {
+    "expected_quiet_hours": null,
+    "scale_to_zero": false
+  },
+  "metadata": {
+    "application": "enterprise-hello",
+    "contacts": [
+      {
+        "contact": "web@example.com",
+        "name": "web mailbox",
+        "type": "email"
+      }
+    ],
+    "depends_on": [
+      "service:hello-orders-api",
+      "service:hello-catalog-api",
+      "service:hello-inventory-api"
+    ],
+    "description": "Backend-for-frontend; public API entry point.",
+    "display_name": "hello-bff",
+    "domain": "storefront",
+    "languages": [
+      "dotnet"
+    ],
+    "owner": "web@example.com",
+    "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
+    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff",
+    "team": "web",
+    "tier": "critical"
+  },
+  "monitors": {
+    "aca.http_5xx_ratio@app": {
+      "evaluation_delay": 900,
+      "key": "aca.http_5xx_ratio@app",
+      "message": "{{#is_alert}}**CRITICAL**: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).{{/is_alert}}\n{{#is_warning}}**WARNING**: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web` | owner: web@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Compare with the APM error rate; if APM is healthy the failures are at ingress/revision level.\n2. az containerapp revision list -n <app> -g <rg> -o table; check the active revision is healthy.\n3. Review ContainerAppSystemLogs (diagnostic settings) for probe failures and scaling events.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#aca-5xx",
+      "name": "[dev] hello-bff Container App [[resource.name]] 5xx ratio above 5%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-web",
+          "oncall"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_15m):sum:azure.app_containerapps.requests{[[resource.scope]],statuscodecategory:5xx}.as_count() / sum:azure.app_containerapps.requests{[[resource.scope]]}.as_count() * 100 > 5",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "app",
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#aca-5xx",
+      "severity": "critical",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:aca.http_5xx_ratio",
+        "service:hello-bff",
+        "severity:critical",
+        "team:web",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 5
+      },
+      "type": "query alert"
+    },
+    "aca.restarts@app": {
+      "evaluation_delay": 900,
+      "key": "aca.restarts@app",
+      "message": "{{#is_alert}}**WARNING**: Container replicas restarted repeatedly (probe failures, crashes or OOM).{{/is_alert}}\n{{#is_warning}}**WARNING**: Container replicas restarted repeatedly (probe failures, crashes or OOM).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web` | owner: web@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. az containerapp logs show -n <app> -g <rg> --type system to read restart reasons.\n2. Check the Fluent Bit sidecar is not the restarting container (telemetry pipeline dashboard).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#aca-restarts",
+      "name": "[dev] hello-bff Container App [[resource.name]] replicas restarting",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-web"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "sum(last_15m):sum:azure.app_containerapps.restart_count{[[resource.scope]]}.as_count() > 3",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "app",
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#aca-restarts",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:aca.restarts",
+        "service:hello-bff",
+        "severity:warning",
+        "team:web",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 3
+      },
+      "type": "query alert"
+    },
+    "apm.error_rate": {
+      "evaluation_delay": null,
+      "key": "apm.error_rate",
+      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web` | owner: web@example.com | tier: critical\n\nTroubleshooting:\n1. APM -> Service hello-bff -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#error-rate",
+      "name": "[dev] hello-bff error rate above 5%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-web",
+          "oncall"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_10m):( sum:trace.http.server.request.errors{service:hello-bff,env:dev}.as_count() / clamp_min(sum:trace.http.server.request.hits{service:hello-bff,env:dev}.as_count(), 20) ) * 100 > 5",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#error-rate",
+      "severity": "critical",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:apm.error_rate",
+        "service:hello-bff",
+        "severity:critical",
+        "team:web",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 5,
+        "warning": 2
+      },
+      "type": "query alert"
+    },
+    "apm.http_5xx": {
+      "evaluation_delay": null,
+      "key": "apm.http_5xx",
+      "message": "{{#is_alert}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web` | owner: web@example.com | tier: critical\n\nTroubleshooting:\n1. Filter traces by http.status_code:5* for hello-bff; open the error span.\n2. 503 from /readyz-gated dependencies means a dependency is down; 500 means an unhandled exception.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#http-5xx",
+      "name": "[dev] hello-bff returning HTTP 5xx",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-web"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "sum(last_10m):sum:trace.http.server.request.hits.by_http_status{service:hello-bff,env:dev,http.status_class:5xx}.as_count() > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#http-5xx",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:apm.http_5xx",
+        "service:hello-bff",
+        "severity:warning",
+        "team:web",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 10,
+        "warning": 3
+      },
+      "type": "query alert"
+    },
+    "apm.latency_p95": {
+      "evaluation_delay": null,
+      "key": "apm.latency_p95",
+      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web` | owner: web@example.com | tier: critical\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#latency",
+      "name": "[dev] hello-bff p95 latency above 1.5s",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-web"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "percentile(last_15m):p95:trace.http.server.request{service:hello-bff,env:dev} > 1.5",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#latency",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:apm.latency_p95",
+        "service:hello-bff",
+        "severity:warning",
+        "team:web",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 1.5,
+        "warning": 0.75
+      },
+      "type": "query alert"
+    },
+    "apm.no_traffic": {
+      "evaluation_delay": null,
+      "key": "apm.no_traffic",
+      "message": "{{#is_alert}}**CRITICAL**: No server spans were received although this service is declared always-on.{{/is_alert}}\n{{#is_warning}}**WARNING**: No server spans were received although this service is declared always-on.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web` | owner: web@example.com | tier: critical\n\nTroubleshooting:\n1. Is the pipeline healthy? Check the \"telemetry pipeline canary\" monitor first - if it is also alerting, the problem is the collector/agent, not the service.\n2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?\n3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#missing-telemetry",
+      "name": "[dev] hello-bff stopped reporting traces",
+      "new_group_delay": 60,
+      "no_data_timeframe": 30,
+      "notify": {
+        "alert": [
+          "team-web",
+          "oncall"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": true,
+      "priority": 2,
+      "query": "sum(last_30m):sum:trace.http.server.request.hits{service:hello-bff,env:dev}.as_count() < 1",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#missing-telemetry",
+      "severity": "critical",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:apm.no_traffic",
+        "service:hello-bff",
+        "severity:critical",
+        "team:web",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 1
+      },
+      "type": "query alert"
+    },
+    "logs.error_spike": {
+      "evaluation_delay": null,
+      "key": "logs.error_spike",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web` | owner: web@example.com | tier: critical\n\nTroubleshooting:\n1. Open Logs for service:hello-bff env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-bff in the last hour (a new version is the usual cause).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#error-logs",
+      "name": "[dev] hello-bff error log volume above 50 in 10m",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-web"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"service:hello-bff env:dev status:error\").index(\"*\").rollup(\"count\").last(\"10m\") > 50",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#error-logs",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:logs.error_spike",
+        "service:hello-bff",
+        "severity:warning",
+        "team:web",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 50
+      },
+      "type": "log alert"
+    }
+  },
+  "notifications": {
+    "critical": [
+      "team-web",
+      "oncall"
+    ],
+    "default": [
+      "team-web"
+    ],
+    "warning": [
+      "team-web"
+    ]
+  },
+  "package_version": "1.0.0",
+  "presence_ref": "deploy-core-aca.apps.hello-bff.url",
+  "resources": [
+    {
+      "entities": [],
+      "id": "${contract:deploy-core-aca.apps.hello-bff.id}",
+      "required": false,
+      "role": "app",
+      "tags": {},
+      "type": "Microsoft.App/containerApps"
+    }
+  ],
+  "runtime": "dotnet",
+  "schema": "rendered-service/v1",
+  "service": "hello-bff",
+  "slos": [
+    {
+      "burn_rate_alerts": [
+        {
+          "long_window": "1h",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#slo-burn-rate",
+          "name": "[dev] hello-bff availability SLO burn rate critical (1h/5m)",
+          "notify": {
+            "alert": [
+              "team-web",
+              "oncall"
+            ]
+          },
+          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#slo-burn-rate",
+          "severity": "critical",
+          "short_window": "5m",
+          "threshold": 14.4
+        },
+        {
+          "long_window": "6h",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#slo-burn-rate",
+          "name": "[dev] hello-bff availability SLO burn rate warning (6h/30m)",
+          "notify": {
+            "alert": [
+              "team-web"
+            ]
+          },
+          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#slo-burn-rate",
+          "severity": "warning",
+          "short_window": "30m",
+          "threshold": 6.0
+        }
+      ],
+      "denominator": "sum:trace.http.server.request.hits{service:hello-bff,env:dev}.as_count()",
+      "description": "availability SLO for hello-bff (dev). Runbook: https://runbooks.example.com/enterprise-hello/hello-bff#slo-availability",
+      "display_name": "[dev] hello-bff availability",
+      "name": "availability",
+      "numerator": "sum:trace.http.server.request.hits{service:hello-bff,env:dev}.as_count() - sum:trace.http.server.request.errors{service:hello-bff,env:dev}.as_count()",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "service:hello-bff",
+        "team:web",
+        "tier:critical"
+      ],
+      "target": 99.5,
+      "timeframe": "30d",
+      "type": "availability",
+      "warning": 99.8
+    },
+    {
+      "burn_rate_alerts": [
+        {
+          "long_window": "1h",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `latency` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#slo-burn-rate",
+          "name": "[dev] hello-bff latency SLO burn rate critical (1h/5m)",
+          "notify": {
+            "alert": [
+              "team-web",
+              "oncall"
+            ]
+          },
+          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#slo-burn-rate",
+          "severity": "critical",
+          "short_window": "5m",
+          "threshold": 14.4
+        },
+        {
+          "long_window": "6h",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `latency` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-bff` | env: `dev` | team: `web`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-bff#slo-burn-rate",
+          "name": "[dev] hello-bff latency SLO burn rate warning (6h/30m)",
+          "notify": {
+            "alert": [
+              "team-web"
+            ]
+          },
+          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-bff#slo-burn-rate",
+          "severity": "warning",
+          "short_window": "30m",
+          "threshold": 6.0
+        }
+      ],
+      "description": "latency SLO for hello-bff (dev). Runbook: https://runbooks.example.com/enterprise-hello/hello-bff#slo-latency",
+      "display_name": "[dev] hello-bff latency",
+      "name": "latency",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "service:hello-bff",
+        "team:web",
+        "tier:critical"
+      ],
+      "target": 99.0,
+      "time_slice": {
+        "comparator": "<=",
+        "query": "p95:trace.http.server.request{service:hello-bff,env:dev}",
+        "threshold": 0.8
+      },
+      "timeframe": "30d",
+      "type": "latency",
+      "warning": null
+    }
+  ],
+  "synthetics_defaults": {
+    "min_failure_duration": 120,
+    "min_location_failed": 1,
+    "retry": {
+      "count": 1,
+      "interval": 300
+    }
+  },
+  "tags": [
+    "application:enterprise-hello",
+    "domain:storefront",
+    "env:dev",
+    "managed_by:observability-package",
+    "service:hello-bff",
+    "team:web",
+    "tier:critical"
+  ],
+  "telemetry": {
+    "dbm": {
+      "enabled": false
+    },
+    "logs": {
+      "route": "sidecar"
+    },
+    "profile": "http-api",
+    "rum": {
+      "enabled": false
+    },
+    "traces": {
+      "enabled": true,
+      "sample_rate": 1.0,
+      "server_operation": "http.server.request"
+    }
+  }
+}

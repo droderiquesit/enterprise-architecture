@@ -39,6 +39,7 @@ resource "azurerm_resource_group" "agents" {
 #   Uniform orchestration, overprovisioning disabled, upgrade policy Manual, no autoscale, no instance protection.
 # Azure DevOps owns capacity (instances) and installs the agent extension; both are ignored here.
 resource "azurerm_linux_virtual_machine_scale_set" "agents" {
+  #checkov:skip=CKV_AZURE_97:encryption at host is a setting (default off) because it requires the Microsoft.Compute/EncryptionAtHost feature registration per subscription.
   count = local.vmss_mode ? 1 : 0
 
   name                            = local.names.vm_scale_set

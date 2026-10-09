@@ -47,6 +47,16 @@
           },
           "name": {
             "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          },
+          "secrets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "secret names this identity may read at runtime"
           }
         }
       }
@@ -59,5 +69,6 @@
         "pattern": "^https://"
       }
     }
-  }
+  },
+  "description": "Output of foundation/identity. identities keys: hello-bff, hello-orders-api, hello-inventory-api, hello-catalog-api, hello-dbadapter, hello-worker, hello-durable, hello-functions, hello-jobs, hello-partner-sim, hello-traffic, hello-frontend, obs-collector, obs-dbm, aks-control-plane, aks-kubelet, deploy-agent (+ settings.extra_identities). secret_ids keys: datadog-api-key, datadog-app-key, fault-token, datadog-client-token, dbm-<engine>-password for engines in settings.dbm_sql_auth_engines (default mysql, sqlvm)."
 }

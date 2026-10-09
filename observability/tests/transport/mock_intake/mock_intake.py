@@ -1,7 +1,9 @@
 """Minimal mock of the Datadog logs intake used by the local transport tests.
 
 POST /api/v2/logs          -> records the (optionally gzip-compressed) JSON array, returns 202
-GET  /_received            -> every event received so far (flattened list), plus request metadata
+POST anything else         -> recorded as an "other" request (path, size, headers) and answered 202, so the
+                              Datadog exporter of an OTel collector can be pointed here (traces/metrics/series)
+GET  /_received            -> every log event received so far (flattened list), plus request metadata
 DELETE /_received          -> reset
 GET  /healthz              -> 200
 
@@ -17,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 _lock = threading.Lock()
 _events: list[dict] = []
 _requests: list[dict] = []
+_others: list[dict] = []
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -38,7 +41,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True})
         if self.path == "/_received":
             with _lock:
-                return self._send(200, {"events": list(_events), "requests": list(_requests)})
+                return self._send(200, {"events": list(_events), "requests": list(_requests), "others": list(_others)})
         return self._send(404, {"error": "not found"})
 
     def do_DELETE(self):  # noqa: N802
@@ -46,18 +49,43 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 _events.clear()
                 _requests.clear()
+                _others.clear()
             return self._send(200, {"ok": True})
         return self._send(404, {"error": "not found"})
 
+    def _read_chunked(self) -> bytes:
+        data = b""
+        while True:
+            size = int(self.rfile.readline().strip().split(b";")[0], 16)
+            if size == 0:
+                self.rfile.readline()
+                return data
+            data += self.rfile.read(size)
+            self.rfile.readline()
+
     def do_POST(self):  # noqa: N802
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length)
+        if (self.headers.get("Transfer-Encoding") or "").lower() == "chunked":
+            raw = self._read_chunked()
+        else:
+            raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
         encoding = (self.headers.get("Content-Encoding") or "").lower()
         if encoding == "gzip":
-            raw = gzip.decompress(raw)
-        if self.path.split("?")[0] != "/api/v2/logs":
-            return self._send(404, {"error": "unknown path"})
+            try:
+                raw = gzip.decompress(raw)
+            except OSError:
+                return self._send(400, {"error": "bad gzip"})
         api_key = self.headers.get("DD-API-KEY") or self.headers.get("dd-api-key")
+        if self.path.split("?")[0] != "/api/v2/logs":
+            with _lock:
+                _others.append(
+                    {
+                        "path": self.path.split("?")[0],
+                        "bytes": len(raw),
+                        "content_type": self.headers.get("Content-Type"),
+                        "api_key_present": bool(api_key),
+                    }
+                )
+            return self._send(202, {})
         if not api_key:
             return self._send(403, {"error": "missing api key"})
         try:

@@ -1,0 +1,21 @@
+# Static bundle (React/Vite) for Static Web Apps (steps template).
+parameters:
+  - name: componentPath
+    type: string
+steps:
+  - task: NodeTool@0
+    displayName: Use Node.js 24 LTS
+    retryCountOnTaskFailure: 2
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))
+    inputs:
+      versionSpec: '24.x'
+  - script: |
+      set -euo pipefail
+      cd '${{ parameters.componentPath }}'
+      npm ci --no-audit --no-fund
+      npm run build
+      out=dist; if [[ -d build && ! -d dist ]]; then out=build; fi
+      cd - >/dev/null
+      python3 tools/deploy/artifacts.py zip --src '${{ parameters.componentPath }}'/"$out" --out "$BUILD_OUT/package.zip"
+    displayName: npm ci + build + zip
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))

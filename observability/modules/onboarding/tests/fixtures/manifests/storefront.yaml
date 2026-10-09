@@ -1,0 +1,16 @@
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: storefront
+  team: shop
+  owner: shop@example.com
+  env: test
+  runbook_url: https://runbooks.example.com/storefront
+spec:
+  architecture: swa
+  telemetry:
+    profile: frontend
+  endpoints:
+    - {name: site, url: https://www.example.com, visibility: public, health_path: /, browser_journey: true,
+       browser_steps: [{name: Home renders, type: assertPageContains, value: Shop}]}
+  notifications: {default: [shop], critical: [shop]}

@@ -68,6 +68,40 @@
           },
           "address_prefix": {
             "type": "string"
+          },
+          "vnet_id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "delegation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "service delegation name, e.g. Microsoft.App/environments"
+          },
+          "nsg_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "route_table_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "explicit_egress": {
+            "type": "boolean",
+            "description": "subnet has NAT Gateway or firewall route"
+          },
+          "default_outbound": {
+            "type": "boolean",
+            "description": "Azure default outbound access (false = private subnet)"
+          },
+          "nat_gateway_egress": {
+            "type": "boolean"
           }
         }
       }
@@ -114,6 +148,12 @@
             "string",
             "null"
           ]
+        },
+        "nat_gateway_id": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -122,6 +162,25 @@
         "string",
         "null"
       ]
+    },
+    "hub_vnet_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "spoke_address_space": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "internal_dns_zone_id": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
-  }
+  },
+  "description": "Output of foundation/network. private_dns_zones is keyed by short keys: blob, file, queue, table, dfs, vault, sql, postgres, mysql, cosmos_sql, cosmos_mongo, cosmos_cassandra, cosmos_gremlin, cosmos_table, mongocluster (Azure DocumentDB), redis (Azure Managed Redis, privatelink.redis.azure.net), servicebus (Service Bus + Event Hubs), acr, webapps, aca (privatelink.<region>.azurecontainerapps.io), aks (privatelink.<region>.azmk8s.io), search, kusto (privatelink.<region>.kusto.windows.net), batch, apim, documentdb (alias of mongocluster), postgres_vnet / mysql_vnet (Flexible Server VNet-injection zones), optional monitor/oms/ods/agentsvc (AMPLS) and any settings.private_dns_zones_extra keys. subnets is keyed by ADR-0001 \u00a78 subnet keys plus enabled edge subnets (AzureFirewallSubnet, AzureFirewallManagementSubnet, AzureBastionSubnet, appgw) and the optional apim subnet."
 }

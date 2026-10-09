@@ -1,0 +1,22 @@
+{
+    "timestamp": "2026-10-09T16:37:31.073Z",
+    "level": "INFO",
+    "message": "GET /products/{sku} 200",
+    "logger": "hello.access",
+    "service": "hello-catalog-api",
+    "env": "local",
+    "version": "1.0.0",
+    "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+    "span_id": "d7fdd1a5b0d651e6",
+    "dd.trace_id": "11803532876627986230",
+    "dd.span_id": "15563826396828946918",
+    "dd.service": "hello-catalog-api",
+    "dd.env": "local",
+    "dd.version": "1.0.0",
+    "http.method": "GET",
+    "http.route": "/products/{sku}",
+    "http.status_code": 200,
+    "duration_ms": 4.04,
+    "network.client.ip": "172.18.0.1",
+    "http.useragent": "curl/8.5.0"
+}

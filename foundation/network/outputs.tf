@@ -24,12 +24,21 @@ output "contract" {
         nat_gateway_egress = local.nat && v.egress
       }
     }
-    private_dns_zones = {
-      for k, v in local.private_dns_zones : k => {
-        id   = azurerm_private_dns_zone.this[k].id
-        name = azurerm_private_dns_zone.this[k].name
-      }
-    }
+    # `documentdb` is an alias of `mongocluster` (same zone) for consumers that key by component name.
+    private_dns_zones = merge(
+      {
+        for k, v in local.private_dns_zones : k => {
+          id   = azurerm_private_dns_zone.this[k].id
+          name = azurerm_private_dns_zone.this[k].name
+        }
+      },
+      contains(keys(local.private_dns_zones), "mongocluster") ? {
+        documentdb = {
+          id   = azurerm_private_dns_zone.this["mongocluster"].id
+          name = azurerm_private_dns_zone.this["mongocluster"].name
+        }
+      } : {}
+    )
     egress = {
       type                = var.settings.egress
       public_ips          = local.nat ? azurerm_public_ip.nat[*].ip_address : []

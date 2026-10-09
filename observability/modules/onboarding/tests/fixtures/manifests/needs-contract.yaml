@@ -1,0 +1,14 @@
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: needs-contract
+  team: shop
+  owner: shop@example.com
+  env: strict
+  runbook_url: https://runbooks.example.com/needs-contract
+spec:
+  architecture: aca
+  telemetry: {profile: worker}
+  resources:
+    - {id: "${contract:platform-db-sql.databases.orders.id}", type: Microsoft.Sql/servers/databases, role: db}
+  notifications: {default: [shop]}

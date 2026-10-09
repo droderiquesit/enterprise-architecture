@@ -100,9 +100,11 @@ variable "settings" {
       os_sku    = optional(string, "AzureLinux")
       zones     = optional(list(string), [])
     }), {})
-    azure_policy_enabled  = optional(bool, false)
-    image_cleaner_enabled = optional(bool, true)
-    defender_enabled      = optional(bool, false) # Defender sensor uses the platform-shared workspace
+    azure_policy_enabled               = optional(bool, false)
+    image_cleaner_enabled              = optional(bool, true)
+    defender_enabled                   = optional(bool, false) # Defender sensor uses the platform-shared workspace
+    host_encryption_enabled            = optional(bool, false) # needs Microsoft.Compute/EncryptionAtHost registration
+    key_vault_secrets_provider_enabled = optional(bool, true)  # Secrets Store CSI driver with rotation
     # Workload identity federation: identity key => Kubernetes namespace/service account.
     workload_identities = optional(map(object({
       namespace       = string

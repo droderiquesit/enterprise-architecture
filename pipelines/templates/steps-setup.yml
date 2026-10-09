@@ -1,0 +1,14 @@
+# Common job setup: Python tool dependencies and (optionally) pinned CLIs.
+# Network steps are idempotent and therefore the only ones retried.
+parameters:
+  - name: tools
+    type: string
+    default: ''          # e.g. 'terraform' or 'gitleaks trivy checkov'
+steps:
+  - script: python3 -m pip install --quiet --user --requirement pipelines/requirements-tools.txt
+    displayName: Install tool requirements
+    retryCountOnTaskFailure: 2
+  - ${{ if ne(parameters.tools, '') }}:
+    - script: bash pipelines/scripts/install-tools.sh ${{ parameters.tools }}
+      displayName: Install ${{ parameters.tools }}
+      retryCountOnTaskFailure: 2

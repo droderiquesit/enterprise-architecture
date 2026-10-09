@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-appservice contract v1",
+  "description": "App Service plans (Linux, Windows, Windows containers, Logic Apps Standard) and VNet integration subnet.",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "integration_subnet_id",
+    "plans"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "integration_subnet_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "plans": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "os_type",
+          "sku"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          },
+          "os_type": {
+            "enum": [
+              "Linux",
+              "Windows",
+              "WindowsContainer"
+            ]
+          },
+          "sku": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "functions_dedicated_plan": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "logicapps_storage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "name": {
+          "type": "string"
+        },
+        "private": {
+          "type": "boolean"
+        },
+        "blob_endpoint": {
+          "type": "string"
+        },
+        "shared_key_required": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

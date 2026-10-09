@@ -1,0 +1,55 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-dbadapter-cosmos-table
+  display_name: hello-dbadapter-cosmos-table
+  team: data-platform
+  owner: data-platform@example.com
+  application: enterprise-hello
+  domain: data
+  tier: low
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  runbook_url: https://runbooks.example.com/enterprise-hello/hello-dbadapter-cosmos-table
+  description: Database adapter for family cosmos-table.
+  languages:
+  - python
+  depends_on: []
+  contacts:
+  - name: data-platform mailbox
+    type: email
+    contact: data-platform@example.com
+spec:
+  architecture: aca
+  runtime: python
+  telemetry:
+    profile: db-adapter
+  resources:
+  - id: ${contract:deploy-dbadapters.adapters.cosmos-table.id}
+    type: Microsoft.App/containerApps
+    role: app
+    required: false
+  - id: ${contract:platform-db-cosmos-table.account.id}
+    type: Microsoft.DocumentDB/databaseAccounts
+    role: store
+    required: false
+  endpoints:
+  - name: internal
+    url: ${contract:deploy-dbadapters.adapters.cosmos-table.url}
+    visibility: private
+    health_path: /readyz
+    required: false
+  presence_ref: deploy-dbadapters.adapters.cosmos-table.url
+  notifications:
+    default:
+    - team-data-platform
+    critical:
+    - team-data-platform
+    - oncall
+    warning:
+    - team-data-platform
+  catalog:
+    component_of:
+    - system:enterprise-hello

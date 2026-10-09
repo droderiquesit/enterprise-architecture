@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-batch contract v1",
+  "description": "Batch account + autoscaling pool (simplified communication, no public IPs) and identity-based auto-storage.",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "account_id",
+    "account_name",
+    "account_endpoint",
+    "pool",
+    "identity",
+    "auto_storage"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "account_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "account_name": {
+      "type": "string"
+    },
+    "account_endpoint": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "private": {
+      "type": "boolean"
+    },
+    "pool": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "vm_size",
+        "max_dedicated_nodes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "name": {
+          "type": "string"
+        },
+        "vm_size": {
+          "type": "string"
+        },
+        "os_type": {
+          "type": "string"
+        },
+        "node_agent_sku_id": {
+          "type": "string"
+        },
+        "max_dedicated_nodes": {
+          "type": "integer"
+        },
+        "python": {
+          "type": "string"
+        },
+        "subnet_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "required": [
+        "id",
+        "client_id",
+        "principal_id"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "principal_id": {
+          "type": "string"
+        }
+      }
+    },
+    "auto_storage": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "packages_container"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "name": {
+          "type": "string"
+        },
+        "blob_endpoint": {
+          "type": "string"
+        },
+        "packages_container": {
+          "type": "string"
+        },
+        "output_container": {
+          "type": "string"
+        }
+      }
+    },
+    "acr_login_server": {
+      "type": "string"
+    }
+  }
+}

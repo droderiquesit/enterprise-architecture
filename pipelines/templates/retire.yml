@@ -1,0 +1,86 @@
+# Retire stage (stage template). Destroys ONLY components whose retirement is scheduled in the
+# selection document, i.e. they have a deployment record, are no longer enabled (or no longer in the
+# registry), have an approved entry in environments/<env>/retirements.yaml with confirm == component,
+# and no enabled component still depends on them. Consumers retire first (selection `order`).
+# The deployment job targets environment lab-<env>-retire, which carries its own approval check.
+# Code that has been deleted from the branch is destroyed from the commit recorded in the
+# component's deployment record (git worktree), so retirement never needs the code to be restored.
+parameters:
+  - name: dependsOn
+    type: object
+  - name: condition
+    type: string
+  - name: environment
+    type: string
+  - name: dryRun
+    type: boolean
+    default: false
+  - name: settings
+    type: object
+
+stages:
+  - stage: Retire
+    displayName: Retire approved components (destroy)
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: ${{ parameters.condition }}
+    lockBehavior: sequential
+    pool:
+      name: ${{ parameters.settings.deployPool }}
+    jobs:
+      - ${{ if eq(parameters.dryRun, true) }}:
+        - job: RetireDryRun
+          displayName: Retirement plan only (dry run)
+          steps:
+            - checkout: self
+              fetchDepth: 1
+            - task: DownloadPipelineArtifact@2
+              retryCountOnTaskFailure: 2
+              inputs:
+                artifact: selection
+                path: $(Pipeline.Workspace)/selection
+            - script: python3 -c "import json;d=json.load(open('$(Pipeline.Workspace)/selection/selection.json'));[print(r['order'],r['component'],r['status'],r['reason']) for r in d['retirements']]"
+              displayName: List scheduled retirements (nothing destroyed)
+      - ${{ if eq(parameters.dryRun, false) }}:
+        - deployment: Retire
+          displayName: Destroy retired components (consumers first)
+          environment: lab-${{ parameters.environment }}-retire
+          timeoutInMinutes: 180
+          cancelTimeoutInMinutes: 15
+          variables:
+            LAB_ENV: ${{ parameters.environment }}
+            SELECTION_FILE: $(Pipeline.Workspace)/selection/selection.json
+            STATE_STORAGE_ACCOUNT: ${{ parameters.settings.stateStorageAccount }}
+            CONTRACTS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts
+            RECORDS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
+          strategy:
+            runOnce:
+              deploy:
+                steps:
+                  - download: none
+                  - checkout: self
+                    fetchDepth: 0            # the recorded commit of a deleted component must be reachable
+                  - task: DownloadPipelineArtifact@2
+                    displayName: Download selection
+                    retryCountOnTaskFailure: 2
+                    inputs:
+                      artifact: selection
+                      path: $(Pipeline.Workspace)/selection
+                  - template: steps-setup.yml
+                    parameters:
+                      tools: terraform
+                  - task: AzureCLI@2
+                    displayName: terraform destroy (scheduled retirements, in order)
+                    inputs:
+                      azureSubscription: ${{ parameters.settings.applyServiceConnection }}
+                      scriptType: bash
+                      scriptLocation: inlineScript
+                      addSpnToEnvironment: true
+                      inlineScript: |
+                        set -euo pipefail
+                        source pipelines/scripts/tf-env.sh
+                        python3 tools/deploy/retire.py --selection "$SELECTION_FILE" --env "$LAB_ENV" \
+                          --records-url "$RECORDS_URL" --contracts-url "$CONTRACTS_URL"
+                    env:
+                      ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.applyServiceConnectionId }}
+                      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                      SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)

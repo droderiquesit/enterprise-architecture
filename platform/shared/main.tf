@@ -17,6 +17,12 @@ locals {
 }
 
 resource "azurerm_container_registry" "this" {
+  #checkov:skip=CKV_AZURE_233:Zone redundancy is Premium-only; setting acr_zone_redundancy_enabled (enterprise).
+  #checkov:skip=CKV_AZURE_237:Dedicated data endpoints are Premium-only; enabled automatically when acr_sku = Premium.
+  #checkov:skip=CKV_AZURE_164:Content trust (DCT) is deprecated; image signing via Notation is an application pipeline concern.
+  #checkov:skip=CKV_AZURE_165:Single-region lab; geo-replication not required.
+  #checkov:skip=CKV_AZURE_166:Quarantine requires Premium + an external scanner workflow; not part of the lab.
+  #checkov:skip=CKV_AZURE_163:Vulnerability scanning is Microsoft Defender for Containers (subscription plan), not a registry setting.
   name                = local.unique.container_registry
   resource_group_name = azurerm_resource_group.this.name
   location            = local.location
@@ -32,6 +38,7 @@ resource "azurerm_container_registry" "this" {
   zone_redundancy_enabled       = local.acr_premium ? var.settings.acr_zone_redundancy_enabled : false
   retention_policy_in_days      = local.acr_premium ? var.settings.acr_retention_days : null
   quarantine_policy_enabled     = false
+  data_endpoint_enabled         = local.acr_premium
   export_policy_enabled         = local.acr_premium ? var.settings.acr_public_network_access_enabled : true
 }
 

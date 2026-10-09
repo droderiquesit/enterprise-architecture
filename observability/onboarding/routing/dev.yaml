@@ -1,0 +1,18 @@
+# Lab notification routing for env dev. Route keys are referenced by manifests (spec.notifications);
+# handles are Datadog @-mentions. Dev routes to e-mail only; nobody is paged from the lab.
+apiVersion: observability/v1
+kind: NotificationRouting
+metadata:
+  env: dev
+  description: Enterprise Hello lab (dev) - e-mail only, no paging.
+routes:
+  default: {handles: ["@platform-team@example.com"]}
+  critical: {handles: ["@platform-team@example.com"]}
+  oncall: {handles: ["@platform-team@example.com"], description: "Would be @pagerduty-<service> in production."}
+  team-web: {handles: ["@web@example.com"]}
+  team-orders: {handles: ["@orders@example.com"]}
+  team-catalog: {handles: ["@catalog@example.com"]}
+  team-fulfillment: {handles: ["@fulfillment@example.com"]}
+  team-data-platform: {handles: ["@data-platform@example.com"]}
+  team-platform-engineering: {handles: ["@platform-team@example.com"]}
+  team-observability: {handles: ["@observability@example.com"]}

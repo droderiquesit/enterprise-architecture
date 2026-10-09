@@ -1,0 +1,64 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-catalog-api
+  display_name: hello-catalog-api
+  team: catalog
+  owner: catalog@example.com
+  application: enterprise-hello
+  domain: catalog
+  tier: high
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  runbook_url: https://runbooks.example.com/enterprise-hello/hello-catalog-api
+  description: Catalog API; PostgreSQL + Managed Redis cache-aside.
+  languages:
+  - python
+  depends_on:
+  - datastore:catalog-postgresql
+  - datastore:catalog-redis
+  contacts:
+  - name: catalog mailbox
+    type: email
+    contact: catalog@example.com
+spec:
+  architecture: aca
+  runtime: python
+  telemetry:
+    profile: http-api
+    dbm:
+      enabled: true
+      engine: postgres
+      endpoint_ref: platform-db-postgresql.server.fqdn
+  resources:
+  - id: ${contract:deploy-core-aca.apps.hello-catalog-api.id}
+    type: Microsoft.App/containerApps
+    role: app
+    required: false
+  - id: ${contract:platform-db-postgresql.server.id}
+    type: Microsoft.DBforPostgreSQL/flexibleServers
+    role: catalog-db
+  - id: ${contract:platform-db-redis.cache.id}
+    type: Microsoft.Cache/redisEnterprise
+    role: cache
+    required: false
+  endpoints:
+  - name: internal
+    url: ${contract:deploy-core-aca.apps.hello-catalog-api.url}
+    visibility: private
+    health_path: /readyz
+    required: false
+  presence_ref: deploy-core-aca.apps.hello-catalog-api.url
+  notifications:
+    default:
+    - team-catalog
+    critical:
+    - team-catalog
+    - oncall
+    warning:
+    - team-catalog
+  catalog:
+    component_of:
+    - system:enterprise-hello

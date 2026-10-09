@@ -1,0 +1,25 @@
+-r ../../shared/python/hello_common/requirements.in
+# drivers (all in one image; imported lazily per DB_FAMILY)
+mssql-python==1.15.0
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
+PyMySQL==1.2.3
+azure-cosmos==4.17.1
+pymongo==4.18.3
+cassandra-driver==3.30.1
+gremlinpython==3.8.2
+azure-data-tables==12.7.0
+redis==8.1.0
+redis-entraid==1.2.2
+azure-confidentialledger==1.1.1
+# azure-kusto-ingest 6.0.4 (latest) pins azure-storage-blob==12.26.0 exactly; datalake 12.21.0 is the
+# newest release compatible with that blob version.
+azure-storage-blob==12.26.0
+azure-storage-file-datalake==12.21.0
+azure-search-documents==12.0.0
+azure-kusto-data==6.0.4
+azure-kusto-ingest==6.0.4
+opentelemetry-instrumentation-psycopg==0.66b1
+opentelemetry-instrumentation-redis==0.66b1
+opentelemetry-instrumentation-pymongo==0.66b1
+opentelemetry-instrumentation-pymysql==0.66b1

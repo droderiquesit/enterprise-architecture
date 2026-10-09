@@ -6,7 +6,7 @@ Output variables (step name `detect` in job `select` of stage `Select`):
   build_<id>       'true' when the artifact must be resolved (existing digest for its source
                    fingerprint) or built
   validate_matrix  JSON matrix for the Validate stage; validate_count its size
-  any_deploy, has_retirements, mode, selection_summary (compact JSON)
+  any_deploy, any_build, has_retirements, mode, selection_summary (compact JSON)
 Component ids use '_' instead of '-' (ADO names allow letters, digits and '_').
 """
 
@@ -48,6 +48,7 @@ def output_variables(doc: dict, registry: Registry) -> Dict[str, str]:
     out["validate_matrix"] = json.dumps(matrix, separators=(",", ":"), sort_keys=True)
     out["validate_count"] = str(len(matrix))
     out["any_deploy"] = _bool(any(v == "true" for k, v in out.items() if k.startswith("sel_")))
+    out["any_build"] = _bool(any(v == "true" for k, v in out.items() if k.startswith("build_")))
     out["has_retirements"] = _bool(any(r["status"] == "retire-scheduled" for r in doc.get("retirements", [])) and not pr)
     out["mode"] = doc["mode"]
     out["selection_summary"] = json.dumps(doc.get("summary", {}), separators=(",", ":"), sort_keys=True)

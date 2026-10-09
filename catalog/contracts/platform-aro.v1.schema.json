@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-aro contract v1",
+  "description": "Azure Red Hat OpenShift cluster (blocked by default; see README prerequisites).",
+  "type": "object",
+  "required": [
+    "enabled",
+    "status"
+  ],
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "implemented",
+        "disabled",
+        "blocked"
+      ]
+    },
+    "resource_group_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cluster_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "cluster_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "console_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "api_server_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "api_server_ip": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ingress_ip": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "api_visibility": {
+      "type": "string"
+    },
+    "worker_count": {
+      "type": "integer"
+    },
+    "os_type": {
+      "type": "string"
+    }
+  }
+}

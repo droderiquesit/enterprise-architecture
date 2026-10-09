@@ -25,6 +25,41 @@
     },
     "log_analytics_customer_id": {
       "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "acr_name": {
+      "type": "string"
+    },
+    "acr_sku": {
+      "enum": [
+        "Basic",
+        "Standard",
+        "Premium"
+      ]
+    },
+    "acr_private": {
+      "type": "boolean"
+    },
+    "acr_public_network_access": {
+      "type": "boolean"
+    },
+    "acr_pull_identities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "acr_push_identities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "log_analytics_name": {
+      "type": "string"
     }
-  }
+  },
+  "description": "Shared container registry (Entra-only) and platform-feature Log Analytics workspace. No secrets."
 }

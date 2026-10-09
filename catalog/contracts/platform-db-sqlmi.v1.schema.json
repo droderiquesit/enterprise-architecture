@@ -1,0 +1,401 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform-db-sqlmi.v1.schema.json",
+  "title": "platform-db-sqlmi contract v1",
+  "description": "Produced by platform/data (see the root README). No secrets: Key Vault versionless secret IDs only.",
+  "type": "object",
+  "required": [
+    "enabled",
+    "engine",
+    "server",
+    "databases",
+    "dbm"
+  ],
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "resource_group_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "engine": {
+      "const": "azure-sql-managed-instance"
+    },
+    "server": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "fqdn",
+            "port",
+            "auth_mode",
+            "pricing_model"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^/subscriptions/[^/]+/"
+            },
+            "name": {
+              "type": "string"
+            },
+            "fqdn": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "public_network_access_enabled": {
+              "const": false
+            },
+            "auth_mode": {
+              "type": "string"
+            },
+            "entra_admin": {
+              "type": "object"
+            },
+            "pricing_model": {
+              "enum": [
+                "Regular",
+                "Freemium"
+              ]
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "databases": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/relationalDatabase"
+      }
+    },
+    "grant_script": {
+      "type": "string"
+    },
+    "dbm": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/dbm"
+        }
+      ]
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "privateEndpoint": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "private_ip_address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "grant": {
+      "type": "object",
+      "required": [
+        "identity_name"
+      ],
+      "properties": {
+        "identity_name": {
+          "type": "string"
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "object_id": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "privileges": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "rbac": {
+      "type": "object",
+      "required": [
+        "identity_name",
+        "principal_id",
+        "role",
+        "scope"
+      ],
+      "properties": {
+        "identity_name": {
+          "type": "string"
+        },
+        "principal_id": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "dbm": {
+      "type": "object",
+      "required": [
+        "supported"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "engine": {
+          "enum": [
+            "sqlserver",
+            "postgres",
+            "mysql"
+          ]
+        },
+        "deployment_type": {
+          "enum": [
+            "sql_database",
+            "managed_instance",
+            "self_hosted_azure_vm",
+            "flexible_server"
+          ]
+        },
+        "auth_mode": {
+          "enum": [
+            "entra-managed-identity",
+            "native-password",
+            "sql-login"
+          ]
+        },
+        "identity_name": {
+          "const": "obs-dbm"
+        },
+        "identity_client_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "resource_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "databases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "password_secret_id": {
+          "type": "string",
+          "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
+          "description": "Versionless Key Vault secret ID (never a value)."
+        },
+        "admin_secret_id": {
+          "type": "string",
+          "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
+          "description": "Versionless Key Vault secret ID (never a value)."
+        },
+        "required_parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "setup_reference": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "if": {
+        "properties": {
+          "supported": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "engine",
+          "deployment_type",
+          "auth_mode",
+          "identity_name",
+          "host",
+          "port",
+          "resource_id",
+          "databases"
+        ]
+      },
+      "else": {
+        "required": [
+          "reason"
+        ]
+      }
+    },
+    "relationalDatabase": {
+      "type": "object",
+      "required": [
+        "name",
+        "boundary",
+        "owner_identity_name",
+        "auth_mode"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "fqdn": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "boundary": {
+          "type": "string"
+        },
+        "schemas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "auth_mode": {
+          "type": "string"
+        },
+        "owner_identity_name": {
+          "type": "string"
+        },
+        "reader_writer_identity_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/grant"
+          }
+        },
+        "password_secret_id": {
+          "type": "string",
+          "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
+          "description": "Versionless Key Vault secret ID (never a value)."
+        },
+        "login": {
+          "type": "string"
+        },
+        "connection_hint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "logicalStore": {
+      "type": "object",
+      "required": [
+        "name",
+        "boundary",
+        "owner_identity_name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "boundary": {
+          "type": "string"
+        },
+        "owner_identity_name": {
+          "type": "string"
+        },
+        "containers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "partition_key": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

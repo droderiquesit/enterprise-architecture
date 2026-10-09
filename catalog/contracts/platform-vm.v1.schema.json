@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-vm contract v1",
+  "description": "Virtual machine hosts (OS prepared, no application). Consumed by vm-workloads (run command) and obs-hosts (extensions).",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "vms"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "subnet_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "auto_shutdown": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "vms": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "os_type",
+          "private_ip",
+          "identity_principal_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          },
+          "computer_name": {
+            "type": "string"
+          },
+          "os_type": {
+            "enum": [
+              "Linux",
+              "Windows"
+            ]
+          },
+          "os_image": {
+            "type": "string"
+          },
+          "private_ip": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          },
+          "workload": {
+            "type": "string"
+          },
+          "identity_id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "identity_client_id": {
+            "type": "string"
+          },
+          "identity_principal_id": {
+            "type": "string"
+          },
+          "system_principal_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "app_root": {
+            "type": "string"
+          },
+          "log_dir": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -148,6 +148,10 @@ run "minimal_single_spoke_defaults" {
     condition     = can(regex("^/subscriptions/[^/]+/", output.contract.private_dns_zones["vault"].id)) && output.contract.internal_dns_zone == "dev.eh.lab.internal"
     error_message = "contract DNS zones"
   }
+  assert {
+    condition     = output.contract.private_dns_zones["documentdb"].name == "privatelink.mongocluster.cosmos.azure.com"
+    error_message = "documentdb alias must point at the mongocluster zone"
+  }
 }
 
 run "hub_spoke_with_firewall_egress" {

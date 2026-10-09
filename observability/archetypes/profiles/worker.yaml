@@ -9,6 +9,9 @@ defaults:
     tier: medium
   spec:
     catalog: {type: queue-consumer}
+    # Consumers are legitimately silent when no messages arrive: no trace no-data monitor. Liveness comes from
+    # the platform (replicas/host monitors) and the pipeline canary; backlog monitors catch a stalled consumer.
+    idle_behavior: {scale_to_zero: true}
     telemetry:
       traces:
         # OTel operation-name logic v2: messaging system + operation, e.g. servicebus.process.

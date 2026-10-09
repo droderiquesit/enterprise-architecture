@@ -1,0 +1,17 @@
+# Overlay: require a bearer token on OTLP (defence in depth on top of VNet-only internal ingress).
+# Clients send "Authorization: Bearer <token>" (OTEL_EXPORTER_OTLP_HEADERS), token from Key Vault.
+extensions:
+  bearertokenauth/otlp:
+    scheme: Bearer
+    token: ${env:OTLP_BEARER_TOKEN}
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        auth:
+          authenticator: bearertokenauth/otlp
+      http:
+        auth:
+          authenticator: bearertokenauth/otlp
+service:
+  extensions: [health_check, bearertokenauth/otlp]

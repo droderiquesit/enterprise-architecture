@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-functions contract v1",
+  "description": "Functions hosting plans and runtime storage (identity-based; no keys).",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "flex",
+    "durable_storage"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "flex_integration_subnet_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "integration_subnet_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "private_endpoints_enabled": {
+      "type": "boolean"
+    },
+    "flex": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "plan_id",
+          "identity",
+          "storage_account_name",
+          "deployment_container",
+          "deployment_container_url"
+        ],
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "plan_name": {
+            "type": "string"
+          },
+          "identity": {
+            "type": "string"
+          },
+          "queue_endpoint": {
+            "type": "string"
+          },
+          "table_endpoint": {
+            "type": "string"
+          },
+          "deployment_container": {
+            "type": "string"
+          },
+          "deployment_container_url": {
+            "type": "string"
+          },
+          "storage_account_id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "storage_account_name": {
+            "type": "string"
+          },
+          "blob_endpoint": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "durable_storage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "storage_account_id",
+        "storage_account_name",
+        "identity"
+      ],
+      "properties": {
+        "queue_endpoint": {
+          "type": "string"
+        },
+        "table_endpoint": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "storage_account_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "storage_account_name": {
+          "type": "string"
+        },
+        "blob_endpoint": {
+          "type": "string"
+        }
+      }
+    },
+    "premium": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "plan_id",
+        "storage_account_name"
+      ],
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "plan_name": {
+          "type": "string"
+        },
+        "sku": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "package_container": {
+          "type": "string"
+        },
+        "storage_account_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "storage_account_name": {
+          "type": "string"
+        },
+        "blob_endpoint": {
+          "type": "string"
+        }
+      }
+    },
+    "consumption_windows": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "plan_id",
+        "storage_account_name"
+      ],
+      "properties": {
+        "plan_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "plan_name": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "package_container": {
+          "type": "string"
+        },
+        "storage_account_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "storage_account_name": {
+          "type": "string"
+        },
+        "blob_endpoint": {
+          "type": "string"
+        }
+      }
+    },
+    "durable_task_scheduler": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "scheduler_id",
+        "task_hub"
+      ],
+      "properties": {
+        "scheduler_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "endpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_hub": {
+          "type": "string"
+        },
+        "task_hub_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        }
+      }
+    }
+  }
+}

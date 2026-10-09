@@ -6,6 +6,7 @@ locals {
 }
 
 resource "azurerm_api_management" "this" {
+  #checkov:skip=CKV_AZURE_174:public_network_access_enabled must be true at creation (provider constraint) and only affects the management plane.
   count = local.apim_on ? 1 : 0
 
   name                = "${local.names.api_management}-${module.naming.suffix}"

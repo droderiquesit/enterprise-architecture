@@ -1,4 +1,7 @@
 resource "azurerm_key_vault" "this" {
+  #checkov:skip=CKV_AZURE_189:public_network_access_enabled is a setting that defaults to false (private endpoint only); checkov cannot resolve var.settings.
+  #checkov:skip=CKV_AZURE_110:purge_protection_enabled is a setting that defaults to true (README documents the teardown implication).
+  #checkov:skip=CKV_AZURE_42:soft delete is always on (7-90 days, validated); purge protection defaults to true via settings.
   name                          = module.naming.unique.key_vault
   resource_group_name           = azurerm_resource_group.identity.name
   location                      = local.location

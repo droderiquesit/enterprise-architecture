@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Hello.InventoryApi</RootNamespace>
+    <AssemblyName>Hello.InventoryApi</AssemblyName>
+    <!-- Linux + Windows (App Service Windows code, Windows VM service, nanoserver container). -->
+    <RuntimeIdentifiers>linux-x64;win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../shared/dotnet/Hello.Common/Hello.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Cosmos" />
+    <!-- The Cosmos SDK requires an explicit Newtonsoft.Json reference (build-time check). -->
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hello.InventoryApi.Tests" />
+  </ItemGroup>
+</Project>

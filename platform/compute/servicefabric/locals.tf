@@ -9,10 +9,10 @@ module "naming" {
 }
 
 module "tags" {
-  source      = "../../../foundation/modules/tags"
-  component   = "platform-servicefabric"
-  layer       = "platform"
-  domain      = "compute"
+  source    = "../../../foundation/modules/tags"
+  component = "platform-servicefabric"
+  layer     = "platform"
+  domain    = "compute"
   environment = {
     name        = var.environment.name
     location    = var.environment.location

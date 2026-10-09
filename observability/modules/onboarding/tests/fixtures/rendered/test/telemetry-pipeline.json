@@ -1,0 +1,367 @@
+{
+  "architecture": "external",
+  "catalog": {
+    "component_of": [],
+    "enabled": true,
+    "lifecycle": "production",
+    "type": "custom"
+  },
+  "dashboards": {
+    "enabled": true,
+    "workflow_metric_prefix": null
+  },
+  "enabled": true,
+  "endpoints": [],
+  "env": "test",
+  "generated_from": {
+    "layers": [
+      "global-defaults",
+      "profiles/telemetry-pipeline",
+      "manifest"
+    ],
+    "manifest": "manifests/pipeline.yaml",
+    "sha256": "734c237a95162408aa67136c8690c49c414598db67efd2dd6675fc8bcbbc4f9f"
+  },
+  "idle_behavior": {
+    "expected_quiet_hours": null,
+    "scale_to_zero": false
+  },
+  "metadata": {
+    "application": "unspecified",
+    "contacts": [],
+    "depends_on": [],
+    "description": "",
+    "display_name": "telemetry-pipeline",
+    "domain": "unspecified",
+    "languages": [],
+    "owner": "obs@example.com",
+    "repository": null,
+    "runbook_url": "https://runbooks.example.com/pipeline",
+    "team": "observability",
+    "tier": "critical"
+  },
+  "monitors": {
+    "pipeline.canary_logs_missing": {
+      "evaluation_delay": null,
+      "key": "pipeline.canary_logs_missing",
+      "message": "{{#is_alert}}**CRITICAL**: The heartbeat record emitted every minute by Fluent Bit did not arrive. Application \"no data\" alerts during this window are pipeline failures, not idleness.{{/is_alert}}\n{{#is_warning}}**WARNING**: The heartbeat record emitted every minute by Fluent Bit did not arrive. Application \"no data\" alerts during this window are pipeline failures, not idleness.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `test` | team: `observability` | owner: obs@example.com | tier: critical\n\nTroubleshooting:\n1. Fluent Bit health: GET http://<fluent-bit>:2020/api/v2/health on the aggregator / DaemonSet / sidecars.\n2. Check fluentbit_output_errors_total and retries below; 403 from Datadog = wrong API key or site.\n3. Check egress (NAT/firewall) to the Datadog logs intake for the configured site.\n\nRunbook: https://runbooks.example.com/pipeline#pipeline-canary",
+      "name": "[test] telemetry pipeline canary logs missing",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "pager"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 1,
+      "query": "logs(\"service:telemetry-canary @canary:true env:test\").index(\"*\").rollup(\"count\").last(\"15m\") < 1",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/pipeline#pipeline-canary",
+      "severity": "critical",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:test",
+        "managed_by:observability-package",
+        "monitor:pipeline.canary_logs_missing",
+        "service:telemetry-pipeline",
+        "severity:critical",
+        "team:observability",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 1
+      },
+      "type": "log alert"
+    },
+    "pipeline.fluentbit_dropped": {
+      "evaluation_delay": null,
+      "key": "pipeline.fluentbit_dropped",
+      "message": "{{#is_alert}}**CRITICAL**: Log records were lost after exhausting retries.{{/is_alert}}\n{{#is_warning}}**WARNING**: Log records were lost after exhausting retries.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `test` | team: `observability` | owner: obs@example.com | tier: critical\n\nTroubleshooting:\n1. Check storage.total_limit_size / filesystem buffering and Datadog intake reachability.\n\nRunbook: https://runbooks.example.com/pipeline#fluentbit-dropped",
+      "name": "[test] Fluent Bit dropped or retry-exhausted records",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "pager"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_15m):sum:fluentbit_output_retries_failed_total{env:test}.as_count() + sum:fluentbit_output_dropped_records_total{env:test}.as_count() > 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/pipeline#fluentbit-dropped",
+      "severity": "critical",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:test",
+        "managed_by:observability-package",
+        "monitor:pipeline.fluentbit_dropped",
+        "service:telemetry-pipeline",
+        "severity:critical",
+        "team:observability",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "query alert"
+    },
+    "pipeline.fluentbit_not_reporting": {
+      "evaluation_delay": null,
+      "key": "pipeline.fluentbit_not_reporting",
+      "message": "{{#is_alert}}**CRITICAL**: No Fluent Bit metrics arrive (Fluent Bit down, or the gateway stopped scraping it).{{/is_alert}}\n{{#is_warning}}**WARNING**: No Fluent Bit metrics arrive (Fluent Bit down, or the gateway stopped scraping it).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `test` | team: `observability` | owner: obs@example.com | tier: critical\n\nTroubleshooting:\n1. Check the OTel gateway prometheus receiver target list and Fluent Bit HTTP server (port 2020).\n\nRunbook: https://runbooks.example.com/pipeline#fluentbit-not-reporting",
+      "name": "[test] Fluent Bit metrics not reporting",
+      "new_group_delay": 60,
+      "no_data_timeframe": 20,
+      "notify": {
+        "alert": [
+          "pager"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": true,
+      "priority": 2,
+      "query": "sum(last_15m):sum:fluentbit_input_records_total{env:test}.as_count() < 1",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/pipeline#fluentbit-not-reporting",
+      "severity": "critical",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:test",
+        "managed_by:observability-package",
+        "monitor:pipeline.fluentbit_not_reporting",
+        "service:telemetry-pipeline",
+        "severity:critical",
+        "team:observability",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 1
+      },
+      "type": "query alert"
+    },
+    "pipeline.fluentbit_output_errors": {
+      "evaluation_delay": null,
+      "key": "pipeline.fluentbit_output_errors",
+      "message": "{{#is_alert}}**WARNING**: Fluent Bit outputs return errors (records are retried).{{/is_alert}}\n{{#is_warning}}**WARNING**: Fluent Bit outputs return errors (records are retried).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `test` | team: `observability` | owner: obs@example.com | tier: critical\n\nTroubleshooting:\n1. kubectl logs / container logs of Fluent Bit; look for \"[output:datadog\" or \"[output:http\" errors.\n\nRunbook: https://runbooks.example.com/pipeline#fluentbit-errors",
+      "name": "[test] Fluent Bit output errors",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "shop"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "sum(last_15m):sum:fluentbit_output_errors_total{env:test}.as_count() > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/pipeline#fluentbit-errors",
+      "severity": "warning",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:test",
+        "managed_by:observability-package",
+        "monitor:pipeline.fluentbit_output_errors",
+        "service:telemetry-pipeline",
+        "severity:warning",
+        "team:observability",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 10
+      },
+      "type": "query alert"
+    },
+    "pipeline.otel_export_failures": {
+      "evaluation_delay": null,
+      "key": "pipeline.otel_export_failures",
+      "message": "{{#is_alert}}**CRITICAL**: The collector fails to export telemetry to Datadog.{{/is_alert}}\n{{#is_warning}}**WARNING**: The collector fails to export telemetry to Datadog.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `test` | team: `observability` | owner: obs@example.com | tier: critical\n\nTroubleshooting:\n1. Collector logs: look for 403 (API key), 413 (payload), DNS/TLS errors.\n2. otelcol_exporter_queue_size close to otelcol_exporter_queue_capacity = backpressure.\n\nRunbook: https://runbooks.example.com/pipeline#otel-export",
+      "name": "[test] OTel gateway export failures",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "pager"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_15m):sum:otelcol_exporter_send_failed_spans{env:test}.as_count() + sum:otelcol_exporter_send_failed_metric_points{env:test}.as_count() > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/pipeline#otel-export",
+      "severity": "critical",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:test",
+        "managed_by:observability-package",
+        "monitor:pipeline.otel_export_failures",
+        "service:telemetry-pipeline",
+        "severity:critical",
+        "team:observability",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 10
+      },
+      "type": "query alert"
+    },
+    "pipeline.otel_not_reporting": {
+      "evaluation_delay": null,
+      "key": "pipeline.otel_not_reporting",
+      "message": "{{#is_alert}}**CRITICAL**: The collector stopped reporting its own metrics (collector down or metrics path broken).{{/is_alert}}\n{{#is_warning}}**WARNING**: The collector stopped reporting its own metrics (collector down or metrics path broken).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `test` | team: `observability` | owner: obs@example.com | tier: critical\n\nTroubleshooting:\n1. Check the gateway replicas (Container App / Deployment) and its internal telemetry endpoint :8888.\n\nRunbook: https://runbooks.example.com/pipeline#otel-not-reporting",
+      "name": "[test] OTel gateway self-metrics missing",
+      "new_group_delay": 60,
+      "no_data_timeframe": 20,
+      "notify": {
+        "alert": [
+          "pager"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": true,
+      "priority": 2,
+      "query": "avg(last_15m):avg:otelcol_process_uptime{env:test} < 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/pipeline#otel-not-reporting",
+      "severity": "critical",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:test",
+        "managed_by:observability-package",
+        "monitor:pipeline.otel_not_reporting",
+        "service:telemetry-pipeline",
+        "severity:critical",
+        "team:observability",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "query alert"
+    },
+    "pipeline.otel_refused": {
+      "evaluation_delay": null,
+      "key": "pipeline.otel_refused",
+      "message": "{{#is_alert}}**WARNING**: Receivers refuse data (memory_limiter engaged or invalid payloads).{{/is_alert}}\n{{#is_warning}}**WARNING**: Receivers refuse data (memory_limiter engaged or invalid payloads).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `test` | team: `observability` | owner: obs@example.com | tier: critical\n\nTroubleshooting:\n1. Check otelcol_process_memory_rss against the memory_limiter settings; scale the gateway.\n\nRunbook: https://runbooks.example.com/pipeline#otel-refused",
+      "name": "[test] OTel gateway refusing data",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "shop"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "sum(last_15m):sum:otelcol_receiver_refused_spans{env:test}.as_count() + sum:otelcol_receiver_refused_metric_points{env:test}.as_count() > 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/pipeline#otel-refused",
+      "severity": "warning",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:test",
+        "managed_by:observability-package",
+        "monitor:pipeline.otel_refused",
+        "service:telemetry-pipeline",
+        "severity:warning",
+        "team:observability",
+        "tier:critical"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "query alert"
+    }
+  },
+  "notifications": {
+    "critical": [
+      "pager"
+    ],
+    "default": [
+      "shop"
+    ]
+  },
+  "package_version": "1.0.0",
+  "presence_ref": null,
+  "resources": [],
+  "runtime": "other",
+  "schema": "rendered-service/v1",
+  "service": "telemetry-pipeline",
+  "slos": [],
+  "synthetics_defaults": {
+    "min_failure_duration": 120,
+    "min_location_failed": 1,
+    "retry": {
+      "count": 1,
+      "interval": 300
+    }
+  },
+  "tags": [
+    "application:unspecified",
+    "domain:unspecified",
+    "env:test",
+    "managed_by:observability-package",
+    "service:telemetry-pipeline",
+    "team:observability",
+    "tier:critical"
+  ],
+  "telemetry": {
+    "dbm": {
+      "enabled": false
+    },
+    "logs": {
+      "route": "none"
+    },
+    "profile": "telemetry-pipeline",
+    "rum": {
+      "enabled": false
+    },
+    "traces": {
+      "enabled": false,
+      "sample_rate": 1.0,
+      "server_operation": "http.server.request"
+    }
+  }
+}

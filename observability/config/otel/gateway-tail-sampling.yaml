@@ -1,0 +1,25 @@
+# Overlay: tail sampling (keep errors + slow traces + a probabilistic share). Only correct when ONE
+# gateway replica sees every span of a trace (max_replicas = 1, enforced by modules/telemetry-transport);
+# multi-replica tail sampling needs a trace-id aware load-balancing tier, which ACA ingress is not.
+processors:
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    expected_new_traces_per_sec: 100
+    policies:
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: slow
+        type: latency
+        latency:
+          threshold_ms: 1000
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: ${env:TRACE_SAMPLING_PERCENTAGE:-10}
+service:
+  pipelines:
+    traces:
+      processors: [memory_limiter, resourcedetection, resource/unified_tags, tail_sampling, batch]

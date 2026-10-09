@@ -50,6 +50,7 @@ resource "azurerm_public_ip" "appgw" {
 }
 
 resource "azurerm_web_application_firewall_policy" "appgw" {
+  #checkov:skip=CKV_AZURE_135:Microsoft_DefaultRuleSet 2.1 includes the Log4j (CVE-2021-44228) rules (944240 et al.); the check only recognises OWASP CRS versions.
   count = local.agw_on ? 1 : 0
 
   name                = "${replace(local.names.application_gateway, "-", "")}waf"
@@ -77,6 +78,7 @@ resource "azurerm_web_application_firewall_policy" "appgw" {
 }
 
 resource "azurerm_application_gateway" "this" {
+  #checkov:skip=CKV_AZURE_218:Predefined policy AppGwSslPolicy20220101 enforces TLS 1.2 minimum with modern ciphers.
   count = local.agw_on ? 1 : 0
 
   name                              = local.names.application_gateway

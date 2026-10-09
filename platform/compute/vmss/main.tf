@@ -112,6 +112,7 @@ resource "azurerm_orchestrated_virtual_machine_scale_set" "flexible" {
 # performs batch-wise rolling reinstalls via run command and applies model updates per instance
 # (`az vmss update-instances`), which keeps rollouts controlled without coupling the layers.
 resource "azurerm_linux_virtual_machine_scale_set" "uniform" {
+  #checkov:skip=CKV_AZURE_97:encryption_at_host_enabled is a setting (needs the EncryptionAtHost feature registration).
   count = local.uni.enabled ? 1 : 0
   #checkov:skip=CKV_AZURE_49:SSH key auth when admin_ssh_public_key is set; otherwise a random break-glass password kept only in state.
   #checkov:skip=CKV_AZURE_149:See CKV_AZURE_49.

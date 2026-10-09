@@ -1,0 +1,51 @@
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: shop-api
+  team: shop
+  owner: shop@example.com
+  application: shop
+  domain: commerce
+  tier: critical
+  env: [test, prod]
+  repository: https://example.com/shop.git
+  runbook_url: https://runbooks.example.com/shop-api
+  depends_on: ["datastore:shop-sql"]
+spec:
+  architecture: appservice
+  runtime: dotnet
+  telemetry:
+    profile: http-api
+  resources:
+    - id: /subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/RG-Shop/providers/Microsoft.Web/sites/app-shop-api
+      type: Microsoft.Web/sites
+      role: app
+    - id: /subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-data/providers/Microsoft.Sql/servers/sql-shop/databases/shopdb
+      type: Microsoft.Sql/servers/databases
+      role: db
+    - id: ${contract:platform-messaging.namespace_id}
+      type: Microsoft.ServiceBus/namespaces
+      role: bus
+      required: false
+  endpoints:
+    - name: api
+      url: https://shop.example.com
+      visibility: public
+      health_path: /healthz
+    - name: internal
+      url: https://shop-internal.example.local
+      visibility: private
+  slos:
+    - {name: availability, type: availability, target: 99.9, timeframe: 30d}
+    - {name: latency, type: latency, target: 99.0, timeframe: 7d, threshold_ms: 400}
+  monitors:
+    overrides:
+      apm.error_rate: {thresholds: {critical: 3, warning: 1}}
+      sql.cpu@db: {priority: 1}
+    disabled: [appsvc.response_time]
+  notifications:
+    default: [shop]
+    critical: [shop, pager]
+  idle_behavior:
+    scale_to_zero: false
+    expected_quiet_hours: {rrule: "FREQ=WEEKLY;BYDAY=SA,SU", duration: 48h, timezone: Europe/Stockholm}

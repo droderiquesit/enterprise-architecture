@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-vmss contract v1",
+  "description": "Virtual machine scale sets (Flexible + Uniform) with autoscale ceilings.",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "scale_sets"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "subnet_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "scale_sets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "orchestration_mode",
+          "os_type",
+          "max_instances"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          },
+          "orchestration_mode": {
+            "enum": [
+              "Flexible",
+              "Uniform"
+            ]
+          },
+          "upgrade_mode": {
+            "type": "string"
+          },
+          "os_type": {
+            "const": "Linux"
+          },
+          "os_image": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "min_instances": {
+            "type": "integer"
+          },
+          "max_instances": {
+            "type": "integer"
+          },
+          "workload": {
+            "type": "string"
+          },
+          "identity_id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "identity_client_id": {
+            "type": "string"
+          },
+          "identity_principal_id": {
+            "type": "string"
+          },
+          "app_root": {
+            "type": "string"
+          },
+          "log_dir": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

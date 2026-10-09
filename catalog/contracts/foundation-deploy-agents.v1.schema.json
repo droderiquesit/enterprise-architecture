@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "foundation-deploy-agents contract v1",
+  "description": "Output of foundation/deploy-agents: self-hosted Azure DevOps agents inside the VNet.",
+  "type": "object",
+  "required": [
+    "mode",
+    "subnet_id",
+    "identity_id",
+    "agent_pool_name"
+  ],
+  "properties": {
+    "mode": {
+      "enum": [
+        "vmss",
+        "managed-devops-pool"
+      ]
+    },
+    "resource_group_name": {
+      "type": "string"
+    },
+    "subnet_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "identity_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "identity_client_id": {
+      "type": "string"
+    },
+    "vmss_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "vmss_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "managed_devops_pool_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "dev_center_project_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "agent_pool_name": {
+      "type": "string"
+    }
+  }
+}

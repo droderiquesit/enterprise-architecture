@@ -92,6 +92,9 @@ def _entry(ctx: Context, cid: str) -> dict:
         "layer": ctx.layer_of.get(cid, 0),
         "wave": None,
         "timeout_minutes": c.timeout_minutes,
+        "contract_versions": ctx.fp.consumed_contracts(c) if not c.is_docs else {},
+        "upstream": sorted(ctx.graph.upstream(cid, ctx.enabled)),
+        "produces": list(c.produces),
     }
 
 

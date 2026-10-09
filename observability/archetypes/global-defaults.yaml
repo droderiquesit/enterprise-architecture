@@ -26,10 +26,9 @@ defaults:
       rum: {enabled: false}
       dbm: {enabled: false}
     idle_behavior: {scale_to_zero: false}
+    # critical / warning fall back to `default` when a manifest does not set them.
     notifications:
       default: [default]
-      critical: [critical]
-      warning: [default]
     dashboards: {enabled: true}
     catalog: {enabled: true, lifecycle: production, type: web}
     slos: []

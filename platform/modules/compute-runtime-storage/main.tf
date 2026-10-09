@@ -94,6 +94,8 @@ variable "blob_retention_days" {
 }
 
 resource "azurerm_storage_account" "this" {
+  #checkov:skip=CKV_AZURE_59:public_network_access defaults to Disabled; callers enable it only where Private Link is impossible (Windows Consumption) - checkov cannot evaluate the variable.
+  #checkov:skip=CKV_AZURE_35:network_rules default_action is Deny whenever public access is disabled (variable-driven).
   #checkov:skip=CKV2_AZURE_1:Microsoft-managed keys are sufficient for synthetic lab data (no CMK).
   #checkov:skip=CKV_AZURE_206:Replication is a caller setting; LRS is the low-cost lab default.
   #checkov:skip=CKV2_AZURE_33:Private endpoints are created by this module when private_endpoints is set (caller decides per SKU/plan).

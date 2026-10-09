@@ -47,12 +47,12 @@ local BEARER_PATTERN = "([Bb][Ee][Aa][Rr][Ee][Rr]%s+)[%w%-%._~%+/]+=*"
 local SIG_PATTERN = "([%?&][Ss][Ii][Gg]=)[^&%s\"']+"
 
 local function redact_string(s)
-  local out = s
+  -- bearer tokens first: "Authorization: Bearer <jwt>" must lose the token, not just the word "Bearer"
+  local out = s:gsub(BEARER_PATTERN, "%1" .. REDACTED)
+  out = out:gsub(SIG_PATTERN, "%1" .. REDACTED)
   for _, p in ipairs(VALUE_PATTERNS) do
     out = out:gsub(p, "%1" .. REDACTED)
   end
-  out = out:gsub(BEARER_PATTERN, "%1" .. REDACTED)
-  out = out:gsub(SIG_PATTERN, "%1" .. REDACTED)
   return out
 end
 

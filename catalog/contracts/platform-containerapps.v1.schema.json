@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-containerapps contract v1",
+  "description": "Container Apps environment (workload profiles) for app/job deployments and the observability gateway.",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "environment_id",
+    "default_domain",
+    "static_ip_address",
+    "ingress_mode",
+    "workload_profiles",
+    "infrastructure_subnet_id"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "environment_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "environment_name": {
+      "type": "string"
+    },
+    "default_domain": {
+      "type": "string"
+    },
+    "static_ip_address": {
+      "type": "string"
+    },
+    "ingress_mode": {
+      "enum": [
+        "external",
+        "internal"
+      ]
+    },
+    "internal": {
+      "type": "boolean"
+    },
+    "infrastructure_subnet_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "workload_profiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dedicated_profile_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "logs_destination": {
+      "type": "string"
+    },
+    "private_dns_zone_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "zone_redundant": {
+      "type": "boolean"
+    }
+  }
+}

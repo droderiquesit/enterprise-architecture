@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "foundation-governance contract v1",
+  "description": "Output of foundation/governance. Azure budgets alert only; caps_spend is always false.",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "action_group_id",
+    "budget",
+    "policy_assignment_ids"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "action_group_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "scope",
+        "amount",
+        "ids",
+        "caps_spend"
+      ],
+      "properties": {
+        "scope": {
+          "enum": [
+            "subscription",
+            "resource_group"
+          ]
+        },
+        "amount": {
+          "type": "number"
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "caps_spend": {
+          "const": false
+        }
+      }
+    },
+    "policy_assignment_ids": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "expires_on": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  }
+}

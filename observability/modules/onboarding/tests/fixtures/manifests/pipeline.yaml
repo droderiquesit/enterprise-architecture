@@ -1,0 +1,12 @@
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: telemetry-pipeline
+  team: observability
+  owner: obs@example.com
+  env: test
+  runbook_url: https://runbooks.example.com/pipeline
+spec:
+  architecture: external
+  telemetry: {profile: telemetry-pipeline}
+  notifications: {default: [shop], critical: [pager]}

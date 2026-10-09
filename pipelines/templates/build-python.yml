@@ -1,0 +1,25 @@
+# Python zip package for App Service / Functions / VM (steps template). Dependencies are vendored
+# into .python_packages/lib/site-packages (Functions layout) so the deployment needs no remote build.
+parameters:
+  - name: componentPath
+    type: string
+steps:
+  - task: UsePythonVersion@0
+    displayName: Use Python 3.13
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))
+    inputs:
+      versionSpec: '3.13'
+  - script: |
+      set -euo pipefail
+      src='${{ parameters.componentPath }}'
+      stage="${BUILD_OUT:?}/pkg"
+      python3 tools/deploy/artifacts.py stage --src "$src" --out "$stage"
+      if [[ -f "$src/requirements.txt" ]]; then
+        python -m pip install --quiet --requirement "$src/requirements.txt" --target "$stage/.python_packages/lib/site-packages"
+      fi
+      if [[ -d applications/shared/python/hello_common ]]; then
+        python -m pip install --quiet --no-deps applications/shared/python/hello_common --target "$stage/.python_packages/lib/site-packages"
+      fi
+      python3 tools/deploy/artifacts.py zip --src "$stage" --out "$BUILD_OUT/package.zip"
+    displayName: Vendor dependencies + zip
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))

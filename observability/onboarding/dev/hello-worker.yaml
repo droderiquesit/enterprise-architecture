@@ -1,0 +1,58 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-worker
+  display_name: hello-worker
+  team: fulfillment
+  owner: fulfillment@example.com
+  application: enterprise-hello
+  domain: notifications
+  tier: medium
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  runbook_url: https://runbooks.example.com/enterprise-hello/hello-worker
+  description: Notifications consumer -> Table Storage.
+  languages:
+  - python
+  depends_on:
+  - queue:order-events
+  - datastore:notifications-table
+  contacts:
+  - name: fulfillment mailbox
+    type: email
+    contact: fulfillment@example.com
+spec:
+  architecture: aks
+  runtime: python
+  telemetry:
+    profile: worker
+  resources:
+  - id: ${contract:platform-messaging.namespace_id}
+    type: Microsoft.ServiceBus/namespaces
+    role: servicebus
+    entities:
+    - order-events/fulfillment
+    - order-events/notifications
+    - order-events/audit
+    - batch-items
+  - id: ${contract:platform-db-table-storage.account.id}
+    type: Microsoft.Storage/storageAccounts
+    role: table-store
+    required: false
+  monitors:
+    disabled:
+    - queue.*
+  presence_ref: deploy-core-aks.apps.hello-worker.id
+  notifications:
+    default:
+    - team-fulfillment
+    critical:
+    - team-fulfillment
+    - oncall
+    warning:
+    - team-fulfillment
+  catalog:
+    component_of:
+    - system:enterprise-hello

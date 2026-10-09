@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-aks contract v1",
+  "description": "AKS cluster platform: ids, OIDC issuer, kubeconfig-free access info, kubelet + workload identity bindings.",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "cluster_id",
+    "cluster_name",
+    "oidc_issuer_url",
+    "node_resource_group",
+    "access",
+    "kubelet_identity",
+    "workload_identities"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "cluster_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "cluster_name": {
+      "type": "string"
+    },
+    "kubernetes_version": {
+      "type": "string"
+    },
+    "node_resource_group": {
+      "type": "string"
+    },
+    "node_resource_group_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "oidc_issuer_url": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "os_type": {
+      "const": "Linux"
+    },
+    "access": {
+      "type": "object",
+      "required": [
+        "private_cluster",
+        "local_accounts",
+        "azure_rbac_enabled"
+      ],
+      "properties": {
+        "private_cluster": {
+          "type": "boolean"
+        },
+        "fqdn": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "private_fqdn": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authorized_ip_ranges": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "run_command_enabled": {
+          "type": "boolean"
+        },
+        "local_accounts": {
+          "const": false
+        },
+        "azure_rbac_enabled": {
+          "const": true
+        },
+        "entra_server_app_id": {
+          "type": "string"
+        }
+      }
+    },
+    "kubelet_identity": {
+      "type": "object",
+      "required": [
+        "id",
+        "client_id",
+        "principal_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "principal_id": {
+          "type": "string"
+        }
+      }
+    },
+    "network": {
+      "type": "object"
+    },
+    "node_pools": {
+      "type": "object"
+    },
+    "workload_identities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "namespace",
+          "service_account",
+          "client_id"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "service_account": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

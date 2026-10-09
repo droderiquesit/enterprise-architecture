@@ -20,12 +20,12 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from opentelemetry import trace
 
 from .config import ServiceInfo, listen_port
 from .faults import FaultRegistry, install_faults
 from .logging import configure_logging
 from .problems import install_problem_handlers, problem_response
+from .propagation import inject_current
 from .telemetry import setup_telemetry
 
 ReadinessCheck = Callable[[], Any] | Callable[[], Awaitable[Any]]
@@ -88,9 +88,10 @@ def create_app(
         finally:
             duration_ms = round((time.perf_counter() - started) * 1000, 2)
             status = response.status_code if response is not None else 500
-            ctx = trace.get_current_span().get_span_context()
-            if response is not None and ctx.is_valid:
-                response.headers["traceparent"] = f"00-{ctx.trace_id:032x}-{ctx.span_id:016x}-{int(ctx.trace_flags):02x}"
+            if response is not None:
+                carrier = inject_current()
+                if "traceparent" in carrier:
+                    response.headers["traceparent"] = carrier["traceparent"]
             route = request.scope.get("route")
             fields = {
                 "http.method": request.method,

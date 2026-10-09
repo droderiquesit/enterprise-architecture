@@ -1,0 +1,394 @@
+{
+  "architecture": "vmss",
+  "catalog": {
+    "component_of": [
+      "system:enterprise-hello"
+    ],
+    "enabled": true,
+    "lifecycle": "production",
+    "type": "db"
+  },
+  "dashboards": {
+    "enabled": true
+  },
+  "enabled": true,
+  "endpoints": [
+    {
+      "browser_journey": false,
+      "health_path": "/readyz",
+      "name": "internal",
+      "required": false,
+      "synthetic": {
+        "enabled": false,
+        "locations": [
+          "aws:eu-central-1"
+        ],
+        "private_location": true,
+        "tick_every": 300
+      },
+      "url": "${contract:deploy-dbadapters.adapters.sqlvm.url}",
+      "visibility": "private"
+    }
+  ],
+  "env": "dev",
+  "generated_from": {
+    "layers": [
+      "global-defaults",
+      "platform/vm",
+      "profiles/http-api",
+      "profiles/db-adapter",
+      "manifest"
+    ],
+    "manifest": "dev/hello-dbadapter-sqlvm.yaml",
+    "sha256": "387ba060d0423c80426333220043209fccd8ea2fa1277b5780eb44d34a7911f5"
+  },
+  "idle_behavior": {
+    "expected_quiet_hours": null,
+    "scale_to_zero": false
+  },
+  "metadata": {
+    "application": "enterprise-hello",
+    "contacts": [
+      {
+        "contact": "data-platform@example.com",
+        "name": "data-platform mailbox",
+        "type": "email"
+      }
+    ],
+    "depends_on": [],
+    "description": "Database adapter for family sqlvm.",
+    "display_name": "hello-dbadapter-sqlvm",
+    "domain": "data",
+    "languages": [
+      "python"
+    ],
+    "owner": "data-platform@example.com",
+    "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
+    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm",
+    "team": "data-platform",
+    "tier": "low"
+  },
+  "monitors": {
+    "apm.error_rate": {
+      "evaluation_delay": null,
+      "key": "apm.error_rate",
+      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-sqlvm` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. APM -> Service hello-dbadapter-sqlvm -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#error-rate",
+      "name": "[dev] hello-dbadapter-sqlvm error rate above 10%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-data-platform",
+          "oncall"
+        ],
+        "warning": [
+          "team-data-platform"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_10m):( sum:trace.http.server.request.errors{service:hello-dbadapter-sqlvm,env:dev}.as_count() / clamp_min(sum:trace.http.server.request.hits{service:hello-dbadapter-sqlvm,env:dev}.as_count(), 20) ) * 100 > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#error-rate",
+      "severity": "critical",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:data",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:apm.error_rate",
+        "service:hello-dbadapter-sqlvm",
+        "severity:critical",
+        "team:data-platform",
+        "tier:low"
+      ],
+      "thresholds": {
+        "critical": 10,
+        "warning": 5
+      },
+      "type": "query alert"
+    },
+    "apm.latency_p95": {
+      "evaluation_delay": null,
+      "key": "apm.latency_p95",
+      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-sqlvm` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#latency",
+      "name": "[dev] hello-dbadapter-sqlvm p95 latency above 2s",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-data-platform"
+        ],
+        "warning": [
+          "team-data-platform"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "percentile(last_15m):p95:trace.http.server.request{service:hello-dbadapter-sqlvm,env:dev} > 2",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#latency",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:data",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:apm.latency_p95",
+        "service:hello-dbadapter-sqlvm",
+        "severity:warning",
+        "team:data-platform",
+        "tier:low"
+      ],
+      "thresholds": {
+        "critical": 2,
+        "warning": 1
+      },
+      "type": "query alert"
+    },
+    "apm.no_traffic": {
+      "evaluation_delay": null,
+      "key": "apm.no_traffic",
+      "message": "{{#is_alert}}**CRITICAL**: No server spans were received although this service is declared always-on.{{/is_alert}}\n{{#is_warning}}**WARNING**: No server spans were received although this service is declared always-on.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-sqlvm` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. Is the pipeline healthy? Check the \"telemetry pipeline canary\" monitor first - if it is also alerting, the problem is the collector/agent, not the service.\n2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?\n3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#missing-telemetry",
+      "name": "[dev] hello-dbadapter-sqlvm stopped reporting traces",
+      "new_group_delay": 60,
+      "no_data_timeframe": 30,
+      "notify": {
+        "alert": [
+          "team-data-platform",
+          "oncall"
+        ],
+        "warning": [
+          "team-data-platform"
+        ]
+      },
+      "notify_no_data": true,
+      "priority": 2,
+      "query": "sum(last_30m):sum:trace.http.server.request.hits{service:hello-dbadapter-sqlvm,env:dev}.as_count() < 1",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#missing-telemetry",
+      "severity": "critical",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:data",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:apm.no_traffic",
+        "service:hello-dbadapter-sqlvm",
+        "severity:critical",
+        "team:data-platform",
+        "tier:low"
+      ],
+      "thresholds": {
+        "critical": 1
+      },
+      "type": "query alert"
+    },
+    "host.cpu_high": {
+      "evaluation_delay": null,
+      "key": "host.cpu_high",
+      "message": "{{#is_alert}}**WARNING**: Host CPU is saturated, or the Datadog Agent stopped reporting (no data).{{/is_alert}}\n{{#is_warning}}**WARNING**: Host CPU is saturated, or the Datadog Agent stopped reporting (no data).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-sqlvm` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. No data: check the VM is running (az vm get-instance-view) and the datadog-agent service status.\n2. High CPU: Live Processes for host:{{host.name}}.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#host-cpu",
+      "name": "[dev] hello-dbadapter-sqlvm host CPU above 90%",
+      "new_group_delay": 60,
+      "no_data_timeframe": 20,
+      "notify": {
+        "alert": [
+          "team-data-platform"
+        ],
+        "warning": [
+          "team-data-platform"
+        ]
+      },
+      "notify_no_data": true,
+      "priority": 3,
+      "query": "avg(last_10m):100 - avg:system.cpu.idle{service:hello-dbadapter-sqlvm,env:dev} by {host} > 90",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#host-cpu",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:data",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:host.cpu_high",
+        "service:hello-dbadapter-sqlvm",
+        "severity:warning",
+        "team:data-platform",
+        "tier:low"
+      ],
+      "thresholds": {
+        "critical": 90
+      },
+      "type": "query alert"
+    },
+    "logs.error_spike": {
+      "evaluation_delay": null,
+      "key": "logs.error_spike",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-sqlvm` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. Open Logs for service:hello-dbadapter-sqlvm env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-dbadapter-sqlvm in the last hour (a new version is the usual cause).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#error-logs",
+      "name": "[dev] hello-dbadapter-sqlvm error log volume above 50 in 10m",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-data-platform"
+        ],
+        "warning": [
+          "team-data-platform"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"service:hello-dbadapter-sqlvm env:dev status:error\").index(\"*\").rollup(\"count\").last(\"10m\") > 50",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#error-logs",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:data",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:logs.error_spike",
+        "service:hello-dbadapter-sqlvm",
+        "severity:warning",
+        "team:data-platform",
+        "tier:low"
+      ],
+      "thresholds": {
+        "critical": 50
+      },
+      "type": "log alert"
+    }
+  },
+  "notifications": {
+    "critical": [
+      "team-data-platform",
+      "oncall"
+    ],
+    "default": [
+      "team-data-platform"
+    ],
+    "warning": [
+      "team-data-platform"
+    ]
+  },
+  "package_version": "1.0.0",
+  "presence_ref": "deploy-dbadapters.adapters.sqlvm.url",
+  "resources": [
+    {
+      "entities": [],
+      "id": "${contract:deploy-dbadapters.adapters.sqlvm.id}",
+      "required": false,
+      "role": "app",
+      "tags": {},
+      "type": "Microsoft.Compute/virtualMachineScaleSets"
+    },
+    {
+      "entities": [],
+      "id": "${contract:platform-db-sqlvm.vm.id}",
+      "required": false,
+      "role": "store",
+      "tags": {},
+      "type": "Microsoft.Compute/virtualMachines"
+    }
+  ],
+  "runtime": "python",
+  "schema": "rendered-service/v1",
+  "service": "hello-dbadapter-sqlvm",
+  "slos": [
+    {
+      "burn_rate_alerts": [
+        {
+          "long_window": "1h",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 16.8x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-dbadapter-sqlvm` | env: `dev` | team: `data-platform`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#slo-burn-rate",
+          "name": "[dev] hello-dbadapter-sqlvm availability SLO burn rate critical (1h/5m)",
+          "notify": {
+            "alert": [
+              "team-data-platform",
+              "oncall"
+            ]
+          },
+          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#slo-burn-rate",
+          "severity": "critical",
+          "short_window": "5m",
+          "threshold": 16.8
+        },
+        {
+          "long_window": "6h",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 5.6x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-dbadapter-sqlvm` | env: `dev` | team: `data-platform`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#slo-burn-rate",
+          "name": "[dev] hello-dbadapter-sqlvm availability SLO burn rate warning (6h/30m)",
+          "notify": {
+            "alert": [
+              "team-data-platform"
+            ]
+          },
+          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#slo-burn-rate",
+          "severity": "warning",
+          "short_window": "30m",
+          "threshold": 5.6
+        }
+      ],
+      "denominator": "sum:trace.http.server.request.hits{service:hello-dbadapter-sqlvm,env:dev}.as_count()",
+      "description": "availability SLO for hello-dbadapter-sqlvm (dev). Runbook: https://runbooks.example.com/enterprise-hello/hello-dbadapter-sqlvm#slo-availability",
+      "display_name": "[dev] hello-dbadapter-sqlvm availability",
+      "name": "availability",
+      "numerator": "sum:trace.http.server.request.hits{service:hello-dbadapter-sqlvm,env:dev}.as_count() - sum:trace.http.server.request.errors{service:hello-dbadapter-sqlvm,env:dev}.as_count()",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:data",
+        "env:dev",
+        "managed_by:observability-package",
+        "service:hello-dbadapter-sqlvm",
+        "team:data-platform",
+        "tier:low"
+      ],
+      "target": 99.0,
+      "timeframe": "7d",
+      "type": "availability",
+      "warning": null
+    }
+  ],
+  "synthetics_defaults": {
+    "min_failure_duration": 120,
+    "min_location_failed": 1,
+    "retry": {
+      "count": 1,
+      "interval": 300
+    }
+  },
+  "tags": [
+    "application:enterprise-hello",
+    "domain:data",
+    "env:dev",
+    "managed_by:observability-package",
+    "service:hello-dbadapter-sqlvm",
+    "team:data-platform",
+    "tier:low"
+  ],
+  "telemetry": {
+    "dbm": {
+      "enabled": false
+    },
+    "logs": {
+      "route": "host"
+    },
+    "profile": "db-adapter",
+    "rum": {
+      "enabled": false
+    },
+    "traces": {
+      "enabled": true,
+      "sample_rate": 1.0,
+      "server_operation": "http.server.request"
+    }
+  }
+}

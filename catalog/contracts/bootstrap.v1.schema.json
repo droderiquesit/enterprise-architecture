@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bootstrap contract v1",
+  "description": "Output of bootstrap/ (manual component). State storage + pipeline identities. IDs only: no keys, SAS or secrets.",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "state_storage_account_name",
+    "state_storage_account_id",
+    "containers",
+    "identities"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "state_storage_account_name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{3,24}$"
+    },
+    "state_storage_account_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "state_blob_endpoint": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "containers": {
+      "type": "object",
+      "required": [
+        "tfstate",
+        "contracts",
+        "plans",
+        "deployments",
+        "evidence"
+      ],
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "name",
+          "id"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "state_key_pattern": {
+      "type": "string"
+    },
+    "public_network_access": {
+      "enum": [
+        "Enabled",
+        "Disabled"
+      ]
+    },
+    "identities": {
+      "type": "object",
+      "required": [
+        "plan",
+        "apply"
+      ],
+      "description": "plan, apply and (optional) validate pipeline identities",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "client_id",
+          "principal_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "principal_id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "federated_credentials": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "datadog_integration": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "client_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tenant_id": {
+          "type": "string"
+        },
+        "secretless_auth": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

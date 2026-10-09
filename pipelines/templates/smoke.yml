@@ -1,0 +1,43 @@
+# HTTP smoke tests (job template) against endpoints published in deployment contracts.
+# Runs on the VNet agent pool so private endpoints / internal ingress are reachable.
+parameters:
+  - name: environment
+    type: string
+  - name: settings
+    type: object
+
+jobs:
+  - job: Smoke
+    displayName: Smoke tests (contracts -> /healthz /readyz /version)
+    timeoutInMinutes: 30
+    variables:
+      LAB_ENV: ${{ parameters.environment }}
+      CONTRACTS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts
+    steps:
+      - checkout: self
+        fetchDepth: 1
+      - task: DownloadPipelineArtifact@2
+        displayName: Download selection
+        retryCountOnTaskFailure: 2
+        inputs:
+          artifact: selection
+          path: $(Pipeline.Workspace)/selection
+      - template: steps-setup.yml
+      - task: AzureCLI@2
+        displayName: Run smoke tests (bounded polling)
+        inputs:
+          azureSubscription: ${{ parameters.settings.planServiceConnection }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -euo pipefail
+            mkdir -p "$(Build.ArtifactStagingDirectory)/smoke"
+            python3 tools/smoke/smoke.py --env "$LAB_ENV" --contracts "$CONTRACTS_URL" \
+              --selection "$(Pipeline.Workspace)/selection/selection.json" \
+              --out "$(Build.ArtifactStagingDirectory)/smoke/smoke-results.json" --timeout 600
+      - task: PublishPipelineArtifact@1
+        displayName: Publish smoke results
+        condition: not(canceled())
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/smoke
+          artifact: smoke-$(System.JobAttempt)

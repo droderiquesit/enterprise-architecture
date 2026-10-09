@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-servicefabric contract v1",
+  "description": "Service Fabric managed cluster (disabled by default).",
+  "type": "object",
+  "required": [
+    "enabled",
+    "status"
+  ],
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "implemented",
+        "disabled",
+        "blocked"
+      ]
+    },
+    "resource_group_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cluster_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "cluster_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "management_endpoint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "client_endpoint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sku": {
+      "type": "string"
+    },
+    "os_type": {
+      "type": "string"
+    },
+    "node_type": {
+      "type": "string"
+    },
+    "node_count": {
+      "type": "integer"
+    },
+    "app_port": {
+      "type": "integer"
+    },
+    "byo_vnet": {
+      "type": "boolean"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+# .NET zip package (steps template): publish + zip. Unit tests run in the Validate stage.
+parameters:
+  - name: componentPath
+    type: string
+steps:
+  - task: UseDotNet@2
+    displayName: Use .NET 10 SDK
+    retryCountOnTaskFailure: 2
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))
+    inputs:
+      packageType: sdk
+      version: 10.0.x
+  - script: |
+      set -euo pipefail
+      mkdir -p "$BUILD_OUT/publish"
+      proj="$(find '${{ parameters.componentPath }}' -name '*.csproj' -not -path '*/tests/*' -not -name '*.Tests.csproj' | sort | head -1)"
+      [[ -n "$proj" ]] || { echo "no project under ${{ parameters.componentPath }}"; exit 1; }
+      dotnet publish "$proj" --configuration Release --output "$BUILD_OUT/publish" -p:SourceRevisionId=$(Build.SourceVersion)
+      python3 tools/deploy/artifacts.py zip --src "$BUILD_OUT/publish" --out "$BUILD_OUT/package.zip"
+    displayName: dotnet publish + zip
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))

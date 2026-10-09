@@ -1,0 +1,51 @@
+# Telemetry verification (job template): calls the observability package's verifier
+# (observability/tools/verify/telemetry_verify.py, owned by the observability team) with the run's
+# selection. Datadog keys come from the Key Vault-linked variable group (secrets datadog-api-key,
+# datadog-app-key) and are passed only as environment variables - never echoed.
+parameters:
+  - name: environment
+    type: string
+  - name: settings
+    type: object
+
+jobs:
+  - job: TelemetryVerify
+    displayName: Telemetry verification (Datadog)
+    dependsOn: Smoke
+    timeoutInMinutes: 45
+    variables:
+      - group: ${{ parameters.settings.datadogVariableGroup }}
+      - name: LAB_ENV
+        value: ${{ parameters.environment }}
+    steps:
+      - checkout: self
+        fetchDepth: 1
+      - task: DownloadPipelineArtifact@2
+        displayName: Download selection
+        retryCountOnTaskFailure: 2
+        inputs:
+          artifact: selection
+          path: $(Pipeline.Workspace)/selection
+      - template: steps-setup.yml
+      - script: |
+          set -euo pipefail
+          out="$(Build.ArtifactStagingDirectory)/telemetry"; mkdir -p "$out"
+          verifier=observability/tools/verify/telemetry_verify.py
+          if [[ ! -f "$verifier" ]]; then
+            echo "##vso[task.logissue type=warning]$verifier not present; telemetry not verified (status stays 'deployed', not 'verified')"
+            echo '{"status":"not-run","reason":"verifier missing"}' > "$out/telemetry-results.json"
+            exit 0
+          fi
+          python3 "$verifier" --env "$LAB_ENV" --site "$DD_SITE" \
+            --selection "$(Pipeline.Workspace)/selection/selection.json" --out "$out/telemetry-results.json"
+        displayName: Verify telemetry (logs, traces, metrics, RUM)
+        env:
+          DD_API_KEY: $(datadog-api-key)
+          DD_APP_KEY: $(datadog-app-key)
+          DD_SITE: ${{ parameters.settings.datadogSite }}
+      - task: PublishPipelineArtifact@1
+        displayName: Publish telemetry results
+        condition: not(canceled())
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/telemetry
+          artifact: telemetry-$(System.JobAttempt)

@@ -26,6 +26,10 @@ output "contract" {
       client_id    = local.kubelet.client_id
       principal_id = local.kubelet.principal_id
     }
+    key_vault_secrets_provider = var.settings.key_vault_secrets_provider_enabled ? {
+      client_id    = try(azurerm_kubernetes_cluster.this.key_vault_secrets_provider[0].secret_identity[0].client_id, null)
+      principal_id = try(azurerm_kubernetes_cluster.this.key_vault_secrets_provider[0].secret_identity[0].object_id, null)
+    } : null
     network = {
       plugin         = "azure"
       plugin_mode    = "overlay"

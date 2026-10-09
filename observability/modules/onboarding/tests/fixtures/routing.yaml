@@ -1,0 +1,6 @@
+apiVersion: observability/v1
+kind: NotificationRouting
+metadata: {env: test}
+routes:
+  shop: {handles: ["@slack-shop-alerts"]}
+  pager: {handles: ["@pagerduty-shop", "@slack-shop-alerts"]}

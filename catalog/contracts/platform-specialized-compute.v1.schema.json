@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-specialized-compute contract v1",
+  "description": "Optional specialized compute: confidential/dedicated-host/GPU VMs, Automation, Azure ML; AVS cataloged as blocked.",
+  "type": "object",
+  "required": [
+    "capabilities",
+    "vms"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "vms": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "os_type"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          },
+          "os_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          },
+          "private_ip": {
+            "type": "string"
+          },
+          "workload": {
+            "type": "string"
+          },
+          "identity_principal_id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "confidential",
+              "dedicated-host",
+              "gpu"
+            ]
+          }
+        }
+      }
+    },
+    "dedicated_host_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "automation": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "account_id"
+      ],
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "account_name": {
+          "type": "string"
+        },
+        "schedule_name": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        }
+      }
+    },
+    "ml": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "workspace_id"
+      ],
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "cluster_id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "cluster_name": {
+          "type": "string"
+        }
+      }
+    },
+    "avs": {
+      "type": "object"
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "implemented",
+          "disabled",
+          "blocked"
+        ]
+      }
+    }
+  }
+}

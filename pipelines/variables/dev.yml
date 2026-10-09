@@ -1,0 +1,26 @@
+# Compile-time settings of environment "dev" (template variables file).
+# Service connection NAMES must be known when the pipeline is compiled (they cannot come from a
+# variable group), so they live here. Nothing in this file is secret: service connection ids,
+# storage account names and pool names are identifiers, not credentials.
+# Replace every placeholder before the first run (pipelines/README.md "ADO setup").
+variables:
+  # Workload identity federation service connections (Azure Resource Manager, WIF):
+  #   plan  identity: Reader on the lab subscription + Storage Blob Data Contributor on the
+  #                   tfstate container (blob-lease locking), Data Reader on contracts/packages,
+  #                   Data Contributor on deployments and plans (write-once naming)
+  #   apply identity: Contributor + User Access Administrator (constrained) on lab resource groups,
+  #                   Storage Blob Data Contributor on tfstate/contracts/plans/deployments/evidence
+  #   build identity: AcrPush on the lab registry, Data Contributor on packages
+  planServiceConnection: sc-lab-dev-plan
+  planServiceConnectionId: "00000000-0000-0000-0000-000000000001"
+  applyServiceConnection: sc-lab-dev-apply
+  applyServiceConnectionId: "00000000-0000-0000-0000-000000000002"
+  buildServiceConnection: sc-lab-dev-build
+  # bootstrap outputs (state storage account with containers tfstate, contracts, plans, deployments, evidence, packages)
+  stateStorageAccount: ehstdevtfstate00000
+  containerRegistry: ehacrdev00000
+  # agent pool on the deploy-agents subnet (foundation-deploy-agents) reaching private endpoints
+  deployPool: foundation-deploy-agents
+  # Key Vault-linked variable group holding the Datadog keys (secrets: datadog-api-key, datadog-app-key)
+  datadogVariableGroup: lab-dev-datadog
+  datadogSite: datadoghq.com

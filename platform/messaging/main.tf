@@ -30,6 +30,9 @@ locals {
 }
 
 resource "azurerm_servicebus_namespace" "this" {
+  #checkov:skip=CKV_AZURE_202:A namespace identity is only needed for customer-managed keys, which the synthetic-data lab does not use.
+  #checkov:skip=CKV_AZURE_201:Microsoft-managed encryption keys are sufficient for synthetic data (CMK is Premium-only).
+  #checkov:skip=CKV_AZURE_199:Infrastructure (double) encryption requires CMK on Premium; not used in the lab.
   name                = "${local.names.service_bus}-${module.naming.suffix}"
   resource_group_name = azurerm_resource_group.this.name
   location            = local.location

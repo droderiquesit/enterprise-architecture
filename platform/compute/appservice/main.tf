@@ -15,6 +15,8 @@ locals {
 }
 
 resource "azurerm_service_plan" "this" {
+  #checkov:skip=CKV_AZURE_225:zone_balancing is a per-plan setting (needs >= 2 workers); single-instance lab default.
+  #checkov:skip=CKV_AZURE_212:worker_count is a setting (1 for the lab).
   for_each = local.enabled_plans
 
   name                   = "${local.names.app_service_plan}-${each.value.suffix}"
@@ -29,6 +31,8 @@ resource "azurerm_service_plan" "this" {
 
 # ---------------------------------------------------------------- Logic Apps Standard
 resource "azurerm_service_plan" "logicapps" {
+  #checkov:skip=CKV_AZURE_225:Workflow Standard lab plan; zone redundancy not required.
+  #checkov:skip=CKV_AZURE_212:Elastic WS plan scales out automatically up to max_elastic_workers.
   count = local.logicapps.enabled ? 1 : 0
 
   name                         = "${local.names.app_service_plan}-logic"
@@ -45,6 +49,9 @@ resource "azurerm_service_plan" "logicapps" {
 # so shared keys stay enabled on THIS account only; the key is never placed in a contract - the
 # deploy-logicapps root reads it at deploy time through its own RBAC.
 resource "azurerm_storage_account" "logicapps" {
+  #checkov:skip=CKV_AZURE_59:public_network_access is Disabled by default (storage_private) with private endpoints - variable-driven.
+  #checkov:skip=CKV_AZURE_35:network_rules default_action is Deny when storage_private (default).
+  #checkov:skip=CKV_AZURE_33:Storage service logging is a diagnostic setting owned by observability (ADR-0001 §3 rule 4).
   count = local.logicapps.enabled ? 1 : 0
 
   name                     = substr("${local.unique.storage}la", 0, 24)
@@ -68,6 +75,11 @@ resource "azurerm_storage_account" "logicapps" {
   network_rules {
     default_action = local.logicapps.storage_private ? "Deny" : "Allow"
     bypass         = ["AzureServices"]
+  }
+
+  sas_policy {
+    expiration_period = "01.00:00:00"
+    expiration_action = "Log"
   }
 
   blob_properties {

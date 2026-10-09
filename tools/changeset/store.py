@@ -34,6 +34,9 @@ class Store:
     def list(self, prefix: str) -> List[str]:
         raise NotImplementedError
 
+    def delete(self, key: str) -> None:
+        raise NotImplementedError
+
     def get_json(self, key: str):
         data = self.get_bytes(key)
         return None if data is None else json.loads(data.decode("utf-8"))
@@ -85,6 +88,11 @@ class LocalStore(Store):
                 if rel.startswith(prefix) and not rel.endswith(".tmp"):
                     out.append(rel)
         return sorted(out)
+
+    def delete(self, key: str) -> None:
+        p = self._p(key)
+        if p.is_file():
+            p.unlink()
 
     def __repr__(self) -> str:
         return f"LocalStore({self.root})"
@@ -142,6 +150,9 @@ class BlobStore(Store):
         names = json.loads(proc.stdout or "[]")
         strip = (self.prefix + "/") if self.prefix else ""
         return sorted(n[len(strip):] if strip and n.startswith(strip) else n for n in names)
+
+    def delete(self, key: str) -> None:
+        self._az("delete", "--name", self._name(key), check=False)
 
     def __repr__(self) -> str:
         return f"BlobStore({self.account}/{self.container}/{self.prefix})"

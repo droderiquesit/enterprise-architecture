@@ -73,7 +73,7 @@ Rules:
 - Bootstrap starts with local state and migrates (`bootstrap/README.md`).
 - Storage account: versioning, soft delete (containers + blobs), change feed, `shared_access_key_enabled = false`,
   public network access disabled after private agents exist, `prevent_destroy`, resource lock `CanNotDelete`.
-- Containers: `tfstate`, `contracts`, `plans` (plan files; sensitive; RBAC restricted to the apply identity),
+- Containers: `tfstate`, `contracts`, `plans` (plan files; sensitive; write = plan identity, read = apply identity; no human/PR access),
   `deployments` (component deployment records), `evidence`.
 
 ## 5. Output contracts
@@ -150,7 +150,7 @@ with no Firewall (NAT Gateway for egress). Subnet catalogue (names fixed, prefix
 |---|---|---|
 | `compute` | VMs, VMSS | — |
 | `aks-nodes` | AKS nodes (Azure CNI overlay) | — |
-| `aca-infra` | Container Apps environment (workload profiles, /23 min) | `Microsoft.App/environments` |
+| `aca-infra` | Container Apps environment (workload profiles: /27 minimum; lab uses /23 for headroom) | `Microsoft.App/environments` |
 | `appsvc-integration` | App Service / Functions VNet integration | `Microsoft.Web/serverFarms` |
 | `flex-integration` | Flex Consumption VNet integration | `Microsoft.App/environments` |
 | `aci` | Container Instances | `Microsoft.ContainerInstance/containerGroups` |
@@ -163,6 +163,7 @@ with no Firewall (NAT Gateway for egress). Subnet catalogue (names fixed, prefix
 | `deploy-agents` | Self-hosted pipeline agents / Managed DevOps Pools | (`Microsoft.DevOpsInfrastructure/pools` when MDP) |
 | `observability` | collectors, private synthetics location, DBM agent | — |
 | `sfmc`, `aro-master`, `aro-worker` | specialized | — |
+| `apim` | API Management v2 VNet integration (optional) | `Microsoft.Web/serverFarms` |
 | `AzureBastionSubnet`, `AzureFirewallSubnet`, `appgw` | hub / edge (optional) | — |
 
 Databases, Key Vault, storage, registries, Service Bus Premium and management endpoints are private by default
@@ -249,3 +250,12 @@ Nothing may be reported `deployed` or `verified` without an evidence file produc
 ```
 
 Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=false, validate, test).
+
+## 13. Amendments
+
+- 2026-10-09: plan identity may write to the `plans` container (the plan stage persists the saved plan); apply identity reads it.
+- 2026-10-09: Azure DevOps workload identity federation uses the Entra issuer `https://login.microsoftonline.com/<tenant>/v2.0`
+  (the `vstoken.dev.azure.com` issuer is deprecated, retiring 2027-07-01); issuer/subject are copied from the service connection.
+- 2026-10-09: Batch pool start-task telemetry setup (Fluent Bit) is observability-owned content (script published by the
+  instrumentation contract) referenced by the platform-batch pool start task; platform-batch owns only the reference.
+- 2026-10-09: Static Web Apps is not available in swedencentral; the frontend SWA resource uses a separate `swa_location` (default westeurope).

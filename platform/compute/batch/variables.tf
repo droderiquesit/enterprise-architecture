@@ -52,3 +52,33 @@ variable "platform_shared" {
     log_analytics_workspace_id = string
   })
 }
+
+variable "settings" {
+  description = "platform-batch settings (environment.yaml components.platform-batch)."
+  type = object({
+    identity                      = optional(string, "hello-jobs") # pool + auto-storage node identity
+    public_network_access_enabled = optional(bool, false)          # false => batchAccount + nodeManagement private endpoints
+    job_submitter_identities      = optional(list(string), ["deploy-agent", "hello-jobs"])
+    pool = optional(object({
+      name                = optional(string, "hello-jobs")
+      vm_size             = optional(string, "Standard_D2s_v5")
+      max_dedicated_nodes = optional(number, 2)
+      max_tasks_per_node  = optional(number, 1)
+      node_agent_sku_id   = optional(string, "batch.node.ubuntu 24.04")
+      image = optional(object({
+        publisher = optional(string, "canonical")
+        offer     = optional(string, "ubuntu-24_04-lts")
+        sku       = optional(string, "server")
+        version   = optional(string, "latest")
+      }), {})
+      python_version = optional(string, "3.13")
+    }), {})
+    storage_replication = optional(string, "LRS")
+  })
+  default = {}
+
+  validation {
+    condition     = var.settings.pool.max_dedicated_nodes >= 1 && var.settings.pool.max_dedicated_nodes <= 10
+    error_message = "pool.max_dedicated_nodes must be 1-10 (lab ceiling)."
+  }
+}

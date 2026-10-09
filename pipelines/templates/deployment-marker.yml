@@ -1,0 +1,21 @@
+# Deployment markers (steps template): one Datadog DORA deployment event
+# (POST https://api.<site>/api/v2/dora/deployment) per component applied in this run, built from the
+# evidence document. Requires DD_API_KEY (Key Vault-linked variable group). Failures warn only:
+# markers are telemetry, never a reason to fail a deployment.
+parameters:
+  - name: environment
+    type: string
+  - name: settings
+    type: object
+
+steps:
+  - script: |
+      set -euo pipefail
+      python3 tools/report/deployment_marker.py --evidence "$(Build.ArtifactStagingDirectory)/evidence/evidence.json" \
+        --site "$DD_SITE" --repository-url "$(Build.Repository.Uri)" \
+        --out "$(Build.ArtifactStagingDirectory)/evidence/markers.json" \
+        || echo "##vso[task.logissue type=warning]deployment markers not sent"
+    displayName: Send deployment markers (Datadog DORA)
+    env:
+      DD_API_KEY: $(datadog-api-key)
+      DD_SITE: ${{ parameters.settings.datadogSite }}

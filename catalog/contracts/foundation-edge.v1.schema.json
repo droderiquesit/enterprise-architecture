@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "foundation-edge contract v1",
+  "description": "Output of foundation/edge. Every component is optional and disabled by default; public_endpoints lists the externally reachable URLs.",
+  "type": "object",
+  "required": [
+    "app_gateway",
+    "front_door",
+    "apim",
+    "firewall",
+    "bastion",
+    "public_endpoints"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "app_gateway": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "public_ip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "front_door": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "profile_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "endpoint_hostname": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "front_door_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "X-Azure-FDID value origins should require"
+        }
+      }
+    },
+    "apim": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "gateway_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "firewall": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "private_ip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "public_ips": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "bastion": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^/subscriptions/[^/]+/"
+        },
+        "sku": {
+          "enum": [
+            "Developer",
+            "Basic",
+            "Standard"
+          ]
+        },
+        "dns_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "public_endpoints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^https://"
+      }
+    }
+  }
+}

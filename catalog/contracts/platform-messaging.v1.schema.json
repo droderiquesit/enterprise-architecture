@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform-messaging contract v1",
+  "description": "Service Bus namespace, entities and data-plane grants (Entra ID only; no keys or connection strings).",
+  "type": "object",
+  "required": [
+    "resource_group_name",
+    "namespace_id",
+    "namespace_name",
+    "fqdn",
+    "topic",
+    "subscriptions",
+    "queues"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "namespace_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "namespace_name": {
+      "type": "string"
+    },
+    "fqdn": {
+      "type": "string"
+    },
+    "sku": {
+      "enum": [
+        "Standard",
+        "Premium"
+      ]
+    },
+    "local_auth_enabled": {
+      "const": false
+    },
+    "private": {
+      "type": "boolean"
+    },
+    "topic": {
+      "type": "object",
+      "required": [
+        "name",
+        "id"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^/subscriptions/[^/]+/"
+        }
+      }
+    },
+    "subscriptions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "consumer"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          },
+          "consumer": {
+            "type": "string"
+          },
+          "max_delivery_count": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "queues": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "consumer"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          },
+          "name": {
+            "type": "string"
+          },
+          "consumer": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "grants": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "identity",
+          "entity",
+          "kind",
+          "role"
+        ],
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "topic",
+              "queue",
+              "subscription"
+            ]
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "skipped_grants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

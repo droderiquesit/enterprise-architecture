@@ -1,0 +1,337 @@
+{
+  "architecture": "aca",
+  "catalog": {
+    "component_of": [],
+    "enabled": true,
+    "lifecycle": "production",
+    "type": "queue-consumer"
+  },
+  "dashboards": {
+    "enabled": true,
+    "workflow_metric_prefix": null
+  },
+  "enabled": true,
+  "endpoints": [],
+  "env": "strict",
+  "generated_from": {
+    "layers": [
+      "global-defaults",
+      "platform/aca",
+      "platform/database-sql",
+      "profiles/worker",
+      "manifest"
+    ],
+    "manifest": "manifests/needs-contract.yaml",
+    "sha256": "bcf0f8d3a6775ac052c5d32d27adbe6fafe8b05d7342c08af815f58fe444e42f"
+  },
+  "idle_behavior": {
+    "expected_quiet_hours": null,
+    "scale_to_zero": true
+  },
+  "metadata": {
+    "application": "unspecified",
+    "contacts": [],
+    "depends_on": [],
+    "description": "",
+    "display_name": "needs-contract",
+    "domain": "unspecified",
+    "languages": [],
+    "owner": "shop@example.com",
+    "repository": null,
+    "runbook_url": "https://runbooks.example.com/needs-contract",
+    "team": "shop",
+    "tier": "medium"
+  },
+  "monitors": {
+    "apm.consumer_error_rate": {
+      "evaluation_delay": null,
+      "key": "apm.consumer_error_rate",
+      "message": "{{#is_alert}}**CRITICAL**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `needs-contract` | env: `strict` | team: `shop` | owner: shop@example.com | tier: medium\n\nTroubleshooting:\n1. APM consumer spans for needs-contract; follow the span link to the producer trace.\n2. Check the dead-letter monitor of the Service Bus namespace.\n\nRunbook: https://runbooks.example.com/needs-contract#consumer-errors",
+      "name": "[strict] needs-contract message processing failure rate above 10%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "shop"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_15m):( sum:trace.servicebus.process.errors{service:needs-contract,env:strict}.as_count() / clamp_min(sum:trace.servicebus.process.hits{service:needs-contract,env:strict}.as_count(), 5) ) * 100 > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/needs-contract#consumer-errors",
+      "severity": "critical",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:strict",
+        "managed_by:observability-package",
+        "monitor:apm.consumer_error_rate",
+        "service:needs-contract",
+        "severity:critical",
+        "team:shop",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 10
+      },
+      "type": "query alert"
+    },
+    "logs.error_spike": {
+      "evaluation_delay": null,
+      "key": "logs.error_spike",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `needs-contract` | env: `strict` | team: `shop` | owner: shop@example.com | tier: medium\n\nTroubleshooting:\n1. Open Logs for service:needs-contract env:strict status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for needs-contract in the last hour (a new version is the usual cause).\n\nRunbook: https://runbooks.example.com/needs-contract#error-logs",
+      "name": "[strict] needs-contract error log volume above 50 in 10m",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "shop"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"service:needs-contract env:strict status:error\").index(\"*\").rollup(\"count\").last(\"10m\") > 50",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://runbooks.example.com/needs-contract#error-logs",
+      "severity": "warning",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:strict",
+        "managed_by:observability-package",
+        "monitor:logs.error_spike",
+        "service:needs-contract",
+        "severity:warning",
+        "team:shop",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 50
+      },
+      "type": "log alert"
+    },
+    "sql.connection_failures@db": {
+      "evaluation_delay": 900,
+      "key": "sql.connection_failures@db",
+      "message": "{{#is_alert}}**CRITICAL**: Clients fail to connect (firewall/private endpoint, Entra auth, or exhausted workers).{{/is_alert}}\n{{#is_warning}}**WARNING**: Clients fail to connect (firewall/private endpoint, Entra auth, or exhausted workers).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `needs-contract` | env: `strict` | team: `shop` | owner: shop@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check the app logs for SqlException numbers (18456 login failed, 40613 unavailable, 10928 limits).\n2. Verify the managed identity still has a database user (CREATE USER ... FROM EXTERNAL PROVIDER).\n3. Verify private endpoint DNS resolves to a private IP from the workload subnet.\n\nRunbook: https://runbooks.example.com/needs-contract#sql-connections",
+      "name": "[strict] needs-contract SQL database [[resource.name]] connection failures",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "shop"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_15m):sum:azure.sql_servers_databases.connection_failed{[[resource.scope]]}.as_count() > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "db",
+      "runbook_url": "https://runbooks.example.com/needs-contract#sql-connections",
+      "severity": "critical",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:strict",
+        "managed_by:observability-package",
+        "monitor:sql.connection_failures",
+        "service:needs-contract",
+        "severity:critical",
+        "team:shop",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 10
+      },
+      "type": "query alert"
+    },
+    "sql.cpu@db": {
+      "evaluation_delay": 900,
+      "key": "sql.cpu@db",
+      "message": "{{#is_alert}}**WARNING**: Database CPU is saturated (vCore/serverless); queries will queue.{{/is_alert}}\n{{#is_warning}}**WARNING**: Database CPU is saturated (vCore/serverless); queries will queue.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `needs-contract` | env: `strict` | team: `shop` | owner: shop@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Open Database Monitoring -> Query metrics for this database; sort by CPU.\n2. Check azure.sql_servers_databases.workers_percent and sessions_percent.\n3. Serverless: confirm max vCores; DTU SKU: see the DTU monitor.\n\nRunbook: https://runbooks.example.com/needs-contract#sql-cpu",
+      "name": "[strict] needs-contract SQL database [[resource.name]] CPU above 90%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "shop"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "avg(last_15m):avg:azure.sql_servers_databases.cpu_percent{[[resource.scope]]} > 90",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "db",
+      "runbook_url": "https://runbooks.example.com/needs-contract#sql-cpu",
+      "severity": "warning",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:strict",
+        "managed_by:observability-package",
+        "monitor:sql.cpu",
+        "service:needs-contract",
+        "severity:warning",
+        "team:shop",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 90,
+        "warning": 80
+      },
+      "type": "query alert"
+    },
+    "sql.deadlocks@db": {
+      "evaluation_delay": 900,
+      "key": "sql.deadlocks@db",
+      "message": "{{#is_alert}}**WARNING**: Deadlocks were detected.{{/is_alert}}\n{{#is_warning}}**WARNING**: Deadlocks were detected.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `needs-contract` | env: `strict` | team: `shop` | owner: shop@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Read the deadlock graph from the SQL diagnostic logs (Deadlocks category) or DBM samples.\n\nRunbook: https://runbooks.example.com/needs-contract#sql-deadlocks",
+      "name": "[strict] needs-contract SQL database [[resource.name]] deadlocks",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "shop"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 4,
+      "query": "sum(last_15m):sum:azure.sql_servers_databases.deadlock{[[resource.scope]]}.as_count() > 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "db",
+      "runbook_url": "https://runbooks.example.com/needs-contract#sql-deadlocks",
+      "severity": "warning",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:strict",
+        "managed_by:observability-package",
+        "monitor:sql.deadlocks",
+        "service:needs-contract",
+        "severity:warning",
+        "team:shop",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "query alert"
+    },
+    "sql.storage@db": {
+      "evaluation_delay": 900,
+      "key": "sql.storage@db",
+      "message": "{{#is_alert}}**WARNING**: The database is close to its max size.{{/is_alert}}\n{{#is_warning}}**WARNING**: The database is close to its max size.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `needs-contract` | env: `strict` | team: `shop` | owner: shop@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check retention jobs (history purge) and raise max size if growth is expected.\n\nRunbook: https://runbooks.example.com/needs-contract#sql-storage",
+      "name": "[strict] needs-contract SQL database [[resource.name]] storage above 90%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "shop"
+        ],
+        "warning": [
+          "shop"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "avg(last_30m):avg:azure.sql_servers_databases.storage_percent{[[resource.scope]]} > 90",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "db",
+      "runbook_url": "https://runbooks.example.com/needs-contract#sql-storage",
+      "severity": "warning",
+      "tags": [
+        "application:unspecified",
+        "domain:unspecified",
+        "env:strict",
+        "managed_by:observability-package",
+        "monitor:sql.storage",
+        "service:needs-contract",
+        "severity:warning",
+        "team:shop",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 90
+      },
+      "type": "query alert"
+    }
+  },
+  "notifications": {
+    "default": [
+      "shop"
+    ]
+  },
+  "package_version": "1.0.0",
+  "presence_ref": null,
+  "resources": [
+    {
+      "entities": [],
+      "id": "${contract:platform-db-sql.databases.orders.id}",
+      "required": true,
+      "role": "db",
+      "tags": {},
+      "type": "Microsoft.Sql/servers/databases"
+    }
+  ],
+  "runtime": "other",
+  "schema": "rendered-service/v1",
+  "service": "needs-contract",
+  "slos": [],
+  "synthetics_defaults": {
+    "min_failure_duration": 120,
+    "min_location_failed": 1,
+    "retry": {
+      "count": 1,
+      "interval": 300
+    }
+  },
+  "tags": [
+    "application:unspecified",
+    "domain:unspecified",
+    "env:strict",
+    "managed_by:observability-package",
+    "service:needs-contract",
+    "team:shop",
+    "tier:medium"
+  ],
+  "telemetry": {
+    "dbm": {
+      "enabled": false
+    },
+    "logs": {
+      "route": "sidecar"
+    },
+    "profile": "worker",
+    "rum": {
+      "enabled": false
+    },
+    "traces": {
+      "enabled": true,
+      "sample_rate": 1.0,
+      "server_operation": "servicebus.process"
+    }
+  }
+}

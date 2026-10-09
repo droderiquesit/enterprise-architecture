@@ -45,6 +45,14 @@ resource "azurerm_role_assignment" "control_plane_kubelet_operator" {
 
 # ---------------------------------------------------------------- cluster
 resource "azurerm_kubernetes_cluster" "this" {
+  #checkov:skip=CKV_AZURE_226:Dsv5 sizes have no local temp disk, so ephemeral OS disks are not possible at the default size.
+  #checkov:skip=CKV_AZURE_117:Disk encryption sets (CMK) are not used for synthetic lab data; platform-managed keys apply.
+  #checkov:skip=CKV_AZURE_232:System pool is tainted CriticalAddonsOnly whenever a user pool exists (variable-driven); single-pool lab clusters must schedule apps on it.
+  #checkov:skip=CKV_AZURE_170:sku_tier is a setting (Free for the lab, Standard for enterprise).
+  #checkov:skip=CKV_AZURE_227:host_encryption_enabled is a setting; it requires the EncryptionAtHost feature registration per subscription.
+  #checkov:skip=CKV_AZURE_4:Cluster logs/metrics are owned by observability (Datadog agent + diagnostic settings in obs-diagnostics, ADR-0001 §3/§10).
+  #checkov:skip=CKV_AZURE_116:Azure Policy add-on is a setting (azure_policy_enabled); off by default to keep the 1-2 node lab pool small.
+  #checkov:skip=CKV_AZURE_115:private_cluster_enabled defaults to true (variable-driven; public API requires authorized_ip_ranges).
   name                = local.cluster_name
   resource_group_name = azurerm_resource_group.this.name
   location            = local.location
@@ -104,6 +112,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     max_count                    = var.settings.system_pool.max_count
     os_sku                       = var.settings.system_pool.os_sku
     os_disk_type                 = "Managed"
+    host_encryption_enabled      = var.settings.host_encryption_enabled
     max_pods                     = 110
     node_public_ip_enabled       = false
     only_critical_addons_enabled = var.settings.user_pool.enabled
@@ -151,6 +160,15 @@ resource "azurerm_kubernetes_cluster" "this" {
     utc_offset  = var.settings.maintenance.utc_offset
   }
 
+  # Secrets Store CSI driver (Key Vault) for app secret references, with rotation.
+  dynamic "key_vault_secrets_provider" {
+    for_each = var.settings.key_vault_secrets_provider_enabled ? [1] : []
+    content {
+      secret_rotation_enabled  = true
+      secret_rotation_interval = "2m"
+    }
+  }
+
   dynamic "microsoft_defender" {
     for_each = var.settings.defender_enabled ? [1] : []
     content {
@@ -171,21 +189,24 @@ resource "azurerm_kubernetes_cluster" "this" {
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "user" {
+  #checkov:skip=CKV_AZURE_227:host_encryption_enabled is a setting; requires the EncryptionAtHost feature registration.
   count = var.settings.user_pool.enabled ? 1 : 0
 
-  name                   = "user"
-  kubernetes_cluster_id  = azurerm_kubernetes_cluster.this.id
-  vm_size                = var.settings.user_pool.vm_size
-  vnet_subnet_id         = local.node_subnet.id
-  mode                   = "User"
-  auto_scaling_enabled   = true
-  min_count              = var.settings.user_pool.min_count
-  max_count              = var.settings.user_pool.max_count
-  os_sku                 = var.settings.user_pool.os_sku
-  os_type                = "Linux"
-  node_public_ip_enabled = false
-  zones                  = var.settings.user_pool.zones
-  tags                   = local.tags
+  name                    = "user"
+  kubernetes_cluster_id   = azurerm_kubernetes_cluster.this.id
+  vm_size                 = var.settings.user_pool.vm_size
+  vnet_subnet_id          = local.node_subnet.id
+  mode                    = "User"
+  auto_scaling_enabled    = true
+  min_count               = var.settings.user_pool.min_count
+  max_count               = var.settings.user_pool.max_count
+  os_sku                  = var.settings.user_pool.os_sku
+  os_type                 = "Linux"
+  max_pods                = 110
+  node_public_ip_enabled  = false
+  host_encryption_enabled = var.settings.host_encryption_enabled
+  zones                   = var.settings.user_pool.zones
+  tags                    = local.tags
 
   upgrade_settings {
     max_surge = "10%"

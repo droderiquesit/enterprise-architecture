@@ -1,0 +1,20 @@
+# Test-only overlay for config/otel/gateway.yaml: Datadog exporter pointed at the local mock intake
+# (plain HTTP) and an additional file exporter so resource-attribute mapping can be asserted.
+exporters:
+  datadog:
+    traces:
+      endpoint: http://intake:8080
+    metrics:
+      endpoint: http://intake:8080
+  file/traces:
+    path: /out/traces.json
+    flush_interval: 1s
+  file/metrics:
+    path: /out/metrics.json
+    flush_interval: 1s
+service:
+  pipelines:
+    traces:
+      exporters: [datadog, file/traces]
+    metrics:
+      exporters: [datadog, file/metrics]

@@ -31,13 +31,14 @@ resource "azurerm_public_ip" "firewall_mgmt" {
 }
 
 resource "azurerm_firewall_policy" "this" {
+  #checkov:skip=CKV_AZURE_220:IDPS is an Azure Firewall Premium feature; the lab supports Basic/Standard only.
   count = local.fw_on ? 1 : 0
 
   name                     = "${local.names.firewall}-policy"
   resource_group_name      = local.rg_name
   location                 = local.location
   sku                      = local.fw.sku_tier
-  threat_intelligence_mode = "Alert"
+  threat_intelligence_mode = local.fw.sku_tier == "Basic" ? "Alert" : "Deny" # Basic supports Alert only
   tags                     = local.tags
 }
 
@@ -100,6 +101,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "egress" {
 }
 
 resource "azurerm_firewall" "this" {
+  #checkov:skip=CKV_AZURE_216:Threat intelligence mode is set on the attached firewall policy (Deny on Standard; Basic supports Alert only).
   count = local.fw_on ? 1 : 0
 
   name                = local.names.firewall

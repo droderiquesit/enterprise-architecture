@@ -1,0 +1,39 @@
+# Drift report (job template). In drift mode every enabled component was planned (never applied);
+# this job collects the plan summaries and reports components whose real state differs from code.
+# Drift marks the run SucceededWithIssues (it is information for operators, not a build failure).
+parameters:
+  - name: environment
+    type: string
+  - name: settings
+    type: object
+
+jobs:
+  - job: DriftReport
+    displayName: Drift report
+    timeoutInMinutes: 20
+    steps:
+      - checkout: self
+        fetchDepth: 1
+      - task: DownloadPipelineArtifact@2
+        displayName: Download selection + plan summaries
+        retryCountOnTaskFailure: 2
+        inputs:
+          buildType: current
+          itemPattern: |
+            selection/**
+            plan-*/**
+          path: $(Pipeline.Workspace)/run
+      - template: steps-setup.yml
+      - script: |
+          set -euo pipefail
+          mkdir -p "$(Build.ArtifactStagingDirectory)/drift"
+          python3 tools/report/report.py drift --run-dir "$(Pipeline.Workspace)/run" \
+            --out "$(Build.ArtifactStagingDirectory)/drift/drift-report.md" \
+            --json "$(Build.ArtifactStagingDirectory)/drift/drift.json" --ado
+        displayName: Summarise drift
+      - task: PublishPipelineArtifact@1
+        displayName: Publish drift report
+        condition: not(canceled())
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/drift
+          artifact: drift-$(System.JobAttempt)

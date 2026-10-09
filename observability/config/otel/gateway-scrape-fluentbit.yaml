@@ -1,0 +1,15 @@
+# Overlay: scrape the Fluent Bit aggregator self-metrics (Prometheus format) into Datadog.
+# FLUENTBIT_METRICS_TARGET = <aggregator internal host>:2020
+receivers:
+  prometheus/fluentbit:
+    config:
+      scrape_configs:
+        - job_name: fluent-bit-aggregator
+          scrape_interval: 60s
+          metrics_path: /api/v2/metrics/prometheus
+          static_configs:
+            - targets: ["${env:FLUENTBIT_METRICS_TARGET}"]
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp, datadog/connector, prometheus/self, prometheus/fluentbit]

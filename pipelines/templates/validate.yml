@@ -1,0 +1,101 @@
+# Validate stage jobs (job template). Microsoft-hosted agents, NO service connection, no secrets:
+# safe for untrusted PR code.
+#   matrix     relays the Select stage's validate_matrix output into a same-stage output variable
+#              (matrix-from-output-variable is documented for dependencies.<job>.outputs)
+#   component  one matrix leg per selected component: tools/validate/component.py
+#              (terraform: fmt/init -backend=false/validate/test + tflint when present;
+#               artifacts: unit tests; contracts/schemas)
+#   tooling    pipeline tooling tests + static lint (registry graph, generated stages up to date,
+#              pipeline conditions, ownership rules, provider pins, environment schema)
+parameters:
+  - name: environment
+    type: string
+  - name: hostedImage
+    type: string
+    default: ubuntu-24.04
+  - name: maxParallel
+    type: number
+    default: 8
+
+jobs:
+  - job: matrix
+    displayName: Expand validation matrix
+    pool:
+      vmImage: ${{ parameters.hostedImage }}
+    variables:
+      SELECTED_MATRIX: $[ stageDependencies.Select.select.outputs['detect.validate_matrix'] ]
+      SELECTED_COUNT: $[ stageDependencies.Select.select.outputs['detect.validate_count'] ]
+    steps:
+      - checkout: none
+      - script: |
+          set -euo pipefail
+          m="${SELECTED_MATRIX:-}"; [[ -n "$m" ]] || m='{}'
+          c="${SELECTED_COUNT:-}"; [[ -n "$c" ]] || c=0
+          printf '##vso[task.setvariable variable=json;isOutput=true]%s\n' "$m"
+          printf '##vso[task.setvariable variable=count;isOutput=true]%s\n' "$c"
+          echo "components to validate: $c"
+        name: emit
+        displayName: Emit matrix
+
+  - job: component
+    displayName: Validate
+    dependsOn: matrix
+    condition: and(succeeded(), ne(dependencies.matrix.outputs['emit.count'], '0'))
+    pool:
+      vmImage: ${{ parameters.hostedImage }}
+    timeoutInMinutes: 60
+    strategy:
+      matrix: $[ dependencies.matrix.outputs['emit.json'] ]
+      maxParallel: ${{ parameters.maxParallel }}
+    steps:
+      - checkout: self
+        fetchDepth: 1
+      - template: steps-setup.yml
+        parameters:
+          tools: terraform
+      - task: UseDotNet@2
+        displayName: Use .NET 10 SDK
+        retryCountOnTaskFailure: 2
+        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
+        inputs:
+          packageType: sdk
+          version: 10.0.x
+      - task: NodeTool@0
+        displayName: Use Node.js 24
+        retryCountOnTaskFailure: 2
+        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
+        inputs:
+          versionSpec: '24.x'
+      - script: python3 tools/validate/component.py --component "$(component)" --env "${{ parameters.environment }}"
+        displayName: Validate $(component)
+
+  - job: tooling
+    displayName: Pipeline tooling tests + static checks
+    pool:
+      vmImage: ${{ parameters.hostedImage }}
+    timeoutInMinutes: 30
+    steps:
+      - checkout: self
+        fetchDepth: 0
+      - template: steps-setup.yml
+        parameters:
+          tools: terraform
+      - script: python3 -m pip install --quiet --user pytest==9.1.1
+        displayName: Install pytest
+        retryCountOnTaskFailure: 2
+      - script: |
+          set -euo pipefail
+          python3 -m tools.changeset graph
+          python3 tools/config/resolve.py --env "${{ parameters.environment }}"
+          python3 tools/pipeline/generate.py --check
+          python3 tools/validate/pipeline_lint.py
+          python3 tools/validate/ownership.py
+          python3 tools/validate/versions.py
+        displayName: Registry, generated stages, pipeline lint, ownership, provider pins
+      - script: python3 -m pytest -q tests/changeset tests/pipeline tests/tools --junitxml="$(Build.ArtifactStagingDirectory)/tooling-tests.xml"
+        displayName: Tooling unit tests
+      - task: PublishTestResults@2
+        condition: not(canceled())
+        inputs:
+          testResultsFormat: JUnit
+          testResultsFiles: $(Build.ArtifactStagingDirectory)/tooling-tests.xml

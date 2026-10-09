@@ -83,7 +83,7 @@ monitors:
     scope: service
     name: "[[[env]]] OTel gateway export failures"
     type: query alert
-    query: "sum(last_15m):sum:otelcol_exporter_send_failed_spans{[[params.pipeline_scope]]}.as_count() + sum:otelcol_exporter_send_failed_metric_points{[[params.pipeline_scope]]}.as_count() + sum:otelcol_exporter_send_failed_log_records{[[params.pipeline_scope]]}.as_count() > [[critical]]"
+    query: "sum(last_15m):sum:otelcol_exporter_send_failed_spans{[[params.pipeline_scope]]}.as_count() + sum:otelcol_exporter_send_failed_metric_points{[[params.pipeline_scope]]}.as_count() > [[critical]]"
     thresholds: {critical: "[[params.otel_failed_threshold]]"}
     severity: critical
     priority: 2

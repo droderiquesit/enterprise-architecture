@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Hello.Durable</RootNamespace>
+    <AssemblyName>Hello.Durable</AssemblyName>
+    <!-- Flex Consumption: Linux, .NET 10 isolated worker. -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Configuration)' == 'Release' and '$(HelloDurablePublish)' == 'true'">linux-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../shared/dotnet/Hello.Common/Hello.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.ServiceBus" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Timer" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" />
+    <PackageReference Include="Azure.Messaging.ServiceBus" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Data.SqlClient.Extensions.Azure" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="host.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="local.settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" Condition="Exists('local.settings.json')" />
+    <EmbeddedResource Include="Data/Migrations/*.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hello.Durable.Tests" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,166 @@
+# Universal pipeline of azure-enterprise-observability-lab (Azure DevOps, YAML).
+# Deploys only changed components and their necessary dependencies. How it works, how to add a
+# component and how to configure Azure DevOps: pipelines/README.md.
+#
+# Stage graph
+#   Select -> Validate ─┐
+#          -> Security ─┼-> Build -> C_<component> stages (generated, dependency ordered, parallel
+#                       │            where independent) -> Retire -> Verify / Drift -> Evidence
+# PR builds (Build.Reason == PullRequest) compile ONLY Select, Validate and Security: no service
+# connection, variable group or self-hosted pool is referenced, so untrusted PR code never gets
+# credentials. Plans against real state happen on main (protected branch) behind approvals.
+
+name: $(Date:yyyyMMdd)$(Rev:.r)
+
+# CI on main. Paths are deliberately NOT used to decide what deploys: tools/changeset compares
+# fingerprints with deployment records, so a docs-only push runs Select and selects nothing.
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+
+# Azure Repos ignores YAML `pr:` triggers. PR validation = branch policy "Build validation" on main
+# pointing at this pipeline (pipelines/README.md, "Branch policies").
+
+schedules:
+  - cron: "17 2 * * *"          # 02:17 UTC nightly: drift detection (auto mode -> drift on Schedule)
+    displayName: Nightly drift detection
+    branches:
+      include:
+        - main
+    always: true                # run even when main has not changed: drift is about the cloud, not the code
+
+# Runs queue behind each other on resources with an exclusive lock check (environment lab-<env>);
+# every component stage additionally takes a stage-level lock (generated lockBehavior: sequential).
+lockBehavior: sequential
+
+parameters:
+  - name: environment
+    displayName: Environment
+    type: string
+    default: dev
+    values:
+      - dev
+  - name: mode
+    displayName: Mode
+    type: string
+    default: auto
+    values:
+      - auto          # PR -> pr, schedule -> drift, otherwise deploy (fingerprints vs records)
+      - manual        # only `components` (+ upstream planned without apply)
+      - reconcile     # plan every enabled component, apply where the plan has changes
+      - drift         # plan every enabled component, apply nothing, report drift
+      - retire        # only scheduled retirements (environments/<env>/retirements.yaml)
+  - name: components
+    displayName: Components (manual mode, comma separated)
+    type: string
+    default: ' '
+  - name: withConsumers
+    displayName: Manual mode - also plan/apply consumers
+    type: boolean
+    default: false
+  - name: dryRun
+    displayName: Dry run (plan only, no apply / destroy / records)
+    type: boolean
+    default: false
+
+variables:
+  - template: pipelines/variables/tools.yml
+  - template: pipelines/variables/${{ parameters.environment }}.yml
+
+stages:
+  # ------------------------------------------------------------------ Select
+  - stage: Select
+    displayName: Select changed components
+    jobs:
+      - job: select
+        displayName: Detect changes
+        timeoutInMinutes: 20
+        ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+          pool:
+            vmImage: ${{ variables.hostedImage }}
+        ${{ else }}:
+          pool:
+            name: ${{ variables.deployPool }}
+        steps:
+          - checkout: self
+            fetchDepth: 0               # merge-base needs history
+          - template: pipelines/templates/steps-setup.yml
+          - script: |
+              set -euo pipefail
+              python3 -m tools.changeset graph
+              python3 tools/config/resolve.py --env "${{ parameters.environment }}"
+            displayName: Validate registry, graph and environment configuration
+          - ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+            - script: |
+                set -euo pipefail
+                target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+                git fetch --no-tags origin "+refs/heads/${target}:refs/remotes/origin/${target}"
+                mkdir -p "$(Build.ArtifactStagingDirectory)/selection"
+                python3 -m tools.changeset select --mode pr --env "${{ parameters.environment }}" --target "$target" \
+                  --out "$(Build.ArtifactStagingDirectory)/selection/selection.json" --ado
+              name: detect
+              displayName: Select (PR, merge-base diff, no credentials)
+          - ${{ else }}:
+            - task: AzureCLI@2
+              name: detect
+              displayName: Select (fingerprints vs deployment records)
+              inputs:
+                azureSubscription: ${{ variables.planServiceConnection }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -euo pipefail
+                  mkdir -p "$(Build.ArtifactStagingDirectory)/selection"
+                  python3 -m tools.changeset select --mode "${{ parameters.mode }}" --env "${{ parameters.environment }}" \
+                    --components "${{ parameters.components }}" ${{ iif(parameters.withConsumers, '--with-consumers', '') }} \
+                    --records-url "https://${{ variables.stateStorageAccount }}.blob.core.windows.net/deployments" \
+                    --build-reason "$(Build.Reason)" \
+                    --out "$(Build.ArtifactStagingDirectory)/selection/selection.json" --ado
+          - task: PublishPipelineArtifact@1
+            displayName: Publish selection document
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/selection
+              artifact: selection
+
+  # ---------------------------------------------------------------- Validate
+  - stage: Validate
+    displayName: Validate (no credentials)
+    dependsOn: Select
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'))
+    jobs:
+      - template: pipelines/templates/validate.yml
+        parameters:
+          environment: ${{ parameters.environment }}
+          hostedImage: ${{ variables.hostedImage }}
+
+  # ---------------------------------------------------------------- Security
+  - stage: Security
+    displayName: Security scans (no credentials)
+    dependsOn: Select
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'))
+    jobs:
+      - template: pipelines/templates/security-scan.yml
+        parameters:
+          hostedImage: ${{ variables.hostedImage }}
+
+  # ------------------------------------- Build, components, verify, evidence
+  - ${{ if ne(variables['Build.Reason'], 'PullRequest') }}:
+    - template: pipelines/generated/component-stages.yml
+      parameters:
+        environment: ${{ parameters.environment }}
+        dryRun: ${{ parameters.dryRun }}
+        settings:
+          deployPool: ${{ variables.deployPool }}
+          hostedImage: ${{ variables.hostedImage }}
+          planServiceConnection: ${{ variables.planServiceConnection }}
+          planServiceConnectionId: ${{ variables.planServiceConnectionId }}
+          applyServiceConnection: ${{ variables.applyServiceConnection }}
+          applyServiceConnectionId: ${{ variables.applyServiceConnectionId }}
+          buildServiceConnection: ${{ variables.buildServiceConnection }}
+          stateStorageAccount: ${{ variables.stateStorageAccount }}
+          containerRegistry: ${{ variables.containerRegistry }}
+          datadogVariableGroup: ${{ variables.datadogVariableGroup }}
+          datadogSite: ${{ variables.datadogSite }}
+          useAcrBuild: 'false'

@@ -23,6 +23,8 @@ locals {
 
 # ---------------------------------------------------------------- Flex Consumption
 resource "azurerm_service_plan" "flex" {
+  #checkov:skip=CKV_AZURE_225:Serverless/elastic Functions plan in a single-zone lab; zone redundancy not required.
+  #checkov:skip=CKV_AZURE_212:Serverless/elastic plan scales automatically; no fixed minimum instance count.
   for_each = var.settings.flex_apps
 
   name                = "${local.names.app_service_plan}-flex-${each.key}"
@@ -82,6 +84,8 @@ module "durable_storage" {
 
 # ---------------------------------------------------------------- Elastic Premium (Linux)
 resource "azurerm_service_plan" "premium" {
+  #checkov:skip=CKV_AZURE_225:Serverless/elastic Functions plan in a single-zone lab; zone redundancy not required.
+  #checkov:skip=CKV_AZURE_212:Serverless/elastic plan scales automatically; no fixed minimum instance count.
   count = local.premium.enabled ? 1 : 0
 
   name                         = "${local.names.app_service_plan}-ep"
@@ -116,6 +120,8 @@ module "premium_storage" {
 
 # ---------------------------------------------------------------- Windows Consumption (Y1)
 resource "azurerm_service_plan" "consumption_windows" {
+  #checkov:skip=CKV_AZURE_225:Serverless/elastic Functions plan in a single-zone lab; zone redundancy not required.
+  #checkov:skip=CKV_AZURE_212:Serverless/elastic plan scales automatically; no fixed minimum instance count.
   count = local.y1.enabled ? 1 : 0
 
   name                = "${local.names.app_service_plan}-y1"

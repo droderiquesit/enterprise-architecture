@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Hello.Bff</RootNamespace>
+    <AssemblyName>Hello.Bff</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../shared/dotnet/Hello.Common/Hello.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hello.Bff.Tests" />
+  </ItemGroup>
+</Project>

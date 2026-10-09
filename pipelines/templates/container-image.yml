@@ -1,0 +1,57 @@
+# Container image build + push by digest (steps template).
+# Build context = applications/ and Dockerfile = <componentPath>/Dockerfile (the convention used by
+# the application Dockerfiles). docker buildx attaches BuildKit provenance (mode=max) and an SBOM
+# attestation; syft (when installable) also writes an SPDX SBOM file next to the build metadata.
+# Agents without Docker: set settings.useAcrBuild to 'true' (az acr build; with public network access
+# disabled on the registry, ACR Tasks need a dedicated agent pool - see pipelines/README.md).
+parameters:
+  - name: component
+    type: string
+  - name: componentPath
+    type: string
+  - name: artifactName
+    type: string
+  - name: settings
+    type: object
+
+steps:
+  - script: bash pipelines/scripts/install-tools.sh syft || echo "##vso[task.logissue type=warning]syft unavailable; SBOM attestation from buildx only"
+    displayName: Install syft (SBOM)
+    retryCountOnTaskFailure: 2
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))
+  - task: AzureCLI@2
+    displayName: Build and push ${{ parameters.artifactName }} by digest
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))
+    inputs:
+      azureSubscription: ${{ parameters.settings.buildServiceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+        mkdir -p "$BUILD_OUT"
+        tag="$(python3 tools/deploy/artifacts.py tag --component '${{ parameters.component }}' --selection "$SELECTION_FILE")"
+        repo="${CONTAINER_REGISTRY}.azurecr.io/${{ parameters.artifactName }}"
+        dockerfile="${{ parameters.componentPath }}/Dockerfile"
+        build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        if [[ "${USE_ACR_BUILD,,}" == "true" ]]; then
+          az acr build --registry "$CONTAINER_REGISTRY" --image "${{ parameters.artifactName }}:${tag}" \
+            --file "$dockerfile" --build-arg "GIT_COMMIT=$(Build.SourceVersion)" \
+            --build-arg "VERSION=${tag}" --build-arg "BUILD_TIME=${build_time}" applications
+          digest="$(az acr manifest show-metadata --registry "$CONTAINER_REGISTRY" --name "${{ parameters.artifactName }}:${tag}" --query digest -o tsv)"
+        else
+          az acr login --name "$CONTAINER_REGISTRY"
+          docker buildx create --use --name labbuilder >/dev/null 2>&1 || docker buildx use labbuilder
+          docker buildx build --file "$dockerfile" \
+            --build-arg "GIT_COMMIT=$(Build.SourceVersion)" --build-arg "VERSION=${tag}" --build-arg "BUILD_TIME=${build_time}" \
+            --label "org.opencontainers.image.revision=$(Build.SourceVersion)" \
+            --provenance=mode=max --sbom=true --metadata-file "$BUILD_OUT/buildx-metadata.json" \
+            --tag "${repo}:${tag}" --push applications
+          digest="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['containerimage.digest'])" "$BUILD_OUT/buildx-metadata.json")"
+        fi
+        if command -v syft >/dev/null; then
+          syft scan "registry:${repo}@${digest}" -o "spdx-json=$BUILD_OUT/sbom.spdx.json" || echo "##vso[task.logissue type=warning]syft SBOM failed"
+        fi
+        python3 tools/deploy/artifacts.py image-meta --out "$BUILD_OUT/container-image.json" \
+          --repository "$repo" --digest "$digest" --tag "$tag"
+    env:
+      USE_ACR_BUILD: ${{ coalesce(parameters.settings.useAcrBuild, 'false') }}

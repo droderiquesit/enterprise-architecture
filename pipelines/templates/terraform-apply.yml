@@ -1,0 +1,136 @@
+# Apply deployment job of a component stage. Runs with the APPLY identity, behind the approvals and
+# checks of environment lab-<env>. Omitted entirely when dryRun is true.
+# Runs only when the plan reported changes and the component is an apply candidate.
+parameters:
+  - name: component
+    type: string
+  - name: componentPath
+    type: string
+  - name: artifacts
+    type: object
+    default: []
+  - name: timeoutMinutes
+    type: number
+    default: 60
+  - name: environment
+    type: string
+  - name: dryRun
+    type: boolean
+    default: false
+  - name: settings
+    type: object
+
+jobs:
+  - ${{ if eq(parameters.dryRun, false) }}:
+    - deployment: Apply
+      displayName: Apply ${{ parameters.component }}
+      dependsOn: Plan
+      condition: and(succeeded(), eq(dependencies.Plan.outputs['plan.has_changes'], 'true'), eq(stageDependencies.Select.select.outputs['detect.apply_${{ replace(parameters.component, '-', '_') }}'], 'true'))
+      environment: lab-${{ parameters.environment }}
+      timeoutInMinutes: ${{ parameters.timeoutMinutes }}
+      cancelTimeoutInMinutes: 15
+      variables:
+        LAB_ENV: ${{ parameters.environment }}
+        PLAN_ARTIFACT: $[ dependencies.Plan.outputs['plan.artifact'] ]
+        BINDING_FILE: $(Agent.TempDirectory)/binding.json
+        MANIFEST_FILE: $(Pipeline.Workspace)/plan/manifest.json
+        APPLIED_MARKER: $(Agent.TempDirectory)/applied
+        SELECTION_FILE: $(Pipeline.Workspace)/selection/selection.json
+        ARTIFACT_METADATA_DIR: $(Pipeline.Workspace)/artifact-metadata
+        STATE_STORAGE_ACCOUNT: ${{ parameters.settings.stateStorageAccount }}
+        CONTRACTS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts
+        PLANS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/plans
+        RECORDS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: none            # deployment jobs auto-download every artifact otherwise
+              - checkout: self
+                fetchDepth: 1
+              - task: DownloadPipelineArtifact@2
+                displayName: Download plan summary + manifest
+                retryCountOnTaskFailure: 2
+                inputs:
+                  artifact: $(PLAN_ARTIFACT)
+                  path: $(Pipeline.Workspace)/plan
+              - task: DownloadPipelineArtifact@2
+                displayName: Download selection
+                retryCountOnTaskFailure: 2
+                inputs:
+                  artifact: selection
+                  path: $(Pipeline.Workspace)/selection
+              - ${{ each artifact in parameters.artifacts }}:
+                - task: DownloadPipelineArtifact@2
+                  displayName: Download metadata of ${{ artifact }}
+                  retryCountOnTaskFailure: 2
+                  inputs:
+                    artifact: artifact-${{ artifact }}
+                    path: $(Pipeline.Workspace)/artifact-metadata/${{ artifact }}
+              - template: steps-setup.yml
+                parameters:
+                  tools: terraform
+              - task: AzureCLI@2
+                name: prepare
+                displayName: Re-render config, contracts and artifact digests (binding check inputs)
+                inputs:
+                  azureSubscription: ${{ parameters.settings.applyServiceConnection }}
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  addSpnToEnvironment: true
+                  inlineScript: |
+                    set -euo pipefail
+                    source pipelines/scripts/tf-env.sh
+                    bash pipelines/scripts/tf-prepare.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
+                env:
+                  ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.applyServiceConnectionId }}
+                  SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                  SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
+              - task: AzureCLI@2
+                name: init
+                displayName: terraform init (remote state)
+                retryCountOnTaskFailure: 2
+                inputs:
+                  azureSubscription: ${{ parameters.settings.applyServiceConnection }}
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  addSpnToEnvironment: true
+                  inlineScript: |
+                    set -euo pipefail
+                    source pipelines/scripts/tf-env.sh
+                    bash pipelines/scripts/tf-init.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
+                env:
+                  ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.applyServiceConnectionId }}
+                  SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                  SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
+              - task: AzureCLI@2
+                name: apply
+                displayName: Verify binding, apply, publish contract, record
+                inputs:
+                  azureSubscription: ${{ parameters.settings.applyServiceConnection }}
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  addSpnToEnvironment: true
+                  inlineScript: |
+                    set -euo pipefail
+                    source pipelines/scripts/tf-env.sh
+                    bash pipelines/scripts/tf-apply.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
+                env:
+                  ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.applyServiceConnectionId }}
+                  SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                  SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
+              - task: AzureCLI@2
+                displayName: Record failed / partial / canceled deployment
+                condition: not(succeeded())
+                inputs:
+                  azureSubscription: ${{ parameters.settings.applyServiceConnection }}
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    set -euo pipefail
+                    status=failed
+                    [[ "$(Agent.JobStatus)" == "Canceled" ]] && status=canceled
+                    [[ -f "$APPLIED_MARKER" ]] && status=partial
+                    python3 tools/deploy/record.py write --env "$LAB_ENV" --component "${{ parameters.component }}" \
+                      --status "$status" --selection "$SELECTION_FILE" --store "$RECORDS_URL" \
+                      --note "Agent.JobStatus=$(Agent.JobStatus)"
