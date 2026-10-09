@@ -1,0 +1,8 @@
+apiVersion: observability/v1
+kind: NotificationRouting
+metadata:
+  env: prod
+routes:
+  orders: {handles: ["@slack-orders-alerts"]}
+  orders-pager: {handles: ["@pagerduty-orders", "@slack-orders-alerts"]}
+  platform: {handles: ["@slack-platform-observability"]}

@@ -8,6 +8,7 @@ artifact   unit tests by detected toolchain: .NET (dotnet test on *Tests.csproj)
            tests/ dir exists, after installing the shared package and the service), Node (npm ci, npm test,
            npm run build); otherwise structure-only
 docs       relative Markdown links resolve
+module:<dir> shared Terraform module changed in a PR (tools/validate/terraform.sh <dir>)
 A registry component whose path does not exist yet is reported as `cataloged` (not a failure).
 """
 
@@ -94,6 +95,9 @@ def main(argv=None) -> int:
     ap.add_argument("--repo", default=".")
     args = ap.parse_args(argv)
     repo = Path(args.repo).resolve()
+    if args.component.startswith("module:"):
+        path = args.component.split(":", 1)[1]
+        return run(["bash", "tools/validate/terraform.sh", path], cwd=repo)
     comp = load_registry(WorkTree(repo)).get(args.component)
     if not (repo / comp.path).exists():
         print(f"{comp.id}: {comp.path} does not exist yet (status: cataloged) - nothing to validate")

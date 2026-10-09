@@ -237,9 +237,9 @@ variable "sidecar_mode" {
 variable "images" {
   description = "Pinned images (ADR-0001 §2)."
   type = object({
-    fluent_bit       = optional(string, "fluent/fluent-bit:5.1.3")
-    otel_contrib     = optional(string, "otel/opentelemetry-collector-contrib:0.162.0")
-    ddot_collector   = optional(string, "datadog/ddot-collector:7.84.2")
+    fluent_bit     = optional(string, "fluent/fluent-bit:5.1.3")
+    otel_contrib   = optional(string, "otel/opentelemetry-collector-contrib:0.162.0")
+    ddot_collector = optional(string, "datadog/ddot-collector:7.84.2")
   })
   default = {}
 }

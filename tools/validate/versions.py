@@ -33,21 +33,22 @@ LOCK_RE = re.compile(r'provider\s+"registry\.terraform\.io/([^"]+)"\s*\{[^}]*?ve
 
 
 def _block(text: str, keyword: str) -> str | None:
-    m = re.search(keyword + r"\s*\{", text)
-    if not m:
-        return None
-    depth, i = 1, m.end()
-    while i < len(text) and depth:
-        depth += {"{": 1, "}": -1}.get(text[i], 0)
-        i += 1
-    return text[m.end(): i - 1]
+    """Concatenated bodies of every top-level `<keyword> {` block (a root may split terraform {} blocks)."""
+    bodies = []
+    for m in re.finditer(r"(?m)^\s*" + keyword + r"\s*\{", text):
+        depth, i = 1, m.end()
+        while i < len(text) and depth:
+            depth += {"{": 1, "}": -1}.get(text[i], 0)
+            i += 1
+        bodies.append(text[m.end(): i - 1])
+    return "\n".join(bodies) if bodies else None
 
 
 def check_dir(repo: Path, rel: str, pins: dict, is_root: bool, owner: str) -> tuple[list[str], list[str]]:
     errors, notes = [], []
     d = repo / rel
     tf_text = "\n".join(p.read_text() for p in sorted(d.glob("*.tf")))
-    tf_block = _block(tf_text, r"\bterraform")
+    tf_block = _block(tf_text, "terraform")
     req = REQ_VERSION_RE.search(tf_block or "")
     want_req = pins["required_version"]
     if req and req.group(1) != want_req:

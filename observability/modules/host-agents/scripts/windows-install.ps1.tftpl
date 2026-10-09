@@ -1,0 +1,87 @@
+# Enterprise Hello / portable Datadog package: Windows host log + OTLP setup (idempotent; safe to re-run).
+#  1. Datadog Agent (DatadogWindowsAgent extension): OTLP receiver on localhost, Agent log collection OFF.
+#  2. Fluent Bit ${fb_version} MSI from packages.fluentbit.io (SHA256 verified), config in
+#     C:\ProgramData\fluent-bit-eh, Windows service fluent-bit-eh with a service-scoped environment.
+#  3. Datadog API key read from Key Vault with the VM's user-assigned identity, or protected parameter.
+$ErrorActionPreference = 'Stop'
+$FbVersion = '${fb_version}'
+$ConfDir = 'C:\ProgramData\fluent-bit-eh'
+$FbExe = 'C:\Program Files\fluent-bit\bin\fluent-bit.exe'
+$ApiKeySecretId = '${api_key_secret_id}'
+$IdentityClientId = '${identity_client_id}'
+$ConfigureAgent = '${configure_agent}'
+function Log($m) { Write-Output "[eh-host-setup] $m" }
+function Expand-Gz([string]$b64) {
+  $in = New-Object IO.MemoryStream(,[Convert]::FromBase64String($b64))
+  $gz = New-Object IO.Compression.GZipStream($in, [IO.Compression.CompressionMode]::Decompress)
+  $out = New-Object IO.MemoryStream; $gz.CopyTo($out); $gz.Dispose()
+  return [Text.Encoding]::UTF8.GetString($out.ToArray())
+}
+
+if ($ConfigureAgent -eq 'true') {
+  $agentEnv = @{
+    'DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT' = 'localhost:4317'
+    'DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT' = 'localhost:4318'
+    'DD_OTLP_CONFIG_LOGS_ENABLED'                     = 'false'
+    'DD_LOGS_ENABLED'                                 = 'false'
+    'DD_TAGS'                                         = '${agent_tags}'
+  }
+  $changed = $false
+  foreach ($k in $agentEnv.Keys) {
+    if ([Environment]::GetEnvironmentVariable($k, 'Machine') -ne $agentEnv[$k]) {
+      [Environment]::SetEnvironmentVariable($k, $agentEnv[$k], 'Machine'); $changed = $true
+    }
+  }
+  if ($changed -and (Get-Service datadogagent -ErrorAction SilentlyContinue)) { Restart-Service datadogagent -Force; Log 'datadogagent reconfigured' }
+}
+
+$current = if (Test-Path $FbExe) { (& $FbExe --version 2>$null | Select-Object -First 1) } else { '' }
+if ($current -notmatch [regex]::Escape("v$FbVersion")) {
+  $msi = Join-Path $env:TEMP "fluent-bit-$FbVersion-win64.msi"
+  $url = "https://packages.fluentbit.io/windows/fluent-bit-$FbVersion-win64.msi"
+  Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $msi
+  $expected = ((Invoke-WebRequest -UseBasicParsing -Uri "$url.sha256").Content -split '\s+')[0].Trim().ToLower()
+  if ((Get-FileHash $msi -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw "checksum mismatch for $url" }
+  $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart" -Wait -PassThru
+  if ($p.ExitCode -ne 0) { throw "msiexec failed: $($p.ExitCode)" }
+  Log "fluent-bit $FbVersion installed"
+}
+
+$apiKey = $env:DD_API_KEY
+if ($ApiKeySecretId -and $IdentityClientId) {
+  $tok = (Invoke-RestMethod -Headers @{Metadata='true'} -Uri "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net&client_id=$IdentityClientId").access_token
+  $apiKey = (Invoke-RestMethod -Headers @{Authorization="Bearer $tok"} -Uri "$ApiKeySecretId`?api-version=7.4").value
+}
+if (-not $apiKey) { throw 'no Datadog API key available (Key Vault or protected parameter)' }
+
+$files = @{
+%{ for path, gz in files ~}
+  '${replace(path, "/", "\\")}' = '${gz}'
+%{ endfor ~}
+}
+New-Item -ItemType Directory -Force -Path "$ConfDir\lua", "$ConfDir\state" | Out-Null
+$restart = $false
+foreach ($rel in $files.Keys) {
+  $target = Join-Path $ConfDir $rel
+  $content = Expand-Gz $files[$rel]
+  if (-not (Test-Path $target) -or (Get-Content -Raw $target) -ne $content) { [IO.File]::WriteAllText($target, $content); $restart = $true }
+}
+# config dir: SYSTEM + Administrators only
+icacls $ConfDir /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+
+$svcEnv = @(
+%{ for k, v in env ~}
+  '${k}=${v}'
+%{ endfor ~}
+  "DD_API_KEY=$apiKey"
+)
+$svcName = 'fluent-bit-eh'
+if (-not (Get-Service $svcName -ErrorAction SilentlyContinue)) {
+  New-Service -Name $svcName -BinaryPathName "`"$FbExe`" -c `"$ConfDir\fluent-bit.yaml`"" -StartupType Automatic -DisplayName 'Fluent Bit (app logs -> Datadog)' | Out-Null
+  $restart = $true
+}
+$key = "HKLM:\SYSTEM\CurrentControlSet\Services\$svcName"
+$old = (Get-ItemProperty -Path $key -Name Environment -ErrorAction SilentlyContinue).Environment
+if (($old -join "`n") -ne ($svcEnv -join "`n")) { Set-ItemProperty -Path $key -Name Environment -Type MultiString -Value $svcEnv; $restart = $true }
+sc.exe failure $svcName reset= 86400 actions= restart/5000/restart/5000/restart/30000 | Out-Null
+if ($restart -or (Get-Service $svcName).Status -ne 'Running') { Restart-Service $svcName -Force; Log 'fluent-bit-eh (re)started' } else { Log 'fluent-bit-eh unchanged' }

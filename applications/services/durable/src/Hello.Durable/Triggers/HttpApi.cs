@@ -16,8 +16,35 @@ public sealed record BatchRequest(int? Items, bool? Enqueue);
 /// HTTP API (ASP.NET Core integration). Anonymous at the Functions layer: the app is reachable only on the private
 /// network (inbound access is owned by the deployment root).
 /// </summary>
-public sealed class HttpApi(HelloServiceInfo info, DurableSettings settings, TimeProvider time)
+public sealed class HttpApi(HelloServiceInfo info, DurableSettings settings, TimeProvider time, OrderEventStarter starter)
 {
+    /// <summary>
+    /// Lab/manual entry point: same body as the `order-events` OrderCreated message; starts (or no-ops for an existing)
+    /// OrderProcessing instance "order-{order_id}". Used for smoke tests when Service Bus is not available.
+    /// </summary>
+    [Function("StartOrderWorkflow")]
+    public async Task<IActionResult> StartOrder(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "workflows/order")] HttpRequest req,
+        [DurableClient] DurableTaskClient client)
+    {
+        ArgumentNullException.ThrowIfNull(req);
+        using var reader = new StreamReader(req.Body);
+        var body = await reader.ReadToEndAsync(req.HttpContext.RequestAborted).ConfigureAwait(false);
+        var props = new Dictionary<string, object>();
+        if (req.Headers.TryGetValue("traceparent", out var tp))
+        {
+            props["traceparent"] = tp.ToString();
+        }
+
+        var started = await starter.StartAsync(client, body, props, null, req.HttpContext.RequestAborted).ConfigureAwait(false);
+        if (started is null)
+        {
+            return Problem(StatusCodes.Status409Conflict, "not-started", "Workflow not started", "Invalid payload or the instance already exists.");
+        }
+
+        return Accepted(started);
+    }
+
     [Function("Healthz")]
     public IActionResult Healthz([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "healthz")] HttpRequest req) =>
         new OkObjectResult(new { status = "ok", service = info.Service });

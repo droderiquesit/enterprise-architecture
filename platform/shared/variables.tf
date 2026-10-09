@@ -62,6 +62,8 @@ variable "settings" {
       "hello-frontend", "obs-collector", "obs-dbm", "aks-kubelet",
     ])
     acr_push_identities = optional(list(string), ["deploy-agent"])
+    # Extra principals (e.g. the bootstrap `build` pipeline identity principal id) granted AcrPush.
+    acr_push_principal_ids = optional(list(string), [])
     # Log Analytics: only for platform features that require a workspace (AKS Defender/Container
     # Insights opt-ins, ACA "log-analytics" destination). Application logs never go here (ADR §10).
     log_analytics_retention_days     = optional(number, 30)

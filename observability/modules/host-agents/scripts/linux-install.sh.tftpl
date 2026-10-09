@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# Enterprise Hello / portable Datadog package: host log + OTLP setup (idempotent; safe to re-run).
+#  1. Datadog Agent (installed by the DatadogLinuxAgent VM extension): OTLP receiver on localhost,
+#     Agent log collection OFF (application logs are shipped by Fluent Bit only).
+#  2. Fluent Bit ${fb_version} from packages.fluentbit.io (pinned, apt-mark hold / versionlock),
+#     config in /etc/fluent-bit-eh, unit fluent-bit-eh.service (the packaged fluent-bit.service is disabled).
+#  3. Datadog API key for Fluent Bit read from Key Vault with the VM's user-assigned identity (IMDS),
+#     or from the protected run-command parameter DD_API_KEY.
+set -euo pipefail
+FB_VERSION='${fb_version}'
+CONF_DIR=/etc/fluent-bit-eh
+STATE_DIR=/var/lib/fluent-bit-eh
+ENV_FILE=/etc/default/fluent-bit-eh
+API_KEY_SECRET_ID='${api_key_secret_id}'
+IDENTITY_CLIENT_ID='${identity_client_id}'
+CONFIGURE_AGENT='${configure_agent}'
+log() { echo "[eh-host-setup] $*"; }
+
+# ------------------------------------------------------------------ Datadog Agent: OTLP on, logs off
+if [ "$CONFIGURE_AGENT" = "true" ]; then
+  changed=0
+  for unit in datadog-agent datadog-agent-trace; do
+    d=/etc/systemd/system/$unit.service.d
+    install -d -m 0755 "$d"
+    tmp=$(mktemp)
+    cat > "$tmp" <<'UNIT'
+[Service]
+Environment=DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT=localhost:4317
+Environment=DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT=localhost:4318
+Environment=DD_OTLP_CONFIG_LOGS_ENABLED=false
+Environment=DD_LOGS_ENABLED=false
+Environment=DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED=${process_collection}
+Environment="DD_TAGS=${agent_tags}"
+UNIT
+    if ! cmp -s "$tmp" "$d/eh-observability.conf"; then mv "$tmp" "$d/eh-observability.conf"; chmod 0644 "$d/eh-observability.conf"; changed=1; else rm -f "$tmp"; fi
+  done
+  if [ $changed -eq 1 ] && systemctl list-unit-files datadog-agent.service >/dev/null 2>&1; then
+    systemctl daemon-reload
+    systemctl restart datadog-agent || log "datadog-agent restart failed (extension still installing?)"
+    log "datadog-agent reconfigured (OTLP localhost:4317/4318, logs disabled)"
+  fi
+fi
+
+# ------------------------------------------------------------------ Fluent Bit package (pinned)
+installed=""
+if command -v dpkg-query >/dev/null 2>&1; then installed=$(dpkg-query -W -f='$${Version}' fluent-bit 2>/dev/null || true); fi
+if [ -z "$installed" ] && command -v rpm >/dev/null 2>&1; then installed=$(rpm -q --qf '%%{VERSION}' fluent-bit 2>/dev/null || true); fi
+if [ "$installed" != "$FB_VERSION" ]; then
+  . /etc/os-release
+  case "$ID" in
+    ubuntu|debian)
+      install -d -m 0755 /usr/share/keyrings
+      curl -fsSL --retry 5 https://packages.fluentbit.io/fluentbit.key | gpg --dearmor --yes -o /usr/share/keyrings/fluentbit-keyring.gpg
+      echo "deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages.fluentbit.io/$ID/$VERSION_CODENAME $VERSION_CODENAME main" > /etc/apt/sources.list.d/fluent-bit.list
+      apt-get update -y -q
+      apt-mark unhold fluent-bit >/dev/null 2>&1 || true
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q --allow-downgrades "fluent-bit=$FB_VERSION"
+      apt-mark hold fluent-bit
+      ;;
+    rhel|centos|rocky|almalinux|ol|azurelinux|mariner)
+      rpm --import https://packages.fluentbit.io/fluentbit.key
+      major=$${VERSION_ID%%.*}
+      printf '[fluent-bit]\nname=Fluent Bit\nbaseurl=https://packages.fluentbit.io/centos/%s/\ngpgcheck=1\ngpgkey=https://packages.fluentbit.io/fluentbit.key\nenabled=1\n' "$major" > /etc/yum.repos.d/fluent-bit.repo
+      (command -v dnf >/dev/null && dnf install -y "fluent-bit-$FB_VERSION") || yum install -y "fluent-bit-$FB_VERSION"
+      ;;
+    *) log "unsupported distribution $ID"; exit 2 ;;
+  esac
+  log "fluent-bit $FB_VERSION installed"
+fi
+systemctl disable --now fluent-bit.service >/dev/null 2>&1 || true
+
+# ------------------------------------------------------------------ API key (never in this script)
+DD_API_KEY_VALUE="$${DD_API_KEY:-}"
+if [ -n "$API_KEY_SECRET_ID" ] && [ -n "$IDENTITY_CLIENT_ID" ]; then
+  token=$(curl -fsS --retry 5 -H Metadata:true "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net&client_id=$IDENTITY_CLIENT_ID" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+  DD_API_KEY_VALUE=$(curl -fsS --retry 5 -H "Authorization: Bearer $token" "$API_KEY_SECRET_ID?api-version=7.4" | sed -n 's/.*"value":"\([^"]*\)".*/\1/p')
+fi
+if [ -z "$DD_API_KEY_VALUE" ]; then log "no Datadog API key available (Key Vault or protected parameter)"; exit 3; fi
+
+# ------------------------------------------------------------------ config (staged, dry-run, then swapped)
+stage=$(mktemp -d)
+install -d -m 0755 "$stage/lua"
+%{ for path, gz in files ~}
+echo '${gz}' | base64 -d | gunzip > "$stage/${path}"
+%{ endfor ~}
+umask 077
+cat > "$stage/env" <<ENVEOF
+%{ for k, v in env ~}
+${k}=${v}
+%{ endfor ~}
+DD_API_KEY=$DD_API_KEY_VALUE
+ENVEOF
+install -d -m 0750 "$STATE_DIR"
+(set -a; . "$stage/env"; set +a; cd "$stage" && /opt/fluent-bit/bin/fluent-bit -c "$stage/fluent-bit.yaml" --dry-run >/dev/null) || { log "fluent-bit dry-run failed; keeping previous config"; rm -rf "$stage"; exit 4; }
+
+restart=0
+if ! cmp -s "$stage/env" "$ENV_FILE"; then install -m 0600 "$stage/env" "$ENV_FILE"; restart=1; fi
+rm -f "$stage/env"
+if [ ! -d "$CONF_DIR" ] || ! diff -qr "$stage" "$CONF_DIR" >/dev/null 2>&1; then
+  rm -rf "$CONF_DIR.old"; [ -d "$CONF_DIR" ] && mv "$CONF_DIR" "$CONF_DIR.old"
+  mv "$stage" "$CONF_DIR"; chmod 0755 "$CONF_DIR"
+  restart=1
+else
+  rm -rf "$stage"
+fi
+chmod -R go-w "$CONF_DIR"
+
+unit=/etc/systemd/system/fluent-bit-eh.service
+cat > "$unit.tmp" <<'UNIT'
+[Unit]
+Description=Fluent Bit (application logs -> Datadog, portable Datadog package)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/fluent-bit-eh
+WorkingDirectory=/etc/fluent-bit-eh
+ExecStart=/opt/fluent-bit/bin/fluent-bit -c /etc/fluent-bit-eh/fluent-bit.yaml
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+if ! cmp -s "$unit.tmp" "$unit"; then mv "$unit.tmp" "$unit"; systemctl daemon-reload; restart=1; else rm -f "$unit.tmp"; fi
+systemctl enable fluent-bit-eh.service >/dev/null
+if [ $restart -eq 1 ] || ! systemctl is-active --quiet fluent-bit-eh.service; then systemctl restart fluent-bit-eh.service; log "fluent-bit-eh (re)started"; else log "fluent-bit-eh unchanged"; fi

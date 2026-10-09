@@ -4,14 +4,15 @@
 # Contents: modules/ config/ schemas/ archetypes/ tools/ pipelines/ examples/ README.md CHANGELOG.md UPGRADING.md VERSION
 # Never included: lab roots, lab onboarding manifests/rendered output, .terraform/, caches, vendored copies.
 # The build FAILS if any packaged file references paths outside the package, lab roots, remote state,
-# or a real subscription id (only the all-zero placeholder is allowed).
+# or a real subscription id. Allowed placeholders: the all-zero GUID and test GUIDs of the form
+# xxxxxxxx-0000-0000-0000-000000000000 (third group 0000 = no RFC 4122 version, so never a real subscription id).
 #
 # Usage: package.sh [--out DIR] [--version X.Y.Z[-pre]]   (default version: ./VERSION)
 # Exit codes: 0 ok, 1 portability violation, 2 usage error.
 set -euo pipefail
 
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT="${PKG_ROOT}/dist"
+OUT="${PKG_ROOT}/tools/release/dist"
 VERSION_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -61,7 +62,7 @@ check 'terraform_remote''_state' 'remote state coupling'
 check '\.\./\.\./\.\.' 'path escape above the package root'
 GUID='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
 sub_hits="$(grep -rIhoE "(subscriptions/|subscription_id[\"']?[[:space:]]*[:=][[:space:]]*[\"']?)${GUID}" "${STAGE}/${NAME}" \
-            | grep -oE "$GUID" | grep -v '^00000000-0000-0000-0000-000000000000$' | sort -u || true)"
+            | grep -oE "$GUID" | grep -vE '^[0-9a-fA-F]{8}-0000-0000-0000-000000000000$' | sort -u || true)"
 if [[ -n "$sub_hits" ]]; then
   echo "PORTABILITY VIOLATION (subscription id other than the all-zero placeholder): $sub_hits" >&2
   violations=$((violations + 1))

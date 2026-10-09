@@ -1,0 +1,38 @@
+# Existing App Service web app (Linux, .NET). Resource ids are supplied verbatim by the platform team.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: orders-web
+  display_name: Orders web
+  team: orders
+  owner: orders-team@contoso.example
+  application: orders
+  domain: commerce
+  tier: high
+  env: prod
+  repository: https://dev.azure.com/contoso/orders/_git/orders-web
+  runbook_url: https://wiki.contoso.example/runbooks/orders-web
+  languages: [dotnet]
+  depends_on: ["service:orders-api"]
+  contacts:
+    - {type: email, contact: orders-team@contoso.example}
+spec:
+  architecture: appservice
+  runtime: dotnet
+  telemetry:
+    profile: http-api
+    logs: {route: eventhub}
+  resources:
+    - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-orders-prod/providers/Microsoft.Web/sites/app-orders-web-prod
+      type: Microsoft.Web/sites
+      role: app
+  endpoints:
+    - name: site
+      url: https://orders.contoso.example
+      visibility: public
+      health_path: /healthz
+  slos:
+    - {name: availability, type: availability, target: 99.9, warning: 99.95, timeframe: 30d}
+  notifications:
+    default: [orders]
+    critical: [orders-pager]

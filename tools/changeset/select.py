@@ -21,6 +21,7 @@ that root but does not re-plan its consumers: artifacts do not change Terraform 
 from __future__ import annotations
 
 import datetime as _dt
+import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
@@ -33,6 +34,7 @@ from .store import Store
 from .trees import GitTree, Tree, WorkTree
 
 MODES = ("pr", "deploy", "manual", "reconcile", "drift", "retire")
+MODULE_DIR_RE = re.compile(r"^((?:[^/]+/)*modules/[^/]+)/")
 TOOLING_PATHS = ("tools/", "pipelines/", "azure-pipelines.yml", "tests/", "catalog/schemas/", "environments/schema/")
 SUCCEEDED = "succeeded"
 
@@ -145,6 +147,8 @@ def _base_doc(ctx: Context, mode: str) -> dict:
         "notes": list(ctx.notes),
         "components": {c.id: _entry(ctx, c.id) for c in ctx.registry if c.pipeline != "manual"},
         "removed_components": [],
+        "modules_to_validate": [],
+        "unowned_paths": [],
         "retirements": [],
         "tooling_changed": False,
         "changed_files": [],
@@ -222,6 +226,16 @@ def select_pr(repo: Path, env: str, target: str = "main", head: str = "HEAD", ba
                         comps[c.id]["direct"] = True
                         if p not in comps[c.id]["changed_paths"]:
                             comps[c.id]["changed_paths"].append(p)
+
+    # 1b. changed Terraform module directories nobody consumes yet still get validated
+    owned = {p for e in comps.values() for p in e["changed_paths"]}
+    modules = set()
+    for p in all_paths:
+        m = MODULE_DIR_RE.match(p)
+        if m and p not in owned and (ctx.tree.exists(p) or ctx.tree.is_dir(m.group(1))):
+            modules.add(m.group(1))
+    doc["unowned_paths"] = sorted(p for p in set(all_paths) - owned if not p.startswith(TOOLING_PATHS))
+    doc["modules_to_validate"] = sorted(m for m in modules if ctx.tree.is_dir(m))
 
     # 2. fingerprint comparison (catches config, versions, shared modules, registry edits)
     infra_changed: Set[str] = set()

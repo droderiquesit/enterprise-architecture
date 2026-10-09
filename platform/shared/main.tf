@@ -11,7 +11,10 @@ locals {
 
   # Only grant identities that exist in the identity contract (profiles may publish a subset).
   acr_pull = { for k in var.settings.acr_pull_identities : k => local.identities[k] if contains(keys(local.identities), k) }
-  acr_push = { for k in var.settings.acr_push_identities : k => local.identities[k] if contains(keys(local.identities), k) }
+  acr_push = merge(
+    { for k in var.settings.acr_push_identities : k => local.identities[k] if contains(keys(local.identities), k) },
+    { for p in var.settings.acr_push_principal_ids : "principal-${p}" => { principal_id = p } },
+  )
 
   acr_dns_zone_id = try(var.foundation_network.private_dns_zones["acr"].id, null)
 }

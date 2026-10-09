@@ -1000,6 +1000,7 @@ services:
     - enterprise
     - full
     - minimal
+    - specialized
   references:
   - https://learn.microsoft.com/en-us/azure/container-apps/jobs
   - https://docs.datadoghq.com/integrations/azure_container_apps/
@@ -1042,6 +1043,7 @@ services:
     - enterprise
     - full
     - minimal
+    - specialized
   references:
   - https://learn.microsoft.com/en-us/azure/container-apps/jobs
   - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
@@ -1086,6 +1088,7 @@ services:
     - enterprise
     - full
     - minimal
+    - specialized
   references:
   - https://learn.microsoft.com/en-us/azure/container-apps/jobs
   - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
@@ -1128,6 +1131,7 @@ services:
     - enterprise
     - full
     - minimal
+    - specialized
   references:
   - https://learn.microsoft.com/en-us/azure/container-apps/jobs
   - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/

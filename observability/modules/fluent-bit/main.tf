@@ -1,0 +1,66 @@
+locals {
+  dir = "${path.module}/../../config/fluent-bit"
+
+  main_file = {
+    sidecar              = "sidecar.yaml"
+    "sidecar-forward"    = "sidecar-forward.yaml"
+    aggregator           = "aggregator.yaml"
+    "aggregator-forward" = "aggregator-forward.yaml"
+    "k8s-daemonset"      = "k8s-daemonset.yaml"
+    "linux-host"         = "linux-host.yaml"
+    "windows-host"       = "windows-host.yaml"
+  }[var.role]
+
+  is_host = contains(["linux-host", "windows-host"], var.role)
+
+  extra_include = var.role == "linux-host" && var.systemd_unit != null ? file("${local.dir}/linux-host-systemd.yaml") : (
+    var.role == "windows-host" && var.windows_event_log ? file("${local.dir}/windows-host-winevtlog.yaml") : file("${local.dir}/inputs-extra.yaml")
+  )
+
+  # files keyed by their path relative to the config directory (the main config is always fluent-bit.yaml)
+  files = merge(
+    {
+      "fluent-bit.yaml"          = file("${local.dir}/${local.main_file}")
+      "parsers.yaml"             = file("${local.dir}/parsers.yaml")
+      "lua/enterprise_hello.lua" = file("${local.dir}/lua/enterprise_hello.lua")
+    },
+    local.is_host ? { "inputs-extra.yaml" = local.extra_include } : {},
+  )
+
+  default_state_dir = {
+    sidecar              = "/var/log/app/.flb"
+    "sidecar-forward"    = "/var/log/app/.flb"
+    aggregator           = "/var/fluent-bit/state"
+    "aggregator-forward" = "/var/fluent-bit/state"
+    "k8s-daemonset"      = "/var/fluent-bit/state"
+    "linux-host"         = "/var/lib/fluent-bit-eh"
+    "windows-host"       = "C:\\ProgramData\\fluent-bit-eh\\state"
+  }[var.role]
+
+  tags_string = join(",", [for k in sort(keys(var.static_tags)) : "${k}:${var.static_tags[k]}"])
+
+  env = merge(
+    {
+      FLB_STATE_DIR = coalesce(var.state_dir, local.default_state_dir)
+      FLB_DD_HOST   = "http-intake.logs.${var.datadog_site}"
+      FLB_DD_PORT   = "443"
+      FLB_DD_TLS    = var.tls ? "on" : "off"
+      FLB_DD_TAGS   = local.tags_string
+    },
+    var.dd_source != null ? { FLB_DD_SOURCE = var.dd_source } : {},
+    var.dd_service != null ? { FLB_DD_SERVICE = var.dd_service } : {},
+    local.is_host ? { FLB_LOG_PATHS = join(",", var.log_paths) } : {},
+    var.role == "linux-host" && var.systemd_unit != null ? { FLB_SYSTEMD_UNIT = var.systemd_unit } : {},
+    var.role == "k8s-daemonset" ? {
+      FLB_EXCLUDE_PATHS = join(",", [for ns in var.exclude_namespaces : "/var/log/containers/*_${ns}_*.log"])
+      FLB_THROTTLE_RATE = tostring(var.throttle_rate)
+    } : {},
+  )
+
+  # env vars that must be injected from a secret store by the host platform
+  secret_env = concat(
+    contains(["sidecar-forward"], var.role) ? ["FLB_FORWARD_SHARED_KEY"] : ["DD_API_KEY"],
+    contains(["aggregator", "aggregator-forward"], var.role) ? ["FLB_FORWARD_SHARED_KEY"] : [],
+    var.role == "aggregator" ? ["EVENTHUB_CONNECTION_STRING"] : [],
+  )
+}

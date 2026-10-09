@@ -184,7 +184,7 @@ Semantic versioning of the whole package (`VERSION`, tag `observability-v<versio
 * **PATCH**: fixes that do not change resources other than correcting content.
 
 Releases are built with `tools/release/package.sh` (deterministic tarball + sha256; the build fails when a file
-references paths outside the package, remote state, or a real subscription id).
+references paths outside the package, remote state, or a subscription id other than the all-zero placeholder or synthetic test ids of the form `xxxxxxxx-0000-0000-0000-000000000000`).
 
 ## 8. Pipelines
 

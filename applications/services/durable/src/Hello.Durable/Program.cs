@@ -18,6 +18,10 @@ using OpenTelemetry.Trace;
 var builder = FunctionsApplication.CreateBuilder(args);
 builder.ConfigureFunctionsWebApplication();
 
+// Note: the worker's default ObjectSerializer is kept on purpose. Replacing WorkerOptions.Serializer (e.g. snake_case)
+// made orchestration inputs scheduled by DurableTaskClient deserialize as defaults inside the orchestrator (observed in
+// the local func + Azurite smoke run), so durable payloads keep the SDK's default JSON shape.
+
 var info = HelloServiceInfo.FromConfiguration(builder.Configuration, "hello-durable");
 var services = builder.Services;
 services.AddSingleton(info);
@@ -31,15 +35,26 @@ builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 builder.Logging.AddFilter("System.Net.Http", LogLevel.Warning);
 builder.Logging.AddFilter("Azure", LogLevel.Warning);
 
-// OpenTelemetry in the worker: function invocation spans (UseFunctionsWorkerDefaults) + Durable Task spans +
-// outbound HTTP/SQL/Service Bus; traces and metrics via OTLP. The host's own OTel output is enabled by
-// host.json "telemetryMode": "OpenTelemetry".
-services.AddHelloOpenTelemetry(builder.Configuration, info, o =>
+// OpenTelemetry in the worker: Functions worker invocation spans + Durable Task spans + outbound HTTP/SQL/Service Bus;
+// traces and metrics via OTLP. The host's own OTel output is enabled by host.json "telemetryMode": "OpenTelemetry".
+//
+// Microsoft.Azure.Functions.Worker.OpenTelemetry's UseFunctionsWorkerDefaults() is OFF by default: in the local
+// func 4.15.2 + Azurite smoke run (worker package 1.2.0) enabling it stopped worker ILogger output from being relayed
+// to the host, i.e. application logs would disappear from FunctionAppLogs (the ADR-0001 §10 log path).
+// Set FUNCTIONS_WORKER_OTEL_DEFAULTS=true to opt in (experiments only).
+var otel = services.AddHelloOpenTelemetry(builder.Configuration, info, o =>
 {
     o.AspNetCore = false;
-    o.ConfigureTracing = t => t.AddSource("Microsoft.DurableTask").AddSqlClientInstrumentation();
+    o.ConfigureTracing = t => t
+        .AddSource("Microsoft.Azure.Functions.Worker")
+        .AddSource("Microsoft.DurableTask")
+        .AddSqlClientInstrumentation();
     o.ConfigureMetrics = m => m.AddSqlClientInstrumentation();
-}).UseFunctionsWorkerDefaults();
+});
+if (string.Equals(builder.Configuration["FUNCTIONS_WORKER_OTEL_DEFAULTS"], "true", StringComparison.OrdinalIgnoreCase))
+{
+    otel.UseFunctionsWorkerDefaults();
+}
 
 services.TryAddSingleton<HelloMetrics>();
 services.TryAddSingleton<Hello.Common.Faults.FaultState>();

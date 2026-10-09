@@ -39,7 +39,9 @@ LABEL org.opencontainers.image.title="hello-durable" \
 ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
     AzureFunctionsJobHost__Logging__Console__IsEnabled=true \
     FUNCTIONS_WORKER_RUNTIME=dotnet-isolated \
-    ASPNETCORE_URLS=http://+:8080
+    ASPNETCORE_URLS=http://+:8080 \
+    WEBSITE_HOSTNAME=localhost:8080
+# WEBSITE_HOSTNAME: the Durable client binding needs it outside App Service; the platform overrides it when it sets one.
 COPY --from=build /home/site/wwwroot /home/site/wwwroot
 # The Functions host image expects to run as root (writes under /azure-functions-host and /tmp);
 # run with a read-only root filesystem / non-root only where the platform supports it (ACA does not require root).

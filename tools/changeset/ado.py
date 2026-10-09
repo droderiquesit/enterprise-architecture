@@ -13,6 +13,7 @@ Component ids use '_' instead of '-' (ADO names allow letters, digits and '_').
 from __future__ import annotations
 
 import json
+import re
 from typing import Dict, List
 
 from .registry import Registry, var_id
@@ -29,6 +30,9 @@ def validate_matrix(doc: dict, registry: Registry) -> Dict[str, dict]:
             continue
         c = registry.get(cid)
         matrix[var_id(cid)] = {"component": cid, "kind": c.kind, "componentPath": c.path}
+    for mod in doc.get("modules_to_validate", []):
+        key = "module_" + re.sub(r"[^A-Za-z0-9_]", "_", mod)
+        matrix[key] = {"component": f"module:{mod}", "kind": "module", "componentPath": mod}
     return matrix
 
 

@@ -18,6 +18,7 @@ components:
 - platform-db-horizondb
 - obs-prereqs
 - obs-azure-integration
+- platform-containerapps
 - obs-telemetry-transport
 - obs-diagnostics
 - obs-monitoring

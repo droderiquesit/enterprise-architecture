@@ -14,14 +14,26 @@ if ! compgen -G "$dir/*.tf" >/dev/null; then echo "no .tf files in $dir" >&2; ex
 export TF_IN_AUTOMATION=true TF_INPUT=0
 step() { printf '[%s] %s\n' "$dir" "$*"; }
 
-cleanup() { if [[ "$clean" == "--clean" ]]; then rm -rf "${dir:?}/.terraform"; fi; }
+had_lock=false
+[[ -f "$dir/.terraform.lock.hcl" ]] && had_lock=true
+cleanup() {
+  if [[ "$clean" == "--clean" ]]; then rm -rf "${dir:?}/.terraform"; fi
+  # never leave a lock file behind in a directory that did not commit one (shared modules)
+  if [[ "$had_lock" == false ]]; then rm -f "${dir:?}/.terraform.lock.hcl"; fi
+}
 trap cleanup EXIT
 
 step "fmt -check"
 terraform -chdir="$dir" fmt -check -recursive -diff -no-color
 
 init_args=(-backend=false -input=false -no-color)
-if [[ -f "$dir/.terraform.lock.hcl" ]]; then init_args+=(-lockfile=readonly); fi
+if [[ "$had_lock" == true ]]; then
+  init_args+=(-lockfile=readonly)
+else
+  # no committed lock file (shared module): reuse cached providers without checksum entries instead of
+  # re-installing into a shared plugin cache that other terraform processes may be executing from
+  export TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true
+fi
 step "init ${init_args[*]}"
 terraform -chdir="$dir" init "${init_args[@]}" >/dev/null
 

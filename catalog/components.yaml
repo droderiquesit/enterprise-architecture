@@ -317,19 +317,19 @@ components:
     layer: applications
     kind: artifact
     path: applications/services/bff
-    inputs: [applications/shared/dotnet/**]
+    inputs: [applications/shared/dotnet/**, applications/dotnet/**]
     artifact: {type: container-image, name: hello-bff}
   - id: svc-orders-api
     layer: applications
     kind: artifact
     path: applications/services/orders-api
-    inputs: [applications/shared/dotnet/**]
+    inputs: [applications/shared/dotnet/**, applications/dotnet/**]
     artifact: {type: container-image, name: hello-orders-api}
   - id: svc-inventory-api
     layer: applications
     kind: artifact
     path: applications/services/inventory-api
-    inputs: [applications/shared/dotnet/**]
+    inputs: [applications/shared/dotnet/**, applications/dotnet/**]
     artifact: {type: zip-package, name: hello-inventory-api, also: [container-image]}
   - id: svc-catalog-api
     layer: applications
@@ -359,7 +359,7 @@ components:
     layer: applications
     kind: artifact
     path: applications/services/durable
-    inputs: [applications/shared/dotnet/**]
+    inputs: [applications/shared/dotnet/**, applications/dotnet/**]
     artifact: {type: zip-package, name: hello-durable, also: [container-image]}
   - id: svc-functions
     layer: applications

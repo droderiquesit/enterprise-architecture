@@ -69,6 +69,12 @@ def main(argv=None) -> int:
     items = targets(repo, only)
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         results = list(pool.map(lambda t: run_one(repo, t[0], t[1], args.clean), items))
+    # a shared plugin cache is not concurrency safe ("text file busy" while another init installs the
+    # same provider): re-run those targets serially once
+    for i, r in enumerate(results):
+        if r["status"] == "FAIL" and ("text file busy" in r["output"] or "Failed to install provider" in r["output"]):
+            results[i] = run_one(repo, r["name"], r["path"], args.clean)
+            results[i]["retried"] = True
     width = max((len(r["name"]) for r in results), default=10)
     print(f"{'target'.ljust(width)}  status   seconds  path")
     for r in sorted(results, key=lambda r: (r["status"] != "FAIL", r["name"])):

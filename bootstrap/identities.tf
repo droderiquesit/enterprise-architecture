@@ -2,11 +2,12 @@
 #
 #   plan      Reader (subscription) + state lease/write (tfstate) + read contracts + write plans
 #   apply     Contributor + constrained RBAC Administrator (+ Resource Policy Contributor) + write all containers
+#   build     packages container write + AcrPush (granted by platform-shared settings.acr_push_principal_ids)
 #   validate  NO Azure role assignments. Untrusted PR validation runs on Microsoft-hosted agents without any
 #             service connection (fmt/validate/test with mock providers need no credentials).
 locals {
   pipeline_identities = merge(
-    { plan = "terraform plan (read-only Azure, writes state locks and plan files)", apply = "terraform apply" },
+    { plan = "terraform plan (read-only Azure, writes state locks and plan files)", apply = "terraform apply", build = "artifact build (AcrPush via platform-shared, writes packages)" },
     local.s.create_validate_identity ? { validate = "PR validation (no Azure rights)" } : {}
   )
 
@@ -34,7 +35,10 @@ locals {
       "plan/subscription/Reader"                                   = { identity = "plan", scope = "subscription", role = "Reader" }
       "plan/tfstate/Storage Blob Data Contributor"                 = { identity = "plan", scope = "tfstate", role = "Storage Blob Data Contributor" } # blob lease = state lock
       "plan/contracts/Storage Blob Data Reader"                    = { identity = "plan", scope = "contracts", role = "Storage Blob Data Reader" }
-      "plan/deployments/Storage Blob Data Reader"                  = { identity = "plan", scope = "deployments", role = "Storage Blob Data Reader" }
+      "plan/deployments/Storage Blob Data Contributor"             = { identity = "plan", scope = "deployments", role = "Storage Blob Data Contributor" } # no-change plans record themselves
+      "plan/evidence/Storage Blob Data Contributor"                = { identity = "plan", scope = "evidence", role = "Storage Blob Data Contributor" }
+      "build/packages/Storage Blob Data Contributor"               = { identity = "build", scope = "packages", role = "Storage Blob Data Contributor" }
+      "build/deployments/Storage Blob Data Reader"                 = { identity = "build", scope = "deployments", role = "Storage Blob Data Reader" }
       "plan/plans/Storage Blob Data Contributor"                   = { identity = "plan", scope = "plans", role = "Storage Blob Data Contributor" }
       "apply/subscription/Contributor"                             = { identity = "apply", scope = "subscription", role = "Contributor" }
       "apply/subscription/Role Based Access Control Administrator" = { identity = "apply", scope = "subscription", role = "Role Based Access Control Administrator" }

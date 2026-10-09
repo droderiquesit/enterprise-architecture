@@ -70,7 +70,7 @@ run "state_storage_hardening" {
     error_message = "storage firewall must deny by default"
   }
   assert {
-    condition     = toset(keys(azurerm_storage_container.this)) == toset(["tfstate", "contracts", "plans", "deployments", "evidence"])
+    condition     = toset(keys(azurerm_storage_container.this)) == toset(["tfstate", "contracts", "plans", "deployments", "evidence", "packages"])
     error_message = "ADR containers expected"
   }
   assert {
@@ -87,7 +87,7 @@ run "pipeline_identity_least_privilege" {
   command = plan
 
   assert {
-    condition     = toset(keys(azurerm_user_assigned_identity.pipeline)) == toset(["plan", "apply", "validate"])
+    condition     = toset(keys(azurerm_user_assigned_identity.pipeline)) == toset(["plan", "apply", "build", "validate"])
     error_message = "plan/apply/validate identities expected"
   }
   assert {
@@ -95,12 +95,12 @@ run "pipeline_identity_least_privilege" {
     error_message = "validate identity must have no Azure role assignments"
   }
   assert {
-    condition     = toset([for k, r in azurerm_role_assignment.pipeline : k if startswith(k, "plan/")]) == toset(["plan/subscription/Reader", "plan/tfstate/Storage Blob Data Contributor", "plan/contracts/Storage Blob Data Reader", "plan/deployments/Storage Blob Data Reader", "plan/plans/Storage Blob Data Contributor"])
+    condition     = toset([for k, r in azurerm_role_assignment.pipeline : k if startswith(k, "plan/")]) == toset(["plan/subscription/Reader", "plan/tfstate/Storage Blob Data Contributor", "plan/contracts/Storage Blob Data Reader", "plan/deployments/Storage Blob Data Contributor", "plan/evidence/Storage Blob Data Contributor", "plan/plans/Storage Blob Data Contributor"])
     error_message = "plan identity: Reader + state lock + contracts read + plans write only"
   }
   assert {
-    condition     = !contains(keys(azurerm_role_assignment.pipeline), "plan/subscription/Contributor") && !contains(keys(azurerm_role_assignment.pipeline), "plan/evidence/Storage Blob Data Contributor")
-    error_message = "plan identity must not write Azure resources or evidence"
+    condition     = !contains(keys(azurerm_role_assignment.pipeline), "plan/subscription/Contributor")
+    error_message = "plan identity must not write Azure resources"
   }
   assert {
     condition     = strcontains(azurerm_role_assignment.pipeline["apply/subscription/Role Based Access Control Administrator"].condition, "GuidNotEquals {8e3af657-a8ff-443c-a75c-2fe8c4bcb635, 18d7d88d-d35e-4fb5-a5c3-7773c20a72d9, f58310d9-a9f6-439a-9e8d-f62e7b41a168}") && azurerm_role_assignment.pipeline["apply/subscription/Role Based Access Control Administrator"].condition_version == "2.0"

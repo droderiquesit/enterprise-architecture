@@ -28,6 +28,7 @@ locals {
     contracts   = "published output contracts contracts/<env>/<contract>/v<major>.json"
     plans       = "saved plan files (sensitive: may contain secrets from providers)"
     deployments = "component deployment records"
+    packages    = "immutable zip/static packages (by sha256)"
     evidence    = "deployment / verification evidence"
   }
 }

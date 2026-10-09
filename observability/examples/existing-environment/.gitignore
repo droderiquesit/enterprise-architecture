@@ -1,0 +1,6 @@
+.vendor/
+.terraform/
+*.tfplan
+tfplan
+terraform.tfstate*
+references.auto.tfvars.json

@@ -257,7 +257,7 @@ def test_deleted_component_is_retire_pending_and_never_destroyed_without_retirem
     assert output_variables(doc, load_registry(WorkTree(repo)))["has_retirements"] == "true"
 
 
-def test_retirement_refused_while_enabled_consumer_depends(deployed):
+def test_custom_profile_keeps_hard_dependency_out_of_retirement(deployed):
     repo, store = deployed
     # platform-db-cosmos stays in the registry but its record pretends it is disabled while
     # deploy-dbadapters (enabled) still hard-depends on it -> blocked, even with approval
@@ -333,3 +333,29 @@ def test_config_change_selects_only_that_component(deployed):
     doc = select_deploy(repo, "dev", store)
     assert "foundation-network" in doc["directly_changed"]
     assert "foundation-identity" not in doc["directly_changed"]
+
+
+def test_retirement_refused_while_enabled_consumer_depends(deployed):
+    repo, store = deployed
+    # a removed component whose record says it produced a contract that enabled components still consume
+    store.put_json("dev/legacy-network.json", {"component": "legacy-network", "status": "succeeded", "commit": "x",
+                                                "path": "legacy/network", "produces": ["foundation-network"]})
+    write(repo, "environments/dev/retirements.yaml", yaml.safe_dump({"retirements": [
+        {"component": "legacy-network", "confirm": "legacy-network", "approved_by": "lead@example.com", "reason": "old"}]}))
+    commit_all(repo, "approve legacy retirement")
+    doc = select_deploy(repo, "dev", store)
+    r = {x["component"]: x for x in doc["retirements"]}["legacy-network"]
+    assert r["status"] == "retire-blocked"
+    assert "foundation-identity" in r["reason"]
+    assert doc["summary"]["retire_scheduled"] == []
+
+
+def test_pr_validates_changed_module_without_registered_consumer(tmp_path):
+    repo = make_synthetic_repo(tmp_path)
+    git(repo, "checkout", "-q", "-b", "feature")
+    write(repo, "observability/modules/new-thing/main.tf", "# new module\n")
+    commit_all(repo, "new module")
+    doc = select_pr(repo, "dev", target="main")
+    assert doc["modules_to_validate"] == ["observability/modules/new-thing"]
+    matrix = json.loads(output_variables(doc, load_registry(WorkTree(repo)))["validate_matrix"])
+    assert matrix["module_observability_modules_new_thing"]["component"] == "module:observability/modules/new-thing"

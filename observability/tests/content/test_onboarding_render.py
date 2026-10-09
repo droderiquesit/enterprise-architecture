@@ -259,3 +259,13 @@ def test_lab_manifests_cover_every_enterprise_hello_service():
 def test_rendered_documents_match_rendered_schema():
     for name, doc in all_rendered():
         assert not lib.schema_errors(doc, "rendered-service.v1.schema.json"), name
+
+
+def test_example_rendered_output_is_current():
+    ex = PKG / "examples/existing-environment"
+    r = subprocess.run(RENDER + ["render", "--manifests", str(ex / "manifests/prod"), "--env", "prod",
+                                 "--out", str(ex / "rendered/prod"), "--check"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    r = subprocess.run(VALIDATE + ["--manifests", str(ex / "manifests/prod"), "--env", "prod",
+                                   "--routing", str(ex / "routing/prod.yaml"), "--strict"], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout

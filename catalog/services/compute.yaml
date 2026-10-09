@@ -462,6 +462,7 @@ services:
     - enterprise
     - full
     - minimal
+    - specialized
   references:
   - https://learn.microsoft.com/en-us/azure/container-apps/overview
   - https://learn.microsoft.com/en-us/azure/container-apps/workload-profiles-overview
@@ -541,6 +542,7 @@ services:
     - enterprise
     - full
     - minimal
+    - specialized
   references:
   - https://learn.microsoft.com/en-us/azure/container-apps/workload-profiles-overview
   - https://docs.datadoghq.com/integrations/azure_container_apps/

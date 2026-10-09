@@ -1,7 +1,7 @@
 # Event Hubs for diagnostic-settings export (app-logs + platform-logs) consumed by the aggregator's Kafka input.
 locals {
-  eh_create = var.event_hub.mode == "create"
-  eh_enabled = var.event_hub.mode != "none"
+  eh_create         = var.event_hub.mode == "create"
+  eh_enabled        = var.event_hub.mode != "none"
   eh_namespace_name = coalesce(var.names.eventhub_namespace, substr("${var.name_prefix}-evhns", 0, 50))
   hubs = local.eh_create ? {
     app      = var.event_hub.app_logs_hub
@@ -113,7 +113,7 @@ locals {
   eh_namespace_name_effective = local.eh_enabled ? (
     local.eh_create ? azurerm_eventhub_namespace.this[0].name : element(split("/", var.event_hub.namespace_id), length(split("/", var.event_hub.namespace_id)) - 1)
   ) : null
-  eh_fqdn = local.eh_enabled ? coalesce(var.event_hub.namespace_fqdn, "${local.eh_namespace_name_effective}.servicebus.windows.net") : null
+  eh_fqdn         = local.eh_enabled ? coalesce(var.event_hub.namespace_fqdn, "${local.eh_namespace_name_effective}.servicebus.windows.net") : null
   eh_send_rule_id = local.eh_create ? azurerm_eventhub_namespace_authorization_rule.diagnostics[0].id : var.event_hub.send_authorization_rule_id
   eh_listen_secret_id = local.eh_create ? (
     var.event_hub.listen_secret_key_vault_id != null ? azurerm_key_vault_secret.fluentbit_listen[0].versionless_id : var.event_hub.listen_connection_string_secret_id
