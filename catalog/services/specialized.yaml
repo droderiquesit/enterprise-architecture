@@ -1,0 +1,672 @@
+# Azure service catalog - schema: catalog/schemas/service.schema.json
+# Validate: python3 tools/catalog/validate.py   Render: python3 tools/catalog/render_coverage.py
+# Facts verified 2026-10-09 via Microsoft Learn, docs.datadoghq.com and tfschema (azurerm 5.9.0 / azapi 2.13.0).
+# This file is the source of truth; edit it directly.
+schema_version: 1
+verified_on: '2026-10-09'
+description: Specialized, expensive or restricted services (catalog + optional profiles).
+services:
+- id: avs
+  family: vmware
+  hosting_variant: Azure VMware Solution private cloud (AV36P/AV48/AV64)
+  category: specialized
+  display_name: Azure VMware Solution
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: true
+      westeurope: true
+    region_notes: Region/SKU availability is per host SKU; Sweden Central not verified
+    quotas:
+    - host quota must be requested via support (per SKU, per region); minimum 3 hosts
+    registrations:
+    - Microsoft.AVS
+    licensing:
+    - VMware licensing bundled (Broadcom/VCF); customer-managed licensing options vary
+  networking:
+    private_support: vnet-integration
+    notes: ExpressRoute into the hub; /22 management block
+  iac:
+    terraform_resources:
+    - azurerm_vmware_private_cloud
+    - azurerm_vmware_cluster
+    - azurerm_vmware_express_route_authorization
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.avs_privateclouds
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.avs_privateclouds)
+      logs:
+        supported: partial
+        method: syslog forwarding via diagnostic settings (VMwareSyslog)
+      traces:
+        supported: n/a
+        method: n/a
+      dbm: &id001
+        supported: n/a
+        method: not applicable
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog vSphere integration needs an Agent with vCenter access
+  cost:
+    profile: very-high
+    approx_monthly_usd_default: 25000
+    assumptions: 3 x AV36P hosts PAYG
+    teardown: terraform destroy (hours)
+    data_retention: vSAN data deleted
+  status:
+    implementation: blocked
+    live_validation: not-run
+    blocked_reason: AVS host quota must be approved via support request and minimum 3 hosts (~USD 25k/month); no quota in lab subscription
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-vmware/introduction
+  - https://learn.microsoft.com/en-us/azure/azure-vmware/request-host-quota-azure-vmware-solution
+- id: dedicated-host
+  family: virtual-machines
+  hosting_variant: Dedicated host group + host (Dsv5-Type1)
+  category: specialized
+  display_name: Azure Dedicated Host
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - dedicated host vCPU quota per family
+    registrations:
+    - Microsoft.Compute
+    licensing: []
+  networking:
+    private_support: internal-only
+  iac:
+    terraform_resources:
+    - azurerm_dedicated_host_group
+    - azurerm_dedicated_host
+    azapi: []
+    component: platform-specialized-compute
+    implemented: true
+  workload:
+    exercised_by: []
+    operations: []
+    boundary: optional placement for vm-confidential/vm-linux
+  telemetry:
+    azure_metric_namespace: azure.vm
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.vm) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: &id002
+        supported: 'yes'
+        method: OpenTelemetry SDK -> OTLP localhost:4317 -> Datadog Agent on the host
+        notes: Agent VM extension owned by obs-hosts
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: &id003
+        supported: partial
+        method: Datadog continuous profiler (dd-trace library) optional per service; OTel profiling not used
+        notes: off by default to avoid a second tracer; enable per service
+  datadog_limitations:
+  - Host-level metrics only via Azure Monitor
+  cost:
+    profile: very-high
+    approx_monthly_usd_default: 3000
+    assumptions: one Dsv5-Type1 host billed whether used or not
+    teardown: terraform destroy (host must be empty)
+    data_retention: n/a
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/virtual-machines/dedicated-hosts
+- id: vm-confidential
+  family: virtual-machines
+  hosting_variant: Confidential VM (DCasv5/ECasv5, AMD SEV-SNP, Trusted Launch + VMGuestStateOnly/DiskWithVMGuestState)
+  category: specialized
+  display_name: Azure confidential VMs
+  lifecycle:
+    status: ga
+    notes: Generally available (AMD SEV-SNP DCasv5/ECasv5; Intel TDX DCesv5/ECesv5 GA in selected regions).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: true
+      westeurope: true
+    region_notes: Confidential VM size availability is per region; verify DCasv5 in swedencentral
+    quotas:
+    - DCasv5 family vCPU quota (often 0 by default)
+    registrations:
+    - Microsoft.Compute
+    licensing: []
+  networking:
+    private_support: internal-only
+  iac:
+    terraform_resources:
+    - azurerm_linux_virtual_machine
+    azapi: []
+    component: platform-specialized-compute
+    implemented: true
+    notes: secure_boot_enabled, vtpm_enabled, os_disk.security_encryption_type (VMGuestStateOnly | DiskWithVMGuestState)
+  workload:
+    exercised_by:
+    - hello-worker
+    operations:
+    - consume notifications
+  telemetry:
+    azure_metric_namespace: azure.vm
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.vm) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: *id002
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 70
+    assumptions: Standard_DC2as_v5
+    teardown: terraform destroy
+    data_retention: OS disk deleted
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/confidential-computing/confidential-vm-overview
+  - https://docs.datadoghq.com/integrations/azure_vm/
+- id: confidential-containers
+  family: confidential-computing
+  parent: container-instances
+  hosting_variant: Confidential containers (ACI Confidential SKU; AKS confidential node pools)
+  category: specialized
+  display_name: Confidential containers
+  lifecycle:
+    status: ga
+    notes: ACI Confidential SKU is GA (Linux only, no GPU, CCE policy via az confcom). AKS 'Confidential Containers' (Kata) offering is preview - not re-verified.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: true
+      westeurope: true
+    region_notes: see ACI region availability page for Confidential SKU
+    quotas: []
+    registrations:
+    - Microsoft.ContainerInstance
+    licensing: []
+  networking:
+    private_support: vnet-injection
+  iac:
+    terraform_resources:
+    - azurerm_container_group
+    azapi: []
+    component: null
+    implemented: false
+    notes: sku = Confidential + confidential_compute_cce_policy
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.containerinstance_containergroups
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.containerinstance_containergroups)
+      logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar (must be included in the CCE policy)
+      traces:
+        supported: 'yes'
+        method: OpenTelemetry SDK -> OTLP (gRPC/HTTP) -> observability OTel gateway (DDOT/upstream collector on ACA, internal ingress) -> Datadog
+        notes: owned by obs-telemetry-transport; app roots consume the instrumentation contract
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Every sidecar (Fluent Bit) must be part of the attested confidential computing enforcement policy
+  cost:
+    profile: low
+    approx_monthly_usd_default: 45
+    assumptions: 1 vCPU/1.5 GB confidential group
+    teardown: terraform destroy of the owning root
+    data_retention: none
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-instances/container-instances-confidential-overview
+  - https://learn.microsoft.com/en-us/azure/confidential-computing/confidential-containers
+- id: vm-gpu
+  family: virtual-machines
+  hosting_variant: GPU VM (NCasT4_v3 / NVadsA10_v5)
+  category: specialized
+  display_name: GPU / HPC virtual machines
+  lifecycle:
+    status: ga
+    notes: Generally available; NCv3 (V100) family retired 2025-09-30.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: true
+      westeurope: true
+    quotas:
+    - GPU family vCPU quota is 0 by default - support request required
+    registrations:
+    - Microsoft.Compute
+    licensing: []
+  networking:
+    private_support: internal-only
+  iac:
+    terraform_resources:
+    - azurerm_linux_virtual_machine
+    - azurerm_virtual_machine_extension
+    azapi: []
+    component: platform-specialized-compute
+    implemented: true
+    notes: NVIDIA driver extension
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.vm
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.vm) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: *id002
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - GPU metrics need the Datadog NVIDIA DCGM/nvml integration on the Agent
+  cost:
+    profile: high
+    approx_monthly_usd_default: 390
+    assumptions: Standard_NC4as_T4_v3 PAYG 24x7 (deallocate when idle)
+    teardown: terraform destroy
+    data_retention: disks deleted
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/overview
+  - https://docs.datadoghq.com/integrations/nvml/
+- id: cyclecloud
+  family: hpc
+  hosting_variant: Azure CycleCloud (marketplace VM) orchestrating HPC clusters (Slurm)
+  category: specialized
+  display_name: Azure CycleCloud
+  lifecycle:
+    status: ga
+    notes: Generally available (CycleCloud 8.x); Chef run_lists in cluster-init ended 2025-03-31.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Compute
+    licensing:
+    - marketplace image terms acceptance (azurerm_marketplace_agreement)
+  networking:
+    private_support: internal-only
+  iac:
+    terraform_resources:
+    - azurerm_linux_virtual_machine
+    - azurerm_marketplace_agreement
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.vm
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.vm) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: *id002
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 70
+    assumptions: CycleCloud server VM only (cluster nodes extra)
+    teardown: terraform destroy of the owning root
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/cyclecloud/overview
+- id: automation
+  family: automation
+  hosting_variant: Azure Automation account + PowerShell/Python runbook
+  category: specialized
+  display_name: Azure Automation
+  lifecycle:
+    status: ga
+    notes: Generally available. Run As accounts retired 2023-09-30; Update Management and Change Tracking (Log Analytics agent) retired 2024-08-31.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Automation
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: private endpoints (Webhook, DSCAndHybridWorker)
+  iac:
+    terraform_resources:
+    - azurerm_automation_account
+    - azurerm_automation_runbook
+    - azurerm_automation_schedule
+    azapi: []
+    component: platform-specialized-compute
+    implemented: true
+  workload:
+    exercised_by:
+    - health-probe runbook
+    operations:
+    - scheduled /readyz probe of public endpoints
+  telemetry:
+    azure_metric_namespace: azure.automation_automationaccounts
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.automation_automationaccounts)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (JobLogs, JobStreams) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: 'no'
+        method: none
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 1
+    assumptions: 500 free job minutes/month
+    teardown: terraform destroy of the owning root
+    data_retention: job history 30 days
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/automation/overview
+  - https://docs.datadoghq.com/integrations/azure_automation/
+- id: ml-compute
+  family: machine-learning
+  hosting_variant: Azure Machine Learning workspace + compute cluster (min 0 nodes)
+  category: specialized
+  display_name: Azure Machine Learning compute
+  lifecycle:
+    status: ga
+    notes: Generally available. CLI/SDK v1 retired 2025-09-30 (use v2).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - per-family vCPU quota for AML compute
+    registrations:
+    - Microsoft.MachineLearningServices
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: managed VNet isolation + workspace private endpoint
+  iac:
+    terraform_resources:
+    - azurerm_machine_learning_workspace
+    - azurerm_machine_learning_compute_cluster
+    azapi: []
+    component: platform-specialized-compute
+    implemented: true
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.machinelearningservices_workspaces
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.machinelearningservices_workspaces)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (AmlComputeJobEvent, AmlComputeClusterEvent) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: 'no'
+        method: none
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 15
+    assumptions: workspace dependencies (storage, KV, ACR Basic) + cluster scaled to 0
+    teardown: terraform destroy of the owning root
+    data_retention: workspace soft delete 14 days
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/machine-learning/concept-compute-target
+  - https://docs.datadoghq.com/integrations/azure_machine_learning_services/
+- id: managed-devops-pools
+  family: devops
+  hosting_variant: Managed DevOps Pools (Microsoft.DevOpsInfrastructure/pools) with VNet injection
+  category: specialized
+  display_name: Managed DevOps Pools
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.DevOpsInfrastructure
+    - Microsoft.DevCenter
+    licensing:
+    - Azure DevOps organization; parallel jobs
+  networking:
+    private_support: vnet-injection
+    notes: subnet 'deploy-agents' delegated to Microsoft.DevOpsInfrastructure/pools
+  iac:
+    terraform_resources:
+    - azurerm_managed_devops_pool
+    - azurerm_dev_center
+    - azurerm_dev_center_project
+    azapi: []
+    component: foundation-deploy-agents
+    implemented: false
+    notes: foundation-deploy-agents may use self-hosted VMSS agents instead - reconcile
+  workload:
+    exercised_by:
+    - pipelines
+    operations:
+    - private terraform plan/apply
+  telemetry:
+    azure_metric_namespace: azure.devopsinfrastructure_pools
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.devopsinfrastructure_pools)
+      logs:
+        supported: n/a
+        method: agent logs stay in Azure DevOps
+      traces:
+        supported: n/a
+        method: n/a
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 20
+    assumptions: Standard_D2ads_v5, standby 0, ~10 h/month
+    teardown: terraform destroy of the owning root
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/devops/managed-devops-pools/overview
+  - https://docs.datadoghq.com/integrations/azure/
+- id: arc-servers
+  family: azure-arc
+  hosting_variant: Azure Arc-enabled servers (Connected Machine agent)
+  category: specialized
+  display_name: Azure Arc-enabled servers
+  lifecycle:
+    status: ga
+    notes: Generally available. Catalog only - requires a non-Azure machine.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.HybridCompute
+    - Microsoft.GuestConfiguration
+    licensing: []
+  networking:
+    private_support: partial
+    notes: Arc private link scope optional
+  iac:
+    terraform_resources:
+    - azurerm_arc_machine
+    - azurerm_arc_machine_extension
+    azapi: []
+    component: null
+    implemented: false
+    notes: azurerm_arc_machine only creates the resource; onboarding needs the agent on the machine
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Datadog Agent on the machine (Arc extension or direct install)
+      logs:
+        supported: partial
+        method: Fluent Bit / Agent on the machine
+      traces:
+        supported: partial
+        method: Agent OTLP
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: Arc control plane free; extensions/Defender extra
+    teardown: terraform destroy of the owning root
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-arc/servers/overview
+  - https://docs.datadoghq.com/integrations/azure_arc/

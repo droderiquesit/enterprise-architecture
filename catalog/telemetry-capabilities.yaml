@@ -1,0 +1,2181 @@
+# Telemetry capability matrix (authoritative collection path per signal).
+# Rendered to docs/coverage/telemetry-capability-matrix.md by tools/catalog/render_coverage.py
+# Validated by tools/catalog/validate.py (keys must cover architecture-matrix.yaml + database catalog entries).
+schema_version: 1
+verified_on: '2026-10-09'
+description: 'Authoritative telemetry collection path per signal for every compute architecture (catalog/architecture-matrix.yaml) and database family. Consistent with ADR-0001 section
+  10: Fluent Bit for application logs; Datadog Agent OTLP (AKS/VM) or the OTel gateway (managed runtimes) for traces/metrics; Datadog Azure integration for platform metrics; diagnostic
+  settings (obs-diagnostics) for platform logs; Agent DBM checks from the observability subnet.'
+signals:
+- app_logs
+- traces
+- app_metrics
+- runtime_metrics
+- platform_metrics
+- platform_logs
+- dbm
+- rum
+- profiling
+database_signals:
+- platform_metrics
+- platform_logs
+- client_spans
+- dbm
+sources:
+  datadog_dbm: https://docs.datadoghq.com/database_monitoring/
+  datadog_dbm_sqlserver_azure: https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/
+  datadog_dbm_postgres_azure: https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/
+  datadog_dbm_mysql_azure: https://docs.datadoghq.com/database_monitoring/setup_mysql/azure/
+  datadog_otlp_serverless: https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+  datadog_azure_functions: https://docs.datadoghq.com/serverless/azure_functions/
+  datadog_azure_app_service: https://docs.datadoghq.com/serverless/azure_app_service/
+  datadog_azure_container_apps: https://docs.datadoghq.com/serverless/azure_container_apps/
+  datadog_azure_integration: https://docs.datadoghq.com/integrations/azure/
+findings:
+  dbm_support:
+    azure_sql_database: supported (deployment_type sql_database; one instance per database; elastic pool DBs are separate hosts; no Agent Jobs; autodiscovery unsupported); Agent 7.41.0+
+    azure_sql_managed_instance: supported (Agent on a separate host)
+    sql_server_on_azure_vm: supported (self-hosted guide, Agent on the VM); SQL Server 2025 needs Agent 7.79+
+    postgresql_flexible_server: supported (Agent 7.36.1+; pg_stat_statements, pg_stat_statements.track=ALL, track_activity_query_size=4096); elastic clusters and Cosmos DB for PostgreSQL
+      not listed
+    mysql_flexible_server: partially supported - Query Activity and Wait Event collection NOT supported on Flexible Server; performance_schema=ON
+    not_supported: Cosmos DB (all APIs), Azure DocumentDB (Datadog MongoDB DBM covers self-hosted + Atlas only), Managed Redis / Azure Cache for Redis, Managed Instance for Apache Cassandra,
+      Table Storage, Confidential Ledger, HorizonDB, Synapse, Data Explorer
+  serverless_otlp_intake: 'Datadog accepts agentless OTLP from Azure Container Apps, App Service and Functions: http/protobuf or http/json only (gRPC NOT supported); headers dd-api-key,
+    dd-otlp-source=serverless, compute_stats=true; set OTEL_SERVICE_NAME; set cloud.provider=azure, cloud.platform (azure.container_apps | azure.app_service | azure.functions) and cloud.resource_id
+    because the Collector''s Azure resource detector only supports VMs. Lab default remains the private OTel gateway; direct intake is the fallback for runtimes without VNet integration
+    (Windows Consumption).'
+  functions_native: 'Datadog native Functions APM: Dedicated/Premium/Consumption/Flex (Flex needs DD_AZURE_RESOURCE_GROUP), via Serverless Compatibility Layer + tracer (or .NET APM extension
+    on Windows Dedicated/Premium); profiler preview for Python/Node only. Not used by default (OTel path is authoritative).'
+  app_service_native: 'Datadog App Service instrumentation: Linux code, Linux container, Windows code (Java/Node/.NET); Windows containers not listed. Not used by default.'
+  container_apps_native: Datadog serverless-init (in-container or sidecar) gives traces, enhanced metrics (azure.app_containerapps.enhanced.*), custom metrics and logs. Not used by default.
+compute:
+  aks:
+    catalog_ref: aks
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit DaemonSet tails /var/log/containers -> Datadog
+        owner: obs-kubernetes
+        duplicate_prevention: Datadog Agent DD_LOGS_ENABLED=false / containerCollectAll=false
+        datadog_limitation: none
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> Datadog Agent DaemonSet (hostPort 4317 via status.hostIP)
+        owner: obs-kubernetes
+        duplicate_prevention: no dd-trace; no separate collector
+        datadog_limitation: none
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> Agent OTLP
+        owner: obs-kubernetes
+        duplicate_prevention: single exporter
+        datadog_limitation: none
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> Agent OTLP
+        owner: obs-kubernetes
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: none
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.containerservice_managedclusters)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: kube-audit / control-plane logs via diagnostic settings (optional)
+        owner: obs-diagnostics
+        duplicate_prevention: not application logs
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: &id001
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling: &id002
+        supported: partial
+        method: dd-trace continuous profiler, opt-in per service (DD_PROFILING_ENABLED) - not OTel
+        owner: applications deploy root (env vars from instrumentation contract)
+        duplicate_prevention: profiler only; tracing stays on OTel SDK (DD_TRACE_ENABLED=false when profiler is used)
+        datadog_limitation: profiling requires the Datadog library; OTel profiling signal not used
+  container-apps-consumption:
+    catalog_ref: container-apps-consumption
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
+        owner: applications deploy root (sidecar spec from obs instrumentation contract)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        datadog_limitation: sidecar adds CPU/memory to each replica
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: no serverless-init / dd-trace
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host-level metrics (no Agent)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps, azure.app_managedenvironments)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        owner: obs-diagnostics
+        duplicate_prevention: system logs only
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  container-apps-dedicated:
+    catalog_ref: container-apps-dedicated
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
+        owner: applications deploy root (sidecar spec from obs instrumentation contract)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        datadog_limitation: sidecar adds CPU/memory to each replica
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: no serverless-init / dd-trace
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host-level metrics (no Agent)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps, azure.app_managedenvironments)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        owner: obs-diagnostics
+        duplicate_prevention: system logs only
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  container-apps-job-manual:
+    catalog_ref: container-apps-job-manual
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
+        owner: applications deploy root (sidecar spec from obs instrumentation contract)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        datadog_limitation: sidecar adds CPU/memory to each replica; job sidecar must terminate when the main container exits
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: no serverless-init / dd-trace
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host-level metrics (no Agent)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps / azure.app_jobs)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        owner: obs-diagnostics
+        duplicate_prevention: system logs only
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  container-apps-job-scheduled:
+    catalog_ref: container-apps-job-scheduled
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
+        owner: applications deploy root (sidecar spec from obs instrumentation contract)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        datadog_limitation: sidecar adds CPU/memory to each replica; job sidecar must terminate when the main container exits
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: no serverless-init / dd-trace
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host-level metrics (no Agent)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps / azure.app_jobs)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        owner: obs-diagnostics
+        duplicate_prevention: system logs only
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  container-apps-job-event:
+    catalog_ref: container-apps-job-event
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
+        owner: applications deploy root (sidecar spec from obs instrumentation contract)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        datadog_limitation: sidecar adds CPU/memory to each replica; job sidecar must terminate when the main container exits
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: no serverless-init / dd-trace
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host-level metrics (no Agent)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps / azure.app_jobs)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        owner: obs-diagnostics
+        duplicate_prevention: system logs only
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  container-instances:
+    catalog_ref: container-instances
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
+        owner: applications deploy root (sidecar spec from obs instrumentation contract)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        datadog_limitation: sidecar adds CPU/memory to each replica
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: no serverless-init / dd-trace
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host-level metrics (no Agent)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.containerinstance_containergroups)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: ContainerEvent only (ContainerInstanceLog not exported)
+        owner: obs-diagnostics
+        duplicate_prevention: app stdout not exported
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  app-service-linux-code:
+    catalog_ref: app-service-linux-code
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_services, azure.web_serverfarms)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  app-service-linux-container:
+    catalog_ref: app-service-linux-container
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_services, azure.web_serverfarms)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  app-service-windows-code:
+    catalog_ref: app-service-windows-code
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_services, azure.web_serverfarms)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  app-service-windows-container:
+    catalog_ref: app-service-windows-container
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only; Windows containers not in Datadog App Service matrix
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_services, azure.web_serverfarms)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  functions-flex-consumption:
+    catalog_ref: functions-flex-consumption
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  functions-premium:
+    catalog_ref: functions-premium
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  functions-dedicated:
+    catalog_ref: functions-dedicated
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  functions-consumption-windows:
+    catalog_ref: functions-consumption-windows
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: partial
+        method: OTel SDK -> OTLP/HTTP direct to Datadog serverless OTLP intake (dd-otlp-source=serverless) - no VNet integration on Consumption
+        owner: applications deploy root
+        duplicate_prevention: only exporter for this app
+        datadog_limitation: gRPC not supported by the serverless OTLP intake; API key must be a Key Vault reference
+      app_metrics:
+        supported: partial
+        method: OTel SDK metrics -> Datadog OTLP metrics intake (public)
+        owner: applications deploy root
+        duplicate_prevention: single exporter
+        datadog_limitation: public egress
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  functions-on-container-apps:
+    catalog_ref: functions-on-container-apps
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
+        owner: applications deploy root (sidecar spec from obs instrumentation contract)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        datadog_limitation: sidecar adds CPU/memory to each replica
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: no serverless-init / dd-trace
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host-level metrics (no Agent)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps, azure.app_managedenvironments)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        owner: obs-diagnostics
+        duplicate_prevention: system logs only
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  durable-functions:
+    catalog_ref: durable-functions
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
+        owner: obs-telemetry-transport
+        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  static-web-apps:
+    catalog_ref: static-web-apps
+    signals:
+      app_logs:
+        supported: partial
+        method: Datadog Browser Logs SDK (optional) from the SPA
+        owner: deploy-frontend
+        duplicate_prevention: no server-side logs
+        datadog_limitation: browser logs sampled with RUM session
+      traces:
+        supported: 'yes'
+        method: RUM -> APM correlation via allowedTracingUrls (W3C tracecontext) for first-party API origins only
+        owner: deploy-frontend
+        duplicate_prevention: no third-party origins
+        datadog_limitation: none
+      app_metrics:
+        supported: n/a
+        method: browser
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      runtime_metrics:
+        supported: n/a
+        method: browser
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.web_staticsites)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: n/a
+        method: no relevant diagnostic categories
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum:
+        supported: 'yes'
+        method: '@datadog/browser-rum 7.x (sessionSampleRate per profile; session replay off by default)'
+        owner: deploy-frontend
+        duplicate_prevention: single RUM application per env
+        datadog_limitation: ad blockers drop events unless a proxy is used
+      profiling:
+        supported: n/a
+        method: browser profiling not enabled
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+  logic-apps-consumption:
+    catalog_ref: logic-apps-consumption
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: WorkflowRuntime diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        owner: obs-diagnostics
+        duplicate_prevention: single diagnostic setting
+        datadog_limitation: run history only
+      traces:
+        supported: n/a
+        method: no OTel support in Consumption
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      app_metrics:
+        supported: n/a
+        method: no custom metrics
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      runtime_metrics:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.logic_workflows)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: WorkflowRuntime (same as app_logs)
+        owner: obs-diagnostics
+        duplicate_prevention: one category, one destination
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+  logic-apps-standard:
+    catalog_ref: logic-apps-standard
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: WorkflowRuntime + FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        owner: obs-diagnostics + obs-telemetry-transport
+        duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
+        datadog_limitation: minutes of latency through Event Hubs; stdout only
+      traces:
+        supported: partial
+        method: Logic Apps Standard host OpenTelemetry export -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: action-level span coverage depends on runtime
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> OTel gateway
+        owner: obs-telemetry-transport
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: no host Agent
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.app_services)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: AppServicePlatformLogs / AppServiceHTTPLogs (optional) -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never select the console/app-log category twice
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  vm-linux:
+    catalog_ref: vm-linux
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        owner: obs-hosts
+        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        datadog_limitation: none
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: no dd-trace tracer; single exporter
+        datadog_limitation: none
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: do not also send DogStatsD for the same instruments
+        datadog_limitation: OTel cumulative->delta conversion in the Agent
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        owner: obs-hosts
+        duplicate_prevention: dd-trace runtime metrics disabled
+        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.vm)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: Azure activity log + VM boot diagnostics only (no app logs) via diagnostic settings -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never export guest/app logs through diagnostics
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not a database host (see databases section)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  vm-windows:
+    catalog_ref: vm-windows
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        owner: obs-hosts
+        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        datadog_limitation: none
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: no dd-trace tracer; single exporter
+        datadog_limitation: none
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: do not also send DogStatsD for the same instruments
+        datadog_limitation: OTel cumulative->delta conversion in the Agent
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        owner: obs-hosts
+        duplicate_prevention: dd-trace runtime metrics disabled
+        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.vm)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: Azure activity log + VM boot diagnostics only (no app logs) via diagnostic settings -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never export guest/app logs through diagnostics
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not a database host (see databases section)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  vmss-flexible:
+    catalog_ref: vmss-flexible
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        owner: obs-hosts
+        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        datadog_limitation: none
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: no dd-trace tracer; single exporter
+        datadog_limitation: none
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: do not also send DogStatsD for the same instruments
+        datadog_limitation: OTel cumulative->delta conversion in the Agent
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        owner: obs-hosts
+        duplicate_prevention: dd-trace runtime metrics disabled
+        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.compute_virtualmachinescalesets)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: Azure activity log + VM boot diagnostics only (no app logs) via diagnostic settings -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never export guest/app logs through diagnostics
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not a database host (see databases section)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  vmss-uniform:
+    catalog_ref: vmss-uniform
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        owner: obs-hosts
+        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        datadog_limitation: none
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: no dd-trace tracer; single exporter
+        datadog_limitation: none
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: do not also send DogStatsD for the same instruments
+        datadog_limitation: OTel cumulative->delta conversion in the Agent
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        owner: obs-hosts
+        duplicate_prevention: dd-trace runtime metrics disabled
+        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.compute_virtualmachinescalesets)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: Azure activity log + VM boot diagnostics only (no app logs) via diagnostic settings -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never export guest/app logs through diagnostics
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not a database host (see databases section)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  batch:
+    catalog_ref: batch
+    signals:
+      app_logs:
+        supported: partial
+        method: pool start task installs Fluent Bit (config from instrumentation contract) tailing task logs
+        owner: platform-batch (start task) + obs instrumentation contract
+        duplicate_prevention: no Agent log collection
+        datadog_limitation: start task ownership crosses layers - reconcile
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway (pool subnet routes to ACA internal ingress)
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: no Agent on nodes
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway (pool subnet routes to ACA internal ingress)
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: no Agent on nodes
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway (pool subnet routes to ACA internal ingress)
+        owner: obs-telemetry-transport
+        duplicate_prevention: single exporter
+        datadog_limitation: no Agent on nodes
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.batch_batchaccounts)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: Azure activity log + VM boot diagnostics only (no app logs) via diagnostic settings -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never export guest/app logs through diagnostics
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not a database host (see databases section)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  service-fabric-managed:
+    catalog_ref: service-fabric-managed
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        owner: obs-hosts
+        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        datadog_limitation: none
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: no dd-trace tracer; single exporter
+        datadog_limitation: none
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: do not also send DogStatsD for the same instruments
+        datadog_limitation: OTel cumulative->delta conversion in the Agent
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        owner: obs-hosts
+        duplicate_prevention: dd-trace runtime metrics disabled
+        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, Azure Monitor (no Datadog SF namespace))
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: Azure activity log + VM boot diagnostics only (no app logs) via diagnostic settings -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never export guest/app logs through diagnostics
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not a database host (see databases section)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  aro:
+    catalog_ref: aro
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit DaemonSet tails /var/log/containers -> Datadog
+        owner: obs-kubernetes
+        duplicate_prevention: Datadog Agent DD_LOGS_ENABLED=false / containerCollectAll=false
+        datadog_limitation: Fluent Bit and Agent need OpenShift SCCs
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP -> Datadog Agent DaemonSet (hostPort 4317 via status.hostIP)
+        owner: obs-kubernetes
+        duplicate_prevention: no dd-trace; no separate collector
+        datadog_limitation: none
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> Agent OTLP
+        owner: obs-kubernetes
+        duplicate_prevention: single exporter
+        datadog_limitation: none
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation -> Agent OTLP
+        owner: obs-kubernetes
+        duplicate_prevention: dd-trace runtime metrics off
+        datadog_limitation: none
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Agent + Cluster Agent (kubelet, kube-state-metrics)
+        owner: obs-kubernetes
+        duplicate_prevention: n/a
+        datadog_limitation: no Azure namespace for this platform
+      platform_logs:
+        supported: partial
+        method: kube-audit / control-plane logs via diagnostic settings (optional)
+        owner: obs-diagnostics
+        duplicate_prevention: not application logs
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  vm-confidential:
+    catalog_ref: vm-confidential
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        owner: obs-hosts
+        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        datadog_limitation: none
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: no dd-trace tracer; single exporter
+        datadog_limitation: none
+      app_metrics:
+        supported: 'yes'
+        method: OTel SDK metrics -> Agent OTLP receiver
+        owner: obs-hosts
+        duplicate_prevention: do not also send DogStatsD for the same instruments
+        datadog_limitation: OTel cumulative->delta conversion in the Agent
+      runtime_metrics:
+        supported: 'yes'
+        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        owner: obs-hosts
+        duplicate_prevention: dd-trace runtime metrics disabled
+        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.vm)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: partial
+        method: Azure activity log + VM boot diagnostics only (no app logs) via diagnostic settings -> Event Hubs
+        owner: obs-diagnostics
+        duplicate_prevention: never export guest/app logs through diagnostics
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not a database host (see databases section)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling: *id002
+  automation:
+    catalog_ref: automation
+    signals:
+      app_logs:
+        supported: 'yes'
+        method: JobLogs/JobStreams diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        owner: obs-diagnostics
+        duplicate_prevention: one destination
+        datadog_limitation: runbook output only
+      traces:
+        supported: n/a
+        method: no OTel in runbooks
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      app_metrics:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      runtime_metrics:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.automation_automationaccounts)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: JobLogs (same as app_logs)
+        owner: obs-diagnostics
+        duplicate_prevention: n/a
+        datadog_limitation: none
+      dbm:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      rum: *id001
+      profiling:
+        supported: n/a
+        method: not applicable
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+databases:
+  sql-database-provisioned:
+    catalog_ref: sql-database-provisioned
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.sql_servers_databases)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
+          / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent sqlserver check (dbm: true, deployment_type ''sql_database'', one instance per database) from the observability subnet via private endpoint; owned by obs-dbm'
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: Agent 7.41.0+; autodiscovery must not be enabled for Azure SQL DB; connect directly, not via proxy/pooler
+  sql-database-serverless:
+    catalog_ref: sql-database-serverless
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.sql_servers_databases)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
+          / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent sqlserver check (dbm: true, deployment_type ''sql_database'', one instance per database) from the observability subnet via private endpoint; owned by obs-dbm'
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: Agent 7.41.0+; autodiscovery must not be enabled for Azure SQL DB; connect directly, not via proxy/pooler
+  sql-elastic-pool:
+    catalog_ref: sql-elastic-pool
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.sql_servers_elasticpools)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
+          / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent sqlserver check (dbm: true, deployment_type ''sql_database'', one instance per database) from the observability subnet via private endpoint; owned by obs-dbm'
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: Agent 7.41.0+; autodiscovery must not be enabled for Azure SQL DB; connect directly, not via proxy/pooler
+  sql-hyperscale:
+    catalog_ref: sql-hyperscale
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.sql_servers_databases)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
+          / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent sqlserver check (dbm: true, deployment_type ''sql_database'', one instance per database) from the observability subnet via private endpoint; owned by obs-dbm'
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: Agent 7.41.0+; autodiscovery must not be enabled for Azure SQL DB; connect directly, not via proxy/pooler
+  sql-managed-instance:
+    catalog_ref: sql-managed-instance
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.sql_managedinstances)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, ResourceUsageStats, Errors) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent sqlserver check (dbm: true) from the observability subnet; owned by obs-dbm'
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: Agent runs on a separate host (no host access); connect directly to the MI host name
+  sql-server-on-vm:
+    catalog_ref: sql-server-on-vm
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.vm)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: Fluent Bit service on the VM (SQL error log / app logs) owned by obs-hosts
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: SQL Server error log collection optional
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent installed on the VM (VM extension owned by obs-hosts/obs-dbm) running the sqlserver check (dbm: true)'
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: self-hosted setup guide applies
+  postgresql-flexible:
+    catalog_ref: postgresql-flexible
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.dbforpostgresql_flexibleservers)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (PostgreSQLLogs, PostgreSQLFlexSessions, PostgreSQLFlexQueryStoreRuntime) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog
+          log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent postgres check (dbm: true) from the observability subnet over the private network; owned by obs-dbm'
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: Agent 7.36.1+; azure.extensions=pg_stat_statements, pg_stat_statements.track=ALL, track_activity_query_size=4096 (static, restart)
+  postgresql-elastic-cluster:
+    catalog_ref: postgresql-elastic-cluster
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.dbforpostgresql_flexibleservers)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (PostgreSQLLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: partial
+        method: Datadog Agent postgres check against the coordinator (port 5432)
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: Elastic clusters are not listed in Datadog's Azure Postgres DBM page; worker nodes share one IP with different ports (7000+), per-node DBM unverified
+  mysql-flexible:
+    catalog_ref: mysql-flexible
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.dbformysql_flexibleservers)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (MySqlSlowLogs, MySqlAuditLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: partial
+        method: 'Datadog Agent mysql check (dbm: true) from the observability subnet; owned by obs-dbm'
+        owner: obs-dbm
+        duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
+        datadog_limitation: performance_schema=ON (restart); Query Activity and Wait Event collection are NOT supported on Flexible Server
+  cosmos-nosql:
+    catalog_ref: cosmos-nosql
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.cosmosdb)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (DataPlaneRequests, QueryRuntimeStatistics, PartitionKeyStatistics) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log
+          forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Cosmos DB is not in the Datadog DBM support matrix
+  cosmos-mongodb-ru:
+    catalog_ref: cosmos-mongodb-ru
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.cosmosdb)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (MongoRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Cosmos DB is not in the Datadog DBM support matrix
+  cosmos-cassandra:
+    catalog_ref: cosmos-cassandra
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.cosmosdb)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (CassandraRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Cosmos DB is not in the Datadog DBM support matrix
+  cosmos-gremlin:
+    catalog_ref: cosmos-gremlin
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.cosmosdb)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (GremlinRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Cosmos DB is not in the Datadog DBM support matrix
+  cosmos-table:
+    catalog_ref: cosmos-table
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.cosmosdb)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (TableApiRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Cosmos DB is not in the Datadog DBM support matrix
+  documentdb:
+    catalog_ref: documentdb
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.documentdb_mongoclusters)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (vCoreMongoRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Datadog MongoDB DBM supports self-hosted MongoDB and MongoDB Atlas only
+  managed-cassandra:
+    catalog_ref: managed-cassandra
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.documentdb_cassandraclusters)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (CassandraAudit, CassandraLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Cassandra is not in the Datadog DBM support matrix; the Datadog Cassandra (JMX) integration needs host access, which the managed service does not give
+  managed-redis:
+    catalog_ref: managed-redis
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.cache_redisenterprise)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (ConnectionEvents) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Redis is not in the Datadog DBM support matrix
+  table-storage:
+    catalog_ref: table-storage
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.storage_storageaccounts_tableservices)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (StorageRead, StorageWrite, StorageDelete (tableServices)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: not a database engine supported by DBM
+  confidential-ledger:
+    catalog_ref: confidential-ledger
+    signals:
+      platform_metrics:
+        supported: partial
+        method: Azure Monitor metrics if emitted (no Datadog namespace found)
+        owner: obs-azure-integration
+        duplicate_prevention: n/a
+        datadog_limitation: no curated dashboards
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (ApplicationLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: not a DBM engine
+  horizondb:
+    catalog_ref: horizondb
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.horizondb_clusters)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (PostgreSQL logs (category names not verified)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not listed in Datadog DBM support matrix
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: PostgreSQL-compatible; a postgres Agent check may connect but is unsupported
+  data-explorer:
+    catalog_ref: data-explorer
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.kusto_clusters)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (SucceededIngestion, FailedIngestion, Command, Query) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: n/a
+        method: not a DBM-supported engine
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+  ai-search:
+    catalog_ref: ai-search
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.search_searchservices)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (OperationLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: n/a
+        method: not a DBM-supported engine
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+  blob-storage:
+    catalog_ref: blob-storage
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.storage_storageaccounts_blobservices)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (StorageRead, StorageWrite, StorageDelete (blobServices)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: n/a
+        method: not a DBM-supported engine
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+  adls-gen2:
+    catalog_ref: adls-gen2
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.storage_storageaccounts_blobservices)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (StorageRead, StorageWrite) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: n/a
+        method: not a DBM-supported engine
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+  synapse-sql:
+    catalog_ref: synapse-sql
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.synapse_workspaces_sqlpools)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (SqlRequests, RequestSteps, ExecRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: dedicated SQL pool is not in the Datadog DBM support matrix
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+  azure-cache-for-redis:
+    catalog_ref: azure-cache-for-redis
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.cache_redis)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (ConnectedClientList) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Redis is not in the Datadog DBM support matrix
+  cosmos-postgresql:
+    catalog_ref: cosmos-postgresql
+    signals:
+      platform_metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, azure.dbforpostgresql_servergroupsv2)
+        owner: obs-azure-integration
+        duplicate_prevention: single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog
+        datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
+      platform_logs:
+        supported: 'yes'
+        method: diagnostic settings (PostgreSQLLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        owner: obs-diagnostics
+        duplicate_prevention: database diagnostic logs only; never application logs
+        datadog_limitation: none
+      client_spans:
+        supported: 'yes'
+        method: OpenTelemetry DB client instrumentation in the owning service (db.system, db.namespace attributes) -> OTLP
+        owner: applications deploy root
+        duplicate_prevention: one tracer per process
+        datadog_limitation: spans show client-observed latency only
+      dbm:
+        supported: 'no'
+        method: not listed in Datadog Azure Postgres DBM page
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a

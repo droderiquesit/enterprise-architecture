@@ -1,0 +1,733 @@
+# Azure service catalog - schema: catalog/schemas/service.schema.json
+# Validate: python3 tools/catalog/validate.py   Render: python3 tools/catalog/render_coverage.py
+# Facts verified 2026-10-09 via Microsoft Learn, docs.datadoghq.com and tfschema (azurerm 5.9.0 / azapi 2.13.0).
+# This file is the source of truth; edit it directly.
+schema_version: 1
+verified_on: '2026-10-09'
+description: Analytics and adjacent data services (category analytics / adjacent-data).
+services:
+- id: data-explorer
+  family: data-explorer
+  hosting_variant: Azure Data Explorer cluster (Dev/Test SKU) + database
+  category: analytics
+  display_name: Azure Data Explorer
+  lifecycle:
+    status: ga
+    notes: Generally available. (Synapse Data Explorer pools retired 2025-10-07 - see synapse-data-explorer.)
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Kusto
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (cluster)
+  iac:
+    terraform_resources:
+    - azurerm_kusto_cluster
+    - azurerm_kusto_database
+    azapi: []
+    component: platform-data-analytics
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-adx
+    operations:
+    - ingest inline + KQL query
+    boundary: database adapter / table Records
+  telemetry:
+    azure_metric_namespace: azure.kusto_clusters
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.kusto_clusters)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (SucceededIngestion, FailedIngestion, Command, Query) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: &id001
+        supported: 'yes'
+        method: client spans from the calling service's OpenTelemetry SDK/instrumentation -> OTLP -> Datadog Agent or OTel gateway
+        notes: database itself emits no traces; spans come from hello-* callers
+      dbm: &id002
+        supported: n/a
+        method: not a DBM-supported engine
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - No DBM; query-level detail via Command/Query diagnostic logs
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 130
+    assumptions: Dev(No SLA)_Standard_E2a_v4, 1 instance; stop when idle
+    teardown: terraform destroy of the owning root
+    data_retention: database soft-delete/hot cache per policy; data deleted with cluster
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/data-explorer/data-explorer-overview
+  - https://docs.datadoghq.com/integrations/azure_data_explorer/
+- id: synapse-sql
+  family: synapse
+  hosting_variant: Synapse dedicated SQL pool (DW100c) in a Synapse workspace
+  category: analytics
+  display_name: Azure Synapse dedicated SQL pool
+  lifecycle:
+    status: ga
+    notes: Generally available; Microsoft positions Fabric Warehouse for new analytics projects. Pausable.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Synapse
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: managed VNet + private endpoints (Sql, SqlOnDemand, Dev); private link hub for Studio
+  iac:
+    terraform_resources:
+    - azurerm_synapse_workspace
+    - azurerm_synapse_sql_pool
+    - azurerm_storage_data_lake_gen2_filesystem
+    azapi: []
+    component: platform-data-analytics
+    implemented: true
+  workload:
+    exercised_by: []
+    operations: []
+    boundary: no owner service (cataloged-only in architecture-matrix)
+  telemetry:
+    azure_metric_namespace: azure.synapse_workspaces_sqlpools
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.synapse_workspaces_sqlpools)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (SqlRequests, RequestSteps, ExecRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: dedicated SQL pool is not in the Datadog DBM support matrix
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - No DBM for Synapse
+  cost:
+    profile: very-high
+    approx_monthly_usd_default: 1100
+    assumptions: DW100c running 24x7 (pause to stop compute billing)
+    teardown: terraform destroy of the owning root
+    data_retention: 7-day restore points
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-overview-what-is
+  - https://docs.datadoghq.com/integrations/azure_synapse/
+- id: synapse-serverless-sql
+  family: synapse
+  hosting_variant: Synapse serverless SQL pool (built-in, per-TB processed)
+  category: analytics
+  display_name: Azure Synapse serverless SQL pool
+  lifecycle:
+    status: ga
+    notes: Built into every Synapse workspace; cannot be deleted.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Synapse
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: SqlOnDemand private endpoint
+  iac:
+    terraform_resources:
+    - azurerm_synapse_workspace
+    azapi: []
+    component: null
+    implemented: false
+    notes: no separate resource - exists with the workspace
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.synapse_workspaces
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.synapse_workspaces)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (BuiltinSqlReqsEnded) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: USD 5 per TB processed; minimal queries
+    teardown: terraform destroy of the owning root
+    data_retention: none (queries over lake data)
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/on-demand-workspace-overview
+  - https://docs.datadoghq.com/integrations/azure_synapse/
+- id: synapse-spark
+  family: synapse
+  hosting_variant: Synapse Apache Spark pool (auto-pause)
+  category: analytics
+  display_name: Azure Synapse Spark pool
+  lifecycle:
+    status: ga
+    notes: Generally available; Spark 3.3 runtime EOS 2025-03-31 - use the current 3.4/3.5 runtime.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Synapse
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: managed VNet
+  iac:
+    terraform_resources:
+    - azurerm_synapse_spark_pool
+    azapi: []
+    component: platform-data-analytics
+    implemented: true
+  workload:
+    exercised_by: []
+    operations: []
+    boundary: no owner service
+  telemetry:
+    azure_metric_namespace: azure.synapse_workspaces_bigdatapools
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.synapse_workspaces_bigdatapools)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (BigDataPoolAppsEnded) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: 'no'
+        method: no tracing configured
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog Spark/Data Jobs Monitoring not configured for Synapse
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: auto-pause 15 min; billed only while running (Small nodes)
+    teardown: terraform destroy of the owning root
+    data_retention: none
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/synapse-analytics/spark/apache-spark-overview
+  - https://docs.datadoghq.com/integrations/azure_synapse/
+- id: synapse-data-explorer
+  family: synapse
+  hosting_variant: Synapse Data Explorer pools
+  category: analytics
+  display_name: Synapse Data Explorer (retired)
+  lifecycle:
+    status: retired
+    notes: Data Explorer (Kusto) pools in Synapse retired 2025-10-07 (preview never GA).
+    verified_on: '2026-10-09'
+    retirement_date: '2025-10-07'
+    successor: data-explorer
+  availability:
+    regions_checked:
+      swedencentral: false
+      eastus2: false
+      westeurope: false
+    quotas: []
+    registrations: []
+    licensing: []
+  networking:
+    private_support: n/a
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.synapse_workspaces_kustopools
+    signals:
+      metrics:
+        supported: n/a
+        method: retired
+      logs:
+        supported: n/a
+        method: retired
+      traces:
+        supported: n/a
+        method: retired
+      dbm: &id003
+        supported: n/a
+        method: not applicable
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: not deployable
+    teardown: n/a
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/advisor/advisor-how-to-use-service-upgrade-retirement-recommendations
+- id: ai-search
+  family: ai-search
+  hosting_variant: Azure AI Search service (Basic)
+  category: adjacent-data
+  display_name: Azure AI Search
+  lifecycle:
+    status: ga
+    notes: Generally available. Free tier lacks private endpoints and SLA.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Search
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: Basic or higher required for private endpoint; public_network_access_enabled = false
+  iac:
+    terraform_resources:
+    - azurerm_search_service
+    azapi: []
+    component: platform-data-analytics
+    implemented: true
+    notes: index created at runtime by hello-dbadapter-search (data plane)
+  workload:
+    exercised_by:
+    - hello-dbadapter-search
+    operations:
+    - create index
+    - upload docs
+    - search
+    boundary: index adapter-records
+  telemetry:
+    azure_metric_namespace: azure.search_searchservices
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.search_searchservices)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (OperationLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 75
+    assumptions: Basic, 1 replica, 1 partition
+    teardown: terraform destroy of the owning root
+    data_retention: indexes deleted with service
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/search/search-what-is-azure-search
+  - https://docs.datadoghq.com/integrations/azure_search/
+- id: blob-storage
+  family: azure-storage
+  hosting_variant: Blob Storage (StorageV2, LRS)
+  category: adjacent-data
+  display_name: Azure Blob Storage
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Storage
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: blob private endpoint; shared keys disabled
+  iac:
+    terraform_resources:
+    - azurerm_storage_account
+    - azurerm_storage_container
+    azapi: []
+    component: platform-data-analytics
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-blob
+    - logic-apps-standard audit-archive
+    operations:
+    - put/get/list blobs
+    boundary: container adapter
+  telemetry:
+    azure_metric_namespace: azure.storage_storageaccounts_blobservices
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.storage_storageaccounts_blobservices)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (StorageRead, StorageWrite, StorageDelete (blobServices)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 2
+    assumptions: Hot LRS < 5 GB
+    teardown: terraform destroy of the owning root
+    data_retention: soft delete 7 days (containers + blobs) if enabled
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction
+  - https://docs.datadoghq.com/integrations/azure_blob_storage/
+- id: adls-gen2
+  family: azure-storage
+  hosting_variant: Data Lake Storage Gen2 (hierarchical namespace)
+  category: adjacent-data
+  display_name: Azure Data Lake Storage Gen2
+  lifecycle:
+    status: ga
+    notes: Generally available. (ADLS Gen1 retired 2024-02-29.)
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Storage
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: dfs + blob private endpoints; Terraform filesystem resource is data-plane (needs private reach from agents)
+  iac:
+    terraform_resources:
+    - azurerm_storage_account
+    - azurerm_storage_data_lake_gen2_filesystem
+    azapi: []
+    component: platform-data-analytics
+    implemented: true
+    notes: is_hns_enabled = true
+  workload:
+    exercised_by:
+    - hello-dbadapter-adls
+    operations:
+    - create/read/list files
+    boundary: filesystem adapter
+  telemetry:
+    azure_metric_namespace: azure.storage_storageaccounts_blobservices
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.storage_storageaccounts_blobservices)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (StorageRead, StorageWrite) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 2
+    assumptions: Hot LRS < 5 GB
+    teardown: terraform destroy of the owning root
+    data_retention: soft delete if enabled
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-introduction
+  - https://docs.datadoghq.com/integrations/azure_data_lake_store/
+- id: databricks
+  family: databricks
+  hosting_variant: Azure Databricks workspace (Premium, VNet-injected)
+  category: analytics
+  display_name: Azure Databricks
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Databricks
+    licensing:
+    - Premium tier for private link, Unity Catalog features; DBU billing
+  networking:
+    private_support: vnet-injection
+    notes: VNet injection (2 subnets) + private link (front-end/back-end)
+  iac:
+    terraform_resources:
+    - azurerm_databricks_workspace
+    - azurerm_databricks_access_connector
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Datadog Databricks integration (Agent init script on clusters) / Data Jobs Monitoring
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (jobs, clusters, accounts) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: partial
+        method: Data Jobs Monitoring spans
+      dbm: *id003
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Requires cluster init scripts and a Datadog API key in the workspace
+  cost:
+    profile: high
+    approx_monthly_usd_default: 300
+    assumptions: small all-purpose cluster a few hours/day + workspace
+    teardown: terraform destroy of the owning root
+    data_retention: workspace storage deleted with managed RG
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/databricks/introduction/
+  - https://docs.datadoghq.com/integrations/databricks/
+- id: hdinsight
+  family: hdinsight
+  hosting_variant: HDInsight 5.1 cluster (Spark 3.3)
+  category: analytics
+  display_name: Azure HDInsight
+  lifecycle:
+    status: ga
+    notes: HDInsight 5.1 is the only supported version (standard support, no retirement announced); 4.0 and 5.0 retired 2025-03-31; Ubuntu 18.04 base under ESM. HDInsight on AKS was
+      retired separately (2025-01-31).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.HDInsight
+    licensing: []
+  networking:
+    private_support: vnet-injection
+  iac:
+    terraform_resources:
+    - azurerm_hdinsight_spark_cluster
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.hdinsight_clusters
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.hdinsight_clusters)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (HDInsightSparkLogs (Azure Monitor agent)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: 'no'
+        method: none
+      dbm: *id003
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: very-high
+    approx_monthly_usd_default: 900
+    assumptions: minimum head + worker nodes
+    teardown: terraform destroy of the owning root
+    data_retention: cluster storage account persists unless deleted
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/hdinsight/hdinsight-component-versioning
+  - https://docs.datadoghq.com/integrations/azure_hdinsight/
+- id: stream-analytics
+  family: stream-analytics
+  hosting_variant: Stream Analytics job (Standard V2)
+  category: analytics
+  display_name: Azure Stream Analytics
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.StreamAnalytics
+    licensing: []
+  networking:
+    private_support: partial
+    notes: managed private endpoints require a Stream Analytics cluster; standard jobs use public endpoints/managed identity
+  iac:
+    terraform_resources:
+    - azurerm_stream_analytics_job
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.streamanalytics_streamingjobs
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.streamanalytics_streamingjobs)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (Execution, Authoring) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: 'no'
+        method: none
+      dbm: *id003
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 80
+    assumptions: 1 SU V2 running 24x7
+    teardown: terraform destroy of the owning root
+    data_retention: none
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/stream-analytics/stream-analytics-introduction
+  - https://docs.datadoghq.com/integrations/azure_stream_analytics/

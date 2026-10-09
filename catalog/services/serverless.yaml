@@ -1,0 +1,1133 @@
+# Azure service catalog - schema: catalog/schemas/service.schema.json
+# Validate: python3 tools/catalog/validate.py   Render: python3 tools/catalog/render_coverage.py
+# Facts verified 2026-10-09 via Microsoft Learn, docs.datadoghq.com and tfschema (azurerm 5.9.0 / azapi 2.13.0).
+# This file is the source of truth; edit it directly.
+schema_version: 1
+verified_on: '2026-10-09'
+description: Serverless hosting (Functions plans, Durable, Static Web Apps, Logic Apps, Container Apps Jobs).
+services:
+- id: functions-flex-consumption
+  family: azure-functions
+  hosting_variant: Functions Flex Consumption plan (FC1, Linux, .NET 10 isolated / Python 3.13)
+  category: serverless
+  display_name: Azure Functions Flex Consumption
+  lifecycle:
+    status: ga
+    notes: Generally available; recommended serverless plan. No deployment slots; deployment from blob container; per-instance memory 512/2048/4096 MB; always-ready optional.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: Sweden Central, East US 2, West Europe all listed by Get-AzFunctionAppAvailableLocation -PlanType FlexConsumption; not in Azure Government
+    quotas:
+    - regional Flex Consumption memory quota (default 512 GB per subscription per region)
+    registrations:
+    - Microsoft.Web
+    - Microsoft.App (VNet integration uses Microsoft.App/environments delegation)
+    licensing: []
+  networking:
+    private_support: vnet-integration
+    notes: VNet integration into 'flex-integration' subnet (delegated Microsoft.App/environments); inbound private endpoint
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_function_app_flex_consumption
+    - azurerm_storage_account
+    azapi: []
+    component: platform-functions
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-durable (OrderProcessing, BatchProcessing, Reconciliation)
+    operations:
+    - Service Bus-triggered orchestrations
+  telemetry:
+    azure_metric_namespace: azure.functions
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.functions / azure.app_services) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator -> Datadog
+      traces:
+        supported: 'yes'
+        method: OTel SDK in worker -> OTel gateway over VNet integration
+        notes: 'Datadog native option: serverless compatibility layer + dd-trace (not used by default)'
+      dbm: &id001
+        supported: n/a
+        method: not applicable
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: partial
+        method: Datadog profiler preview for Python/Node on Azure Functions only
+        notes: not enabled
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
+  cost:
+    profile: low
+    approx_monthly_usd_default: 10
+    assumptions: on-demand only, no always-ready instances, light traffic + storage account
+    teardown: terraform destroy
+    data_retention: deployment package in blob container deleted
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-functions/flex-consumption-plan
+  - https://learn.microsoft.com/en-us/azure/azure-functions/flex-consumption-how-to
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-scale
+  - https://docs.datadoghq.com/serverless/azure_functions/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+  - https://docs.datadoghq.com/integrations/azure_functions/
+- id: functions-premium
+  family: azure-functions
+  hosting_variant: Functions Elastic Premium plan (EP1, Linux)
+  category: serverless
+  display_name: Azure Functions Premium (Elastic Premium)
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: vnet-integration
+    notes: outbound VNet integration; inbound private endpoint
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_linux_function_app
+    azapi: []
+    component: platform-functions
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-functions audit (Service Bus subscription trigger)
+    operations:
+    - append ledger audit entry
+  telemetry:
+    azure_metric_namespace: azure.functions
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.functions / azure.app_services) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator -> Datadog
+      traces:
+        supported: 'yes'
+        method: OTel SDK in worker -> OTel gateway over VNet integration
+        notes: 'Datadog native option: serverless compatibility layer + dd-trace (not used by default)'
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: partial
+        method: Datadog profiler preview for Python/Node on Azure Functions only
+        notes: not enabled
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 155
+    assumptions: EP1 x 1 always-ready instance
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-premium-plan
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-scale
+  - https://docs.datadoghq.com/serverless/azure_functions/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+  - https://docs.datadoghq.com/integrations/azure_functions/
+- id: functions-dedicated
+  family: azure-functions
+  hosting_variant: Functions on a Dedicated (App Service) plan (Linux B1/S1)
+  category: serverless
+  display_name: Azure Functions Dedicated plan
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: vnet-integration
+    notes: outbound VNet integration; inbound private endpoint
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_linux_function_app
+    azapi: []
+    component: platform-appservice
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-functions cache-warmer (timer)
+    operations:
+    - timer warm-up of Managed Redis keys
+  telemetry:
+    azure_metric_namespace: azure.functions
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.functions / azure.app_services) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator -> Datadog
+      traces:
+        supported: 'yes'
+        method: OTel SDK in worker -> OTel gateway over VNet integration
+        notes: 'Datadog native option: serverless compatibility layer + dd-trace (not used by default)'
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: partial
+        method: Datadog profiler preview for Python/Node on Azure Functions only
+        notes: not enabled
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
+  cost:
+    profile: low
+    approx_monthly_usd_default: 13
+    assumptions: shares B1 Linux App Service plan (always_on true)
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-functions/dedicated-plan
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-scale
+  - https://docs.datadoghq.com/serverless/azure_functions/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+  - https://docs.datadoghq.com/integrations/azure_functions/
+- id: functions-consumption-windows
+  family: azure-functions
+  hosting_variant: Functions Consumption plan (Y1, Windows, .NET isolated)
+  category: serverless
+  display_name: Azure Functions Consumption (Windows, legacy)
+  lifecycle:
+    status: legacy
+    notes: Consumption plan is documented as legacy; Windows Consumption is not affected by the Linux retirement and remains the only serverless Windows option. Python is not supported
+      on Windows.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: none
+    notes: no VNet integration on Consumption; storage account cannot be fully private - documented exception
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_windows_function_app
+    azapi: []
+    component: platform-functions
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-durable Reconciliation (.NET isolated)
+    operations:
+    - timer reconciliation
+  telemetry:
+    azure_metric_namespace: azure.functions
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.functions / azure.app_services) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator -> Datadog
+      traces:
+        supported: 'yes'
+        method: OTel SDK in worker -> OTel gateway over VNet integration
+        notes: 'Datadog native option: serverless compatibility layer + dd-trace (not used by default)'
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: partial
+        method: Datadog profiler preview for Python/Node on Azure Functions only
+        notes: not enabled
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
+  - 'No VNet integration: traces to the internal OTel gateway are not reachable; requires a public OTLP path (Datadog serverless OTLP intake) - document as exception'
+  cost:
+    profile: low
+    approx_monthly_usd_default: 1
+    assumptions: free grant covers lab traffic; storage account extra
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-functions/consumption-plan
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-scale
+  - https://docs.datadoghq.com/serverless/azure_functions/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+  - https://docs.datadoghq.com/integrations/azure_functions/
+- id: functions-consumption-linux
+  family: azure-functions
+  hosting_variant: Functions Consumption plan (Y1, Linux)
+  category: serverless
+  display_name: Azure Functions Consumption (Linux, retiring)
+  lifecycle:
+    status: retiring
+    notes: Linux Consumption hosting retires 2028-09-30; no new features or language versions (Python 3.12 is the last; 3.13 unsupported). v3 runtime apps on Linux Consumption stop after
+      2026-09-30. Migrate to Flex Consumption.
+    verified_on: '2026-10-09'
+    retirement_date: '2028-09-30'
+    successor: functions-flex-consumption
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: none
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_linux_function_app
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.functions
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.functions / azure.app_services) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator -> Datadog
+      traces:
+        supported: 'yes'
+        method: OTel SDK in worker -> OTel gateway over VNet integration
+        notes: 'Datadog native option: serverless compatibility layer + dd-trace (not used by default)'
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: partial
+        method: Datadog profiler preview for Python/Node on Azure Functions only
+        notes: not enabled
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
+  cost:
+    profile: low
+    approx_monthly_usd_default: 1
+    assumptions: free grant
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-functions/consumption-plan
+  - https://learn.microsoft.com/en-us/azure/azure-functions/migration/migrate-plan-consumption-to-flex
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-scale
+  - https://docs.datadoghq.com/serverless/azure_functions/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+  - https://docs.datadoghq.com/integrations/azure_functions/
+- id: functions-on-container-apps
+  family: azure-functions
+  hosting_variant: Functions on Azure Container Apps V2 (native Microsoft.App/containerApps kind=functionapp)
+  category: serverless
+  display_name: Azure Functions on Container Apps
+  lifecycle:
+    status: ga
+    notes: V2 native model (single container app with kind=functionapp) is recommended; V1 (Microsoft.Web proxy site + hidden container app) is legacy.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.App
+    licensing: []
+  networking:
+    private_support: vnet-injection
+    notes: inherits the internal ACA environment
+  iac:
+    terraform_resources: []
+    azapi:
+    - type: Microsoft.App/containerApps
+      api_version: '2026-07-01'
+      reason: azurerm_container_app exposes 'kind' as computed only; kind=functionapp cannot be set
+    component: deploy-functions
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-functions http quote (container image)
+    operations:
+    - HTTP-triggered quote
+  telemetry:
+    azure_metric_namespace: azure.app_containerapps
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_containerapps, azure.app_managedenvironments) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog; ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
+        notes: ContainerAppConsoleLogs must NOT also be exported (duplicate)
+      traces: &id002
+        supported: 'yes'
+        method: OpenTelemetry SDK -> OTLP (gRPC/HTTP) -> observability OTel gateway (DDOT/upstream collector on ACA, internal ingress) -> Datadog
+        notes: owned by obs-telemetry-transport; app roots consume the instrumentation contract
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: partial
+        method: Datadog continuous profiler (dd-trace library) optional per service; OTel profiling not used
+        notes: off by default to avoid a second tracer; enable per service
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: runs in the shared Consumption profile, scale to zero
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-apps/functions-overview
+  - https://learn.microsoft.com/en-us/azure/container-apps/migrate-functions
+  - https://learn.microsoft.com/en-us/azure/templates/microsoft.app/containerapps
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-scale
+  - https://docs.datadoghq.com/serverless/azure_functions/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+  - https://docs.datadoghq.com/integrations/azure_functions/
+- id: functions-container-premium
+  family: azure-functions
+  hosting_variant: Functions custom Linux container on Elastic Premium or Dedicated plan
+  category: serverless
+  display_name: Azure Functions container on Premium/Dedicated
+  lifecycle:
+    status: ga
+    notes: Supported; Microsoft recommends Container Apps for new containerized Functions workloads.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: vnet-integration
+    notes: outbound VNet integration; inbound private endpoint
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_linux_function_app
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.functions
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.functions / azure.app_services) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator -> Datadog
+      traces:
+        supported: 'yes'
+        method: OTel SDK in worker -> OTel gateway over VNet integration
+        notes: 'Datadog native option: serverless compatibility layer + dd-trace (not used by default)'
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: partial
+        method: Datadog profiler preview for Python/Node on Azure Functions only
+        notes: not enabled
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 155
+    assumptions: EP1 plan if dedicated to the container
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-how-to-custom-container
+  - https://learn.microsoft.com/en-us/azure/azure-functions/functions-scale
+  - https://docs.datadoghq.com/serverless/azure_functions/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+  - https://docs.datadoghq.com/integrations/azure_functions/
+- id: durable-functions
+  family: azure-functions
+  hosting_variant: Durable Functions extension (.NET isolated) with Durable Task Scheduler or Azure Storage backend
+  category: serverless
+  display_name: Durable Functions
+  variants:
+  - name: Durable Task Scheduler backend
+    notes: recommended; lab default
+  - name: Azure Storage backend
+    notes: fallback
+  - name: MSSQL backend
+  - name: Netherite backend
+    lifecycle: not-recommended
+  lifecycle:
+    status: ga
+    notes: Generally available. Durable Task Scheduler is the recommended storage provider.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: vnet-integration
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: platform-functions
+    implemented: true
+    notes: extension configured in host.json by the svc-durable artifact; no ARM resource of its own
+  workload:
+    exercised_by:
+    - hello-durable
+    operations:
+    - OrderProcessing orchestration
+    - BatchProcessing fan-out
+    - Reconciliation eternal orchestration
+  telemetry:
+    azure_metric_namespace: azure.functions
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.functions / azure.app_services) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: FunctionAppLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator -> Datadog
+      traces:
+        supported: 'yes'
+        method: OTel SDK in worker -> OTel gateway over VNet integration
+        notes: 'Datadog native option: serverless compatibility layer + dd-trace (not used by default)'
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: partial
+        method: Datadog profiler preview for Python/Node on Azure Functions only
+        notes: not enabled
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
+  - Orchestrator replay produces repeated spans unless the worker suppresses tracing on replay
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: cost carried by host plan + backend
+    teardown: n/a
+    data_retention: orchestration history in backend
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/durable-task/durable-functions/durable-functions-overview
+  - https://docs.datadoghq.com/serverless/azure_functions/
+- id: durable-task-scheduler
+  family: durable-task
+  hosting_variant: Durable Task Scheduler (Microsoft.DurableTask/schedulers + taskHubs)
+  category: serverless
+  display_name: Durable Task Scheduler
+  variants:
+  - name: Consumption SKU
+    notes: pay per action, 500 actions/s, 30-day retention, 10 schedulers/region/subscription, 5 task hubs/scheduler
+  - name: Dedicated SKU
+    notes: 1-3 CUs (3 for HA), 2,000 actions/s per CU, 90-day retention, 25 schedulers + 25 task hubs/region/subscription
+  lifecycle:
+    status: ga
+    notes: Stable ARM API versions 2025-11-01 and 2026-02-01 published (2026-05-01-preview newest); recommended backend for Durable Functions and Durable Task SDKs.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: unknown
+      westeurope: unknown
+    region_notes: '''Available in most Azure regions'' - verify: az provider show --namespace Microsoft.DurableTask --query "resourceTypes[?resourceType==''schedulers''].locations |
+      [0]"'
+    quotas:
+    - see variants
+    registrations:
+    - Microsoft.DurableTask
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: private endpoints supported; ipAllowlist is required in the API (set [] / deny when private)
+  iac:
+    terraform_resources: []
+    azapi:
+    - type: Microsoft.DurableTask/schedulers
+      api_version: '2026-02-01'
+      reason: no azurerm resource in 5.9.0
+    - type: Microsoft.DurableTask/schedulers/taskHubs
+      api_version: '2026-02-01'
+      reason: no azurerm resource in 5.9.0
+    component: platform-functions
+    implemented: true
+    notes: app identity needs 'Durable Task Data Contributor' on the scheduler/task hub; endpoint {name}.{region}.durabletask.io (gRPC/TLS)
+  workload:
+    exercised_by:
+    - hello-durable
+    operations:
+    - orchestration history + work item dispatch
+  telemetry:
+    azure_metric_namespace: azure.durabletask_schedulers
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.durabletask_schedulers)
+        notes: namespace present in the Datadog Azure integration metric list
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (scheduler logs (category names not verified)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: partial
+        method: orchestration spans come from the Functions worker OTel SDK; the scheduler emits none
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Scheduler dashboard (orchestration-level view) is Azure-only
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: Consumption SKU, < 1M actions/month
+    teardown: terraform destroy (azapi) deletes scheduler and history
+    data_retention: Consumption 30 days, Dedicated up to 90 days
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/durable-task/scheduler/durable-task-scheduler
+  - https://learn.microsoft.com/en-us/azure/durable-task/scheduler/durable-task-scheduler-billing
+  - https://learn.microsoft.com/en-us/azure/templates/microsoft.durabletask/schedulers
+  - https://docs.datadoghq.com/integrations/azure/
+- id: static-web-apps
+  family: static-web-apps
+  hosting_variant: Azure Static Web Apps (Standard plan, bring-your-own API)
+  category: serverless
+  display_name: Azure Static Web Apps
+  variants:
+  - name: Free
+  - name: Standard
+    notes: lab default; needed for private endpoint, BYO API, custom auth
+  - name: Dedicated plan
+    lifecycle: retired
+    notes: retired 2025-10-31
+  lifecycle:
+    status: ga
+    notes: Generally available. Dedicated plan retired 2025-10-31; SWA database connections retired 2025-11-01.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: false
+      eastus2: true
+      westeurope: true
+    region_notes: Static content is global; the resource/managed-API region must be one of Central US, East US 2, West US 2, West Europe, East Asia. Sweden Central is NOT a valid location
+      -> lab uses westeurope for this resource.
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: Standard plan private endpoint makes the site private (staticSites subresource); public by default
+  iac:
+    terraform_resources:
+    - azurerm_static_web_app
+    azapi: []
+    component: deploy-frontend
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-frontend
+    operations:
+    - serve SPA + runtime config.json
+    - browser RUM sessions
+  telemetry:
+    azure_metric_namespace: azure.web_staticsites
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.web_staticsites)
+      logs:
+        supported: partial
+        method: Browser logs via Datadog Browser Logs SDK (optional); no server-side app logs
+      traces:
+        supported: 'yes'
+        method: RUM-to-APM via allowedTracingUrls (W3C tracecontext) to first-party API origins
+      dbm: *id001
+      rum:
+        supported: 'yes'
+        method: '@datadog/browser-rum 7.x in hello-frontend (session replay off by default)'
+      profiling:
+        supported: partial
+        method: browser profiling not enabled
+  datadog_limitations:
+  - CSP/connect-src must allow the Datadog RUM intake for the configured DD_SITE
+  cost:
+    profile: low
+    approx_monthly_usd_default: 9
+    assumptions: Standard plan
+    teardown: terraform destroy
+    data_retention: deployed content removed
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/static-web-apps/overview
+  - https://learn.microsoft.com/en-us/azure/static-web-apps/plans
+  - https://docs.datadoghq.com/real_user_monitoring/browser/
+  - https://docs.datadoghq.com/integrations/azure_static_web_apps/
+- id: logic-apps-consumption
+  family: logic-apps
+  hosting_variant: Logic Apps Consumption (multitenant workflow)
+  category: serverless
+  display_name: Azure Logic Apps (Consumption)
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Logic
+    licensing: []
+  networking:
+    private_support: none
+    notes: multitenant; outbound from shared Logic Apps IPs - Service Bus must allow it (Standard SKU namespace or IP rules); documented exception
+  iac:
+    terraform_resources:
+    - azurerm_logic_app_workflow
+    - azurerm_logic_app_trigger_recurrence
+    - azurerm_logic_app_action_custom
+    azapi: []
+    component: deploy-logicapps
+    implemented: true
+  workload:
+    exercised_by:
+    - hourly batch request
+    operations:
+    - send message to Service Bus queue batch-items
+  telemetry:
+    azure_metric_namespace: azure.logic_workflows
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.logic_workflows)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (WorkflowRuntime) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: 'no'
+        method: no OpenTelemetry support in Consumption; correlation via tracking id only
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - No distributed tracing; run history only via WorkflowRuntime logs
+  cost:
+    profile: low
+    approx_monthly_usd_default: 2
+    assumptions: ~720 runs/month x 3 actions
+    teardown: terraform destroy
+    data_retention: run history 90 days default
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/logic-apps/logic-apps-overview
+  - https://docs.datadoghq.com/integrations/azure_logic_app/
+- id: logic-apps-standard
+  family: logic-apps
+  hosting_variant: Logic Apps Standard (single-tenant, Workflow Standard WS1 plan)
+  category: serverless
+  display_name: Azure Logic Apps (Standard)
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    - Microsoft.Logic
+    licensing: []
+  networking:
+    private_support: vnet-integration
+    notes: VNet integration + private endpoint; storage account private
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_logic_app_standard
+    azapi: []
+    component: platform-appservice
+    implemented: true
+    notes: workflow definitions deployed by deploy-logicapps (zip)
+  workload:
+    exercised_by:
+    - order-events audit-archive workflow
+    operations:
+    - Service Bus trigger -> write Blob
+  telemetry:
+    azure_metric_namespace: azure.app_services
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.app_services)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (WorkflowRuntime, FunctionAppLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: partial
+        method: Logic Apps Standard host can emit OpenTelemetry (host.json) to an OTLP endpoint (OTel gateway)
+        notes: verify per runtime version
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Workflow action-level spans depend on the runtime's OTel support
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 180
+    assumptions: WS1 plan + storage account
+    teardown: terraform destroy
+    data_retention: run history in storage account
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/logic-apps/single-tenant-overview-compare
+  - https://docs.datadoghq.com/integrations/azure_logic_app/
+- id: container-apps-jobs
+  family: container-apps
+  hosting_variant: 'Container Apps Jobs (umbrella: manual, scheduled, event-driven)'
+  category: serverless
+  display_name: Azure Container Apps Jobs
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability: &id003
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.App
+    licensing: []
+  networking: &id004
+    private_support: vnet-injection
+    notes: runs in the internal ACA environment
+  iac:
+    terraform_resources:
+    - azurerm_container_app_job
+    azapi: []
+    component: platform-containerapps
+    implemented: true
+    notes: job resources owned by deploy-jobs
+  workload:
+    exercised_by:
+    - hello-jobs
+    - hello-traffic
+    operations:
+    - see trigger variants
+  telemetry: &id005
+    azure_metric_namespace: azure.app_jobs
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_jobs) + OTel job metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file; ContainerAppSystemLogs via diagnostic settings
+        notes: sidecar must exit when the main container completes (shutdown signal / file sentinel)
+      traces: *id002
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: 'no'
+        method: not configured
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Short-lived executions must flush OTel exporters and Fluent Bit before exit
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: per-execution consumption billing
+    teardown: terraform destroy
+    data_retention: execution history retained by the platform (last 100)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-apps/jobs
+  - https://docs.datadoghq.com/integrations/azure_container_apps/
+- id: container-apps-job-manual
+  family: container-apps
+  parent: container-apps-jobs
+  hosting_variant: Container Apps Job, manual_trigger_config
+  category: serverless
+  display_name: Container Apps Job (manual)
+  lifecycle:
+    status: ga
+    notes: Generally available. started via API/CLI (az containerapp job start).
+    verified_on: '2026-10-09'
+  availability: *id003
+  networking: *id004
+  iac:
+    terraform_resources:
+    - azurerm_container_app_job
+    azapi: []
+    component: platform-containerapps
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-jobs seed
+    operations:
+    - seed synthetic data
+  telemetry: *id005
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 2
+    assumptions: few short executions per day
+    teardown: terraform destroy
+    data_retention: execution history (last 100)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-apps/jobs
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+- id: container-apps-job-scheduled
+  family: container-apps
+  parent: container-apps-jobs
+  hosting_variant: Container Apps Job, schedule_trigger_config (cron)
+  category: serverless
+  display_name: Container Apps Job (scheduled)
+  lifecycle:
+    status: ga
+    notes: Generally available. cron in UTC.
+    verified_on: '2026-10-09'
+  availability: *id003
+  networking: *id004
+  iac:
+    terraform_resources:
+    - azurerm_container_app_job
+    azapi: []
+    component: platform-containerapps
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-jobs reconcile-trigger
+    - hello-traffic
+    operations:
+    - reconciliation trigger
+    - synthetic browser/API traffic
+  telemetry: *id005
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 2
+    assumptions: few short executions per day
+    teardown: terraform destroy
+    data_retention: execution history (last 100)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-apps/jobs
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+- id: container-apps-job-event
+  family: container-apps
+  parent: container-apps-jobs
+  hosting_variant: Container Apps Job, event_trigger_config (KEDA azure-servicebus scaler)
+  category: serverless
+  display_name: Container Apps Job (event)
+  lifecycle:
+    status: ga
+    notes: Generally available. KEDA scaler auth via managed identity.
+    verified_on: '2026-10-09'
+  availability: *id003
+  networking: *id004
+  iac:
+    terraform_resources:
+    - azurerm_container_app_job
+    azapi: []
+    component: platform-containerapps
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-jobs batch-item-processor
+    operations:
+    - process batch-items queue messages
+  telemetry: *id005
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 2
+    assumptions: few short executions per day
+    teardown: terraform destroy
+    data_retention: execution history (last 100)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-apps/jobs
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/

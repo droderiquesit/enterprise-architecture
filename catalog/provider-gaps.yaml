@@ -1,0 +1,156 @@
+# Provider gaps: services (or required properties) that hashicorp/azurerm 5.9.0 cannot manage.
+# ADR-0001 section 2: Azure/azapi 2.13.0 may be used ONLY for gaps listed here.
+# Checked 2026-10-09 with `tfschema list` / `tfschema show` against azurerm 5.9.0 and azapi 2.13.0;
+# API versions from Microsoft Learn ARM template reference (links per entry).
+# Validated by tools/catalog/validate.py: every catalog entry with iac.azapi[] must have a matching gap here
+# (same type + api_version) and every service_id must exist in catalog/services/*.yaml.
+#
+# resolution:
+#   azapi               - implement with azapi_resource using type@api_version
+#   not-iac-deployable  - no ARM API usable with the pinned providers (retired, or not an ARM resource)
+#   other-provider      - needs a provider that is not pinned in versions.yaml (record only; do not add without ADR change)
+schema_version: 1
+verified_on: "2026-10-09"
+azurerm_version: "5.9.0"
+azapi_version: "2.13.0"
+gaps:
+  - service_id: durable-task-scheduler
+    arm_types:
+      - {type: Microsoft.DurableTask/schedulers, api_version: "2026-02-01"}
+      - {type: Microsoft.DurableTask/schedulers/taskHubs, api_version: "2026-02-01"}
+    azurerm_status: missing
+    resolution: azapi
+    reason: "No azurerm_durable_task_* resource in 5.9.0. Stable API versions 2025-11-01 and 2026-02-01 exist; 2026-02-01 adds publicNetworkAccess + identity. properties.ipAllowlist is required; sku.name Consumption|Dedicated (capacity for Dedicated)."
+    owner_component: platform-functions
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.durabletask/schedulers
+      - https://learn.microsoft.com/en-us/azure/durable-task/common/durable-task-hubs
+  - service_id: horizondb
+    arm_types:
+      - {type: Microsoft.HorizonDb/clusters, api_version: "2026-05-01-preview"}
+    azurerm_status: missing
+    resolution: azapi
+    reason: "Preview service; no azurerm resource. Child types clusters/pools, clusters/privateEndpointConnections also exist (2026-05-01-preview). Firewall rules not yet in CLI per quickstart."
+    owner_component: platform-db-horizondb
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.horizondb/clusters
+      - https://learn.microsoft.com/en-us/azure/horizondb/configure-maintain/quickstart-create-cluster
+  - service_id: functions-on-container-apps
+    arm_types:
+      - {type: Microsoft.App/containerApps, api_version: "2026-07-01"}
+    azurerm_status: partial
+    resolution: azapi
+    reason: "azurerm_container_app exists but exposes `kind` as computed only; Functions on Container Apps V2 requires kind = 'functionapp' at create time. azurerm_linux_function_app has no container_app_environment_id in 5.9.0 (V1 model is legacy anyway)."
+    owner_component: deploy-functions
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.app/containerapps
+      - https://learn.microsoft.com/en-us/azure/container-apps/functions-overview
+  - service_id: cloud-services-extended-support
+    arm_types:
+      - {type: Microsoft.Compute/cloudServices, api_version: "2024-11-04"}
+    azurerm_status: missing
+    resolution: azapi
+    reason: "No azurerm resource. Retiring 2027-03-31 - documented for completeness only; must NOT be implemented."
+    owner_component: null
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.compute/2024-11-04/cloudservices
+  - service_id: mongodb-atlas
+    arm_types:
+      - {type: MongoDB.Atlas/organizations, api_version: "2025-06-01"}
+    azurerm_status: missing
+    resolution: azapi
+    reason: "Azure Native Integration resource only (marketplace + user details required). Atlas clusters/projects need the mongodbatlas provider (other-provider, not pinned). Catalog only."
+    owner_component: null
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/mongodb.atlas/organizations
+  - service_id: confluent-cloud
+    arm_types:
+      - {type: Microsoft.Confluent/organizations, api_version: "2024-07-01"}
+    azurerm_status: missing
+    resolution: azapi
+    reason: "No azurerm resource for the Confluent organization; Kafka clusters/topics need the confluent provider (not pinned). Catalog only."
+    owner_component: null
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.confluent/organizations
+  - service_id: fabric-sql-database
+    arm_types: []
+    azurerm_status: missing
+    resolution: not-iac-deployable
+    reason: "Fabric workspace item - no ARM API (Fabric REST API / microsoft/fabric provider, not pinned). Only the capacity (azurerm_fabric_capacity) is ARM."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/fabric/database/sql/overview]
+  - service_id: fabric-cosmos-db
+    arm_types: []
+    azurerm_status: missing
+    resolution: not-iac-deployable
+    reason: "Fabric workspace item - no ARM API."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/fabric/database/cosmos-db/overview]
+  - service_id: fabric-eventhouse
+    arm_types: []
+    azurerm_status: missing
+    resolution: not-iac-deployable
+    reason: "Fabric workspace item - no ARM API."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/fabric/real-time-intelligence/eventhouse]
+  - service_id: fabric-warehouse
+    arm_types: []
+    azurerm_status: missing
+    resolution: not-iac-deployable
+    reason: "Fabric workspace item - no ARM API."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/fabric/data-warehouse/data-warehousing]
+  - service_id: fabric-spark
+    arm_types: []
+    azurerm_status: missing
+    resolution: not-iac-deployable
+    reason: "Fabric workspace item - no ARM API."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/fabric/data-engineering/spark-compute]
+  - service_id: mariadb
+    arm_types: []
+    azurerm_status: removed
+    resolution: not-iac-deployable
+    reason: "Service retired 2025-09-19; azurerm_mariadb_* removed from the provider."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/lifecycle/products/azure-database-for-mariadb]
+  - service_id: postgresql-single-server
+    arm_types: []
+    azurerm_status: removed
+    resolution: not-iac-deployable
+    reason: "Retired 2025-03-28; azurerm_postgresql_server removed."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/lifecycle/end-of-support/end-of-support-2025]
+  - service_id: mysql-single-server
+    arm_types: []
+    azurerm_status: removed
+    resolution: not-iac-deployable
+    reason: "Retired 2024-09-16; azurerm_mysql_server removed."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/azure/mysql/single-server/whats-happening-to-mysql-single-server]
+  - service_id: sql-edge
+    arm_types: []
+    azurerm_status: missing
+    resolution: not-iac-deployable
+    reason: "Retired 2025-09-30 (edge container product, never an ARM database resource)."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/lifecycle/announcements/azure-products-retirement-september-2025]
+  - service_id: synapse-data-explorer
+    arm_types: []
+    azurerm_status: removed
+    resolution: not-iac-deployable
+    reason: "Synapse Data Explorer pools retired 2025-10-07."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/azure/advisor/advisor-how-to-use-service-upgrade-retirement-recommendations]
+  - service_id: neon-postgres
+    arm_types: []
+    azurerm_status: missing
+    resolution: not-iac-deployable
+    reason: "Azure Native Integration listed as retired."
+    owner_component: null
+    references: [https://learn.microsoft.com/en-us/azure/partner-solutions/partners]
+# Not gaps (checked, azurerm 5.9.0 has them): azurerm_mongo_cluster (Azure DocumentDB), azurerm_managed_redis,
+# azurerm_function_app_flex_consumption, azurerm_container_app_job, azurerm_cosmosdb_cassandra_cluster/_datacenter,
+# azurerm_postgresql_flexible_server cluster{} (elastic clusters), azurerm_confidential_ledger, azurerm_managed_devops_pool,
+# azurerm_vmware_private_cloud, azurerm_redhat_openshift_cluster, azurerm_service_fabric_managed_cluster,
+# azurerm_oracle_* (Database@Azure), azurerm_fabric_capacity, azurerm_static_web_app, azurerm_logic_app_standard.

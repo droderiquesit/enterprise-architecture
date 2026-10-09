@@ -1,0 +1,1398 @@
+# Azure service catalog - schema: catalog/schemas/service.schema.json
+# Validate: python3 tools/catalog/validate.py   Render: python3 tools/catalog/render_coverage.py
+# Facts verified 2026-10-09 via Microsoft Learn, docs.datadoghq.com and tfschema (azurerm 5.9.0 / azapi 2.13.0).
+# This file is the source of truth; edit it directly.
+schema_version: 1
+verified_on: '2026-10-09'
+description: Compute hosting architectures (VMs, scale sets, Kubernetes, Container Apps, ACI, App Service, Batch, Service Fabric, ARO, legacy PaaS).
+services:
+- id: vm-linux
+  family: virtual-machines
+  hosting_variant: Linux VM (Ubuntu 24.04 LTS, Trusted Launch)
+  category: compute
+  display_name: Azure Virtual Machines (Linux)
+  variants:
+  - name: Standard_B2s
+    notes: lab default
+  - name: Standard_D2s_v5
+  - name: Trusted Launch
+    notes: secure_boot_enabled + vtpm_enabled
+  - name: Spot priority
+  - name: Arm64 Dpsv5
+  lifecycle:
+    status: ga
+    notes: Generally available. Default outbound access retired 2025-09-30 for new VNets - explicit egress (NAT Gateway) required.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - regional + per-family vCPU quota
+    registrations:
+    - Microsoft.Compute
+    licensing: []
+  networking:
+    private_support: internal-only
+    notes: private IP only; Bastion/run command for access
+  iac:
+    terraform_resources:
+    - azurerm_linux_virtual_machine
+    - azurerm_network_interface
+    - azurerm_virtual_machine_run_command
+    azapi: []
+    component: platform-vm
+    implemented: true
+    notes: VM run command (app install) is owned by deploy-vm-workloads; Agent/Fluent Bit extensions by obs-hosts
+  workload:
+    exercised_by:
+    - hello-worker (systemd)
+    operations:
+    - consume notifications subscription
+    - write Table Storage
+  telemetry:
+    azure_metric_namespace: azure.vm
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.vm) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: &id001
+        supported: 'yes'
+        method: OpenTelemetry SDK -> OTLP localhost:4317 -> Datadog Agent on the host
+        notes: Agent VM extension owned by obs-hosts
+      dbm: &id002
+        supported: n/a
+        method: not applicable
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: &id003
+        supported: partial
+        method: Datadog continuous profiler (dd-trace library) optional per service; OTel profiling not used
+        notes: off by default to avoid a second tracer; enable per service
+  datadog_limitations:
+  - Agent extension and Fluent Bit are separate ARM resources owned by observability; VM root must not manage them
+  cost:
+    profile: low
+    approx_monthly_usd_default: 35
+    assumptions: Standard_B2s PAYG + 30 GB Standard SSD
+    teardown: terraform destroy deletes VM, NIC, OS disk
+    data_retention: OS disk deleted with VM
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/virtual-machines/overview
+  - https://docs.datadoghq.com/integrations/azure_vm/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest_in_the_agent/
+- id: vm-windows
+  family: virtual-machines
+  hosting_variant: Windows Server 2025 VM (Trusted Launch)
+  category: compute
+  display_name: Azure Virtual Machines (Windows)
+  variants:
+  - name: Standard_B2s
+  - name: Standard_D2s_v5
+    notes: lab default
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - regional + per-family vCPU quota
+    registrations:
+    - Microsoft.Compute
+    licensing:
+    - Windows Server license included (PAYG) or AHB
+  networking:
+    private_support: internal-only
+  iac:
+    terraform_resources:
+    - azurerm_windows_virtual_machine
+    - azurerm_network_interface
+    - azurerm_virtual_machine_run_command
+    azapi: []
+    component: platform-vm
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-inventory-api (Windows service)
+    operations:
+    - HTTP API against Cosmos NoSQL
+  telemetry:
+    azure_metric_namespace: azure.vm
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.vm) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Windows host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Fluent Bit on Windows runs as a service; file tailing of LOG_FILE_PATH only
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 150
+    assumptions: Standard_D2s_v5 Windows PAYG + 128 GB Standard SSD
+    teardown: terraform destroy
+    data_retention: OS disk deleted with VM
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/virtual-machines/windows/overview
+  - https://docs.datadoghq.com/integrations/azure_vm/
+- id: vmss-flexible
+  family: vm-scale-sets
+  hosting_variant: Virtual Machine Scale Set, Flexible orchestration (Linux)
+  category: compute
+  display_name: Virtual Machine Scale Sets (Flexible)
+  variants:
+  - name: Standard_B2s x 2
+    notes: lab default
+  - name: Spot instances
+  lifecycle:
+    status: ga
+    notes: Generally available. Flexible is the recommended mode for new deployments; Uniform remains supported.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - regional + per-family vCPU quota
+    registrations:
+    - Microsoft.Compute
+    licensing: []
+  networking:
+    private_support: internal-only
+  iac:
+    terraform_resources:
+    - azurerm_orchestrated_virtual_machine_scale_set
+    azapi: []
+    component: platform-vmss
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-worker
+    operations:
+    - consume notifications
+    - rolling run-command reinstall
+  telemetry:
+    azure_metric_namespace: azure.compute_virtualmachinescalesets
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.compute_virtualmachinescalesets) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Instance-level metrics via azure.compute_virtualmachinescalesets_virtualmachines; Agent extension on the scale set model owned by obs-hosts
+  cost:
+    profile: low
+    approx_monthly_usd_default: 70
+    assumptions: 2 x Standard_B2s + disks
+    teardown: terraform destroy
+    data_retention: instance disks deleted
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/virtual-machine-scale-sets/virtual-machine-scale-sets-orchestration-modes
+  - https://docs.datadoghq.com/integrations/azure_vm_scale_set/
+- id: vmss-uniform
+  family: vm-scale-sets
+  hosting_variant: Virtual Machine Scale Set, Uniform orchestration (Linux)
+  category: compute
+  display_name: Virtual Machine Scale Sets (Uniform)
+  variants:
+  - name: Standard_B2s x 2
+    notes: lab default
+  - name: Spot instances
+  lifecycle:
+    status: ga
+    notes: Generally available. Flexible is the recommended mode for new deployments; Uniform remains supported.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - regional + per-family vCPU quota
+    registrations:
+    - Microsoft.Compute
+    licensing: []
+  networking:
+    private_support: internal-only
+  iac:
+    terraform_resources:
+    - azurerm_linux_virtual_machine_scale_set
+    azapi: []
+    component: platform-vmss
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-sqlvm
+    operations:
+    - adapter calls against SQL Server on VM
+    - model update + rolling upgrade
+  telemetry:
+    azure_metric_namespace: azure.compute_virtualmachinescalesets
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.compute_virtualmachinescalesets) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Instance-level metrics via azure.compute_virtualmachinescalesets_virtualmachines; Agent extension on the scale set model owned by obs-hosts
+  cost:
+    profile: low
+    approx_monthly_usd_default: 70
+    assumptions: 2 x Standard_B2s + disks
+    teardown: terraform destroy
+    data_retention: instance disks deleted
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/virtual-machine-scale-sets/virtual-machine-scale-sets-orchestration-modes
+  - https://docs.datadoghq.com/integrations/azure_vm_scale_set/
+- id: aks
+  family: aks
+  hosting_variant: AKS Standard tier, Azure CNI overlay, private API server optional, workload identity
+  category: compute
+  display_name: Azure Kubernetes Service
+  variants:
+  - name: Free tier
+    notes: no SLA
+  - name: Standard tier
+    notes: lab default
+  - name: AKS Automatic
+    notes: sku_tier/node provisioning; not used
+  - name: system pool Standard_D2s_v5 x1 + user pool x1
+  lifecycle:
+    status: ga
+    notes: Generally available. Azure Linux 2.0 node images unsupported since 2025-11-30; Ubuntu 20.04 unsupported since 2025-04.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - regional vCPU quota for node SKUs
+    registrations:
+    - Microsoft.ContainerService
+    licensing: []
+  networking:
+    private_support: internal-only
+    notes: nodes in aks-nodes subnet; private cluster optional; ingress via internal LB/App Gateway
+  iac:
+    terraform_resources:
+    - azurerm_kubernetes_cluster
+    - azurerm_kubernetes_cluster_node_pool
+    azapi: []
+    component: platform-aks
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-bff
+    - hello-orders-api
+    - hello-catalog-api
+    - hello-worker
+    operations:
+    - full user journey
+  telemetry:
+    azure_metric_namespace: azure.containerservice_managedclusters
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent DaemonSet + Cluster Agent (kubelet, KSM) + OTel app metrics via Agent OTLP; Azure integration for control-plane metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit DaemonSet tails /var/log/containers -> Datadog (obs-kubernetes)
+        notes: DD_LOGS_ENABLED=false on the Agent; kube-audit via diagnostic settings optional
+      traces: &id005
+        supported: 'yes'
+        method: OpenTelemetry SDK -> OTLP -> Datadog Agent DaemonSet OTLP receiver (hostPort 4317 via node IP)
+        notes: owned by obs-kubernetes
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Agent container log collection must stay disabled while Fluent Bit ships /var/log/containers
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 230
+    assumptions: Standard tier (~USD 73) + 2 x Standard_D2s_v5 nodes
+    teardown: terraform destroy deletes cluster and node RG (MC_*)
+    data_retention: PV disks with Delete reclaim policy removed
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/aks/what-is-aks
+  - https://docs.datadoghq.com/integrations/azure_container_service/
+  - https://docs.datadoghq.com/containers/kubernetes/
+- id: container-apps-consumption
+  family: container-apps
+  hosting_variant: Container Apps on the Consumption workload profile (workload-profiles environment)
+  category: compute
+  display_name: Azure Container Apps (Consumption profile)
+  lifecycle:
+    status: ga
+    notes: Generally available. Workload-profiles environments are the recommended environment type (Consumption-only environments are the older type).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - cores per environment (Consumption) quota
+    - 15 environments per region per subscription (default)
+    registrations:
+    - Microsoft.App
+    licensing: []
+  networking:
+    private_support: vnet-injection
+    notes: internal environment in aca-infra subnet (delegated Microsoft.App/environments; workload profiles env min /27, ADR uses /23)
+  iac:
+    terraform_resources:
+    - azurerm_container_app_environment
+    - azurerm_container_app
+    azapi: []
+    component: platform-containerapps
+    implemented: true
+    notes: container app resources owned by deploy-* roots; environment by platform-containerapps
+  workload:
+    exercised_by:
+    - hello-bff
+    - hello-orders-api
+    - hello-catalog-api
+    - hello-dbadapter-*
+    operations:
+    - HTTP APIs
+    - adapters
+  telemetry:
+    azure_metric_namespace: azure.app_containerapps
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_containerapps, azure.app_managedenvironments) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog; ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
+        notes: ContainerAppConsoleLogs must NOT also be exported (duplicate)
+      traces: &id004
+        supported: 'yes'
+        method: OpenTelemetry SDK -> OTLP (gRPC/HTTP) -> observability OTel gateway (DDOT/upstream collector on ACA, internal ingress) -> Datadog
+        notes: owned by obs-telemetry-transport; app roots consume the instrumentation contract
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - 'Datadog serverless-init (in-container/sidecar) not used: Fluent Bit + OTel gateway are authoritative'
+  cost:
+    profile: low
+    approx_monthly_usd_default: 25
+    assumptions: scale-to-zero apps, ~0.5 vCPU/1 GiB active a few hours/day; free monthly grant applies
+    teardown: terraform destroy
+    data_retention: no persistent data
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-apps/overview
+  - https://learn.microsoft.com/en-us/azure/container-apps/workload-profiles-overview
+  - https://docs.datadoghq.com/integrations/azure_container_apps/
+  - https://docs.datadoghq.com/serverless/azure_container_apps/
+- id: container-apps-dedicated
+  family: container-apps
+  hosting_variant: Container Apps on a Dedicated workload profile (D4)
+  category: compute
+  display_name: Azure Container Apps (Dedicated profile)
+  variants:
+  - name: D4
+    notes: lab default 'dedicated-d4', min 1 node
+  - name: E-series / GPU profiles
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - dedicated profile node quota
+    registrations:
+    - Microsoft.App
+    licensing: []
+  networking:
+    private_support: vnet-injection
+    notes: same environment as consumption apps
+  iac:
+    terraform_resources:
+    - azurerm_container_app_environment
+    - azurerm_container_app
+    azapi: []
+    component: platform-containerapps
+    implemented: true
+    notes: azurerm_container_app_environment workload_profile block; app sets workload_profile_name
+  workload:
+    exercised_by:
+    - hello-dbadapter-sqlmi
+    - hello-dbadapter-redis
+    - obs-otel-gateway
+    - obs-fluentbit-aggregator
+    operations:
+    - adapters
+    - telemetry transport
+  telemetry:
+    azure_metric_namespace: azure.app_containerapps
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_containerapps, azure.app_managedenvironments) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog; ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
+        notes: ContainerAppConsoleLogs must NOT also be exported (duplicate)
+      traces: *id004
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 260
+    assumptions: 1 x D4 dedicated node always on + environment management fee
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-apps/workload-profiles-overview
+  - https://docs.datadoghq.com/integrations/azure_container_apps/
+- id: container-instances
+  family: container-instances
+  hosting_variant: Azure Container Instances container group (Linux, VNet-deployed, Standard SKU)
+  category: compute
+  display_name: Azure Container Instances
+  variants:
+  - name: Standard SKU
+    notes: lab default
+  - name: Confidential SKU
+    notes: GA; AMD SEV-SNP TEE, Linux only, no GPU; see confidential-containers
+  - name: Spot (priority = Spot)
+    lifecycle: preview
+    notes: East US 2, West Europe, West US only; no VNet, no public IP, no confidential SKU
+  - name: GPU
+    lifecycle: retired
+    notes: retired 2025-07-14
+  - name: NGroups
+    notes: multi-instance
+  lifecycle:
+    status: ga
+    notes: Generally available. GPU containers retired 2025-07-14; Spot containers still preview.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - standard cores per region
+    - 'Spot: 10 vCPU default'
+    registrations:
+    - Microsoft.ContainerInstance
+    licensing: []
+  networking:
+    private_support: vnet-injection
+    notes: deployed into delegated 'aci' subnet with private IP (Spot variant cannot use VNet)
+  iac:
+    terraform_resources:
+    - azurerm_container_group
+    azapi: []
+    component: deploy-partner-sim
+    implemented: true
+    notes: container group is the app resource, owned by applications/deployments/partner-sim (ADR section 3)
+  workload:
+    exercised_by:
+    - hello-partner-sim
+    operations:
+    - simulated partner fulfillment API
+  telemetry:
+    azure_metric_namespace: azure.containerinstance_containergroups
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.containerinstance_containergroups) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: Fluent Bit sidecar container tails shared emptyDir volume -> Datadog
+        notes: ContainerInstanceLog diagnostics not exported (duplicate)
+      traces: *id004
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 35
+    assumptions: 1 vCPU / 1.5 GB always on (app + Fluent Bit sidecar)
+    teardown: terraform destroy
+    data_retention: emptyDir lost on restart
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-instances/container-instances-overview
+  - https://learn.microsoft.com/en-us/azure/container-instances/container-instances-resource-and-quota-limits
+  - https://docs.datadoghq.com/integrations/azure_container_instances/
+- id: app-service-linux
+  family: app-service
+  hosting_variant: App Service plan (Linux) - umbrella for code and container variants
+  category: compute
+  display_name: Azure App Service (Linux)
+  variants:
+  - name: B1 / S1
+    notes: Standard+ needed for slots
+  - name: P0v3/P1v3
+    notes: Premium v3
+  - name: P1mv4/Pv4
+    notes: Premium v4 (where available)
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: inbound private endpoint (Basic+); outbound regional VNet integration into appsvc-integration subnet
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    azapi: []
+    component: platform-appservice
+    implemented: true
+    notes: plan in platform-appservice; azurerm_linux_web_app owned by deploy-appservice/deploy-dbadapters
+  workload:
+    exercised_by: []
+    operations: []
+    boundary: see code/container variants
+  telemetry:
+    azure_metric_namespace: azure.app_services
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_services, azure.web_serverfarms) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka) -> Fluent Bit aggregator -> Datadog
+        notes: AppServiceHTTPLogs/PlatformLogs optional platform logs
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway over VNet integration
+        notes: Datadog native alternative (sidecar/extension) not used to avoid double tracing
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 13
+    assumptions: B1 plan (Linux ~USD 13; Windows ~USD 55)
+    teardown: terraform destroy
+    data_retention: none (stateless); /home content deleted
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/app-service/overview
+  - https://docs.datadoghq.com/integrations/azure_app_services/
+  - https://docs.datadoghq.com/serverless/azure_app_service/
+- id: app-service-windows
+  family: app-service
+  hosting_variant: App Service plan (Windows) - umbrella for code and container variants
+  category: compute
+  display_name: Azure App Service (Windows)
+  variants:
+  - name: B1 / S1
+    notes: Standard+ needed for slots
+  - name: P0v3/P1v3
+    notes: Premium v3
+  - name: P1mv4/Pv4
+    notes: Premium v4 (where available)
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: inbound private endpoint (Basic+); outbound regional VNet integration into appsvc-integration subnet
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    azapi: []
+    component: platform-appservice
+    implemented: true
+    notes: plan in platform-appservice; azurerm_windows_web_app owned by deploy-appservice/deploy-dbadapters
+  workload:
+    exercised_by: []
+    operations: []
+    boundary: see code/container variants
+  telemetry:
+    azure_metric_namespace: azure.app_services
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_services, azure.web_serverfarms) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka) -> Fluent Bit aggregator -> Datadog
+        notes: AppServiceHTTPLogs/PlatformLogs optional platform logs
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway over VNet integration
+        notes: Datadog native alternative (sidecar/extension) not used to avoid double tracing
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 55
+    assumptions: B1 plan (Linux ~USD 13; Windows ~USD 55)
+    teardown: terraform destroy
+    data_retention: none (stateless); /home content deleted
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/app-service/overview
+  - https://docs.datadoghq.com/integrations/azure_app_services/
+  - https://docs.datadoghq.com/serverless/azure_app_service/
+- id: app-service-linux-code
+  family: app-service
+  parent: app-service-linux
+  hosting_variant: App Service Linux, code deployment (Python 3.13 zip)
+  category: compute
+  display_name: App Service Linux (code)
+  lifecycle:
+    status: ga
+    notes: Generally available; Python 3.13 supported.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: private-endpoint
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_linux_web_app
+    azapi: []
+    component: platform-appservice
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-mysql
+    operations:
+    - adapter API
+  telemetry:
+    azure_metric_namespace: azure.app_services
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_services, azure.web_serverfarms) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka) -> Fluent Bit aggregator -> Datadog
+        notes: AppServiceHTTPLogs/PlatformLogs optional platform logs
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway over VNet integration
+        notes: Datadog native alternative (sidecar/extension) not used to avoid double tracing
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 13
+    assumptions: shares the B1 Linux plan
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/app-service/quickstart-python
+  - https://docs.datadoghq.com/serverless/azure_app_service/
+  - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/
+- id: app-service-linux-container
+  family: app-service
+  parent: app-service-linux
+  hosting_variant: App Service Linux, custom container (Web App for Containers)
+  category: compute
+  display_name: App Service Linux (container)
+  lifecycle:
+    status: ga
+    notes: Generally available. Sidecar containers supported on Linux custom containers.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: image pull from ACR over private endpoint with managed identity (vnet_image_pull_enabled)
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_linux_web_app
+    azapi: []
+    component: platform-appservice
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-redis-appsvc (optional)
+    - hello-catalog-api-container (optional)
+    operations:
+    - adapter API
+  telemetry:
+    azure_metric_namespace: azure.app_services
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_services, azure.web_serverfarms) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka) -> Fluent Bit aggregator -> Datadog
+        notes: AppServiceHTTPLogs/PlatformLogs optional platform logs
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway over VNet integration
+        notes: Datadog native alternative (sidecar/extension) not used to avoid double tracing
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 13
+    assumptions: shares the Linux plan
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/app-service/quickstart-custom-container
+  - https://docs.datadoghq.com/serverless/azure_app_service/
+- id: app-service-windows-code
+  family: app-service
+  parent: app-service-windows
+  hosting_variant: App Service Windows, code deployment (.NET 10 zip)
+  category: compute
+  display_name: App Service Windows (code)
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: private-endpoint
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_windows_web_app
+    azapi: []
+    component: platform-appservice
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-inventory-api
+    operations:
+    - inventory API against Cosmos NoSQL
+  telemetry:
+    azure_metric_namespace: azure.app_services
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_services, azure.web_serverfarms) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka) -> Fluent Bit aggregator -> Datadog
+        notes: AppServiceHTTPLogs/PlatformLogs optional platform logs
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway over VNet integration
+        notes: Datadog native alternative (sidecar/extension) not used to avoid double tracing
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Datadog Windows code instrumentation (site extension) supports Java/Node/.NET only; not used by default
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 55
+    assumptions: B1 Windows plan
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/app-service/quickstart-dotnetcore
+  - https://docs.datadoghq.com/serverless/azure_app_service/
+- id: app-service-windows-container
+  family: app-service
+  parent: app-service-windows
+  hosting_variant: App Service Windows container (Premium v3 Windows container plan)
+  category: compute
+  display_name: App Service Windows (container)
+  lifecycle:
+    status: ga
+    notes: Generally available; requires Premium v3 (or v4) Windows container plan.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Web
+    licensing: []
+  networking:
+    private_support: private-endpoint
+  iac:
+    terraform_resources:
+    - azurerm_service_plan
+    - azurerm_windows_web_app
+    azapi: []
+    component: platform-appservice
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-inventory-api (windows container)
+    operations:
+    - inventory API
+  telemetry:
+    azure_metric_namespace: azure.app_services
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.app_services, azure.web_serverfarms) + OTel app metrics via OTel gateway
+      logs:
+        supported: 'yes'
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka) -> Fluent Bit aggregator -> Datadog
+        notes: AppServiceHTTPLogs/PlatformLogs optional platform logs
+      traces:
+        supported: 'yes'
+        method: OTel SDK -> OTel gateway over VNet integration
+        notes: Datadog native alternative (sidecar/extension) not used to avoid double tracing
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
+  - Windows containers are not listed in Datadog's App Service instrumentation matrix
+  cost:
+    profile: high
+    approx_monthly_usd_default: 280
+    assumptions: P1v3 Windows container plan (always on)
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/app-service/quickstart-custom-container
+  - https://docs.datadoghq.com/serverless/azure_app_service/
+- id: batch
+  family: batch
+  hosting_variant: Azure Batch account (Batch service allocation) + Linux pool, simplified node communication, no public IPs
+  category: compute
+  display_name: Azure Batch
+  lifecycle:
+    status: ga
+    notes: Generally available. Low-priority VMs retired 2025-09-30 (use Spot); default outbound for no-public-IP pools retired - NAT Gateway required.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - Batch account per-region quota
+    - dedicated / Spot core quota per Batch account (often 0 by default - request)
+    registrations:
+    - Microsoft.Batch
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: pool in 'batch' subnet without public IPs; account private endpoints (batchAccount, nodeManagement)
+  iac:
+    terraform_resources:
+    - azurerm_batch_account
+    - azurerm_batch_pool
+    azapi: []
+    component: platform-batch
+    implemented: true
+    notes: jobs/tasks created at runtime by deploy-jobs
+  workload:
+    exercised_by:
+    - hello-jobs daily-aggregate task
+    operations:
+    - daily aggregation into SQL fulfillment.reconciliation
+  telemetry:
+    azure_metric_namespace: azure.batch_batchaccounts
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Azure integration (azure.batch_batchaccounts) + OTel task metrics via OTel gateway
+      logs:
+        supported: partial
+        method: pool start task installs Fluent Bit (config from the observability instrumentation contract) tailing task log files
+        notes: ServiceLogs via diagnostic settings for platform events
+      traces: *id004
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: 'no'
+        method: not configured
+  datadog_limitations:
+  - No Datadog Agent on pool nodes by default; host metrics limited to Azure Monitor pool/node counts
+  cost:
+    profile: low
+    approx_monthly_usd_default: 10
+    assumptions: pool scales to 0 dedicated nodes between daily runs; ~1 h/day Standard_D2s_v5
+    teardown: terraform destroy
+    data_retention: task outputs removed with pool
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/batch/batch-technical-overview
+  - https://learn.microsoft.com/en-us/azure/batch/simplified-compute-node-communication
+  - https://docs.datadoghq.com/integrations/azure_batch/
+- id: service-fabric-managed
+  family: service-fabric
+  hosting_variant: Service Fabric managed cluster (Basic SKU, Windows node type)
+  category: compute
+  display_name: Azure Service Fabric managed clusters
+  lifecycle:
+    status: ga
+    notes: Generally available; designated migration target for Cloud Services (extended support).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - 'Basic SKU: 3+ nodes primary node type; Standard SKU: 5+'
+    registrations:
+    - Microsoft.ServiceFabric
+    licensing: []
+  networking:
+    private_support: vnet-injection
+    notes: bring-your-own subnet 'sfmc'
+  iac:
+    terraform_resources:
+    - azurerm_service_fabric_managed_cluster
+    azapi: []
+    component: platform-servicefabric
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-inventory-api guest executable
+    operations:
+    - inventory API
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (None) for platform metrics
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the Windows node host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
+        notes: Agent log collection disabled
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - No Datadog Azure integration metrics namespace for SF managed clusters; rely on Agent on nodes (VMSS extension)
+  cost:
+    profile: high
+    approx_monthly_usd_default: 330
+    assumptions: Basic SKU, 3 x Standard_D2s_v5 Windows nodes
+    teardown: terraform destroy
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/service-fabric/overview-managed-cluster
+  - https://docs.datadoghq.com/integrations/azure_service_fabric/
+- id: aro
+  family: aro
+  hosting_variant: Azure Red Hat OpenShift 4.x (3 masters, 3 workers)
+  category: compute
+  display_name: Azure Red Hat OpenShift
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - minimum 44 vCPUs of standard DSv5 (or chosen) family quota in the region for a default cluster
+    registrations:
+    - Microsoft.RedHatOpenShift
+    - Microsoft.Compute
+    - Microsoft.Storage
+    - Microsoft.Authorization
+    licensing:
+    - Red Hat pull secret (Red Hat account) recommended; OpenShift license included in ARO price
+  networking:
+    private_support: vnet-injection
+    notes: aro-master / aro-worker subnets; private API + ingress visibility settable
+  iac:
+    terraform_resources:
+    - azurerm_redhat_openshift_cluster
+    azapi: []
+    component: platform-aro
+    implemented: true
+    notes: requires a service principal (or managed identities where supported) + ARO RP role assignments
+  workload:
+    exercised_by:
+    - hello-catalog-api
+    operations:
+    - catalog API
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Agent via Operator/Helm with OpenShift SCCs + OTel via Agent OTLP
+      logs:
+        supported: 'yes'
+        method: Fluent Bit DaemonSet (privileged SCC) tails /var/log/containers
+      traces: *id005
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling: *id003
+  datadog_limitations:
+  - Datadog Agent on OpenShift needs custom SCCs; no Azure integration namespace for ARO itself
+  cost:
+    profile: very-high
+    approx_monthly_usd_default: 1800
+    assumptions: 3 x D8s_v5 masters + 3 x D4s_v5 workers + ARO fee
+    teardown: terraform destroy (cluster RG removed)
+    data_retention: none
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/openshift/intro-openshift
+  - https://docs.datadoghq.com/containers/kubernetes/distributions/#openshift
+- id: spring-apps
+  family: spring-apps
+  hosting_variant: Azure Spring Apps (Basic/Standard/Enterprise)
+  category: compute
+  display_name: Azure Spring Apps
+  lifecycle:
+    status: retiring
+    notes: Retirement period started 2025-03-17 (no new customers); all plans retire 2028-03-31. Migrate to Container Apps or AKS. Tanzu components (App Live View, App Accelerator, ACS)
+      out of support since 2025-08-31.
+    verified_on: '2026-10-09'
+    retirement_date: '2028-03-31'
+    creation_blocked_from: '2025-03-17'
+    successor: container-apps-consumption
+  availability:
+    regions_checked:
+      swedencentral: false
+      eastus2: false
+      westeurope: false
+    region_notes: Not available to new customers (tenants without an instance before 2025-03-17)
+    quotas: []
+    registrations: []
+    licensing: []
+  networking:
+    private_support: vnet-injection
+  iac:
+    terraform_resources:
+    - azurerm_spring_cloud_service
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.appplatform_spring
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.appplatform_spring)
+      logs:
+        supported: n/a
+        method: not deployed
+      traces:
+        supported: n/a
+        method: not deployed
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: null
+    assumptions: not deployable for new customers
+    teardown: n/a
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/spring-apps/basic-standard/retirement-announcement
+  - https://docs.datadoghq.com/integrations/azure/
+- id: cloud-services-extended-support
+  family: cloud-services
+  hosting_variant: Cloud Services (extended support)
+  category: compute
+  display_name: Azure Cloud Services (extended support)
+  lifecycle:
+    status: retiring
+    notes: Deprecated since 2025-03-31; fully retired 2027-03-31 with no extensions. Migrate to Service Fabric managed clusters.
+    verified_on: '2026-10-09'
+    retirement_date: '2027-03-31'
+    successor: service-fabric-managed
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations: []
+    licensing: []
+  networking:
+    private_support: vnet-injection
+  iac:
+    terraform_resources: []
+    azapi:
+    - type: Microsoft.Compute/cloudServices
+      api_version: '2024-11-04'
+      reason: no azurerm resource; documented only - do not implement (retiring)
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.compute_cloudservices
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.compute_cloudservices)
+      logs:
+        supported: n/a
+        method: not deployed
+      traces:
+        supported: n/a
+        method: not deployed
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: null
+    assumptions: not deployed
+    teardown: n/a
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/cloud-services-extended-support/overview
+  - https://learn.microsoft.com/en-us/azure/templates/microsoft.compute/2024-11-04/cloudservices
+  - https://docs.datadoghq.com/integrations/azure/

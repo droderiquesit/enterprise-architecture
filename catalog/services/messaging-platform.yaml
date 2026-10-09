@@ -1,0 +1,496 @@
+# Azure service catalog - schema: catalog/schemas/service.schema.json
+# Validate: python3 tools/catalog/validate.py   Render: python3 tools/catalog/render_coverage.py
+# Facts verified 2026-10-09 via Microsoft Learn, docs.datadoghq.com and tfschema (azurerm 5.9.0 / azapi 2.13.0).
+# This file is the source of truth; edit it directly.
+schema_version: 1
+verified_on: '2026-10-09'
+description: Messaging and platform-support services.
+services:
+- id: service-bus
+  family: service-bus
+  hosting_variant: Service Bus namespace (Standard default; Premium for private endpoint)
+  category: messaging
+  display_name: Azure Service Bus
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.ServiceBus
+    licensing: []
+  networking:
+    private_support: partial
+    notes: private endpoints and public_network_access=false require Premium; Standard (minimal profile) stays public with RBAC-only auth - recorded exception
+  iac:
+    terraform_resources:
+    - azurerm_servicebus_namespace
+    - azurerm_servicebus_topic
+    - azurerm_servicebus_subscription
+    - azurerm_servicebus_queue
+    azapi: []
+    component: platform-messaging
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-orders-api
+    - hello-durable
+    - hello-worker
+    - hello-functions
+    - hello-jobs
+    operations:
+    - topic order-events (3 subscriptions)
+    - queue batch-items
+  telemetry:
+    azure_metric_namespace: azure.servicebus_namespaces
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.servicebus_namespaces)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (OperationalLogs, RuntimeAuditLogs (Premium)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: 'yes'
+        method: producer/consumer spans from OTel SDK with W3C traceparent in message application properties
+      dbm: &id001
+        supported: n/a
+        method: not applicable
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Trace context propagation across Service Bus depends on SDK instrumentation; Functions trigger spans need manual link
+  cost:
+    profile: low
+    approx_monthly_usd_default: 10
+    assumptions: Standard tier (Premium 1 MU ~USD 680 in specialized profile)
+    teardown: terraform destroy of the owning root
+    data_retention: messages deleted with namespace
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview
+  - https://docs.datadoghq.com/integrations/azure_service_bus/
+- id: event-hubs
+  family: event-hubs
+  hosting_variant: Event Hubs namespace (Standard, Kafka endpoint) for diagnostic log export
+  category: messaging
+  display_name: Azure Event Hubs
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.EventHub
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: Standard supports private endpoints
+  iac:
+    terraform_resources:
+    - azurerm_eventhub_namespace
+    - azurerm_eventhub
+    - azurerm_eventhub_consumer_group
+    azapi: []
+    component: obs-telemetry-transport
+    implemented: true
+    notes: 'owned by observability (ADR section 3: Event Hub for log export)'
+  workload:
+    exercised_by:
+    - obs-fluentbit-aggregator
+    operations:
+    - kafka consume of diagnostic logs
+  telemetry:
+    azure_metric_namespace: azure.eventhub_namespaces
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.eventhub_namespaces)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (OperationalLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: n/a
+        method: transport only
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 25
+    assumptions: Standard 1 TU
+    teardown: terraform destroy of the owning root
+    data_retention: retention 1-7 days (Standard)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/event-hubs/event-hubs-about
+  - https://docs.datadoghq.com/integrations/azure_event_hub/
+- id: event-grid
+  family: event-grid
+  hosting_variant: Event Grid (system topics / namespaces)
+  category: messaging
+  display_name: Azure Event Grid
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.EventGrid
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: custom topics/namespaces support private endpoints; system topics do not need them
+  iac:
+    terraform_resources:
+    - azurerm_eventgrid_system_topic
+    - azurerm_eventgrid_namespace
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.eventgrid_topics
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.eventgrid_topics)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (DeliveryFailures, PublishFailures) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: partial
+        method: CloudEvents traceparent extension if producers set it
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 1
+    assumptions: first 100k operations free
+    teardown: terraform destroy of the owning root
+    data_retention: 24 h retry
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/event-grid/overview
+  - https://docs.datadoghq.com/integrations/azure_event_grid/
+- id: container-registry
+  family: container-registry
+  hosting_variant: Azure Container Registry (Premium for private endpoint)
+  category: platform-support
+  display_name: Azure Container Registry
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.ContainerRegistry
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: private endpoints require Premium SKU (~USD 50/month); Basic/Standard are public only
+  iac:
+    terraform_resources:
+    - azurerm_container_registry
+    azapi: []
+    component: platform-shared
+    implemented: true
+  workload:
+    exercised_by:
+    - all container-image artifacts
+    operations:
+    - push by pipeline
+    - pull by AKS/ACA/App Service/ACI
+  telemetry:
+    azure_metric_namespace: azure.containerregistry_registries
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.containerregistry_registries)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (ContainerRegistryLoginEvents, ContainerRegistryRepositoryEvents) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: n/a
+        method: n/a
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 50
+    assumptions: Premium (required for private endpoint)
+    teardown: terraform destroy of the owning root (prevent_destroy recommended)
+    data_retention: images deleted with registry
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/container-registry/container-registry-intro
+  - https://docs.datadoghq.com/integrations/azure_container_registry/
+- id: log-analytics
+  family: log-analytics
+  hosting_variant: Log Analytics workspace (PerGB2018)
+  category: platform-support
+  display_name: Azure Monitor Log Analytics
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.OperationalInsights
+    licensing: []
+  networking:
+    private_support: partial
+    notes: Azure Monitor Private Link Scope (AMPLS) optional
+  iac:
+    terraform_resources:
+    - azurerm_log_analytics_workspace
+    azapi: []
+    component: platform-shared
+    implemented: true
+  workload:
+    exercised_by:
+    - ACA environment logs destination (optional)
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.operationalinsights_workspaces
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.operationalinsights_workspaces)
+      logs:
+        supported: n/a
+        method: not an application log path for Datadog (ADR section 10)
+      traces:
+        supported: n/a
+        method: n/a
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog does not read Log Analytics; logs reach Datadog via diagnostic settings -> Event Hubs
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: < 2 GB/day ingestion with 30-day retention
+    teardown: terraform destroy of the owning root
+    data_retention: 30 days interactive retention default
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-monitor/logs/log-analytics-workspace-overview
+  - https://docs.datadoghq.com/integrations/azure/
+- id: key-vault
+  family: key-vault
+  hosting_variant: Key Vault (Standard, RBAC authorization)
+  category: platform-support
+  display_name: Azure Key Vault
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.KeyVault
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (vault)
+  iac:
+    terraform_resources:
+    - azurerm_key_vault
+    - azurerm_key_vault_secret
+    azapi: []
+    component: foundation-identity
+    implemented: true
+    notes: 'ADR section 3: foundation owns Key Vault'
+  workload:
+    exercised_by:
+    - all services
+    operations:
+    - secret references (versionless IDs)
+  telemetry:
+    azure_metric_namespace: azure.keyvault_vaults
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.keyvault_vaults)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (AuditEvent) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: n/a
+        method: n/a
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 1
+    assumptions: Standard, few thousand operations
+    teardown: terraform destroy of the owning root; soft delete 90 days + purge protection
+    data_retention: soft-deleted vault/secrets retained 7-90 days
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/key-vault/general/overview
+  - https://docs.datadoghq.com/integrations/azure_key_vault/
+- id: app-configuration
+  family: app-configuration
+  hosting_variant: App Configuration store (Standard)
+  category: platform-support
+  display_name: Azure App Configuration
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.AppConfiguration
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: private endpoint requires Standard (or higher) tier; Free tier is public only
+  iac:
+    terraform_resources:
+    - azurerm_app_configuration
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.appconfiguration_configurationstores
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.appconfiguration_configurationstores)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (HttpRequest, Audit) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces:
+        supported: n/a
+        method: n/a
+      dbm: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 36
+    assumptions: Standard tier (USD 1.20/day)
+    teardown: terraform destroy of the owning root
+    data_retention: soft delete 1-7 days
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-app-configuration/overview
+  - https://docs.datadoghq.com/integrations/azure_app_configuration/

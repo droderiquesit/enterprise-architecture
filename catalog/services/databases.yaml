@@ -1,0 +1,1993 @@
+# Azure service catalog - schema: catalog/schemas/service.schema.json
+# Validate: python3 tools/catalog/validate.py   Render: python3 tools/catalog/render_coverage.py
+# Facts verified 2026-10-09 via Microsoft Learn, docs.datadoghq.com and tfschema (azurerm 5.9.0 / azapi 2.13.0).
+# This file is the source of truth; edit it directly.
+schema_version: 1
+verified_on: '2026-10-09'
+description: 'Databases: relational, NoSQL, cache and ledger services (category database).'
+services:
+- id: sql-database-provisioned
+  family: azure-sql
+  hosting_variant: Azure SQL Database single database, provisioned compute
+  category: database
+  display_name: Azure SQL Database (provisioned)
+  variants:
+  - name: DTU Basic/S0
+    notes: lab default
+  - name: vCore General Purpose Gen5
+  - name: vCore Business Critical
+    notes: cost
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Sql
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (sqlServer subresource); privatelink.database.windows.net
+  iac:
+    terraform_resources:
+    - azurerm_mssql_server
+    - azurerm_mssql_database
+    azapi: []
+    component: platform-db-sql
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-orders-api
+    - hello-dbadapter-sql
+    operations:
+    - CRUD on orders.orders
+    - idempotent insert by Idempotency-Key
+    - read order status
+    boundary: db orders / schema orders
+  telemetry:
+    azure_metric_namespace: azure.sql_servers_databases
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.sql_servers_databases)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
+          / Datadog log forwarding
+      traces: &id001
+        supported: 'yes'
+        method: client spans from the calling service's OpenTelemetry SDK/instrumentation -> OTLP -> Datadog Agent or OTel gateway
+        notes: database itself emits no traces; spans come from hello-* callers
+      dbm: &id002
+        supported: 'yes'
+        method: 'Datadog Agent sqlserver check (dbm: true, deployment_type ''sql_database'', one instance per database) from the observability subnet via private endpoint; owned by obs-dbm'
+        notes: Agent 7.41.0+; autodiscovery must not be enabled for Azure SQL DB; connect directly, not via proxy/pooler
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - DBM requires one check instance per application database (exclude master)
+  - SQL Server Agent Jobs monitoring is not available for Azure SQL Database
+  cost:
+    profile: low
+    approx_monthly_usd_default: 15
+    assumptions: S0 (10 DTU, 250 GB max) single database on a logical server; vCore GP_Gen5_2 is a settings option (~USD 370/month)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: PITR backups 7 days default (configurable 1-35); LTR off; deleted databases restorable from backup until server deletion
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/sql-database-paas-overview
+  - https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/
+  - https://docs.datadoghq.com/integrations/azure_sql_database/
+- id: sql-database-serverless
+  family: azure-sql
+  hosting_variant: Azure SQL Database single database, serverless compute tier (General Purpose)
+  category: database
+  display_name: Azure SQL Database (serverless)
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Sql
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (sqlServer subresource); privatelink.database.windows.net
+  iac:
+    terraform_resources:
+    - azurerm_mssql_server
+    - azurerm_mssql_database
+    azapi: []
+    component: platform-db-sql
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-durable
+    - hello-jobs
+    operations:
+    - orchestration status writes (fulfillment schema)
+    - reconciliation summaries
+    boundary: db fulfillment / schemas fulfillment
+  telemetry:
+    azure_metric_namespace: azure.sql_servers_databases
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.sql_servers_databases)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
+          / Datadog log forwarding
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - DBM requires one check instance per application database (exclude master)
+  - SQL Server Agent Jobs monitoring is not available for Azure SQL Database
+  - Auto-pause is prevented while the DBM Agent (or any client) keeps sessions open; enabling DBM on a serverless DB effectively disables auto-pause and raises cost
+  cost:
+    profile: low
+    approx_monthly_usd_default: 40
+    assumptions: GP_S_Gen5_1, min 0.5 vCore, auto-pause 60 min, 32 GB; cost depends on active hours
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: PITR backups 7 days default (configurable 1-35); LTR off; deleted databases restorable from backup until server deletion
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/sql-database-paas-overview
+  - https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/
+  - https://docs.datadoghq.com/integrations/azure_sql_database/
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/serverless-tier-overview
+- id: sql-elastic-pool
+  family: azure-sql
+  hosting_variant: Azure SQL Database elastic pool
+  category: database
+  display_name: Azure SQL Database elastic pool
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Sql
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (sqlServer subresource); privatelink.database.windows.net
+  iac:
+    terraform_resources:
+    - azurerm_mssql_server
+    - azurerm_mssql_database
+    - azurerm_mssql_elasticpool
+    azapi: []
+    component: platform-db-sql
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-sql-pool
+    operations:
+    - adapter CRUD in pooled database
+    boundary: db adapter_pool
+  telemetry:
+    azure_metric_namespace: azure.sql_servers_elasticpools
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.sql_servers_elasticpools (+ azure.sql_servers_databases per database))
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
+          / Datadog log forwarding
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - DBM requires one check instance per application database (exclude master)
+  - SQL Server Agent Jobs monitoring is not available for Azure SQL Database
+  - DBM treats each database in the pool as a separate host
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 75
+    assumptions: Basic pool 50 eDTU (or GP 2 vCore pool ~USD 330); disabled by default
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: PITR backups 7 days default (configurable 1-35); LTR off; deleted databases restorable from backup until server deletion
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/sql-database-paas-overview
+  - https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/
+  - https://docs.datadoghq.com/integrations/azure_sql_database/
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/elastic-pool-overview
+  - https://docs.datadoghq.com/integrations/azure_sql_elastic_pool/
+- id: sql-hyperscale
+  family: azure-sql
+  hosting_variant: Azure SQL Database Hyperscale (standard-series Gen5)
+  category: database
+  display_name: Azure SQL Database Hyperscale
+  variants:
+  - name: standard-series (Gen5)
+    notes: lab default
+  - name: premium-series / premium-series memory optimized
+    notes: premium-series memory optimized not available in Sweden Central (region-availability page)
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Sql
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (sqlServer subresource); privatelink.database.windows.net
+  iac:
+    terraform_resources:
+    - azurerm_mssql_server
+    - azurerm_mssql_database
+    azapi: []
+    component: platform-db-sql
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-sql-hyperscale
+    operations:
+    - adapter CRUD
+    boundary: db adapter_hs
+  telemetry:
+    azure_metric_namespace: azure.sql_servers_databases
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.sql_servers_databases)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
+          / Datadog log forwarding
+      traces: *id001
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - DBM requires one check instance per application database (exclude master)
+  - SQL Server Agent Jobs monitoring is not available for Azure SQL Database
+  - Datadog DBM docs do not mention Hyperscale explicitly (treated as Azure SQL Database)
+  cost:
+    profile: high
+    approx_monthly_usd_default: 400
+    assumptions: HS_Gen5_2, 0 HA replicas, minimal storage; disabled by default
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: PITR backups 7 days default (configurable 1-35); LTR off; deleted databases restorable from backup until server deletion
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/sql-database-paas-overview
+  - https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/
+  - https://docs.datadoghq.com/integrations/azure_sql_database/
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/service-tier-hyperscale
+  - https://learn.microsoft.com/en-us/azure/azure-sql/database/region-availability
+- id: sql-managed-instance
+  family: azure-sql
+  hosting_variant: Azure SQL Managed Instance (General Purpose, VNet-injected)
+  category: database
+  display_name: Azure SQL Managed Instance
+  variants:
+  - name: General Purpose (Gen5 / premium-series)
+    notes: lab default 4 vCore
+  - name: Next-gen General Purpose
+  - name: Business Critical
+    notes: cost
+  lifecycle:
+    status: ga
+    notes: Generally available. Provisioning into a new subnet can take hours (virtual cluster creation).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - subnet delegated to Microsoft.Sql/managedInstances, /27 minimum (/24 recommended)
+    - regional vCore quota per subscription
+    registrations:
+    - Microsoft.Sql
+    licensing:
+    - License included or Azure Hybrid Benefit (license_type)
+  networking:
+    private_support: vnet-injection
+    notes: VNet-injected in the dedicated 'sqlmi' subnet; optional private endpoint; public data endpoint disabled
+  iac:
+    terraform_resources:
+    - azurerm_mssql_managed_instance
+    - azurerm_mssql_managed_database
+    azapi: []
+    component: platform-db-sqlmi
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-sqlmi
+    operations:
+    - adapter CRUD
+    boundary: db adapter
+  telemetry:
+    azure_metric_namespace: azure.sql_managedinstances
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.sql_managedinstances)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (SQLSecurityAuditEvents, ResourceUsageStats, Errors) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent sqlserver check (dbm: true) from the observability subnet; owned by obs-dbm'
+        notes: Agent runs on a separate host (no host access); connect directly to the MI host name
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Agent cannot run on the managed instance host; host-level metrics come only from Azure Monitor
+  cost:
+    profile: very-high
+    approx_monthly_usd_default: 730
+    assumptions: GP Gen5 4 vCore, 32 GB, license included, single instance; billed while running (start/stop schedule optional)
+    teardown: terraform destroy; deletion of the last instance also removes the virtual cluster (can take hours); subnet stays locked until then
+    data_retention: PITR 7 days default; LTR off
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-sql/managed-instance/sql-managed-instance-paas-overview
+  - https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/
+  - https://docs.datadoghq.com/integrations/azure_sql_managed_instance/
+- id: sql-server-on-vm
+  family: azure-sql
+  hosting_variant: SQL Server 2022 on Azure Windows VM (SQL IaaS Agent extension)
+  category: database
+  display_name: SQL Server on Azure Virtual Machines
+  variants:
+  - name: SQL Server 2022 Developer (free license)
+    notes: lab default marketplace image
+  - name: Standard / Enterprise PAYG
+  - name: Azure Hybrid Benefit
+  lifecycle:
+    status: ga
+    notes: Generally available. SQL Server 2025 images available; Datadog supports 2025 with Agent 7.79+.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - regional vCPU quota for the chosen VM family (e.g. Dsv5)
+    registrations:
+    - Microsoft.SqlVirtualMachine
+    - Microsoft.Compute
+    licensing:
+    - 'Developer edition: free, non-production only'
+    - 'Standard/Enterprise: PAYG or AHB'
+  networking:
+    private_support: internal-only
+    notes: private IP in the compute subnet; no public IP
+  iac:
+    terraform_resources:
+    - azurerm_windows_virtual_machine
+    - azurerm_mssql_virtual_machine
+    - azurerm_managed_disk
+    azapi: []
+    component: platform-db-sqlvm
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-sqlvm
+    operations:
+    - adapter CRUD
+    boundary: db adapter
+  telemetry:
+    azure_metric_namespace: azure.vm
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.vm)
+      logs:
+        supported: 'yes'
+        method: Fluent Bit service on the VM (SQL error log / app logs) owned by obs-hosts
+        notes: SQL Server error log collection optional
+      traces: *id001
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent installed on the VM (VM extension owned by obs-hosts/obs-dbm) running the sqlserver check (dbm: true)'
+        notes: self-hosted setup guide applies
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no first-party app process
+  datadog_limitations:
+  - Agent and DBM check on the same VM consume VM resources; size VM accordingly
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 160
+    assumptions: Standard_D2s_v5 Windows + SQL Developer (no SQL license fee) + 128 GB Premium SSD
+    teardown: terraform destroy deletes VM and disks
+    data_retention: no automated backup unless SQL IaaS automated backup is enabled (off by default)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-sql/virtual-machines/windows/sql-server-on-azure-vm-iaas-what-is-overview
+  - https://docs.datadoghq.com/database_monitoring/setup_sql_server/selfhosted/
+  - https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/
+- id: postgresql-flexible
+  family: azure-postgresql
+  hosting_variant: Azure Database for PostgreSQL flexible server (single node)
+  category: database
+  display_name: Azure Database for PostgreSQL flexible server
+  variants:
+  - name: Burstable B1ms
+    notes: lab default; no HA
+  - name: General Purpose D2ds_v5
+    notes: HA (zone-redundant) capable
+  - name: PostgreSQL 17
+    notes: lab default version
+  lifecycle:
+    status: ga
+    notes: Generally available. Single Server (predecessor) retired 2025-03-28.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: Zone-redundant HA availability varies by region/subscription (temporary blocks have occurred, e.g. East US 2)
+    quotas: []
+    registrations:
+    - Microsoft.DBforPostgreSQL
+    licensing: []
+  networking:
+    private_support: private-endpoint-or-vnet-injection
+    notes: VNet injection into delegated 'postgres' subnet (lab default) or private endpoint; choice is fixed at creation
+  iac:
+    terraform_resources:
+    - azurerm_postgresql_flexible_server
+    - azurerm_postgresql_flexible_server_database
+    - azurerm_postgresql_flexible_server_configuration
+    azapi: []
+    component: platform-db-postgresql
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-catalog-api
+    - hello-dbadapter-postgresql
+    operations:
+    - catalog price lookups
+    - adapter CRUD
+    boundary: db catalog; db adapter
+  telemetry:
+    azure_metric_namespace: azure.dbforpostgresql_flexibleservers
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.dbforpostgresql_flexibleservers)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (PostgreSQLLogs, PostgreSQLFlexSessions, PostgreSQLFlexQueryStoreRuntime) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog
+          log forwarding
+      traces: *id001
+      dbm:
+        supported: 'yes'
+        method: 'Datadog Agent postgres check (dbm: true) from the observability subnet over the private network; owned by obs-dbm'
+        notes: Agent 7.36.1+; azure.extensions=pg_stat_statements, pg_stat_statements.track=ALL, track_activity_query_size=4096 (static, restart)
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - 'Postgres 16+: postgresql.wal_count/wal_size/wal_age not collected (pg_ls_waldir permission)'
+  - DBM must connect directly to the server, not via PgBouncer
+  cost:
+    profile: low
+    approx_monthly_usd_default: 17
+    assumptions: B1ms burstable, 32 GB P4 storage, no HA, 7-day backup
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: backups 7 days default (7-35); deleted servers restorable for 5 days via support/portal
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/postgresql/overview
+  - https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/
+  - https://docs.datadoghq.com/integrations/azure_db_for_postgresql/
+- id: postgresql-elastic-cluster
+  family: azure-postgresql
+  parent: postgresql-flexible
+  hosting_variant: Azure Database for PostgreSQL flexible server with elastic cluster (Citus, multi-node)
+  category: database
+  display_name: Azure Database for PostgreSQL elastic clusters
+  lifecycle:
+    status: ga
+    notes: Feature of flexible server (no preview label on concept page, updated 2026-07). PostgreSQL 17 and 18 only; no scale-in; no major version upgrade; one database per cluster;
+      scale-out to 20 nodes self-service.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: Same regions as flexible server
+    quotas: []
+    registrations:
+    - Microsoft.DBforPostgreSQL
+    licensing: []
+  networking:
+    private_support: private-endpoint-or-vnet-injection
+    notes: same options as flexible server
+  iac:
+    terraform_resources:
+    - azurerm_postgresql_flexible_server
+    - azurerm_postgresql_flexible_server_configuration
+    azapi: []
+    component: platform-db-postgresql
+    implemented: true
+    notes: azurerm_postgresql_flexible_server cluster { size, default_database_name } block (azurerm 5.9.0)
+  workload:
+    exercised_by:
+    - hello-dbadapter-postgresql-elastic
+    operations:
+    - create_distributed_table adapter.records
+    - distributed insert/select
+    boundary: distributed table adapter.records
+  telemetry:
+    azure_metric_namespace: azure.dbforpostgresql_flexibleservers
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.dbforpostgresql_flexibleservers)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (PostgreSQLLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: partial
+        method: Datadog Agent postgres check against the coordinator (port 5432)
+        notes: Elastic clusters are not listed in Datadog's Azure Postgres DBM page; worker nodes share one IP with different ports (7000+), per-node DBM unverified
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - DBM support for elastic clusters is not documented by Datadog; treat as best effort (coordinator only)
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 290
+    assumptions: 2 nodes General Purpose D2ds_v5, 32 GB each, no HA
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: as flexible server
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+  references:
+  - https://learn.microsoft.com/en-us/azure/postgresql/elastic-clusters/concepts-elastic-clusters
+  - https://learn.microsoft.com/en-us/azure/postgresql/elastic-clusters/concepts-elastic-clusters-limitations
+  - https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/
+- id: mysql-flexible
+  family: azure-mysql
+  hosting_variant: Azure Database for MySQL flexible server
+  category: database
+  display_name: Azure Database for MySQL flexible server
+  variants:
+  - name: Burstable B1ms
+    notes: lab default
+  - name: General Purpose
+  - name: MySQL 8.0 / 8.4 LTS
+  lifecycle:
+    status: ga
+    notes: Generally available. Single Server retired 2024-09-16.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.DBforMySQL
+    licensing: []
+  networking:
+    private_support: private-endpoint-or-vnet-injection
+    notes: VNet injection into delegated 'mysql' subnet (lab default) or private endpoint; fixed at creation
+  iac:
+    terraform_resources:
+    - azurerm_mysql_flexible_server
+    - azurerm_mysql_flexible_database
+    - azurerm_mysql_flexible_server_configuration
+    azapi: []
+    component: platform-db-mysql
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-mysql
+    operations:
+    - adapter CRUD
+    boundary: db adapter
+  telemetry:
+    azure_metric_namespace: azure.dbformysql_flexibleservers
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.dbformysql_flexibleservers)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (MySqlSlowLogs, MySqlAuditLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: partial
+        method: 'Datadog Agent mysql check (dbm: true) from the observability subnet; owned by obs-dbm'
+        notes: performance_schema=ON (restart); Query Activity and Wait Event collection are NOT supported on Flexible Server
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - 'DBM on Flexible Server: query metrics/samples only - no Query Activity, no Wait Events'
+  cost:
+    profile: low
+    approx_monthly_usd_default: 15
+    assumptions: B1ms burstable, 20 GB, no HA
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: backups 7 days default (1-35)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/mysql/flexible-server/overview
+  - https://docs.datadoghq.com/database_monitoring/setup_mysql/azure/
+  - https://docs.datadoghq.com/integrations/azure_db_for_mysql/
+- id: cosmos-nosql
+  family: cosmos-db
+  hosting_variant: Azure Cosmos DB for NoSQL (RU-based account, serverless capacity mode)
+  category: database
+  display_name: Azure Cosmos DB for NoSQL
+  variants:
+  - name: serverless
+    notes: 'default in the lab: pay per RU, single region'
+  - name: provisioned throughput / autoscale
+    notes: settings switch; multi-region writes optional
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - serverless accounts are single-region; 1 TB per container (serverless)
+    registrations:
+    - Microsoft.DocumentDB
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (subresource Sql)
+  iac:
+    terraform_resources:
+    - azurerm_cosmosdb_account
+    - azurerm_cosmosdb_sql_database
+    - azurerm_cosmosdb_sql_container
+    - azurerm_cosmosdb_sql_role_assignment
+    azapi: []
+    component: platform-db-cosmos-nosql
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-inventory-api
+    - hello-dbadapter-cosmos-nosql
+    operations:
+    - point read/upsert by id+partition key
+    - query by sku
+    boundary: db inventory / container items
+  telemetry:
+    azure_metric_namespace: azure.cosmosdb
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.cosmosdb)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (DataPlaneRequests, QueryRuntimeStatistics, PartitionKeyStatistics) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log
+          forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Cosmos DB is not in the Datadog DBM support matrix
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog Database Monitoring does not support this engine; only Azure Monitor platform metrics/logs and client-side spans are available
+  - Per-request RU charge is visible only in diagnostic logs (DataPlaneRequests) or client spans, not in metrics
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: serverless capacity mode, < 1 GB, light synthetic traffic (~1M RU/month)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: continuous backup (7-day tier) or periodic backup every 4 h, 2 copies kept (default periodic); account deletion removes backups after retention
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/overview
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/serverless
+  - https://docs.datadoghq.com/integrations/azure_cosmosdb/
+- id: cosmos-mongodb-ru
+  family: cosmos-db
+  hosting_variant: Azure Cosmos DB for MongoDB (RU) (RU-based account, serverless capacity mode)
+  category: database
+  display_name: Azure Cosmos DB for MongoDB (RU)
+  variants:
+  - name: serverless
+    notes: 'default in the lab: pay per RU, single region'
+  - name: provisioned throughput / autoscale
+    notes: settings switch; multi-region writes optional
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - serverless accounts are single-region; 1 TB per container (serverless)
+    registrations:
+    - Microsoft.DocumentDB
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (subresource MongoDB)
+  iac:
+    terraform_resources:
+    - azurerm_cosmosdb_account
+    - azurerm_cosmosdb_mongo_database
+    - azurerm_cosmosdb_mongo_collection
+    azapi: []
+    component: platform-db-cosmos-mongo
+    implemented: true
+    notes: kind = MongoDB, capabilities EnableMongo (+ EnableServerless); distinct from Azure DocumentDB (mongoClusters)
+  workload:
+    exercised_by:
+    - hello-dbadapter-cosmos-mongo
+    operations:
+    - insert/find/update records
+    boundary: db adapter / collection records
+  telemetry:
+    azure_metric_namespace: azure.cosmosdb
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.cosmosdb)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (MongoRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Cosmos DB is not in the Datadog DBM support matrix
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog Database Monitoring does not support this engine; only Azure Monitor platform metrics/logs and client-side spans are available
+  - Per-request RU charge is visible only in diagnostic logs (DataPlaneRequests) or client spans, not in metrics
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: serverless capacity mode, < 1 GB, light synthetic traffic (~1M RU/month)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: continuous backup (7-day tier) or periodic backup every 4 h, 2 copies kept (default periodic); account deletion removes backups after retention
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/mongodb/introduction
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/serverless
+  - https://docs.datadoghq.com/integrations/azure_cosmosdb/
+- id: cosmos-cassandra
+  family: cosmos-db
+  hosting_variant: Azure Cosmos DB for Apache Cassandra (RU-based account, serverless capacity mode)
+  category: database
+  display_name: Azure Cosmos DB for Apache Cassandra
+  variants:
+  - name: serverless
+    notes: 'default in the lab: pay per RU, single region'
+  - name: provisioned throughput / autoscale
+    notes: settings switch; multi-region writes optional
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - serverless accounts are single-region; 1 TB per container (serverless)
+    registrations:
+    - Microsoft.DocumentDB
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (subresource Cassandra)
+  iac:
+    terraform_resources:
+    - azurerm_cosmosdb_account
+    - azurerm_cosmosdb_cassandra_keyspace
+    - azurerm_cosmosdb_cassandra_table
+    azapi: []
+    component: platform-db-cosmos-cassandra
+    implemented: true
+    notes: capabilities EnableCassandra
+  workload:
+    exercised_by:
+    - hello-dbadapter-cosmos-cassandra
+    operations:
+    - CQL insert/select
+    boundary: keyspace adapter
+  telemetry:
+    azure_metric_namespace: azure.cosmosdb
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.cosmosdb)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (CassandraRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Cosmos DB is not in the Datadog DBM support matrix
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog Database Monitoring does not support this engine; only Azure Monitor platform metrics/logs and client-side spans are available
+  - Per-request RU charge is visible only in diagnostic logs (DataPlaneRequests) or client spans, not in metrics
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: serverless capacity mode, < 1 GB, light synthetic traffic (~1M RU/month)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: continuous backup (7-day tier) or periodic backup every 4 h, 2 copies kept (default periodic); account deletion removes backups after retention
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/cassandra/introduction
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/serverless
+  - https://docs.datadoghq.com/integrations/azure_cosmosdb/
+- id: cosmos-gremlin
+  family: cosmos-db
+  hosting_variant: Azure Cosmos DB for Apache Gremlin (RU-based account, serverless capacity mode)
+  category: database
+  display_name: Azure Cosmos DB for Apache Gremlin
+  variants:
+  - name: serverless
+    notes: 'default in the lab: pay per RU, single region'
+  - name: provisioned throughput / autoscale
+    notes: settings switch; multi-region writes optional
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - serverless accounts are single-region; 1 TB per container (serverless)
+    registrations:
+    - Microsoft.DocumentDB
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (subresource Gremlin)
+  iac:
+    terraform_resources:
+    - azurerm_cosmosdb_account
+    - azurerm_cosmosdb_gremlin_database
+    - azurerm_cosmosdb_gremlin_graph
+    azapi: []
+    component: platform-db-cosmos-gremlin
+    implemented: true
+    notes: capabilities EnableGremlin
+  workload:
+    exercised_by:
+    - hello-dbadapter-cosmos-gremlin
+    operations:
+    - addV/addE/traversal
+    boundary: db adapter / graph records
+  telemetry:
+    azure_metric_namespace: azure.cosmosdb
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.cosmosdb)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (GremlinRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Cosmos DB is not in the Datadog DBM support matrix
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog Database Monitoring does not support this engine; only Azure Monitor platform metrics/logs and client-side spans are available
+  - Per-request RU charge is visible only in diagnostic logs (DataPlaneRequests) or client spans, not in metrics
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: serverless capacity mode, < 1 GB, light synthetic traffic (~1M RU/month)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: continuous backup (7-day tier) or periodic backup every 4 h, 2 copies kept (default periodic); account deletion removes backups after retention
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/gremlin/introduction
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/serverless
+  - https://docs.datadoghq.com/integrations/azure_cosmosdb/
+- id: cosmos-table
+  family: cosmos-db
+  hosting_variant: Azure Cosmos DB for Table (RU-based account, serverless capacity mode)
+  category: database
+  display_name: Azure Cosmos DB for Table
+  variants:
+  - name: serverless
+    notes: 'default in the lab: pay per RU, single region'
+  - name: provisioned throughput / autoscale
+    notes: settings switch; multi-region writes optional
+  lifecycle:
+    status: ga
+    notes: Generally available; no retirement announced.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas:
+    - serverless accounts are single-region; 1 TB per container (serverless)
+    registrations:
+    - Microsoft.DocumentDB
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access_enabled = false + private endpoint (subresource Table)
+  iac:
+    terraform_resources:
+    - azurerm_cosmosdb_account
+    - azurerm_cosmosdb_table
+    azapi: []
+    component: platform-db-cosmos-table
+    implemented: true
+    notes: capabilities EnableTable
+  workload:
+    exercised_by:
+    - hello-dbadapter-cosmos-table
+    operations:
+    - upsert/query entities
+    boundary: table adapterrecords
+  telemetry:
+    azure_metric_namespace: azure.cosmosdb
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.cosmosdb)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (TableApiRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Cosmos DB is not in the Datadog DBM support matrix
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog Database Monitoring does not support this engine; only Azure Monitor platform metrics/logs and client-side spans are available
+  - Per-request RU charge is visible only in diagnostic logs (DataPlaneRequests) or client spans, not in metrics
+  cost:
+    profile: low
+    approx_monthly_usd_default: 5
+    assumptions: serverless capacity mode, < 1 GB, light synthetic traffic (~1M RU/month)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: continuous backup (7-day tier) or periodic backup every 4 h, 2 copies kept (default periodic); account deletion removes backups after retention
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/table/introduction
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/serverless
+  - https://docs.datadoghq.com/integrations/azure_cosmosdb/
+- id: documentdb
+  family: azure-documentdb
+  hosting_variant: Azure DocumentDB (formerly vCore-based Azure Cosmos DB for MongoDB), mongoClusters
+  category: database
+  display_name: Azure DocumentDB
+  summary: 'Distinct from Cosmos DB for MongoDB (RU): different resource type (Microsoft.DocumentDB/mongoClusters), vCore billing, MongoDB wire protocol.'
+  variants:
+  - name: Free tier
+    notes: one per subscription, limited storage; no SLA
+  - name: M10/M20 burstable
+  - name: M30+ general purpose
+    notes: HA option
+  lifecycle:
+    status: ga
+    notes: GA under the new name Azure DocumentDB; ARM type unchanged (Microsoft.DocumentDB/mongoClusters, stable API 2025-09-01; preview 2026-02-01-preview).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: Region list per product availability; verify tier availability per region
+    quotas: []
+    registrations:
+    - Microsoft.DocumentDB
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access = Disabled + private endpoint (subresource MongoCluster)
+  iac:
+    terraform_resources:
+    - azurerm_mongo_cluster
+    - azurerm_mongo_cluster_user
+    - azurerm_mongo_cluster_firewall_rule
+    azapi: []
+    component: platform-db-documentdb
+    implemented: true
+    notes: 'azurerm_mongo_cluster: compute_tier, storage_size_in_gb, shard_count, high_availability_mode, authentication_methods (NativeAuth/MicrosoftEntraID)'
+  workload:
+    exercised_by:
+    - hello-dbadapter-documentdb
+    operations:
+    - insert/find/update records
+    boundary: db adapter / collection records
+  telemetry:
+    azure_metric_namespace: azure.documentdb_mongoclusters
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.documentdb_mongoclusters)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (vCoreMongoRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Datadog MongoDB DBM supports self-hosted MongoDB and MongoDB Atlas only
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog Database Monitoring does not support this engine; only Azure Monitor platform metrics/logs and client-side spans are available
+  cost:
+    profile: low
+    approx_monthly_usd_default: 60
+    assumptions: M10 burstable tier, 32 GB, no HA (Free tier possible for dev at ~USD 0)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: automatic backups 35 days (service-managed)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/documentdb/overview
+  - https://learn.microsoft.com/en-us/azure/templates/microsoft.documentdb/mongoclusters
+  - https://docs.datadoghq.com/database_monitoring/setup_mongodb/
+  - https://docs.datadoghq.com/integrations/azure/
+- id: managed-cassandra
+  family: cassandra-mi
+  hosting_variant: Azure Managed Instance for Apache Cassandra (cluster + datacenter)
+  category: database
+  display_name: Azure Managed Instance for Apache Cassandra
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: Sweden Central assumed available (not re-verified per SKU)
+    quotas:
+    - minimum 3 nodes per datacenter
+    - regional vCPU quota for the node SKU (e.g. Standard_D8s_v4/v5)
+    registrations:
+    - Microsoft.DocumentDB
+    licensing: []
+  networking:
+    private_support: vnet-injection
+    notes: nodes injected into 'cassandra-mi' subnet; Azure Cosmos DB service principal needs Network Contributor on the VNet
+  iac:
+    terraform_resources:
+    - azurerm_cosmosdb_cassandra_cluster
+    - azurerm_cosmosdb_cassandra_datacenter
+    azapi: []
+    component: platform-db-cassandra-mi
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-cassandra-mi
+    operations:
+    - CQL insert/select
+    boundary: keyspace adapter
+  telemetry:
+    azure_metric_namespace: azure.documentdb_cassandraclusters
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.documentdb_cassandraclusters)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (CassandraAudit, CassandraLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Cassandra is not in the Datadog DBM support matrix; the Datadog Cassandra (JMX) integration needs host access, which the managed service does not give
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Datadog Database Monitoring does not support this engine; only Azure Monitor platform metrics/logs and client-side spans are available
+  cost:
+    profile: very-high
+    approx_monthly_usd_default: 1500
+    assumptions: 1 datacenter x 3 nodes Standard_D8s_v4, P30 disks
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: service backups every 24 h, retained 2 by default
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/managed-instance-apache-cassandra/introduction
+  - https://docs.datadoghq.com/integrations/azure_cosmosdb/
+- id: managed-redis
+  family: azure-redis
+  hosting_variant: Azure Managed Redis (Microsoft.Cache/redisEnterprise)
+  category: database
+  display_name: Azure Managed Redis
+  variants:
+  - name: Balanced_B0 / B1
+    notes: lab default B0; no active geo-replication on B0/B1
+  - name: Memory Optimized / Compute Optimized
+  - name: Flash Optimized
+    lifecycle: preview
+  - name: high availability disabled
+    notes: dev/test only; no SLA, data loss on maintenance
+  lifecycle:
+    status: ga
+    notes: GA since May 2025. Tiers > 120 GB and Flash Optimized remain preview. Successor to Azure Cache for Redis.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: true
+      westeurope: true
+    region_notes: Not every region offers Managed Redis (e.g. North Europe historically); check products-by-region / az provider show for swedencentral. Capacity-related create failures
+      have been reported for Balanced tier.
+    quotas: []
+    registrations:
+    - Microsoft.Cache
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: public_network_access = Disabled + private endpoint (redisEnterprise); host <name>.<region>.redis.azure.net port 10000
+  iac:
+    terraform_resources:
+    - azurerm_managed_redis
+    - azurerm_managed_redis_access_policy_assignment
+    azapi: []
+    component: platform-db-redis
+    implemented: true
+    notes: azurerm_managed_redis default_database { clustering_policy, eviction_policy, access_keys_authentication_enabled, module }; modules fixed at creation
+  workload:
+    exercised_by:
+    - hello-catalog-api
+    - hello-dbadapter-redis
+    operations:
+    - cache-aside GET/SET with TTL
+    boundary: 'key prefix catalog:, adapter:'
+  telemetry:
+    azure_metric_namespace: azure.cache_redisenterprise
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.cache_redisenterprise)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (ConnectionEvents) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Redis is not in the Datadog DBM support matrix
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - The Datadog redisdb Agent check requires network reach and auth; not configured by default (platform metrics + client spans only)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 35
+    assumptions: Balanced_B0 (0.5 GB), high availability disabled for the lab
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: in-memory only unless persistence (RDB/AOF) enabled; data lost on deletion
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/redis/overview
+  - https://learn.microsoft.com/en-us/azure/redis/plan-tiers-and-capacity
+  - https://docs.datadoghq.com/integrations/azure_managed_redis/
+- id: azure-cache-for-redis
+  family: azure-redis
+  hosting_variant: Azure Cache for Redis (Basic/Standard/Premium; Enterprise/Enterprise Flash)
+  category: database
+  display_name: Azure Cache for Redis (legacy)
+  variants:
+  - name: Basic/Standard/Premium
+    lifecycle: retiring
+    notes: retire 2028-09-30; new-customer create block since 2026-04-01
+  - name: Enterprise / Enterprise Flash
+    lifecycle: retiring
+    notes: create blocked 2026-04-01; remaining caches migrated to Managed Redis by 2027-03-31
+  lifecycle:
+    status: retiring
+    notes: 'All SKUs retiring. Basic/Standard/Premium (public cloud): creation blocked for NEW customers from 2026-04-01 (a tenant is ''existing'' if any subscription had a cache before
+      2026-04-01); the planned Oct-2026 block for existing customers was removed (July 2026 update) so existing tenants can create caches until retirement on 2028-09-30. Enterprise/Enterprise
+      Flash: creation blocked 2026-04-01, remaining caches migrated to Azure Managed Redis on 2027-03-31. Not a lab default.'
+    verified_on: '2026-10-09'
+    retirement_date: '2028-09-30'
+    creation_blocked_from: '2026-04-01'
+    successor: managed-redis
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Cache
+    licensing:
+    - New tenants (no cache before 2026-04-01) cannot create Basic/Standard/Premium caches
+  networking:
+    private_support: private-endpoint
+    notes: Premium also supports VNet injection (legacy)
+  iac:
+    terraform_resources:
+    - azurerm_redis_cache
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.cache_redis
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.cache_redis)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (ConnectedClientList) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: Redis is not in the Datadog DBM support matrix
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Same as managed-redis
+  cost:
+    profile: low
+    approx_monthly_usd_default: 16
+    assumptions: C0 Basic (if creation allowed for the tenant)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: in-memory
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/cache-whats-new
+  - https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/retirement-faq
+  - https://docs.datadoghq.com/integrations/azure_redis_cache/
+- id: table-storage
+  family: azure-storage
+  hosting_variant: Azure Table Storage (StorageV2 account, table service)
+  category: database
+  display_name: Azure Table Storage
+  lifecycle:
+    status: ga
+    notes: Generally available.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Storage
+    licensing: []
+  networking:
+    private_support: private-endpoint
+    notes: shared_access_key_enabled = false, public network disabled, private endpoint (table subresource); Terraform data-plane calls need private reach
+  iac:
+    terraform_resources:
+    - azurerm_storage_account
+    - azurerm_storage_table
+    azapi: []
+    component: platform-db-table-storage
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-worker
+    - hello-dbadapter-table-storage
+    operations:
+    - insert notification entity
+    - query by partition
+    boundary: table notifications; table adapterrecords
+  telemetry:
+    azure_metric_namespace: azure.storage_storageaccounts_tableservices
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.storage_storageaccounts_tableservices)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (StorageRead, StorageWrite, StorageDelete (tableServices)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: not a database engine supported by DBM
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Transaction-level detail only via StorageRead/Write logs
+  cost:
+    profile: low
+    approx_monthly_usd_default: 2
+    assumptions: Standard LRS, < 1 GB, < 1M transactions
+    teardown: terraform destroy; account deletion recoverable up to 14 days (account recovery) in some cases
+    data_retention: no versioning for tables; soft delete n/a
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/storage/tables/table-storage-overview
+  - https://docs.datadoghq.com/integrations/azure_table_storage/
+- id: confidential-ledger
+  family: confidential-ledger
+  hosting_variant: Azure confidential ledger (public ledger type)
+  category: database
+  display_name: Azure confidential ledger
+  lifecycle:
+    status: ga
+    notes: Generally available. Data is always replicated to the paired region (cannot be disabled); hard delete.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: unknown
+      westeurope: unknown
+    region_notes: Region list not published on the overview page; verify with az provider show -n Microsoft.ConfidentialLedger. Sweden Central pairs with Sweden South.
+    quotas:
+    - 2 standard SKU ledgers per subscription
+    - 50,000 collection IDs per ledger
+    registrations:
+    - Microsoft.ConfidentialLedger
+    licensing: []
+  networking:
+    private_support: partial
+    notes: data plane is a public TLS 1.3 endpoint terminating in SGX enclaves; private endpoint support not confirmed - record as exception
+  iac:
+    terraform_resources:
+    - azurerm_confidential_ledger
+    azapi: []
+    component: platform-db-ledger
+    implemented: true
+    notes: azuread_based_service_principal block grants ledger roles (Administrator/Contributor/Reader) to the workload identity
+  workload:
+    exercised_by:
+    - hello-functions
+    - hello-dbadapter-ledger
+    operations:
+    - append audit entry
+    - read entry + receipt
+    boundary: collection order-audit
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Datadog Azure integration collects Azure Monitor metrics if the resource type emits them; no dedicated Datadog namespace found
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (ApplicationLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported by Datadog Database Monitoring
+        notes: not a DBM engine
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - No dedicated Datadog Azure integration namespace found for Microsoft.ConfidentialLedger
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 90
+    assumptions: single Standard ledger; pricing is per ledger-day (~USD 3/day) - verify on the pricing page
+    teardown: terraform destroy; HARD delete - ledger data unrecoverable
+    data_retention: immutable while the ledger exists
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/confidential-ledger/overview
+  - https://learn.microsoft.com/en-us/azure/confidential-ledger/data-residency
+  - https://docs.datadoghq.com/integrations/azure/
+- id: horizondb
+  family: azure-horizondb
+  hosting_variant: Azure HorizonDB cluster (PostgreSQL 17 compatible, disaggregated storage)
+  category: database
+  display_name: Azure HorizonDB (preview)
+  lifecycle:
+    status: preview
+    notes: Public preview. Docs list no access form for the base service (only AI Model Management is a gated limited preview), but availability 'depends on your Azure subscription and
+      region'. PostgreSQL 17 only; 7-day backup retention; no CMK, no VNet injection (private link only), no cross-region replicas, no PgBouncer.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: false
+      westeurope: false
+    region_notes: 'Regions (overview, updated 2026-09-22): Canada Central, Central US, East US, West US 2, West US 3, Germany West Central, Sweden Central, Australia East, Korea Central.
+      NOT East US 2 / West Europe.'
+    quotas: []
+    registrations:
+    - Microsoft.HorizonDb
+    licensing:
+    - Preview terms; billed per vCore-hour + storage
+  networking:
+    private_support: private-endpoint
+    notes: private link or public endpoint with firewall rules; connectivity method fixed at creation; no VNet injection
+  iac:
+    terraform_resources: []
+    azapi:
+    - type: Microsoft.HorizonDb/clusters
+      api_version: 2026-05-01-preview
+      reason: no azurerm resource in 5.9.0
+    component: platform-db-horizondb
+    implemented: true
+  workload:
+    exercised_by:
+    - hello-dbadapter-horizondb
+    operations:
+    - adapter CRUD
+    boundary: db adapter
+  telemetry:
+    azure_metric_namespace: azure.horizondb_clusters
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.horizondb_clusters)
+        notes: namespace present in the Datadog Azure integration metric list
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (PostgreSQL logs (category names not verified)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not listed in Datadog DBM support matrix
+        notes: PostgreSQL-compatible; a postgres Agent check may connect but is unsupported
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - No DBM support documented
+  cost:
+    profile: high
+    approx_monthly_usd_default: 300
+    assumptions: 2 vCores, 1 replica (no HA), small storage; preview pricing - verify
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: backups 7 days (fixed in preview)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - specialized
+  references:
+  - https://learn.microsoft.com/en-us/azure/horizondb/overview
+  - https://learn.microsoft.com/en-us/azure/horizondb/configure-maintain/quickstart-create-cluster
+  - https://learn.microsoft.com/en-us/azure/templates/microsoft.horizondb/clusters
+  - https://docs.datadoghq.com/database_monitoring/
+- id: cosmos-postgresql
+  family: cosmos-db
+  hosting_variant: Azure Cosmos DB for PostgreSQL (Citus cluster)
+  category: database
+  display_name: Azure Cosmos DB for PostgreSQL
+  lifecycle:
+    status: not-recommended
+    notes: On a retirement path and no longer recommended for new projects (product-updates page); use PostgreSQL elastic clusters (or Cosmos DB for NoSQL). No retirement date published.
+    verified_on: '2026-10-09'
+    successor: postgresql-elastic-cluster
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.DBforPostgreSQL
+    licensing: []
+  networking:
+    private_support: private-endpoint
+  iac:
+    terraform_resources:
+    - azurerm_cosmosdb_postgresql_cluster
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.dbforpostgresql_servergroupsv2
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.dbforpostgresql_servergroupsv2)
+      logs:
+        supported: 'yes'
+        method: diagnostic settings (PostgreSQLLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not listed in Datadog Azure Postgres DBM page
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Not covered by Datadog DBM
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 200
+    assumptions: single-node cluster 2 vCore (if created)
+    teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
+    data_retention: PITR 35 days
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/cosmos-db/postgresql/product-updates
+  - https://docs.datadoghq.com/integrations/azure_cosmosdb_for_postgresql/
+- id: mariadb
+  family: azure-mariadb
+  hosting_variant: Azure Database for MariaDB (retired)
+  category: database
+  display_name: Azure Database for MariaDB
+  lifecycle:
+    status: retired
+    notes: Retired 2025-09-19; new deployments impossible.
+    verified_on: '2026-10-09'
+    retirement_date: '2025-09-19'
+    successor: mysql-flexible
+  availability:
+    regions_checked:
+      swedencentral: false
+      eastus2: false
+      westeurope: false
+    quotas: []
+    registrations: []
+    licensing: []
+  networking:
+    private_support: n/a
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: No resource in azurerm 5.9.0 (removed); not IaC-deployable
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: n/a
+        method: service retired
+      logs:
+        supported: n/a
+        method: service retired
+      traces:
+        supported: n/a
+        method: service retired
+      dbm:
+        supported: n/a
+        method: service retired
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: not deployable
+    teardown: n/a
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/lifecycle/products/azure-database-for-mariadb
+- id: postgresql-single-server
+  family: azure-postgresql
+  hosting_variant: Azure Database for PostgreSQL single server (retired)
+  category: database
+  display_name: Azure Database for PostgreSQL single server
+  lifecycle:
+    status: retired
+    notes: Retired 2025-03-28; new deployments impossible.
+    verified_on: '2026-10-09'
+    retirement_date: '2025-03-28'
+    successor: postgresql-flexible
+  availability:
+    regions_checked:
+      swedencentral: false
+      eastus2: false
+      westeurope: false
+    quotas: []
+    registrations: []
+    licensing: []
+  networking:
+    private_support: n/a
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: No resource in azurerm 5.9.0 (removed); not IaC-deployable
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: n/a
+        method: service retired
+      logs:
+        supported: n/a
+        method: service retired
+      traces:
+        supported: n/a
+        method: service retired
+      dbm:
+        supported: n/a
+        method: service retired
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: not deployable
+    teardown: n/a
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/lifecycle/end-of-support/end-of-support-2025
+- id: mysql-single-server
+  family: azure-mysql
+  hosting_variant: Azure Database for MySQL single server (retired)
+  category: database
+  display_name: Azure Database for MySQL single server
+  lifecycle:
+    status: retired
+    notes: Retired 2024-09-16; new deployments impossible.
+    verified_on: '2026-10-09'
+    retirement_date: '2024-09-16'
+    successor: mysql-flexible
+  availability:
+    regions_checked:
+      swedencentral: false
+      eastus2: false
+      westeurope: false
+    quotas: []
+    registrations: []
+    licensing: []
+  networking:
+    private_support: n/a
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: No resource in azurerm 5.9.0 (removed); not IaC-deployable
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: n/a
+        method: service retired
+      logs:
+        supported: n/a
+        method: service retired
+      traces:
+        supported: n/a
+        method: service retired
+      dbm:
+        supported: n/a
+        method: service retired
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: not deployable
+    teardown: n/a
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/mysql/single-server/whats-happening-to-mysql-single-server
+- id: sql-edge
+  family: azure-sql
+  hosting_variant: Azure SQL Edge (retired)
+  category: database
+  display_name: Azure SQL Edge
+  lifecycle:
+    status: retired
+    notes: Retired 2025-09-30; new deployments impossible.
+    verified_on: '2026-10-09'
+    retirement_date: '2025-09-30'
+    successor: sql-server-on-vm
+  availability:
+    regions_checked:
+      swedencentral: false
+      eastus2: false
+      westeurope: false
+    quotas: []
+    registrations: []
+    licensing: []
+  networking:
+    private_support: n/a
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: No resource in azurerm 5.9.0 (removed); not IaC-deployable
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: n/a
+        method: service retired
+      logs:
+        supported: n/a
+        method: service retired
+      traces:
+        supported: n/a
+        method: service retired
+      dbm:
+        supported: n/a
+        method: service retired
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: not deployable
+    teardown: n/a
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/lifecycle/announcements/azure-products-retirement-september-2025

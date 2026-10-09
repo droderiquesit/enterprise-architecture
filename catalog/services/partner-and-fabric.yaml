@@ -1,0 +1,743 @@
+# Azure service catalog - schema: catalog/schemas/service.schema.json
+# Validate: python3 tools/catalog/validate.py   Render: python3 tools/catalog/render_coverage.py
+# Facts verified 2026-10-09 via Microsoft Learn, docs.datadoghq.com and tfschema (azurerm 5.9.0 / azapi 2.13.0).
+# This file is the source of truth; edit it directly.
+schema_version: 1
+verified_on: '2026-10-09'
+description: Partner (Azure Native Integrations / Oracle Database@Azure) and Microsoft Fabric items - distinct from ordinary ARM deployments.
+services:
+- id: oracle-database-azure
+  family: oracle
+  hosting_variant: Oracle AI Database@Azure (Exadata Dedicated/Exascale, Autonomous AI Database, Base Database)
+  category: partner
+  display_name: Oracle Database@Azure
+  lifecycle:
+    status: ga
+    notes: Generally available (renamed 'Oracle AI Database@Azure' in Microsoft docs).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: Sweden Central (Stockholm, Dual), East US 2 (Ashburn, Dual), West Europe (Amsterdam, Dual) listed
+    quotas: []
+    registrations:
+    - Oracle.Database
+    licensing:
+    - Azure Marketplace purchase (public or private offer) of Oracle Database@Azure
+    - linked Oracle Cloud Infrastructure (OCI) account/tenancy subscribed to the region
+    - My Oracle Support registration
+    - BYOL or license-included per service
+  networking:
+    private_support: vnet-injection
+    notes: subnet delegated to Oracle.Database/networkAttachments; policies must allow untagged auto-created OracleSubscription resource
+  iac:
+    terraform_resources:
+    - azurerm_oracle_autonomous_database
+    - azurerm_oracle_exadata_infrastructure
+    - azurerm_oracle_cloud_vm_cluster
+    - azurerm_oracle_exascale_database_storage_vault
+    - azurerm_oracle_resource_anchor
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: azure.oracle
+    signals:
+      metrics:
+        supported: 'yes'
+        method: Datadog Azure integration (Azure Monitor metrics, namespace azure.oracle)
+      logs:
+        supported: partial
+        method: OCI logging / Azure Monitor (limited)
+      traces: &id001
+        supported: 'yes'
+        method: client spans from the calling service's OpenTelemetry SDK/instrumentation -> OTLP -> Datadog Agent or OTel gateway
+        notes: database itself emits no traces; spans come from hello-* callers
+      dbm:
+        supported: partial
+        method: Datadog Oracle DBM requires an Agent with network reach to the database
+        notes: support for Database@Azure specifically not verified
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Database@Azure DBM support not documented by Datadog
+  cost:
+    profile: very-high
+    approx_monthly_usd_default: null
+    assumptions: Autonomous AI Database smallest ECPU config or Exadata infrastructure - priced via OCI/marketplace offer
+    teardown: terraform destroy; Exadata infrastructure deletion takes hours
+    data_retention: per OCI backup policy
+  status:
+    implementation: blocked
+    live_validation: not-run
+    blocked_reason: Requires Marketplace offer purchase (private/public) and a linked OCI tenancy + My Oracle Support registration; tag/naming policies must exempt the auto-created OracleSubscription
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/oracle/oracle-db/onboard-oracle-database
+  - https://learn.microsoft.com/en-us/azure/oracle/oracle-db/oracle-database-regions
+  - https://docs.datadoghq.com/database_monitoring/setup_oracle/
+- id: mongodb-atlas
+  family: partner-isv
+  hosting_variant: 'MongoDB Atlas (Azure Native Integration: MongoDB.Atlas/organizations)'
+  category: partner
+  display_name: MongoDB Atlas on Azure
+  lifecycle:
+    status: ga
+    notes: Current Azure Native Integration (data & storage partners list).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - MongoDB.Atlas
+    licensing:
+    - Azure Marketplace SaaS subscription (pay-as-you-go plan)
+  networking:
+    private_support: private-endpoint
+    notes: Atlas private endpoints configured on the Atlas side
+  iac:
+    terraform_resources: []
+    azapi:
+    - type: MongoDB.Atlas/organizations
+      api_version: '2025-06-01'
+      reason: no azurerm resource; clusters themselves need the mongodbatlas provider (not pinned)
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Datadog MongoDB Atlas integration (Atlas API)
+      logs:
+        supported: partial
+        method: Atlas log export
+      traces: *id001
+      dbm:
+        supported: 'yes'
+        method: Datadog DBM supports MongoDB Atlas
+        notes: requires Agent with network reach to the cluster
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 60
+    assumptions: M10 cluster
+    teardown: delete the Azure resource AND the Atlas organization (deleting the Azure resource does not delete the Atlas org)
+    data_retention: per Atlas backup policy
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/partner-solutions/mongo-db/overview
+  - https://learn.microsoft.com/en-us/azure/partner-solutions/partners
+  - https://docs.datadoghq.com/database_monitoring/setup_mongodb/
+- id: elastic-cloud
+  family: partner-isv
+  hosting_variant: Elastic Cloud (Elasticsearch) - Azure Native Integration
+  category: partner
+  display_name: Elastic on Azure
+  lifecycle:
+    status: ga
+    notes: Current Azure Native Integration.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Elastic
+    licensing:
+    - Azure Marketplace plan
+  networking:
+    private_support: partial
+  iac:
+    terraform_resources:
+    - azurerm_elastic_cloud_elasticsearch
+    azapi: []
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Datadog Elastic integration (Agent with network reach)
+      logs:
+        supported: n/a
+        method: n/a
+      traces: *id001
+      dbm: &id002
+        supported: n/a
+        method: not applicable
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 100
+    assumptions: smallest deployment
+    teardown: terraform destroy of the owning root
+    data_retention: per Elastic snapshot policy
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/partner-solutions/elastic/overview
+- id: confluent-cloud
+  family: partner-isv
+  hosting_variant: Apache Kafka & Flink on Confluent Cloud - Azure Native Integration
+  category: partner
+  display_name: Confluent Cloud on Azure
+  lifecycle:
+    status: ga
+    notes: Current Azure Native Integration.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Confluent
+    licensing:
+    - Azure Marketplace plan
+  networking:
+    private_support: partial
+    notes: private networking configured on Confluent side
+  iac:
+    terraform_resources: []
+    azapi:
+    - type: Microsoft.Confluent/organizations
+      api_version: '2024-07-01'
+      reason: no azurerm resource; Kafka clusters need the confluent provider (not pinned)
+    component: null
+    implemented: false
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Datadog Confluent Cloud integration (API)
+      logs:
+        supported: n/a
+        method: n/a
+      traces:
+        supported: partial
+        method: Kafka client spans
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: medium
+    approx_monthly_usd_default: 50
+    assumptions: Basic cluster, light usage
+    teardown: terraform destroy of the owning root + Confluent org cleanup
+    data_retention: topic retention
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/partner-solutions/apache-kafka-confluent-cloud/overview
+  - https://docs.datadoghq.com/integrations/confluent_cloud/
+- id: neon-postgres
+  family: partner-isv
+  hosting_variant: Neon Serverless Postgres - Azure Native Integration
+  category: partner
+  display_name: Neon Serverless Postgres (retired)
+  lifecycle:
+    status: retired
+    notes: 'Listed as ''Neon (retired)'' in the Azure Native Integrations partner list; Azure SDK notice: service permanently retired, SDK unmaintained after 2026-03-13 (exact service
+      retirement date not published - SDK date used).'
+    verified_on: '2026-10-09'
+    retirement_date: '2026-03-13'
+  availability:
+    regions_checked:
+      swedencentral: false
+      eastus2: false
+      westeurope: false
+    quotas: []
+    registrations: []
+    licensing: []
+  networking:
+    private_support: n/a
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: not IaC-deployable
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: n/a
+        method: retired
+      logs:
+        supported: n/a
+        method: retired
+      traces:
+        supported: n/a
+        method: retired
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations: []
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: not deployable
+    teardown: n/a
+    data_retention: n/a
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/partner-solutions/partners
+  - https://learn.microsoft.com/en-us/java/api/overview/azure/resourcemanager-neonpostgres-readme
+- id: fabric-capacity
+  family: fabric
+  hosting_variant: Microsoft Fabric capacity (F2) - the only ARM resource in Fabric
+  category: fabric
+  display_name: Microsoft Fabric capacity
+  lifecycle:
+    status: ga
+    notes: Generally available. Fabric items (below) are NOT ARM resources.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    quotas: []
+    registrations:
+    - Microsoft.Fabric
+    licensing:
+    - capacity administrators must be Entra users/SPs
+  networking:
+    private_support: partial
+    notes: Fabric private links are tenant/workspace-level
+  iac:
+    terraform_resources:
+    - azurerm_fabric_capacity
+    azapi: []
+    component: null
+    implemented: false
+    notes: pausable; items need the Fabric REST API or microsoft/fabric Terraform provider (not pinned in versions.yaml)
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Fabric Capacity Metrics app (Fabric-side); no Datadog Azure namespace found
+      logs:
+        supported: n/a
+        method: n/a
+      traces:
+        supported: n/a
+        method: n/a
+      dbm: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - No Datadog Azure integration metrics for Fabric capacities/items found
+  cost:
+    profile: high
+    approx_monthly_usd_default: 262
+    assumptions: F2 PAYG 24x7 (pause when idle)
+    teardown: terraform destroy of the owning root
+    data_retention: items deleted with workspace per Fabric retention
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/fabric/enterprise/licenses
+- id: fabric-sql-database
+  family: fabric
+  hosting_variant: SQL database in Fabric (Fabric workspace item)
+  category: fabric
+  display_name: SQL database in Fabric
+  lifecycle:
+    status: ga
+    notes: Fabric-native SQL database (Azure SQL engine) auto-mirrored to OneLake; Entra-only auth; created in a Fabric workspace, not via ARM. GA status not re-verified item-by-item
+      on 2026-10-09.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: available where the Fabric capacity region supports the workload; verify Fabric region availability
+    quotas: []
+    registrations: []
+    licensing:
+    - Microsoft Fabric capacity (F SKU) or Power BI Premium / Fabric trial
+    - Fabric tenant setting enabling the item type
+  networking:
+    private_support: partial
+    notes: Fabric workspace/tenant private link
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: 'No ARM API: Fabric item - created via Fabric REST API / microsoft/fabric provider, not IaC-deployable with the pinned providers'
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Fabric monitoring hub / Capacity Metrics app; no Datadog Azure integration
+      logs:
+        supported: partial
+        method: Fabric workspace monitoring (Eventhouse)
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Not covered by the Datadog Azure integration (not ARM resources)
+  cost:
+    profile: medium
+    approx_monthly_usd_default: null
+    assumptions: consumes Fabric capacity CUs (see fabric-capacity)
+    teardown: delete item/workspace in Fabric
+    data_retention: per Fabric item retention
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/fabric/database/sql/overview
+  - https://learn.microsoft.com/en-us/fabric/admin/region-availability
+- id: fabric-cosmos-db
+  family: fabric
+  hosting_variant: Cosmos DB in Fabric (Fabric workspace item)
+  category: fabric
+  display_name: Cosmos DB in Fabric
+  lifecycle:
+    status: ga
+    notes: Cosmos DB NoSQL engine inside Fabric; Entra-only auth (no keys), Gateway mode only, single region, billed in Fabric CUs; requires Fabric/Power BI Premium/trial capacity. GA
+      status not re-verified item-by-item on 2026-10-09.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: available where the Fabric capacity region supports the workload; verify Fabric region availability
+    quotas: []
+    registrations: []
+    licensing:
+    - Microsoft Fabric capacity (F SKU) or Power BI Premium / Fabric trial
+    - Fabric tenant setting enabling the item type
+  networking:
+    private_support: partial
+    notes: Fabric workspace/tenant private link
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: 'No ARM API: Fabric item - created via Fabric REST API / microsoft/fabric provider, not IaC-deployable with the pinned providers'
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Fabric monitoring hub / Capacity Metrics app; no Datadog Azure integration
+      logs:
+        supported: partial
+        method: Fabric workspace monitoring (Eventhouse)
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Not covered by the Datadog Azure integration (not ARM resources)
+  cost:
+    profile: medium
+    approx_monthly_usd_default: null
+    assumptions: consumes Fabric capacity CUs (see fabric-capacity)
+    teardown: delete item/workspace in Fabric
+    data_retention: per Fabric item retention
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/fabric/database/cosmos-db/overview
+  - https://learn.microsoft.com/en-us/fabric/admin/region-availability
+- id: fabric-eventhouse
+  family: fabric
+  hosting_variant: Eventhouse (Real-Time Intelligence) (Fabric workspace item)
+  category: fabric
+  display_name: Eventhouse (Real-Time Intelligence)
+  lifecycle:
+    status: ga
+    notes: KQL databases in Fabric (Kusto engine). GA status not re-verified item-by-item on 2026-10-09.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: available where the Fabric capacity region supports the workload; verify Fabric region availability
+    quotas: []
+    registrations: []
+    licensing:
+    - Microsoft Fabric capacity (F SKU) or Power BI Premium / Fabric trial
+    - Fabric tenant setting enabling the item type
+  networking:
+    private_support: partial
+    notes: Fabric workspace/tenant private link
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: 'No ARM API: Fabric item - created via Fabric REST API / microsoft/fabric provider, not IaC-deployable with the pinned providers'
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Fabric monitoring hub / Capacity Metrics app; no Datadog Azure integration
+      logs:
+        supported: partial
+        method: Fabric workspace monitoring (Eventhouse)
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Not covered by the Datadog Azure integration (not ARM resources)
+  cost:
+    profile: medium
+    approx_monthly_usd_default: null
+    assumptions: consumes Fabric capacity CUs (see fabric-capacity)
+    teardown: delete item/workspace in Fabric
+    data_retention: per Fabric item retention
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/fabric/real-time-intelligence/eventhouse
+  - https://learn.microsoft.com/en-us/fabric/admin/region-availability
+- id: fabric-warehouse
+  family: fabric
+  hosting_variant: Fabric Data Warehouse (Fabric workspace item)
+  category: fabric
+  display_name: Fabric Data Warehouse
+  lifecycle:
+    status: ga
+    notes: T-SQL warehouse over OneLake Delta tables; successor positioning for Synapse dedicated SQL pools. GA status not re-verified item-by-item on 2026-10-09.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: available where the Fabric capacity region supports the workload; verify Fabric region availability
+    quotas: []
+    registrations: []
+    licensing:
+    - Microsoft Fabric capacity (F SKU) or Power BI Premium / Fabric trial
+    - Fabric tenant setting enabling the item type
+  networking:
+    private_support: partial
+    notes: Fabric workspace/tenant private link
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: 'No ARM API: Fabric item - created via Fabric REST API / microsoft/fabric provider, not IaC-deployable with the pinned providers'
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Fabric monitoring hub / Capacity Metrics app; no Datadog Azure integration
+      logs:
+        supported: partial
+        method: Fabric workspace monitoring (Eventhouse)
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Not covered by the Datadog Azure integration (not ARM resources)
+  cost:
+    profile: medium
+    approx_monthly_usd_default: null
+    assumptions: consumes Fabric capacity CUs (see fabric-capacity)
+    teardown: delete item/workspace in Fabric
+    data_retention: per Fabric item retention
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/fabric/data-warehouse/data-warehousing
+  - https://learn.microsoft.com/en-us/fabric/admin/region-availability
+- id: fabric-spark
+  family: fabric
+  hosting_variant: Fabric Spark (Data Engineering) (Fabric workspace item)
+  category: fabric
+  display_name: Fabric Spark (Data Engineering)
+  lifecycle:
+    status: ga
+    notes: Serverless Spark runtime in Fabric (starter pools); catalogued here as the Fabric serverless analytics runtime. GA status not re-verified item-by-item on 2026-10-09.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: true
+      eastus2: true
+      westeurope: true
+    region_notes: available where the Fabric capacity region supports the workload; verify Fabric region availability
+    quotas: []
+    registrations: []
+    licensing:
+    - Microsoft Fabric capacity (F SKU) or Power BI Premium / Fabric trial
+    - Fabric tenant setting enabling the item type
+  networking:
+    private_support: partial
+    notes: Fabric workspace/tenant private link
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: null
+    implemented: false
+    notes: 'No ARM API: Fabric item - created via Fabric REST API / microsoft/fabric provider, not IaC-deployable with the pinned providers'
+  workload:
+    exercised_by: []
+    operations: []
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: partial
+        method: Fabric monitoring hub / Capacity Metrics app; no Datadog Azure integration
+      logs:
+        supported: partial
+        method: Fabric workspace monitoring (Eventhouse)
+      traces: *id001
+      dbm:
+        supported: 'no'
+        method: not supported
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Not covered by the Datadog Azure integration (not ARM resources)
+  cost:
+    profile: medium
+    approx_monthly_usd_default: null
+    assumptions: consumes Fabric capacity CUs (see fabric-capacity)
+    teardown: delete item/workspace in Fabric
+    data_retention: per Fabric item retention
+  status:
+    implementation: cataloged
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/fabric/data-engineering/spark-compute
+  - https://learn.microsoft.com/en-us/fabric/admin/region-availability
