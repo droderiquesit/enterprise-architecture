@@ -28,9 +28,10 @@ resource "datadog_monitor" "this" {
   no_data_timeframe   = each.value.notify_no_data ? each.value.no_data_timeframe : null
   require_full_window = each.value.require_full_window
   evaluation_delay    = each.value.evaluation_delay
-  new_group_delay     = each.value.new_group_delay
-  renotify_interval   = each.value.renotify_interval
-  include_tags        = true
+  # Only multi-alert (grouped) monitors accept new_group_delay; Datadog rejects it on simple alerts.
+  new_group_delay   = can(regex("(?i)\\bby\\s*\\{", each.value.query)) ? each.value.new_group_delay : null
+  renotify_interval = each.value.renotify_interval
+  include_tags      = true
 
   monitor_thresholds {
     critical          = tostring(each.value.thresholds.critical)

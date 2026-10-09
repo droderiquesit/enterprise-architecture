@@ -50,12 +50,11 @@ features:
 component_settings:
   platform-containerapps:
     ingress_mode: external
-  # Only hello-durable consumes order-events in this profile (no hello-worker / hello-functions /
-  # hello-logicapps), so only the fulfillment subscription is created: subscriptions without a consumer
-  # would accumulate every order event until TTL. Other profiles keep the root default (all four).
   platform-messaging:
     subscriptions:
       fulfillment:
         consumer: hello-durable
         max_delivery_count: 10
         lock_duration: PT2M
+  obs-diagnostics:
+    platform_log_tier: security

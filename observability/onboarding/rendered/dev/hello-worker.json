@@ -267,7 +267,7 @@
       "team-fulfillment"
     ]
   },
-  "package_version": "1.0.0",
+  "package_version": "1.1.0",
   "presence_ref": "deploy-core-aks.apps.hello-worker.id",
   "resources": [
     {

@@ -185,3 +185,11 @@ run "rejects_provisioned_fulfillment" {
   }
   expect_failures = [var.settings]
 }
+
+run "server_auditing_streams_to_azure_monitor" {
+  command = plan
+  assert {
+    condition     = length(azurerm_mssql_server_extended_auditing_policy.this) == 1 && azurerm_mssql_server_extended_auditing_policy.this[0].log_monitoring_enabled
+    error_message = "SQL server auditing must be enabled with log_monitoring_enabled so obs-diagnostics can stream SQLSecurityAuditEvents."
+  }
+}

@@ -526,7 +526,7 @@
       "team-orders"
     ]
   },
-  "package_version": "1.0.0",
+  "package_version": "1.1.0",
   "presence_ref": "deploy-core-aca.apps.hello-orders-api.url",
   "resources": [
     {

@@ -58,6 +58,7 @@ variable "settings" {
     })
     private_endpoint_enabled  = optional(bool, true)
     minimum_tls_version       = optional(string, "1.2")
+    auditing_enabled          = optional(bool, true) # server audit -> Azure Monitor (streamed to Datadog by obs-diagnostics)
     pitr_retention_days       = optional(number, 7)
     backup_storage_redundancy = optional(string, "Local")
 

@@ -375,7 +375,7 @@
       "team-observability"
     ]
   },
-  "package_version": "1.0.0",
+  "package_version": "1.1.0",
   "presence_ref": "obs-telemetry-transport.event_hub.namespace_id",
   "resources": [],
   "runtime": "other",

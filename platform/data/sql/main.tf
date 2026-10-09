@@ -110,8 +110,7 @@ resource "azurerm_resource_group" "this" {
 
 resource "azurerm_mssql_server" "this" {
   #checkov:skip=CKV2_AZURE_2:vulnerability assessment/Defender is a security-platform decision outside this lab component
-  #checkov:skip=CKV_AZURE_23:SQL auditing is delivered via diagnostic settings owned by obs-diagnostics (ADR-0001 §10)
-  #checkov:skip=CKV_AZURE_24:SQL auditing retention is owned by obs-diagnostics
+  #checkov:skip=CKV_AZURE_24:Audit records stream to Azure Monitor (log_monitoring_enabled); retention lives in the Event Hubs/Datadog path owned by obs-diagnostics, not a storage account
   name                          = module.naming.unique.globally_unique
   resource_group_name           = azurerm_resource_group.this.name
   location                      = azurerm_resource_group.this.location
@@ -259,4 +258,14 @@ check "owner_identities_present" {
     ])
     error_message = "One or more database owner identities are missing from foundation_identity.identities; their grants are omitted from the contract."
   }
+}
+
+# Server auditing to Azure Monitor. The platform owns the auditing POLICY; the diagnostic setting on the `master`
+# database that streams SQLSecurityAuditEvents to Event Hubs -> Datadog is owned by obs-diagnostics (ADR-0001 rule 4).
+# Without this policy that diagnostic setting exists but stays empty.
+resource "azurerm_mssql_server_extended_auditing_policy" "this" {
+  count                  = var.settings.auditing_enabled ? 1 : 0
+  server_id              = azurerm_mssql_server.this.id
+  enabled                = true
+  log_monitoring_enabled = true
 }

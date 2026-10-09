@@ -6,7 +6,7 @@
 (d) terraform init -backend=false / validate / test (mock providers); assert that only allowed resource types are
     planned and that supplied resource ids are used verbatim (example tests)
 (e) prove that no path in the consumer copy escapes to the source repository or its lab roots
-(f) simulate an upgrade 1.0.0 -> 1.1.0-test (no destroy of anything) and a removal (destroy lists only monitoring objects)
+(f) simulate an upgrade <VERSION> -> <VERSION>-upgrade-test (no destroy of anything) and a removal (destroy lists only monitoring objects)
 
 Requires terraform, bash, tar, sha256sum. No network beyond the provider plugin cache, no credentials.
 """
@@ -24,6 +24,9 @@ import pytest
 PKG = Path(__file__).resolve().parents[2]          # observability/
 REPO = PKG.parent
 EXAMPLE = PKG / "examples" / "existing-environment"
+# current package version (the release under test) and a synthetic next version for the upgrade simulation
+CUR = (PKG / "VERSION").read_text().strip()
+NEXT = CUR + "-upgrade-test"
 
 ALLOWED_PREFIXES = ("datadog_", "kubernetes_")
 ALLOWED_EXACT = {"azurerm_monitor_diagnostic_setting", "azurerm_virtual_machine_extension",
@@ -116,10 +119,10 @@ def consumer(tmp_path_factory):
     work = tmp_path_factory.mktemp("portability")
     assert REPO not in work.parents, "consumer copy must live outside the repository"
     dist = work / "dist"
-    tarball, sha = build("1.0.0", dist)
+    tarball, sha = build(CUR, dist)
     dst = work / "consumer"
     shutil.copytree(EXAMPLE, dst, ignore=shutil.ignore_patterns(".vendor", ".terraform", "*.tfplan"))
-    lock(dst, "1.0.0", tarball, sha)
+    lock(dst, CUR, tarball, sha)
     ok(sh(["bash", "vendor.sh"], cwd=dst))
     return {"work": work, "dir": dst, "dist": dist, "sha": sha, "tarball": tarball}
 
@@ -127,24 +130,24 @@ def consumer(tmp_path_factory):
 def test_a_release_contents(consumer):
     listing = ok(sh(["tar", "-tzf", str(consumer["tarball"])], cwd=consumer["work"])).stdout.splitlines()
     top = {p.split("/")[0] for p in listing}
-    assert top == {"observability-1.0.0"}
+    assert top == {f"observability-{CUR}"}
     second = {p.split("/")[1] for p in listing if p.count("/") >= 1 and p.split("/")[1]}
     assert {"modules", "schemas", "archetypes", "tools", "pipelines", "examples", "VERSION", "README.md",
             "CHANGELOG.md", "UPGRADING.md"} <= second
     assert "lab" not in second and "onboarding" not in second
     assert not [p for p in listing if "/.terraform/" in p or p.endswith(".tfstate")]
     # reproducible build: same inputs -> same checksum
-    _, sha2 = build("1.0.0", consumer["work"] / "dist2")
+    _, sha2 = build(CUR, consumer["work"] / "dist2")
     assert sha2 == consumer["sha"]
 
 
 def test_b_vendor_rejects_wrong_checksum(consumer):
     bad = consumer["work"] / "bad"
     shutil.copytree(consumer["dir"], bad, ignore=shutil.ignore_patterns(".vendor", ".terraform"))
-    lock(bad, "1.0.0", consumer["tarball"], "0" * 64)
+    lock(bad, CUR, consumer["tarball"], "0" * 64)
     r = sh(["bash", "vendor.sh"], cwd=bad)
     assert r.returncode != 0 and "sha256 mismatch" in r.stderr
-    assert not (bad / ".vendor" / "observability-1.0.0").exists()
+    assert not (bad / ".vendor" / f"observability-{CUR}").exists()
 
 
 def test_e_no_path_escapes(consumer):
@@ -189,7 +192,7 @@ def test_d_init_validate_test_and_allowed_types(consumer):
 
 def test_f_upgrade_and_removal(consumer):
     d = consumer["dir"]
-    tarball, sha = build("1.1.0-test", consumer["work"] / "dist-next")
+    tarball, sha = build(NEXT, consumer["work"] / "dist-next")
     # The upgraded root is a copy whose lock + module sources move to 1.1.0-test (vendor.sh --update-sources),
     # planned against the state installed by 1.0.0 (shared state_key).
     up = d / "upgrade"
@@ -197,10 +200,10 @@ def test_f_upgrade_and_removal(consumer):
     for item in ("versions.tf", "providers.tf", "variables.tf", "main.tf", "outputs.tf", "vendor.sh", "rendered", "routing", "manifests"):
         src = d / item
         (shutil.copytree if src.is_dir() else shutil.copy2)(src, up / item)
-    lock(up, "1.1.0-test", tarball, sha)
+    lock(up, NEXT, tarball, sha)
     r = sh(["bash", "vendor.sh", "--update-sources"], cwd=up)
     ok(r)
-    assert "observability-1.1.0-test/" in (up / "main.tf").read_text()
+    assert "observability-" + NEXT + "/" in (up / "main.tf").read_text()
     # removal root: same providers, no resources -> planning it against the installed state lists every destroy
     rm = d / "removal"
     rm.mkdir()

@@ -18,7 +18,7 @@ locals {
 }
 
 module "onboarding" {
-  source = "./.vendor/observability-1.0.0/modules/onboarding"
+  source = "./.vendor/observability-1.1.0/modules/onboarding"
 
   services   = local.services
   routing    = yamldecode(file("${path.module}/routing/${var.env}.yaml"))
@@ -32,7 +32,7 @@ module "onboarding" {
 }
 
 module "azure_integration" {
-  source = "./.vendor/observability-1.0.0/modules/azure-integration"
+  source = "./.vendor/observability-1.1.0/modules/azure-integration"
   count  = var.azure_integration.enabled ? 1 : 0
 
   mode             = "app_registration"
@@ -47,7 +47,7 @@ module "azure_integration" {
 }
 
 module "diagnostics" {
-  source = "./.vendor/observability-1.0.0/modules/diagnostic-settings"
+  source = "./.vendor/observability-1.1.0/modules/diagnostic-settings"
   count  = var.diagnostics.enabled ? 1 : 0
 
   resources = local.diagnostic_resources
@@ -61,7 +61,7 @@ module "diagnostics" {
 
 # Subscription Activity Log (+ optional Entra ID) of the supplied subscriptions -> activity-logs hub.
 module "azure_logs" {
-  source = "./.vendor/observability-1.0.0/modules/azure-logs"
+  source = "./.vendor/observability-1.1.0/modules/azure-logs"
   count  = var.diagnostics.enabled ? 1 : 0
 
   activity_log = {
@@ -77,7 +77,7 @@ module "azure_logs" {
 }
 
 module "log_management" {
-  source = "./.vendor/observability-1.0.0/modules/log-management"
+  source = "./.vendor/observability-1.1.0/modules/log-management"
 
   env       = var.env
   dashboard = { enabled = var.log_management.dashboard, entra = var.azure_logs.entra.enabled }
@@ -87,7 +87,7 @@ module "log_management" {
 }
 
 module "dbm" {
-  source = "./.vendor/observability-1.0.0/modules/dbm"
+  source = "./.vendor/observability-1.1.0/modules/dbm"
   count  = var.dbm.enabled ? 1 : 0
 
   hosting = "cluster_checks"
@@ -107,7 +107,7 @@ module "dbm" {
 }
 
 module "kubernetes" {
-  source = "./.vendor/observability-1.0.0/modules/kubernetes"
+  source = "./.vendor/observability-1.1.0/modules/kubernetes"
   count  = var.kubernetes.enabled ? 1 : 0
 
   cluster_name = var.kubernetes.cluster_name
@@ -123,7 +123,7 @@ module "kubernetes" {
 # Instrumentation hooks: env vars / app settings / k8s patches the application owners apply in their own
 # deployment code (this root never changes application settings).
 module "instrumentation" {
-  source   = "./.vendor/observability-1.0.0/modules/instrumentation"
+  source   = "./.vendor/observability-1.1.0/modules/instrumentation"
   for_each = var.instrumented_services
 
   service = {
