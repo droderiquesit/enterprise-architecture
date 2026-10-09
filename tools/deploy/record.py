@@ -140,6 +140,7 @@ def main(argv=None) -> int:
     ap.add_argument("--artifact-metadata-dir", default=os.environ.get("ARTIFACT_METADATA_DIR"))
     ap.add_argument("--verification", choices=("passed", "failed"), help="verify: smoke/telemetry outcome")
     ap.add_argument("--smoke-results", help="verify: tools/smoke/smoke.py results JSON (all components in it)")
+    ap.add_argument("--telemetry-results", help="verify: tools/smoke/telemetry.py results JSON (all components in it)")
     args = ap.parse_args(argv)
     store = open_store(args.store)
     key = f"{args.env}/{args.component}.json"
@@ -167,28 +168,45 @@ def main(argv=None) -> int:
     return 0
 
 
+def _outcomes(path: str) -> dict:
+    res = json.loads(Path(path).read_text())
+    return {cid: r["status"] for cid, r in (res.get("components") or {}).items()
+            if r.get("status") in ("passed", "failed")}
+
+
+def merge_verification(previous: dict | None, source: str, status: str, run_id: str, at: str) -> dict:
+    """verification = {status, run_id, at, sources: {smoke|telemetry|manual: {...}}}. Overall status is failed when any
+    source of the SAME run failed; a newer run's result replaces the older results of every source."""
+    prev = previous or {}
+    sources = dict(prev.get("sources") or {}) if prev.get("run_id") == run_id else {}
+    sources[source] = {"status": status, "at": at}
+    overall = "failed" if any(v["status"] == "failed" for v in sources.values()) else "passed"
+    return {"status": overall, "run_id": run_id, "at": at, "sources": dict(sorted(sources.items()))}
+
+
 def cmd_verify(args, store) -> int:
-    """Attach the post-deployment verification outcome to existing records (heal re-runs failed ones)."""
-    outcomes = {}
+    """Attach the post-deployment verification outcome (smoke and/or telemetry) to existing records; heal re-runs
+    components whose verification failed."""
+    per_source = []
     if args.smoke_results:
-        res = json.loads(Path(args.smoke_results).read_text())
-        for cid, r in (res.get("components") or {}).items():
-            if r.get("status") in ("passed", "failed"):
-                outcomes[cid] = r["status"]
-    elif args.verification:
-        outcomes[args.component] = args.verification
+        per_source.append(("smoke", _outcomes(args.smoke_results)))
+    if args.telemetry_results:
+        per_source.append(("telemetry", _outcomes(args.telemetry_results)))
+    if not per_source and args.verification:
+        per_source.append(("manual", {args.component: args.verification}))
     run_id = args.run_id or os.environ.get("BUILD_BUILDID", "local")
-    for cid, status in outcomes.items():
-        if args.component not in ("*", cid) and not args.smoke_results:
-            continue
-        key = f"{args.env}/{cid}.json"
-        rec = store.get_json(key)
-        if not rec:
-            continue
-        rec["verification"] = {"status": status, "run_id": run_id,
-                               "at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
-        store.put_json(key, rec)
-        print(f"record {key}: verification={status}")
+    at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for source, outcomes in per_source:
+        for cid, status in sorted(outcomes.items()):
+            if args.component not in ("*", cid):
+                continue
+            key = f"{args.env}/{cid}.json"
+            rec = store.get_json(key)
+            if not rec:
+                continue
+            rec["verification"] = merge_verification(rec.get("verification"), source, status, run_id, at)
+            store.put_json(key, rec)
+            print(f"record {key}: verification={rec['verification']['status']} ({source}={status})")
     return 0
 
 

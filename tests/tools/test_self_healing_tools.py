@@ -299,9 +299,54 @@ def test_verify_op_records_smoke_outcome(tmp_path):
     assert record.main(["verify", "--env", "dev", "--component", "*", "--store", str(tmp_path / "rec"),
                         "--smoke-results", str(res), "--run-id", "9"]) == 0
     assert store.get_json("dev/a.json")["verification"]["status"] == "failed"
-    assert store.get_json("dev/b.json")["verification"] == {"status": "passed", "run_id": "9",
-                                                            "at": store.get_json("dev/b.json")["verification"]["at"]}
+    vb = store.get_json("dev/b.json")["verification"]
+    assert vb == {"status": "passed", "run_id": "9", "at": vb["at"], "sources": {"smoke": {"status": "passed", "at": vb["at"]}}}
     assert store.get_json("dev/z.json") is None
+    # telemetry of the same run failing makes the overall verification failed (smoke result kept)
+    tel = tmp_path / "telemetry.json"
+    tel.write_text(json.dumps({"components": {"b": {"status": "failed"}}}))
+    assert record.main(["verify", "--env", "dev", "--component", "*", "--store", str(tmp_path / "rec"),
+                        "--telemetry-results", str(tel), "--run-id", "9"]) == 0
+    vb = store.get_json("dev/b.json")["verification"]
+    assert vb["status"] == "failed" and set(vb["sources"]) == {"smoke", "telemetry"}
+    # a newer run replaces older per-source results
+    assert record.main(["verify", "--env", "dev", "--component", "b", "--store", str(tmp_path / "rec"),
+                        "--smoke-results", str(res), "--run-id", "10"]) == 0
+    vb = store.get_json("dev/b.json")["verification"]
+    assert vb["status"] == "passed" and list(vb["sources"]) == ["smoke"] and vb["run_id"] == "10"
+
+
+def test_telemetry_adapter_maps_journey_to_deployed_components(tmp_path):
+    from tools.smoke import telemetry
+
+    sel = {"components": {
+        "deploy-core-aca": {"plan": True, "apply_candidate": True, "layer_name": "applications", "kind": "terraform"},
+        "deploy-frontend": {"plan": True, "apply_candidate": True, "layer_name": "applications", "kind": "terraform"},
+        "platform-shared": {"plan": True, "apply_candidate": True, "layer_name": "platform", "kind": "terraform"},
+        "deploy-jobs": {"plan": True, "apply_candidate": False, "layer_name": "applications", "kind": "terraform"}}}
+    argv = telemetry.verifier_args("dev", "datadoghq.eu", "ev.json")
+    assert argv[0] == telemetry.VERIFIER and argv[argv.index("--site") + 1] == "datadoghq.eu"
+    assert [argv[i + 1] for i, a in enumerate(argv) if a == "--journey-service"][0] == "hello-bff"
+    assert "--selection" not in argv and "--out" not in argv     # the verifier's real interface
+    fail = telemetry.results("dev", sel, {"result": "fail", "checks": [{"name": "apm_journey", "status": "fail"}]}, 1)
+    assert fail["components"] == {"deploy-core-aca": {"status": "failed", "source": "telemetry"},
+                                  "deploy-frontend": {"status": "failed", "source": "telemetry"}}
+    assert fail["failed_checks"] == ["apm_journey"]
+    ok = telemetry.results("dev", sel, {"result": "pass", "checks": []}, 0)
+    assert {v["status"] for v in ok["components"].values()} == {"passed"}
+    for rc in (2, 3):     # configuration / credential problems are not application failures
+        assert telemetry.results("dev", sel, {}, rc)["components"] == {}
+    # verifier exists and accepts exactly the arguments the adapter builds (argparse only, no network)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("tv", Path(__file__).resolve().parents[2] / telemetry.VERIFIER)
+    tv = importlib.util.module_from_spec(spec)
+    import sys
+    sys.modules["tv"] = tv
+    try:
+        spec.loader.exec_module(tv)
+    finally:
+        sys.modules.pop("tv", None)
+    tv.build_parser().parse_args(argv[1:])
 
 
 # ------------------------------------------------------------------- rollback

@@ -128,6 +128,25 @@ def _validate(payload: Any, changes: List[FileChange], cfg: dict) -> Tuple[List[
     return out, notes
 
 
+def _error_note(exc: Exception) -> str:
+    """Most-specific-first classification of anthropic SDK errors (without requiring the SDK to be importable)."""
+    try:
+        import anthropic
+    except ImportError:  # pragma: no cover - only with an injected fake client
+        return f"ai call failed ({exc.__class__.__name__})"
+    if isinstance(exc, anthropic.BadRequestError):
+        return f"ai request rejected (400: {str(getattr(exc, 'message', ''))[:120]})"
+    if isinstance(exc, anthropic.AuthenticationError):
+        return "ai authentication failed (check the DSV anthropic-api-key)"
+    if isinstance(exc, anthropic.RateLimitError):
+        return "ai rate limited after retries"
+    if isinstance(exc, anthropic.APIStatusError):
+        return f"ai API error {exc.status_code}"
+    if isinstance(exc, anthropic.APIConnectionError):
+        return "ai API unreachable / timed out"
+    return f"ai call failed ({exc.__class__.__name__})"
+
+
 class AiReviewer:
     def __init__(self, cfg: dict, api_key: Optional[str] = None, client: Any = None, cache_dir: Optional[str] = None):
         self.cfg = cfg
@@ -196,23 +215,13 @@ class AiReviewer:
         return findings, meta
 
     def _call(self, excerpt: str) -> Tuple[Optional[Any], Optional[dict], Optional[str]]:
-        import anthropic
-
         kwargs = self.request(excerpt)
         try:
             client = self.client()
             api = client.beta.messages if "betas" in kwargs else client.messages
             resp = api.create(**kwargs)
-        except anthropic.BadRequestError as exc:
-            return None, None, f"ai request rejected (400: {getattr(exc, 'message', '')[:120]})"
-        except anthropic.AuthenticationError:
-            return None, None, "ai authentication failed (check the DSV anthropic-api-key)"
-        except anthropic.RateLimitError:
-            return None, None, "ai rate limited after retries"
-        except anthropic.APIStatusError as exc:
-            return None, None, f"ai API error {exc.status_code}"
-        except anthropic.APIConnectionError:
-            return None, None, "ai API unreachable / timed out"
+        except Exception as exc:  # noqa: BLE001 - classified below; AI failure only means "no AI findings"
+            return None, None, _error_note(exc)
         usage = getattr(resp, "usage", None)
         usage_d = {"input_tokens": getattr(usage, "input_tokens", None), "output_tokens": getattr(usage, "output_tokens", None)} if usage else None
         stop = getattr(resp, "stop_reason", None)
