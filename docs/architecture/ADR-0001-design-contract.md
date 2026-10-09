@@ -268,7 +268,54 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
   start task: Batch pools have no VM extensions, and platform-batch is upstream of obs-telemetry-transport, so a
   start-task reference would create a platform → observability dependency cycle. platform-batch's start task installs
   only the runtime (Python 3.13). (Supersedes the earlier "start task references the script" wording of this amendment.)
+- 2026-10-09: Secrets move from Key Vault to Delinea DSV (section 14). Rules in sections 5, 9 and 10 that mention Key Vault
+  secret IDs now mean DSV references (`dsv://`).
 - 2026-10-09: Static Web Apps is not available in swedencentral; the frontend SWA resource uses a separate `swa_location` (default westeurope).
+
+## 14. Secret management: Delinea DevOps Secrets Vault (DSV)
+
+Decision (2026-10-09, user requirement): **all keys and secrets live in Delinea DSV.** Azure Key Vault is not used for
+secrets. Workloads read secrets directly from DSV at start-up; nothing copies DSV secrets into another vault.
+
+**Authentication — no bootstrap secret anywhere.** Every reader authenticates with its own Azure *user-assigned managed
+identity* (the per-service identities of `foundation-identity`, the `deploy-agent` identity for pipelines). Protocol, as
+implemented by Delinea's official Go SDK (`dsv-sdk-go` v2.3.0, `auth/azure.go`, `vault/vault.go`):
+
+1. Get an Entra access token for resource `https://management.azure.com/` from the managed identity (IMDS on VMs/VMSS/Batch/
+   self-hosted agents, `IDENTITY_ENDPOINT` on App Service/Functions/Container Apps, workload identity on AKS).
+2. `POST https://<tenant>.secretsvaultcloud.<tld>/v1/token` with `{"grant_type":"azure","jwt":"<token>"}` → `accessToken`,
+   `expiresIn` (DSV tokens live 1 h; refresh at 80 % of lifetime).
+3. `GET https://<tenant>.secretsvaultcloud.<tld>/v1/secrets/<path>` with `Authorization: Bearer <accessToken>` → `{data: {...}}`.
+
+DSV maps a *user* with `provider = <azure auth provider>` and `external-id = <user-assigned identity resource id>`
+(Delinea docs "Authentication: Azure"). Least privilege = one DSV policy per identity granting `read` on exactly its paths.
+
+**Path layout.** `/<name_prefix>/<env>/<secret-name>`, element `value` (e.g. `/eh/dev/datadog-api-key#value`).
+**Reference syntax.** `dsv://<path>#<element>` (element defaults to `value`). References are not secrets and may appear in
+contracts, Terraform state, app settings and Helm values. Secret *values* never do, except where a resource argument has
+no write-only form (each case listed in `docs/known-limitations.md`).
+
+**Ownership.**
+- `foundation-identity` (contract **v2**): identities + the per-identity secret-name lists; publishes `secrets`
+  = `{provider: "delinea-dsv", tenant, tld, base_path, refs: {<secret-name>: "dsv://..."}}`. No Key Vault.
+- `foundation-secrets` (new): renders the DSV desired state (Azure auth provider, one DSV user per managed identity,
+  one policy per user) from the identity contract; `tools/secrets/dsv_apply.py` applies it idempotently through the DSV
+  REST API (plan = diff, apply = converge). Secret *values* are set by operators (`dsv secret create/update`) or by
+  `tools/secrets/publish.py` for values Azure generates (e.g. Event Hubs listen keys); `tools/secrets/check.py` verifies
+  required paths exist without printing values.
+- Consumers resolve references at runtime:
+  - application code: `hello_common` (Python) and `Hello.Common` (.NET) resolve any env var whose value starts with
+    `dsv://` at start-up (cached, refreshed, never logged);
+  - containers without our code (Fluent Bit, OTel collector, Datadog Agent): the `hello-dsv-fetch` helper runs as an
+    **init container** (ACA, ACI, AKS) writing files to an in-memory volume, or as the Datadog Agent
+    `secret_backend_command` (VM/VMSS hosts, AKS agent);
+  - pipelines: `tools/secrets/fetch.py` on self-hosted agents (deploy-agent identity) exports values only as masked step
+    variables / ephemeral `TF_VAR_*` inputs; Microsoft-hosted PR builds never fetch secrets.
+- Terraform reads no DSV secrets with data sources by default (values would land in state); write-only arguments take
+  ephemeral inputs from the pipeline instead.
+
+Local development and tests use `DSV_AUTH=client_credentials` against a mock DSV server, or literal values with
+`DSV_AUTH=none`.
 
 ## See also
 
