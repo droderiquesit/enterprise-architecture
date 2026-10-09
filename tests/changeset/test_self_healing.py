@@ -152,8 +152,7 @@ def test_real_environments_remediation_policy():
         assert sh["drift_auto_remediate"] is allowed, env
     reg = load_registry(WorkTree(root))
     marked = sorted(c.id for c in reg if c.drift_auto_remediate)
-    assert marked == ["foundation-governance", "foundation-secrets", "obs-azure-integration", "obs-diagnostics",
-                      "obs-monitoring"]
+    assert marked == ["foundation-governance", "foundation-secrets", "obs-azure-integration", "obs-diagnostics"]
 
 
 def test_heal_cli_mode(lab, capsys):

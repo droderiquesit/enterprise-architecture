@@ -19,6 +19,8 @@ jobs:
     variables:
       - name: LAB_ENV
         value: ${{ parameters.environment }}
+      - name: RECORDS_URL
+        value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
     steps:
       - checkout: self
         fetchDepth: 1
@@ -29,19 +31,43 @@ jobs:
           artifact: selection
           path: $(Pipeline.Workspace)/selection
       - template: steps-setup.yml
-      - script: |
-          set -euo pipefail
-          out="$(Build.ArtifactStagingDirectory)/telemetry"; mkdir -p "$out"
-          verifier=observability/tools/verify/telemetry_verify.py
-          if [[ ! -f "$verifier" ]]; then
-            echo "##vso[task.logissue type=warning]$verifier not present; telemetry not verified (status stays 'deployed', not 'verified')"
-            echo '{"status":"not-run","reason":"verifier missing"}' > "$out/telemetry-results.json"
-            exit 0
-          fi
-          python3 tools/secrets/fetch.py exec --env "$LAB_ENV" --map DD_API_KEY=datadog-api-key --map DD_APP_KEY=datadog-app-key -- \
-          python3 "$verifier" --env "$LAB_ENV" --site "$DD_SITE" \
-            --selection "$(Pipeline.Workspace)/selection/selection.json" --out "$out/telemetry-results.json"
+      - task: AzureCLI@2
         displayName: Verify telemetry (logs, traces, metrics, RUM)
+        inputs:
+          azureSubscription: ${{ parameters.settings.planServiceConnection }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+              set -euo pipefail
+              out="$(Build.ArtifactStagingDirectory)/telemetry"; mkdir -p "$out"
+              sel="$(Pipeline.Workspace)/selection/selection.json"
+              verifier=observability/tools/verify/telemetry_verify.py
+              if [[ ! -f "$verifier" ]]; then
+                echo "##vso[task.logissue type=warning]$verifier not present; telemetry not verified (status stays 'deployed', not 'verified')"
+                echo '{"result":"not-run","status":"not-run","reason":"verifier missing","components":{}}' > "$out/telemetry-results.json"
+                exit 0
+              fi
+              # the verifier checks one journey (environments/<env>/environment.yaml datadog.telemetry_verification);
+              # tools/smoke/telemetry.py builds its argv and maps the journey result onto this run's deployments
+              mapfile -t argv < <(python3 tools/smoke/telemetry.py args --env "$LAB_ENV" --selection "$sel" \
+                --site "$DD_SITE" --evidence "$out/telemetry-evidence.json" | python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)))')
+              if [[ ${#argv[@]} -eq 0 ]]; then
+                echo "no application deployment in this run: telemetry not verified"
+                echo '{"result":"not-run","status":"not-run","reason":"no deployments","components":{}}' > "$out/telemetry-results.json"
+                exit 0
+              fi
+              set +e
+              python3 tools/secrets/fetch.py exec --env "$LAB_ENV" --map DD_API_KEY=datadog-api-key --map DD_APP_KEY=datadog-app-key -- \
+                python3 "${argv[@]}"
+              rc=$?
+              set -e
+              python3 tools/smoke/telemetry.py results --env "$LAB_ENV" --selection "$sel" \
+                --evidence "$out/telemetry-evidence.json" --exit-code "$rc" --out "$out/telemetry-results.json"
+              # verification outcome on the records: heal runs re-run components whose telemetry verification failed
+              python3 tools/deploy/record.py verify --env "$LAB_ENV" --component '*' --store "$RECORDS_URL" \
+                --telemetry-results "$out/telemetry-results.json" \
+                || echo "##vso[task.logissue type=warning]telemetry verification not recorded on the deployment records"
+              exit $rc
         env:
           DD_SITE: ${{ parameters.settings.datadogSite }}
       - task: PublishPipelineArtifact@1

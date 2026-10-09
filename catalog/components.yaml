@@ -158,6 +158,7 @@ components:
     secret_env:
       TF_VAR_pull_secret: aro-pull-secret?
     produces: [platform-aro]
+    retry: {attempts: 2, max_minutes: 90}   # ARO create is ~40 min; one re-plan+continue at most
     catalog_refs: [aro]
   - id: platform-specialized-compute
     layer: platform
@@ -180,6 +181,7 @@ components:
     path: platform/data/sqlmi
     consumes: [foundation-network, foundation-identity]
     produces: [platform-db-sqlmi]
+    retry: {attempts: 2, max_minutes: 120}   # SQL MI create/update runs for hours; never re-plan in a tight loop
     catalog_refs: [sql-managed-instance]
   - id: platform-db-sqlvm
     layer: platform
@@ -375,7 +377,6 @@ components:
     optional_consumes: [deploy-core-aks, deploy-core-aca, deploy-frontend, deploy-durable, deploy-functions, deploy-partner-sim, deploy-dbadapters, deploy-appservice, deploy-jobs, deploy-vm-workloads, deploy-logicapps, deploy-specialized, obs-telemetry-transport]
     after_deployments: true     # runs after every selected applications deployment (needs endpoints)
     inputs: [observability/onboarding/**, observability/archetypes/**]
-    drift: {auto_remediate: true}   # additive drift re-applied where environments/<env> self_healing allows (dev)
 
   # ------------------------------------------------------ observability images (platform scope)
   - id: img-dsv-fetch

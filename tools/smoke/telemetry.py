@@ -12,7 +12,7 @@ The verifier (observability/tools/verify/telemetry_verify.py, owned by the obser
 `datadog.telemetry_verification` (defaults below). A failed journey marks every application deployment component
 selected in this run as verification=failed (heal mode re-runs them); a verifier usage/auth error (exit 2/3) is a
 pipeline problem, not an application one, and records nothing ("not-run").
-Output: {"env", "result": pass|fail|not-run, "components": {<id>: {"status": "passed"|"failed"}}}
+Output: {"env", "result": pass|fail|not-run, "status": passed|failed|not-run (tools/report/report.py), "components": {<id>: {"status": "passed"|"failed"}}}
 """
 
 from __future__ import annotations
@@ -56,12 +56,12 @@ def verifier_args(env: str, site: str, evidence: str, repo: Path = REPO) -> List
 def results(env: str, selection: dict, evidence: dict, exit_code: int) -> dict:
     deployed = select_components(selection, [])
     if exit_code in (2, 3) or not evidence:
-        return {"env": env, "result": "not-run", "components": {},
+        return {"env": env, "result": "not-run", "status": "not-run", "components": {},
                 "reason": f"verifier exit {exit_code} (configuration / credentials) - nothing recorded"}
     result = "pass" if exit_code == 0 and evidence.get("result") == "pass" else "fail"
     status = "passed" if result == "pass" else "failed"
     failed_checks = [c.get("name") for c in evidence.get("checks") or [] if c.get("status") == "fail"]
-    return {"env": env, "result": result, "failed_checks": failed_checks,
+    return {"env": env, "result": result, "status": status, "failed_checks": failed_checks,
             "components": {cid: {"status": status, "source": "telemetry"} for cid in deployed}}
 
 
