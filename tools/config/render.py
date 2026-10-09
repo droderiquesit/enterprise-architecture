@@ -3,7 +3,8 @@
 
     python3 tools/config/render.py --env dev --component foundation-network [--stdout] [--ado]
 
-Content: {"environment": <ADR §6 globals>, "settings": environment.components.<id> or {}}
+Content: {"environment": <ADR §6 globals>, "settings": profile component_settings.<id> deep-merged
+with environment.components.<id> (environment wins)}
 plus optional globals (network, datadog, budget, features, profile_name) that the root declares
 as variables. The printed sha256 is over the canonical JSON and is part of the plan binding
 manifest and of the component fingerprint.

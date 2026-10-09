@@ -1,0 +1,25 @@
+# escape=`
+# hello-inventory-api — Windows container (Nano Server ltsc2025, non-admin ContainerUser).
+# NOT built in the Linux lab sandbox: requires a Windows Server 2025 Docker host (process isolation) or Hyper-V isolation.
+# Build context: applications/
+#   docker build -f applications/services/inventory-api/Dockerfile.windows -t hello-inventory-api:$VERSION-windows applications
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-nanoserver-ltsc2025 AS build
+ARG VERSION=0.1.0-local
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
+WORKDIR C:\src\dotnet
+COPY dotnet/global.json dotnet/nuget.config dotnet/Directory.Build.props dotnet/Directory.Packages.props ./
+COPY shared/dotnet/Directory.Build.props shared/dotnet/Directory.Packages.props ../shared/dotnet/
+COPY shared/dotnet/Hello.Common/ ../shared/dotnet/Hello.Common/
+COPY services/inventory-api/Directory.Build.props services/inventory-api/Directory.Packages.props ../services/inventory-api/
+COPY services/inventory-api/src/ ../services/inventory-api/src/
+RUN dotnet publish ..\services\inventory-api\src\Hello.InventoryApi\Hello.InventoryApi.csproj -c Release -r win-x64 --self-contained false -o C:\app -p:Version=%VERSION% -p:GIT_COMMIT=%GIT_COMMIT% -p:BUILD_TIME=%BUILD_TIME% -p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-nanoserver-ltsc2025 AS runtime
+WORKDIR C:\app
+COPY --from=build C:\app .
+ENV PORT=8080
+USER ContainerUser
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "Hello.InventoryApi.dll"]

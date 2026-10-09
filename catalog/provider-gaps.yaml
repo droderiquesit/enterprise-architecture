@@ -28,6 +28,7 @@ gaps:
   - service_id: horizondb
     arm_types:
       - {type: Microsoft.HorizonDb/clusters, api_version: "2026-05-01-preview"}
+      - {type: Microsoft.HorizonDb/clusters/administrators, api_version: "2026-05-01-preview"}
     azurerm_status: missing
     resolution: azapi
     reason: "Preview service; no azurerm resource. Child types clusters/pools, clusters/privateEndpointConnections also exist (2026-05-01-preview). Firewall rules not yet in CLI per quickstart."
@@ -154,3 +155,22 @@ gaps:
 # azurerm_postgresql_flexible_server cluster{} (elastic clusters), azurerm_confidential_ledger, azurerm_managed_devops_pool,
 # azurerm_vmware_private_cloud, azurerm_redhat_openshift_cluster, azurerm_service_fabric_managed_cluster,
 # azurerm_oracle_* (Database@Azure), azurerm_fabric_capacity, azurerm_static_web_app, azurerm_logic_app_standard.
+  - service_id: cosmos-table
+    arm_types:
+      - {type: Microsoft.DocumentDB/databaseAccounts/tableRoleAssignments, api_version: "2026-03-15"}
+    azurerm_status: partial
+    resolution: azapi
+    reason: "azurerm 5.9.0 manages the Table API account and tables but has no resource for Table API data-plane RBAC role assignments (only azurerm_cosmosdb_sql_role_assignment for NoSQL)."
+    owner_component: platform-db-cosmos-table
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.documentdb/databaseaccounts/tableroleassignments
+  - service_id: sql-managed-instance
+    arm_types:
+      - {type: Microsoft.Sql/managedInstances, api_version: "2025-01-01"}
+    azurerm_status: partial
+    resolution: azapi
+    reason: "azurerm_mssql_managed_instance cannot set properties.pricingModel=Freemium (SQL MI free offer). azapi is used only when settings.free_offer = true; otherwise azurerm."
+    owner_component: platform-db-sqlmi
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.sql/managedinstances
+      - https://learn.microsoft.com/en-us/azure/azure-sql/managed-instance/free-offer

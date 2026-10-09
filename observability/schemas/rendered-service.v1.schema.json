@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rendered-service.v1.schema.json",
+  "title": "Rendered service document (output of tools/onboarding/render.py, input of modules/onboarding)",
+  "type": "object",
+  "required": ["schema", "package_version", "generated_from", "env", "service", "enabled", "metadata", "architecture",
+               "tags", "resources", "endpoints", "telemetry", "idle_behavior", "monitors", "slos", "dashboards", "catalog"],
+  "properties": {
+    "schema": {"const": "rendered-service/v1"},
+    "package_version": {"type": "string"},
+    "presence_ref": {"type": ["string", "null"]},
+    "resources": {"type": "array", "items": {"type": "object", "required": ["id", "type", "role", "required"]}},
+    "endpoints": {"type": "array", "items": {"type": "object", "required": ["name", "url", "visibility", "health_path", "synthetic", "browser_steps"]}},
+    "monitors": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "type", "query", "message", "thresholds", "notify", "priority", "tags", "resource_role", "runbook_url"],
+        "properties": {
+          "thresholds": {"type": "object", "required": ["critical"], "properties": {"critical": {"type": "number"}}},
+          "notify": {"type": "object", "required": ["alert", "warning"]}
+        }
+      }
+    },
+    "slos": {"type": "array", "items": {"type": "object", "required": ["name", "type", "target", "timeframe", "burn_rate_alerts"]}}
+  }
+}

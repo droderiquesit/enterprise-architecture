@@ -245,6 +245,7 @@ def select_pr(repo: Path, env: str, target: str = "main", head: str = "HEAD", ba
             parts = changed_parts(base_fp.parts(cid), e["fp_parts"])
             e["changed_parts"] = parts
             e["direct"] = True
+            e["validate"] = True
             _add_reason(e, "deploy inputs changed: " + ",".join(parts))
             if c.is_artifact:
                 e["build"] = True
@@ -449,6 +450,7 @@ def select_all(repo: Path, env: str, mode: str, store: Optional[Store] = None, h
         if c.deployable and c.id in ctx.enabled:
             reason = "reconcile: plan every enabled component" if mode == "reconcile" else "drift detection (plan only)"
             _plan(ctx, doc, c.id, reason, apply=(mode == "reconcile"))
+            doc["components"][c.id]["validate"] = True
             rec = _record(store, env, c.id)
             if rec:
                 doc["components"][c.id]["previous_fp"] = rec.get("deploy_fp")

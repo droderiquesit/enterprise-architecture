@@ -29,6 +29,40 @@
         },
         "http_endpoint": {
           "type": "string"
+        },
+        "headers_secret_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Key Vault versionless secret id whose value is the full OTEL_EXPORTER_OTLP_HEADERS string (e.g. authorization=Bearer ...); null when the gateway does not require auth"
+        },
+        "default_protocol": {
+          "enum": [
+            "grpc",
+            "http/protobuf"
+          ],
+          "description": "protocol managed runtimes should use against the gateway"
+        },
+        "node_agent_grpc_port": {
+          "type": "integer"
+        },
+        "node_agent_http_port": {
+          "type": "integer"
+        },
+        "host_agent_grpc_endpoint": {
+          "type": "string"
+        },
+        "gateway_distribution": {
+          "enum": [
+            "upstream",
+            "ddot",
+            "external"
+          ]
+        },
+        "internal_only": {
+          "const": true,
+          "description": "receivers are never exposed publicly"
         }
       }
     },
@@ -51,6 +85,48 @@
         "sidecar_config": {
           "type": "string",
           "description": "fluent-bit YAML config for file-tail sidecars (no secrets; API key via env from secret ref)"
+        },
+        "sidecar_forward_config": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "fluent-bit YAML for sidecars that ship to the aggregator (forward) instead of Datadog"
+        },
+        "sidecar_parsers": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "parsers.yaml content mounted next to the sidecar config"
+        },
+        "sidecar_lua": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "lua/enterprise_hello.lua content mounted next to the sidecar config"
+        },
+        "sidecar_mode": {
+          "enum": [
+            "datadog",
+            "forward"
+          ]
+        },
+        "logs_intake_host": {
+          "type": "string"
+        },
+        "forward_shared_key_secret_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "forward_tls": {
+          "type": "boolean"
+        },
+        "metrics_port": {
+          "type": "integer"
         }
       }
     },
@@ -71,6 +147,17 @@
         },
         "platform_logs_hub": {
           "type": "string"
+        },
+        "kafka_endpoint": {
+          "type": "string",
+          "description": "<namespace>.servicebus.windows.net:9093"
+        },
+        "consumer_group": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string",
+          "description": "diagnostic settings must target an Event Hub in the same region as the source resource"
         }
       }
     },
@@ -89,6 +176,78 @@
         "string",
         "null"
       ]
+    },
+    "log_routes": {
+      "type": "object",
+      "description": "authoritative application-log route per architecture (README-transport.md)",
+      "additionalProperties": {
+        "enum": [
+          "daemonset",
+          "host",
+          "sidecar",
+          "eventhub",
+          "none"
+        ]
+      }
+    },
+    "aggregator": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "hosting": {
+          "enum": [
+            "container_app",
+            "none"
+          ]
+        },
+        "resource_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fqdn": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "gateway": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "hosting": {
+          "enum": [
+            "container_app",
+            "none"
+          ]
+        },
+        "resource_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fqdn": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sampling": {
+          "enum": [
+            "probabilistic",
+            "tail",
+            "none"
+          ]
+        }
+      }
     }
   }
 }

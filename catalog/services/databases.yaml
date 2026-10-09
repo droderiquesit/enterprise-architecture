@@ -353,7 +353,10 @@ services:
     terraform_resources:
     - azurerm_mssql_managed_instance
     - azurerm_mssql_managed_database
-    azapi: []
+    azapi:
+    - type: Microsoft.Sql/managedInstances
+      api_version: "2025-01-01"
+      reason: azurerm 5.9.0 gap (see catalog/provider-gaps.yaml)
     component: platform-db-sqlmi
     implemented: true
   workload:
@@ -1078,7 +1081,10 @@ services:
     terraform_resources:
     - azurerm_cosmosdb_account
     - azurerm_cosmosdb_table
-    azapi: []
+    azapi:
+    - type: Microsoft.DocumentDB/databaseAccounts/tableRoleAssignments
+      api_version: "2026-03-15"
+      reason: azurerm 5.9.0 gap (see catalog/provider-gaps.yaml)
     component: platform-db-cosmos-table
     implemented: true
     notes: capabilities EnableTable
@@ -1622,6 +1628,9 @@ services:
     terraform_resources: []
     azapi:
     - type: Microsoft.HorizonDb/clusters
+      api_version: 2026-05-01-preview
+      reason: no azurerm resource in 5.9.0
+    - type: Microsoft.HorizonDb/clusters/administrators
       api_version: 2026-05-01-preview
       reason: no azurerm resource in 5.9.0
     component: platform-db-horizondb

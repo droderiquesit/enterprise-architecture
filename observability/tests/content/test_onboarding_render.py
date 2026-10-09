@@ -254,3 +254,8 @@ def test_lab_manifests_cover_every_enterprise_hello_service():
                 "ledger", "blob", "adls", "search", "adx"}
     expected |= {f"hello-dbadapter-{f}" for f in families}
     assert expected <= services
+
+
+def test_rendered_documents_match_rendered_schema():
+    for name, doc in all_rendered():
+        assert not lib.schema_errors(doc, "rendered-service.v1.schema.json"), name

@@ -16,7 +16,7 @@ ENV_ARGS=(
   -e 'FLB_EXCLUDE_PATHS=/var/log/containers/*_kube-system_*.log' -e FLB_THROTTLE_RATE=2000 -e FLB_SYSTEMD_UNIT=hello-worker.service
 )
 rc=0
-for f in sidecar.yaml sidecar-forward.yaml aggregator.yaml k8s-daemonset.yaml linux-host.yaml windows-host.yaml; do
+for f in sidecar.yaml sidecar-forward.yaml aggregator.yaml aggregator-forward.yaml k8s-daemonset.yaml linux-host.yaml windows-host.yaml; do
   out="$(docker run --rm "${ENV_ARGS[@]}" -v "$CFG:/fluent-bit/etc/eh:ro" "$IMAGE" -c "/fluent-bit/etc/eh/$f" --dry-run 2>&1 || true)"
   if grep -q "configuration test is successful" <<<"$out" && ! grep -q "\[error\]" <<<"$out"; then
     echo "PASS dry-run $f"

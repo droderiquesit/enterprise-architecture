@@ -141,7 +141,7 @@ def test_dry_run_all_configs():
     res = subprocess.run([str(HERE / "dryrun.sh")], capture_output=True, text=True)
     print(res.stdout, res.stderr)
     assert res.returncode == 0
-    assert res.stdout.count("PASS") == 7
+    assert res.stdout.count("PASS") == 8
 
 
 def test_sidecar_direct_to_datadog(stack, tmp_path):

@@ -155,7 +155,7 @@ databases:
   postgresql-flexible: {owner: hello-catalog-api, boundary: "db catalog", also: [hello-dbadapter-postgresql (db adapter)]}
   postgresql-elastic-cluster: {owner: hello-dbadapter-postgresql-elastic, boundary: "distributed table adapter.records"}
   mysql-flexible: {owner: hello-dbadapter-mysql, boundary: "db adapter"}
-  cosmos-nosql: {owner: hello-inventory-api, boundary: "db inventory / container items", also: [hello-dbadapter-cosmos-nosql (container adapter)]}
+  cosmos-nosql: {owner: hello-inventory-api, boundary: "db inventory / container items", also: [hello-dbadapter-cosmos-nosql (db adapter / container records)]}
   cosmos-mongodb-ru: {owner: hello-dbadapter-cosmos-mongo, boundary: "db adapter / collection records"}
   cosmos-cassandra: {owner: hello-dbadapter-cosmos-cassandra, boundary: "keyspace adapter"}
   cosmos-gremlin: {owner: hello-dbadapter-cosmos-gremlin, boundary: "db adapter / graph records"}

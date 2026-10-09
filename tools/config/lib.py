@@ -164,6 +164,17 @@ def resolve_for_env(tree: Tree, registry: Registry, graph: Graph, env: str) -> T
 
 
 # ---------------------------------------------------------------------- render
+def deep_merge(base: dict, override: dict) -> dict:
+    """Recursive dict merge; `override` wins. Lists and scalars are replaced, not merged."""
+    out = dict(base)
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
 def declared_variables(tree: Tree, root_dir: str) -> Set[str]:
     prefix = root_dir.rstrip("/") + "/"
     names: Set[str] = set()
@@ -177,7 +188,8 @@ def render_component(tree: Tree, registry: Registry, env_doc: dict, profile_doc:
                      declared: Optional[Set[str]] = None) -> dict:
     """The terraform.tfvars.json content for one component.
 
-    `environment` is the ADR §6 object; `settings` is environment.components.<id> (or {}).
+    `environment` is the ADR §6 object; `settings` is the deep merge of the profile's
+    component_settings.<id> (lower precedence) and environment.components.<id> (higher).
     Optional globals (network, datadog, budget, features, profile_name) are included only when the
     root declares a variable of that name, so unrelated global edits never change this component.
     """
@@ -185,7 +197,8 @@ def render_component(tree: Tree, registry: Registry, env_doc: dict, profile_doc:
     env = env_doc.get("environment") or {}
     rendered = {
         "environment": {k: env.get(k) for k in ENVIRONMENT_KEYS if k in env},
-        "settings": (env_doc.get("components") or {}).get(component_id) or {},
+        "settings": deep_merge((profile_doc.get("component_settings") or {}).get(component_id) or {},
+                               (env_doc.get("components") or {}).get(component_id) or {}),
     }
     rendered["environment"].setdefault("tags", {})
     if declared is None:
