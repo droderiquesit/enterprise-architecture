@@ -1,0 +1,90 @@
+# Job template: terraform init/validate/plan of a monitoring root, saved plan published as a pipeline artifact.
+# Azure auth: workload identity federation (OIDC) through an Azure Resource Manager service connection.
+# Datadog keys: read from Key Vault into secret variables and exported only to terraform steps.
+parameters:
+  - name: jobName
+    type: string
+    default: plan
+  - name: rootDir
+    type: string
+  - name: environment
+    type: string
+  - name: azureServiceConnection
+    type: string
+  - name: backendConfig          # -backend-config key/values (storage_account_name, container_name, key, resource_group_name ...)
+    type: object
+    default: {}
+  - name: keyVaultName           # Key Vault holding the Datadog API/app keys
+    type: string
+  - name: datadogApiKeySecret
+    type: string
+    default: datadog-api-key
+  - name: datadogAppKeySecret
+    type: string
+    default: datadog-app-key
+  - name: datadogSite
+    type: string
+    default: datadoghq.com
+  - name: varFiles               # extra -var-file paths relative to rootDir
+    type: object
+    default: []
+  - name: preSteps               # e.g. vendoring the package or `render.py references`
+    type: stepList
+    default: []
+  - name: pool
+    type: object
+    default:
+      vmImage: ubuntu-latest
+
+jobs:
+  - job: ${{ parameters.jobName }}
+    displayName: Terraform plan (${{ parameters.environment }})
+    pool: ${{ parameters.pool }}
+    steps:
+      - checkout: self
+      - ${{ each step in parameters.preSteps }}:
+          - ${{ step }}
+      - task: AzureKeyVault@2
+        displayName: Read Datadog keys
+        inputs:
+          azureSubscription: ${{ parameters.azureServiceConnection }}
+          KeyVaultName: ${{ parameters.keyVaultName }}
+          SecretsFilter: ${{ parameters.datadogApiKeySecret }},${{ parameters.datadogAppKeySecret }}
+          RunAsPreJob: false
+      - task: AzureCLI@2
+        displayName: terraform init / validate / plan
+        inputs:
+          azureSubscription: ${{ parameters.azureServiceConnection }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          addSpnToEnvironment: true
+          workingDirectory: ${{ parameters.rootDir }}
+          inlineScript: |
+            set -euo pipefail
+            export ARM_CLIENT_ID="$servicePrincipalId" ARM_OIDC_TOKEN="$idToken" ARM_TENANT_ID="$tenantId" ARM_USE_OIDC=true
+            export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+            mapfile -t BACKEND_ARGS < <(python3 -c 'import json,os; [print(f"-backend-config={k}={v}") for k,v in json.loads(os.environ["BACKEND_CONFIG_JSON"] or "{}").items()]')
+            mapfile -t VAR_ARGS < <(python3 -c 'import json,os; [print(f"-var-file={f}") for f in json.loads(os.environ["VAR_FILES_JSON"] or "[]")]')
+            terraform init -input=false ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}
+            terraform validate
+            set +e
+            terraform plan -input=false -lock-timeout=5m -detailed-exitcode -out=tfplan ${VAR_ARGS[@]+"${VAR_ARGS[@]}"}
+            rc=$?
+            set -e
+            if [ "$rc" -eq 1 ]; then exit 1; fi
+            echo "##vso[task.setvariable variable=hasChanges;isOutput=true]$([ "$rc" -eq 2 ] && echo true || echo false)"
+            terraform show -no-color tfplan > plan.txt
+            # Safety summary: any delete/replace is printed prominently for reviewers.
+            terraform show -json tfplan | python3 -c 'import json,sys; p=json.load(sys.stdin); d=[r["address"] for r in p.get("resource_changes",[]) if "delete" in r["change"]["actions"]]; print("DESTROY:", d if d else "none")'
+        name: plan
+        env:
+          DD_API_KEY: $(${{ parameters.datadogApiKeySecret }})
+          DD_APP_KEY: $(${{ parameters.datadogAppKeySecret }})
+          DD_SITE: ${{ parameters.datadogSite }}
+          BACKEND_CONFIG_JSON: ${{ convertToJson(parameters.backendConfig) }}
+          VAR_FILES_JSON: ${{ convertToJson(parameters.varFiles) }}
+      - task: PublishPipelineArtifact@1
+        displayName: Publish saved plan (restricted)
+        inputs:
+          targetPath: ${{ parameters.rootDir }}
+          artifact: tfplan-${{ parameters.environment }}

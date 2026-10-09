@@ -26,6 +26,7 @@ AZURITE_KEY = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1
 
 
 def _tcp(host, port):
+    # docker-proxy accepts TCP before the service listens, so callers combine this with an in-container probe
     with socket.create_connection((host, port), timeout=2):
         return True
 
@@ -117,7 +118,7 @@ async def test_sql_family(family, mssql, monkeypatch):
 # ---------------------------------------------------------------- Azurite (tables, blob)
 @pytest.fixture(scope="module")
 def azurite():
-    with run_container("mcr.microsoft.com/azure-storage/azurite:latest", [10000, 10002], ready=lambda c: _tcp(c.host, c.port(10002)) and _tcp(c.host, c.port(10000)),
+    with run_container("mcr.microsoft.com/azure-storage/azurite:latest", [10000, 10002], ready=lambda c: c.logs().count("successfully listening") >= 2,
                        command=["azurite", "--blobHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--skipApiVersionCheck", "--loose"]) as c:
         yield c
 

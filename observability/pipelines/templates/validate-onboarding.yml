@@ -1,0 +1,51 @@
+# Steps template: validate onboarding manifests and verify the committed rendered output is current.
+# Consumers: include from the package repository (see ../README.md in the package root, "Pipelines").
+parameters:
+  - name: packageDir          # directory that contains the package (modules/, tools/, archetypes/, schemas/)
+    type: string
+  - name: manifestsDir        # consumer manifests for this environment
+    type: string
+  - name: routingFile         # NotificationRouting file for this environment
+    type: string
+  - name: environment
+    type: string
+  - name: renderedDir         # committed render.py output consumed by Terraform
+    type: string
+  - name: archetypesDir       # optional consumer archetype overlay; empty = package archetypes
+    type: string
+    default: ''
+  - name: strict
+    type: boolean
+    default: true
+  - name: pythonVersion
+    type: string
+    default: '3.13'
+
+steps:
+  - task: UsePythonVersion@0
+    displayName: Use Python ${{ parameters.pythonVersion }}
+    inputs:
+      versionSpec: ${{ parameters.pythonVersion }}
+
+  - bash: python -m pip install --disable-pip-version-check --quiet "pyyaml>=6,<7" "jsonschema>=4.20,<5"
+    displayName: Install validator dependencies
+
+  - bash: |
+      set -euo pipefail
+      ARCH_ARGS=()
+      if [ -n "${{ parameters.archetypesDir }}" ]; then ARCH_ARGS=(--archetypes "${{ parameters.archetypesDir }}"); fi
+      python "${{ parameters.packageDir }}/tools/onboarding/validate.py" \
+        --manifests "${{ parameters.manifestsDir }}" \
+        --env "${{ parameters.environment }}" \
+        --routing "${{ parameters.routingFile }}" \
+        "${ARCH_ARGS[@]}" ${{ iif(parameters.strict, '--strict', '') }}
+    displayName: Validate onboarding manifests (${{ parameters.environment }})
+
+  - bash: |
+      set -euo pipefail
+      ARCH_ARGS=()
+      if [ -n "${{ parameters.archetypesDir }}" ]; then ARCH_ARGS=(--archetypes "${{ parameters.archetypesDir }}"); fi
+      python "${{ parameters.packageDir }}/tools/onboarding/render.py" render \
+        --manifests "${{ parameters.manifestsDir }}" --env "${{ parameters.environment }}" \
+        --out "${{ parameters.renderedDir }}" "${ARCH_ARGS[@]}" --check
+    displayName: Verify rendered output is up to date

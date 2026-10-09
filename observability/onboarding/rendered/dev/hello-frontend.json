@@ -9,12 +9,20 @@
     "type": "web"
   },
   "dashboards": {
-    "enabled": true
+    "enabled": true,
+    "workflow_metric_prefix": null
   },
   "enabled": true,
   "endpoints": [
     {
       "browser_journey": true,
+      "browser_steps": [
+        {
+          "name": "Page renders",
+          "type": "assertPageContains",
+          "value": "Enterprise Hello"
+        }
+      ],
       "health_path": "/",
       "name": "site",
       "required": false,
@@ -38,7 +46,7 @@
       "manifest"
     ],
     "manifest": "dev/hello-frontend.yaml",
-    "sha256": "62c75bc623c9917905f04296e5fdfe90d4dce0e1ea603710be8871babc718d45"
+    "sha256": "1cf00e5828ee7bae292f53f56bd29f8578c5f09572f8f7a7f8830be86a6ce167"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,

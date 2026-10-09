@@ -37,6 +37,9 @@ spec:
     health_path: /
     required: false
     browser_journey: true
+  monitors:
+    params:
+      browser_assert_text: Enterprise Hello
   presence_ref: deploy-frontend.url
   notifications:
     default:

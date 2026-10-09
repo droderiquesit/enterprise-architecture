@@ -69,6 +69,8 @@ resource "azurerm_network_interface" "this" {
 }
 
 resource "azurerm_windows_virtual_machine" "this" {
+  #checkov:skip=CKV_AZURE_151:encryption at host needs the EncryptionAtHost subscription feature; disks use platform-managed SSE (README)
+  #checkov:skip=CKV_AZURE_50:VM extensions (Datadog Agent, Fluent Bit) are owned by observability (ADR-0001 §3 rule 3)
   name                       = local.vm_name
   computer_name              = local.computer_name
   resource_group_name        = azurerm_resource_group.this.name
@@ -106,14 +108,17 @@ resource "azurerm_windows_virtual_machine" "this" {
 }
 
 resource "azurerm_managed_disk" "data" {
-  for_each             = { data = var.settings.data_disk_gb, log = var.settings.log_disk_gb }
-  name                 = "${local.vm_name}-${each.key}"
-  resource_group_name  = azurerm_resource_group.this.name
-  location             = azurerm_resource_group.this.location
-  storage_account_type = var.settings.data_disk_type
-  create_option        = "Empty"
-  disk_size_gb         = each.value
-  tags                 = module.tags.tags
+  #checkov:skip=CKV_AZURE_93:lab: platform-managed keys; disk encryption sets out of scope
+  for_each                      = { data = var.settings.data_disk_gb, log = var.settings.log_disk_gb }
+  name                          = "${local.vm_name}-${each.key}"
+  resource_group_name           = azurerm_resource_group.this.name
+  location                      = azurerm_resource_group.this.location
+  storage_account_type          = var.settings.data_disk_type
+  create_option                 = "Empty"
+  disk_size_gb                  = each.value
+  network_access_policy         = "DenyAll"
+  public_network_access_enabled = false
+  tags                          = module.tags.tags
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "data" {

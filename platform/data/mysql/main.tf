@@ -1,12 +1,15 @@
 locals {
-  component   = "platform-db-mysql"
-  workload    = "data-mysql"
-  identities  = var.foundation_identity.identities
-  vnet_mode   = var.settings.network_mode == "vnet"
-  mysql_zone  = try(var.foundation_network.private_dns_zones["mysql"].id, null)
-  server_uami = coalesce(var.settings.server_identity_id, try(azurerm_user_assigned_identity.server[0].id, null))
-  admin_login = "ehadmin"
-  kv_uri      = trimsuffix(var.foundation_identity.key_vault_uri, "/")
+  component       = "platform-db-mysql"
+  workload        = "data-mysql"
+  identities      = var.foundation_identity.identities
+  vnet_mode       = var.settings.network_mode == "vnet"
+  mysql_zone      = try(var.foundation_network.private_dns_zones["mysql"].id, null)
+  mysql_vnet_zone = try(var.foundation_network.private_dns_zones["mysql_vnet"].id, local.mysql_zone)
+  # DBM password secret published by foundation-identity (value set out-of-band); convention fallback.
+  dbm_password_secret_id = lookup(var.foundation_identity.secret_ids, "dbm-mysql-password", "${local.kv_uri}/secrets/${var.settings.dbm_password_secret_name}")
+  server_uami            = coalesce(var.settings.server_identity_id, try(azurerm_user_assigned_identity.server[0].id, null))
+  admin_login            = "ehadmin"
+  kv_uri                 = trimsuffix(var.foundation_identity.key_vault_uri, "/")
 
   # catalog/architecture-matrix.yaml databases.mysql-flexible
   databases = {
@@ -73,6 +76,7 @@ resource "azurerm_user_assigned_identity" "server" {
 }
 
 resource "azurerm_mysql_flexible_server" "this" {
+  #checkov:skip=CKV_AZURE_94:lab: geo-redundant backup off for cost; 7-day local PITR (README)
   name                              = module.naming.unique.globally_unique
   resource_group_name               = azurerm_resource_group.this.name
   location                          = azurerm_resource_group.this.location
@@ -82,7 +86,7 @@ resource "azurerm_mysql_flexible_server" "this" {
   geo_redundant_backup_enabled      = false
   public_network_access             = "Disabled"
   delegated_subnet_id               = local.vnet_mode ? var.foundation_network.subnets["mysql"].id : null
-  private_dns_zone_id               = local.vnet_mode ? local.mysql_zone : null
+  private_dns_zone_id               = local.vnet_mode ? local.mysql_vnet_zone : null
   administrator_login               = local.admin_login
   administrator_password_wo         = ephemeral.random_password.admin.result
   administrator_password_wo_version = var.settings.admin_password_version
@@ -101,8 +105,8 @@ resource "azurerm_mysql_flexible_server" "this" {
   lifecycle {
     ignore_changes = [zone]
     precondition {
-      condition     = !local.vnet_mode || local.mysql_zone != null
-      error_message = "VNet mode needs foundation_network.private_dns_zones.mysql (privatelink.mysql.database.azure.com)."
+      condition     = !local.vnet_mode || local.mysql_vnet_zone != null
+      error_message = "VNet mode needs foundation_network.private_dns_zones.mysql_vnet (or mysql)."
     }
   }
 }

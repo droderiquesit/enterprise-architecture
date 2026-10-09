@@ -40,7 +40,7 @@ def output_variables(doc: dict, registry: Registry) -> Dict[str, str]:
             continue
         e = doc["components"].get(c.id) or {}
         if c.is_artifact:
-            out[f"build_{c.var_id}"] = _bool(bool(e.get("build")) and not pr)
+            out[f"build_{c.var_id}"] = _bool(bool(e.get("build") or e.get("resolve")) and not pr)
         else:
             out[f"sel_{c.var_id}"] = _bool(bool(e.get("plan")) and not pr)
             out[f"apply_{c.var_id}"] = _bool(bool(e.get("apply_candidate")) and not pr)

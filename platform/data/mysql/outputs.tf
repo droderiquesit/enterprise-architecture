@@ -49,7 +49,7 @@ output "contract" {
       auth_mode           = "native-password"
       identity_name       = "obs-dbm"
       username            = "datadog"
-      password_secret_id  = "${local.kv_uri}/secrets/${var.settings.dbm_password_secret_name}"
+      password_secret_id  = local.dbm_password_secret_id
       host                = azurerm_mysql_flexible_server.this.fqdn
       port                = 3306
       resource_id         = azurerm_mysql_flexible_server.this.id

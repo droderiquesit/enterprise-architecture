@@ -1,4 +1,5 @@
 # Plan-only tests with mocked providers: no Azure credentials are needed.
+# hashicorp/random is not mocked: mock providers do not support ephemeral resources; it runs locally without credentials.
 mock_provider "azurerm" {
   override_during = plan
   mock_resource "azurerm_resource_group" {

@@ -51,10 +51,12 @@ jobs:
               --records "$RECORDS_URL" --env "$LAB_ENV" --run-id "$(Build.BuildId)" --commit "$(Build.SourceVersion)" \
               --out "$out/deployment-report.md" --evidence "$out/evidence.json"
             if [[ "${{ parameters.dryRun }}" != "True" ]]; then
-              python3 tools/deploy/storecp.py put --store "$EVIDENCE_URL" \
-                --key "$LAB_ENV/runs/$(Build.BuildId)/evidence.json" --file "$out/evidence.json"
-              python3 tools/deploy/storecp.py put --store "$EVIDENCE_URL" \
-                --key "$LAB_ENV/runs/$(Build.BuildId)/deployment-report.md" --file "$out/deployment-report.md"
+              # needs Storage Blob Data Contributor on `evidence` for the plan identity (pipelines/README.md)
+              for f in evidence.json deployment-report.md; do
+                python3 tools/deploy/storecp.py put --store "$EVIDENCE_URL" \
+                  --key "$LAB_ENV/runs/$(Build.BuildId)/$f" --file "$out/$f" \
+                  || echo "##vso[task.logissue type=warning]evidence upload of $f failed; pipeline artifact still holds it"
+              done
             fi
       - ${{ if eq(parameters.dryRun, false) }}:
         - template: deployment-marker.yml

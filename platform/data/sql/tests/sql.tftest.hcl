@@ -140,6 +140,10 @@ run "defaults" {
     error_message = "DBM metadata must point obs-dbm at Entra managed identity auth."
   }
   assert {
+    condition     = !contains(output.contract.dbm.databases, "fulfillment") && output.contract.databases.fulfillment.dbm_enabled == false && contains(keys(output.contract.dbm.excluded_databases), "fulfillment")
+    error_message = "DBM must be disabled for the auto-pausing serverless fulfillment database."
+  }
+  assert {
     condition     = output.contract.server.fqdn == "eh-data-sql-dev-abcde.database.windows.net" && can(regex("^/subscriptions/", output.contract.server.id))
     error_message = "Contract server shape."
   }

@@ -83,6 +83,8 @@ def _entry(ctx: Context, cid: str) -> dict:
         "plan": False,
         "apply_candidate": False,
         "build": False,
+        "resolve": False,
+        "changed_paths": [],
         "reason": [],
         "deploy_fp": ctx.fp.deploy_fp(cid) if not c.is_docs else None,
         "validation_fp": ctx.fp.validation_fp(cid),
@@ -116,11 +118,15 @@ def _finish(ctx: Context, doc: dict) -> dict:
             comps[cid]["wave"] = i
     doc["waves"] = waves
     doc["artifacts_to_build"] = sorted(cid for cid, e in comps.items() if e["build"])
+    doc["artifacts_to_resolve"] = sorted(cid for cid, e in comps.items() if e["resolve"] and not e["build"])
+    doc["directly_changed"] = sorted(cid for cid, e in comps.items() if e.get("direct"))
+    doc["path_owners"] = sorted(cid for cid, e in comps.items() if e["changed_paths"])
     doc["summary"] = {
         "validate": sorted(cid for cid, e in comps.items() if e["validate"]),
         "plan": sorted(planned),
         "apply_candidates": sorted(cid for cid, e in comps.items() if e["apply_candidate"]),
         "build": doc["artifacts_to_build"],
+        "resolve": doc["artifacts_to_resolve"],
         "retire_scheduled": [r["component"] for r in doc.get("retirements", []) if r["status"] == "retire-scheduled"],
     }
     return doc
@@ -161,8 +167,8 @@ def _artifacts_for_planned(ctx: Context, doc: dict) -> None:
             continue
         for a in ctx.registry.get(cid).artifacts:
             ae = doc["components"][a]
-            ae["build"] = True
-            _add_reason(ae, f"required by planned {cid} (resolve existing digest or build)")
+            ae["resolve"] = True
+            _add_reason(ae, f"required by planned {cid} (resolve existing digest; build if missing)")
 
 
 # ------------------------------------------------------------------------ PR
@@ -203,13 +209,19 @@ def select_pr(repo: Path, env: str, target: str = "main", head: str = "HEAD", ba
                 if c.id in comps and ctx.fp.owns(c, p):
                     _add_reason(comps[c.id], f"{ch.status}: {p}")
                     comps[c.id]["validate"] = True
+                    comps[c.id]["direct"] = True
+                    if p not in comps[c.id]["changed_paths"]:
+                        comps[c.id]["changed_paths"].append(p)
             if base_registry is not None and base_fp is not None:
                 for c in base_registry:
-                    if c.id in comps and c.id not in ctx.registry.components:
+                    if c.id not in comps or p in comps[c.id]["changed_paths"]:
                         continue
-                    if c.id in comps and base_fp.owns(c, p):
+                    if base_fp.owns(c, p):
                         _add_reason(comps[c.id], f"{ch.status}: {p} (owned at base)")
                         comps[c.id]["validate"] = True
+                        comps[c.id]["direct"] = True
+                        if p not in comps[c.id]["changed_paths"]:
+                            comps[c.id]["changed_paths"].append(p)
 
     # 2. fingerprint comparison (catches config, versions, shared modules, registry edits)
     infra_changed: Set[str] = set()
@@ -232,6 +244,7 @@ def select_pr(repo: Path, env: str, target: str = "main", head: str = "HEAD", ba
         if e["previous_fp"] != e["deploy_fp"]:
             parts = changed_parts(base_fp.parts(cid), e["fp_parts"])
             e["changed_parts"] = parts
+            e["direct"] = True
             _add_reason(e, "deploy inputs changed: " + ",".join(parts))
             if c.is_artifact:
                 e["build"] = True
@@ -371,6 +384,7 @@ def select_deploy(repo: Path, env: str, store: Optional[Store], head: str = "HEA
         e["changed_parts"] = parts
         _add_reason(e, reason)
         e["validate"] = True
+        e["direct"] = True
         if c.is_artifact:
             e["build"] = True
             continue

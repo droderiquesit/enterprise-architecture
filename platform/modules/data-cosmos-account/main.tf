@@ -119,6 +119,8 @@ locals {
 }
 
 resource "azurerm_cosmosdb_account" "this" {
+  #checkov:skip=CKV_AZURE_140:local auth is a module input: false for NoSQL/Table (Entra RBAC); true only for Mongo RU/Cassandra/Gremlin where Entra data-plane auth is unavailable (README exceptions)
+  #checkov:skip=CKV_AZURE_100:lab: service-managed keys; CMK out of scope for synthetic data
   name                                  = var.name
   resource_group_name                   = var.resource_group_name
   location                              = var.location

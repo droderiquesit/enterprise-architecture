@@ -39,10 +39,10 @@ def _span_names(batches):
     return [s["name"] for b in batches for rs in b.get("resourceSpans", []) for ss in rs["scopeSpans"] for s in ss["spans"]]
 
 
-def _run_gateway(stack, image, outdir, extra_configs=(), extra_env=None, entry_cmd=None):
+def _run_gateway(stack, image, outdir, extra_configs=(), extra_env=None, entry_cmd=None, overlay="test-overlay.yaml"):
     outdir.mkdir(parents=True, exist_ok=True)
     outdir.chmod(0o777)
-    cfgs = ["--config=file:/cfg/gateway.yaml", *extra_configs, "--config=file:/test/test-overlay.yaml"]
+    cfgs = ["--config=file:/cfg/gateway.yaml", *extra_configs, f"--config=file:/test/{overlay}"]
     env = {"DD_API_KEY": "test-not-a-real-key", "DD_SITE": "datadoghq.com", "DD_ENV": "fallback-env",
            "TRACE_SAMPLING_PERCENTAGE": "100", "GATEWAY_MEMORY_LIMIT_MIB": "400", "GATEWAY_MEMORY_SPIKE_MIB": "100"}
     env.update(extra_env or {})
@@ -66,14 +66,11 @@ def _send(grpc_port, http_port, token=None):
     return subprocess.run(args, capture_output=True, text=True, timeout=60)
 
 
-@pytest.mark.parametrize("image,entry", [(OTELCOL_IMAGE, []), (DDOT_IMAGE, ["run"])], ids=["upstream", "ddot"])
-def test_gateway_pipeline(tmp_path, image, entry):
+def test_gateway_pipeline_upstream(tmp_path):
     stack = Stack("otel")
     try:
         _, base = start_mock_intake(stack)
-        # DDOT standalone resolves a hostname at start-up; the module sets DD_HOSTNAME to the gateway app name
-        extra = {"DD_HOSTNAME": "otel-gateway-test"} if image == DDOT_IMAGE else None
-        gw, gport, hport = _run_gateway(stack, image, tmp_path / "out", entry_cmd=entry, extra_env=extra)
+        _, gport, hport = _run_gateway(stack, OTELCOL_IMAGE, tmp_path / "out")
         res = _send(gport, hport)
         assert res.returncode == 0, res.stderr
         wait_for(lambda: len(_span_names(_read_json_lines(tmp_path / "out" / "traces.json"))) >= 4, 60, what="spans in file exporter")
@@ -104,6 +101,29 @@ def test_gateway_pipeline(tmp_path, image, entry):
             for rm in b.get("resourceMetrics", []) for sm in rm["scopeMetrics"] for m in sm["metrics"]), 60, what="metric")
     finally:
         print(stack.logs(f"{stack.id}-gateway")[-3000:])
+        stack.close()
+
+
+def test_gateway_pipeline_ddot(tmp_path):
+    stack = Stack("ddot")
+    try:
+        _, base = start_mock_intake(stack)
+        # DDOT standalone resolves a hostname at start-up; the module sets DD_HOSTNAME to the gateway app name
+        gw, gport, hport = _run_gateway(stack, DDOT_IMAGE, tmp_path / "out", entry_cmd=["run"],
+                                        extra_env={"DD_HOSTNAME": "otel-gateway-test"}, overlay="test-overlay-ddot.yaml")
+        res = _send(gport, hport)
+        assert res.returncode == 0, res.stderr
+        wait_for(lambda: any(o["path"].startswith("/api/v0.2/traces") for o in received(base)["others"]), 90,
+                 what="datadog exporter trace payload at mock intake")
+        wait_for(lambda: any("stats" in o["path"] for o in received(base)["others"]), 60, what="APM stats payload")
+        def _debug_logs():
+            text = stack.logs(gw)
+            return text if "INSERT orders.orders" in text else None
+
+        logs = wait_for(_debug_logs, 30, what="debug exporter output")
+        assert "deployment.environment.name: Str(test)" in logs
+        assert "process.command_line" not in logs
+    finally:
         stack.close()
 
 

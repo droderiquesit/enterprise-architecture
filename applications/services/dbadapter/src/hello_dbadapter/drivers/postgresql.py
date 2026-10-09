@@ -19,7 +19,7 @@ import logging
 import os
 from typing import Any
 
-from .base import Driver, Record, dumps, iso, loads, new_id
+from .base import Driver, Record, iso, loads, new_id, utcnow
 
 log = logging.getLogger("hello_dbadapter.postgresql")
 
@@ -128,9 +128,12 @@ class PostgresDriver(Driver):
         from psycopg.types.json import Jsonb
 
         rid = record_id or new_id()
+        ts = utcnow()
         row = await self._query(
-            f"INSERT INTO adapter.records (id, payload) VALUES (%s, %s) ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now() RETURNING {COLS}",
-            (rid, Jsonb(payload)), fetch="one")
+            # timestamps are bound parameters: Citus rejects non-IMMUTABLE functions (now()) in DO UPDATE on distributed tables
+            f"INSERT INTO adapter.records (id, payload, created_at, updated_at) VALUES (%s, %s, %s, %s) "
+            f"ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at RETURNING {COLS}",
+            (rid, Jsonb(payload), ts, ts), fetch="one")
         return self._row(row)
 
     async def get(self, record_id: str) -> Record | None:
@@ -144,7 +147,7 @@ class PostgresDriver(Driver):
     async def update(self, record_id: str, payload: dict[str, Any]) -> Record | None:
         from psycopg.types.json import Jsonb
 
-        row = await self._query(f"UPDATE adapter.records SET payload = %s, updated_at = now() WHERE id = %s RETURNING {COLS}", (Jsonb(payload), record_id), fetch="one")
+        row = await self._query(f"UPDATE adapter.records SET payload = %s, updated_at = %s WHERE id = %s RETURNING {COLS}", (Jsonb(payload), utcnow(), record_id), fetch="one")
         return self._row(row) if row else None
 
     async def delete(self, record_id: str) -> bool:

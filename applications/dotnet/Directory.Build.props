@@ -33,6 +33,14 @@
     <NoWarn>$(NoWarn);CA1727;CA1848;CA1873</NoWarn>
   </PropertyGroup>
 
+  <!-- Build provenance baked into every assembly (fallback when GIT_COMMIT/BUILD_TIME env vars are absent at runtime). -->
+  <ItemGroup Condition="'$(GIT_COMMIT)' != ''">
+    <AssemblyMetadata Include="GitCommit" Value="$(GIT_COMMIT)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(BUILD_TIME)' != ''">
+    <AssemblyMetadata Include="BuildTime" Value="$(BUILD_TIME)" />
+  </ItemGroup>
+
   <!-- src projects: warnings are errors. Test projects keep warnings visible but non-fatal. -->
   <PropertyGroup Condition="'$(IsTestProject)' != 'true' and !$(MSBuildProjectName.EndsWith('.Tests'))">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

@@ -1,0 +1,71 @@
+# Deployment-job template: applies the SAVED plan produced by terraform-plan.yml (no re-plan), behind an
+# Azure DevOps Environment so approvals/checks gate the apply.
+parameters:
+  - name: jobName
+    type: string
+    default: apply
+  - name: dependsOn
+    type: string
+    default: plan
+  - name: environment
+    type: string
+  - name: adoEnvironment          # Azure DevOps Environment name holding approvals
+    type: string
+  - name: rootDir                 # path of the root inside the plan artifact
+    type: string
+  - name: azureServiceConnection
+    type: string
+  - name: keyVaultName
+    type: string
+  - name: datadogApiKeySecret
+    type: string
+    default: datadog-api-key
+  - name: datadogAppKeySecret
+    type: string
+    default: datadog-app-key
+  - name: datadogSite
+    type: string
+    default: datadoghq.com
+  - name: pool
+    type: object
+    default:
+      vmImage: ubuntu-latest
+
+jobs:
+  - deployment: ${{ parameters.jobName }}
+    displayName: Terraform apply (${{ parameters.environment }})
+    dependsOn: ${{ parameters.dependsOn }}
+    condition: and(succeeded(), eq(dependencies.${{ parameters.dependsOn }}.outputs['plan.hasChanges'], 'true'))
+    pool: ${{ parameters.pool }}
+    environment: ${{ parameters.adoEnvironment }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - download: current
+              artifact: tfplan-${{ parameters.environment }}
+            - task: AzureKeyVault@2
+              displayName: Read Datadog keys
+              inputs:
+                azureSubscription: ${{ parameters.azureServiceConnection }}
+                KeyVaultName: ${{ parameters.keyVaultName }}
+                SecretsFilter: ${{ parameters.datadogApiKeySecret }},${{ parameters.datadogAppKeySecret }}
+                RunAsPreJob: false
+            - task: AzureCLI@2
+              displayName: terraform apply (saved plan)
+              inputs:
+                azureSubscription: ${{ parameters.azureServiceConnection }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                addSpnToEnvironment: true
+                workingDirectory: $(Pipeline.Workspace)/tfplan-${{ parameters.environment }}
+                inlineScript: |
+                  set -euo pipefail
+                  export ARM_CLIENT_ID="$servicePrincipalId" ARM_OIDC_TOKEN="$idToken" ARM_TENANT_ID="$tenantId" ARM_USE_OIDC=true
+                  export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                  chmod -R u+x .terraform/providers || true
+                  terraform apply -input=false -lock-timeout=5m tfplan
+              env:
+                DD_API_KEY: $(${{ parameters.datadogApiKeySecret }})
+                DD_APP_KEY: $(${{ parameters.datadogAppKeySecret }})
+                DD_SITE: ${{ parameters.datadogSite }}

@@ -17,10 +17,10 @@ spec:
   telemetry:
     profile: http-api
   resources:
-    - id: /subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/RG-Shop/providers/Microsoft.Web/sites/app-shop-api
+    - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-Shop/providers/Microsoft.Web/sites/app-shop-api
       type: Microsoft.Web/sites
       role: app
-    - id: /subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-data/providers/Microsoft.Sql/servers/sql-shop/databases/shopdb
+    - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data/providers/Microsoft.Sql/servers/sql-shop/databases/shopdb
       type: Microsoft.Sql/servers/databases
       role: db
     - id: ${contract:platform-messaging.namespace_id}

@@ -1,0 +1,1 @@
+{"status": "ok", "series": [{"metric": "azure.app_containerapps.requests", "pointlist": [[1791540000000, null], [1791540060000, 12.0]]}]}

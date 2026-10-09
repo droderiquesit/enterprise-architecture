@@ -34,6 +34,7 @@ locals {
     "hello-jobs"          = { purpose = "ACA jobs / Batch reconciliation", secrets = [] }
     "hello-partner-sim"   = { purpose = "simulated partner API (ACI)", secrets = ["fault-token"] }
     "hello-traffic"       = { purpose = "synthetic traffic + chaos scenarios", secrets = ["fault-token"] }
+    "hello-logicapps"     = { purpose = "Logic Apps Consumption/Standard workflows (Service Bus, Blob)", secrets = [] }
     "hello-frontend"      = { purpose = "frontend hosting (SWA/nginx); RUM client token is injected at deploy time", secrets = [] }
     "obs-collector"       = { purpose = "Fluent Bit / OTel gateway", secrets = ["datadog-api-key"] }
     "obs-dbm"             = { purpose = "Datadog Agent DBM checks", secrets = concat(["datadog-api-key"], local.dbm_secret_names) }

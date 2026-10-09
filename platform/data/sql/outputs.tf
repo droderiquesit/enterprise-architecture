@@ -45,6 +45,7 @@ output "contract" {
         port                         = 1433
         sku_name                     = local.db_resources[k].sku_name
         compute_model                = d.compute_model
+        dbm_enabled                  = d.dbm_enabled
         catalog_ref                  = d.catalog_ref
         boundary                     = d.boundary
         schemas                      = d.schemas
@@ -67,7 +68,8 @@ output "contract" {
       host               = azurerm_mssql_server.this.fully_qualified_domain_name
       port               = 1433
       resource_id        = azurerm_mssql_server.this.id
-      databases          = sort(keys(local.databases))
+      databases          = sort([for k, d in local.databases : k if d.dbm_enabled])
+      excluded_databases = { for k, d in local.databases : k => "serverless auto-pause: DBM connections would prevent pausing" if !d.dbm_enabled }
       entra_admin_login  = var.settings.entra_admin.login
       # Run by obs-dbm as the Entra admin: CREATE LOGIN [obs-dbm] FROM EXTERNAL PROVIDER in master,
       # server roles ##MS_ServerStateReader## + ##MS_DefinitionReader##, CREATE USER in each database.

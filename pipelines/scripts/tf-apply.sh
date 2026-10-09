@@ -16,4 +16,3 @@ touch "$APPLIED_MARKER"
 python3 tools/contracts/publish.py publish --component "$component" --env "$LAB_ENV" --root "$root" --store "$CONTRACTS_URL"
 python3 tools/deploy/record.py write --env "$LAB_ENV" --component "$component" --status succeeded \
   --selection "$SELECTION_FILE" --store "$RECORDS_URL" --manifest "$MANIFEST_FILE"
-python3 tools/deploy/storecp.py delete --store "$PLANS_URL" --key "$key" || true

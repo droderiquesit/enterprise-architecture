@@ -4,8 +4,6 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>Hello.Durable</RootNamespace>
     <AssemblyName>Hello.Durable</AssemblyName>
-    <!-- Flex Consumption: Linux, .NET 10 isolated worker. -->
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Configuration)' == 'Release' and '$(HelloDurablePublish)' == 'true'">linux-x64</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

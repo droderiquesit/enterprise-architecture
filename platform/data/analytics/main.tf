@@ -43,6 +43,11 @@ resource "azurerm_resource_group" "this" {
 
 # ------------------------------------------------------------------ Blob storage (container adapter)
 resource "azurerm_storage_account" "blob" {
+  #checkov:skip=CKV_AZURE_59:public_network_access = Disabled is set (checkov only inspects the deprecated public_network_access_enabled)
+  #checkov:skip=CKV_AZURE_206:lab: LRS by design (synthetic data, cost); replication_type is a setting
+  #checkov:skip=CKV_AZURE_36:network_rules bypass None is deliberate: access only via private endpoint
+  #checkov:skip=CKV_AZURE_33:storage logging is a diagnostic setting owned by obs-diagnostics (ADR-0001 §3 rule 4)
+  #checkov:skip=CKV2_AZURE_1:lab: platform-managed keys + infrastructure encryption; CMK out of scope for synthetic data
   count                             = var.settings.blob.enabled ? 1 : 0
   name                              = substr("${module.naming.unique.storage}b", 0, 24)
   resource_group_name               = azurerm_resource_group.this.name
@@ -78,6 +83,7 @@ resource "azurerm_storage_account" "blob" {
 }
 
 resource "azurerm_storage_container" "blob_adapter" {
+  #checkov:skip=CKV2_AZURE_21:storage logging is a diagnostic setting owned by obs-diagnostics
   count                 = var.settings.blob.enabled ? 1 : 0
   name                  = "adapter"
   storage_account_id    = azurerm_storage_account.blob[0].id
@@ -107,6 +113,11 @@ module "pe_blob" {
 
 # ------------------------------------------------------------- ADLS Gen2 (HNS; filesystem adapter)
 resource "azurerm_storage_account" "adls" {
+  #checkov:skip=CKV_AZURE_59:public_network_access = Disabled is set (checkov only inspects the deprecated public_network_access_enabled)
+  #checkov:skip=CKV_AZURE_206:lab: LRS by design (synthetic data, cost); replication_type is a setting
+  #checkov:skip=CKV_AZURE_36:network_rules bypass None is deliberate: access only via private endpoint
+  #checkov:skip=CKV_AZURE_33:storage logging is a diagnostic setting owned by obs-diagnostics (ADR-0001 §3 rule 4)
+  #checkov:skip=CKV2_AZURE_1:lab: platform-managed keys + infrastructure encryption; CMK out of scope for synthetic data
   count                             = var.settings.adls.enabled ? 1 : 0
   name                              = substr("${module.naming.unique.storage}d", 0, 24)
   resource_group_name               = azurerm_resource_group.this.name
@@ -144,6 +155,7 @@ resource "azurerm_storage_account" "adls" {
 
 # A container on an HNS account is the ADLS Gen2 filesystem; created through ARM (no data-plane access needed).
 resource "azurerm_storage_container" "adls_adapter" {
+  #checkov:skip=CKV2_AZURE_21:storage logging is a diagnostic setting owned by obs-diagnostics
   count                 = var.settings.adls.enabled ? 1 : 0
   name                  = "adapter"
   storage_account_id    = azurerm_storage_account.adls[0].id
@@ -173,6 +185,7 @@ module "pe_adls" {
 
 # ------------------------------------------------------------------------ Azure Data Explorer
 resource "azurerm_kusto_cluster" "this" {
+  #checkov:skip=CKV2_AZURE_11:lab: platform-managed keys; CMK out of scope for synthetic data
   count                         = var.settings.data_explorer.enabled ? 1 : 0
   name                          = replace(substr(module.naming.unique.globally_unique, 0, 22), "-", "")
   resource_group_name           = azurerm_resource_group.this.name
@@ -180,6 +193,7 @@ resource "azurerm_kusto_cluster" "this" {
   auto_stop_enabled             = var.settings.data_explorer.auto_stop_enabled
   public_network_access_enabled = false
   disk_encryption_enabled       = true
+  double_encryption_enabled     = true
   streaming_ingestion_enabled   = false
   purge_enabled                 = false
   tags                          = module.tags.tags
@@ -281,6 +295,8 @@ module "pe_search" {
 
 # ------------------------------------------------------------------- Synapse (disabled by default)
 resource "azurerm_synapse_workspace" "this" {
+  #checkov:skip=CKV_AZURE_240:lab: platform-managed keys; CMK out of scope
+  #checkov:skip=CKV2_AZURE_53:auditing is a diagnostic setting owned by obs-diagnostics
   count                                = var.settings.synapse.enabled ? 1 : 0
   name                                 = module.naming.unique.globally_unique
   resource_group_name                  = azurerm_resource_group.this.name

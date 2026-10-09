@@ -38,19 +38,19 @@ run "onboards_with_literal_ids_and_drops_optional_reference" {
     error_message = "no monitor may target a dropped resource"
   }
   assert {
-    condition     = output.resources["shop-api/db"].id == "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-data/providers/Microsoft.Sql/servers/sql-shop/databases/shopdb"
+    condition     = output.resources["shop-api/db"].id == "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data/providers/Microsoft.Sql/servers/sql-shop/databases/shopdb"
     error_message = "supplied resource ids must be used verbatim"
   }
   assert {
-    condition     = output.resources["shop-api/db"].scope == "subscription_id:11111111-2222-3333-4444-555555555555,resource_group:rg-data,server_name:sql-shop,name:shopdb"
+    condition     = output.resources["shop-api/db"].scope == "subscription_id:00000000-0000-0000-0000-000000000000,resource_group:rg-data,server_name:sql-shop,name:shopdb"
     error_message = "SQL database scope must include server_name and lower-cased tags"
   }
   assert {
-    condition     = output.resources["shop-api/app"].scope == "subscription_id:11111111-2222-3333-4444-555555555555,resource_group:rg-shop,name:app-shop-api"
+    condition     = output.resources["shop-api/app"].scope == "subscription_id:00000000-0000-0000-0000-000000000000,resource_group:rg-shop,name:app-shop-api"
     error_message = "resource group tag must be lower-cased"
   }
   assert {
-    condition     = strcontains(module.monitors.datadog_monitor_queries["shop-api/sql.cpu@db"], "{subscription_id:11111111-2222-3333-4444-555555555555,resource_group:rg-data,server_name:sql-shop,name:shopdb}")
+    condition     = strcontains(module.monitors.datadog_monitor_queries["shop-api/sql.cpu@db"], "{subscription_id:00000000-0000-0000-0000-000000000000,resource_group:rg-data,server_name:sql-shop,name:shopdb}")
     error_message = "resource placeholder must be replaced in the query"
   }
   assert {
@@ -121,7 +121,7 @@ run "resolves_contract_reference" {
 
   variables {
     contract_references = {
-      "platform-messaging.namespace_id" = "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-msg/providers/Microsoft.ServiceBus/namespaces/sb-shop"
+      "platform-messaging.namespace_id" = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-msg/providers/Microsoft.ServiceBus/namespaces/sb-shop"
     }
   }
 

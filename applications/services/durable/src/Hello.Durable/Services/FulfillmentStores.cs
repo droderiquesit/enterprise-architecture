@@ -48,7 +48,7 @@ public sealed class InMemoryFulfillmentStore : IFulfillmentStore
 /// SQL `fulfillment` schema. Every write is a MERGE keyed by the natural id, so retried activities are idempotent.
 /// The schema migration runs once per process before the first write (idempotent, applock-serialised).
 /// </summary>
-public sealed class SqlFulfillmentStore : IFulfillmentStore
+public sealed class SqlFulfillmentStore : IFulfillmentStore, IDisposable
 {
     private static readonly string[] Scopes = ["https://database.windows.net/.default"];
     private readonly string _connectionString;
@@ -163,6 +163,8 @@ public sealed class SqlFulfillmentStore : IFulfillmentStore
         cmd.Parameters.Add("@samples", SqlDbType.NVarChar, -1).Value = JsonSerializer.Serialize(summary.Samples);
         await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    public void Dispose() => _migrationGate.Dispose();
 
     private async Task<SqlConnection> OpenAsync(CancellationToken cancellationToken)
     {

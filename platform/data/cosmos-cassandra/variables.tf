@@ -37,6 +37,7 @@ variable "foundation_identity" {
   type = object({
     key_vault_id  = string
     key_vault_uri = string
+    secret_ids    = optional(map(string), {}) # versionless Key Vault secret IDs (values set out-of-band)
     identities = map(object({
       id           = string
       principal_id = string

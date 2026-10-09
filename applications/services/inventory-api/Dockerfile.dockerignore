@@ -1,0 +1,11 @@
+# BuildKit Dockerfile-specific ignore file (context = applications/).
+**/bin/
+**/obj/
+**/.artifacts/
+**/node_modules/
+**/.venv/
+**/__pycache__/
+**/*.user
+**/local.settings.json
+**/tests/
+services/frontend/

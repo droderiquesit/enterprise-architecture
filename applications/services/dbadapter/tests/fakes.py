@@ -20,7 +20,7 @@ class FakeMssql:
         self.statements: list[str] = []
         self.connections = 0
 
-    def connect(self, conn_str, autocommit=True):
+    def connect(self, conn_str, autocommit=True, timeout=0):
         self.connections += 1
         self.conn_str = conn_str
         return _MssqlConn(self)

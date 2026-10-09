@@ -1,0 +1,1 @@
+{"data": [{"id": "m1", "type": "log", "attributes": {"service": "hello-bff", "message": "journey marker run-42", "tags": ["env:dev"]}}]}

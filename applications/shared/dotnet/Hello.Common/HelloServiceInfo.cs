@@ -29,12 +29,15 @@ public sealed record HelloServiceInfo(
             assemblyVersion = assemblyVersion[..assemblyVersion.IndexOf('+', StringComparison.Ordinal)];
         }
 
+        var metadata = Assembly.GetEntryAssembly()?.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .ToDictionary(a => a.Key, a => a.Value, StringComparer.Ordinal) ?? [];
+
         return new HelloServiceInfo(
             Service: First(configuration["OTEL_SERVICE_NAME"], configuration["DD_SERVICE"], defaultServiceName),
             Environment: First(configuration["DD_ENV"], "local"),
             Version: First(configuration["DD_VERSION"], assemblyVersion, "0.0.0-local"),
-            Commit: First(configuration["GIT_COMMIT"], configuration["DD_GIT_COMMIT_SHA"], "unknown"),
-            BuildTime: First(configuration["BUILD_TIME"], "unknown"),
+            Commit: First(configuration["GIT_COMMIT"], configuration["DD_GIT_COMMIT_SHA"], metadata.GetValueOrDefault("GitCommit"), "unknown"),
+            BuildTime: First(configuration["BUILD_TIME"], metadata.GetValueOrDefault("BuildTime"), "unknown"),
             Runtime: RuntimeInformation.FrameworkDescription);
     }
 

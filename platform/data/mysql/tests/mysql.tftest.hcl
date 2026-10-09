@@ -1,4 +1,5 @@
 # Plan-only tests with mocked providers: no Azure credentials are needed.
+# hashicorp/random is not mocked: mock providers do not support ephemeral resources; it runs locally without credentials.
 mock_provider "azurerm" {
   override_during = plan
   mock_resource "azurerm_mysql_flexible_server" {
@@ -103,7 +104,7 @@ run "defaults_vnet" {
     error_message = "Entra admin configured."
   }
   assert {
-    condition     = output.contract.dbm.auth_mode == "native-password" && output.contract.dbm.password_secret_id == "https://eh-kv-id-dev-abcde.vault.azure.net/secrets/mysql-datadog-password"
+    condition     = output.contract.dbm.auth_mode == "native-password" && output.contract.dbm.password_secret_id == "https://eh-kv-id-dev-abcde.vault.azure.net/secrets/dbm-mysql-password"
     error_message = "DBM uses a native user whose password lives in Key Vault (reference only)."
   }
   assert {

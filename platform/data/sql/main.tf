@@ -17,6 +17,7 @@ locals {
         owner           = "hello-orders-api"
         readers_writers = []
         compute_model   = "provisioned"
+        dbm_enabled     = true
       }
       fulfillment = {
         catalog_ref     = "sql-database-serverless"
@@ -25,6 +26,8 @@ locals {
         owner           = "hello-durable"
         readers_writers = ["hello-jobs"]
         compute_model   = "serverless"
+        # DBM's continuous connections would keep the serverless database from auto-pausing.
+        dbm_enabled = false
       }
       adapter = {
         catalog_ref     = "sql-database-provisioned"
@@ -33,6 +36,7 @@ locals {
         owner           = "hello-dbadapter"
         readers_writers = []
         compute_model   = "provisioned"
+        dbm_enabled     = true
       }
     },
     var.settings.elastic_pool.enabled ? {
@@ -43,6 +47,7 @@ locals {
         owner           = "hello-dbadapter"
         readers_writers = []
         compute_model   = "elastic-pool"
+        dbm_enabled     = true
       }
     } : {},
     var.settings.hyperscale.enabled ? {
@@ -53,6 +58,7 @@ locals {
         owner           = "hello-dbadapter"
         readers_writers = []
         compute_model   = "hyperscale-serverless"
+        dbm_enabled     = var.settings.hyperscale.auto_pause_delay_in_minutes == -1
       }
     } : {},
   )
@@ -103,6 +109,9 @@ resource "azurerm_resource_group" "this" {
 }
 
 resource "azurerm_mssql_server" "this" {
+  #checkov:skip=CKV2_AZURE_2:vulnerability assessment/Defender is a security-platform decision outside this lab component
+  #checkov:skip=CKV_AZURE_23:SQL auditing is delivered via diagnostic settings owned by obs-diagnostics (ADR-0001 §10)
+  #checkov:skip=CKV_AZURE_24:SQL auditing retention is owned by obs-diagnostics
   name                          = module.naming.unique.globally_unique
   resource_group_name           = azurerm_resource_group.this.name
   location                      = azurerm_resource_group.this.location
@@ -147,6 +156,8 @@ resource "azurerm_mssql_elasticpool" "this" {
 }
 
 resource "azurerm_mssql_database" "orders" {
+  #checkov:skip=CKV_AZURE_224:synthetic data; ledger tables not required
+  #checkov:skip=CKV_AZURE_229:lab: single-zone for cost (S0/Basic/serverless)
   name                 = "orders"
   server_id            = azurerm_mssql_server.this.id
   sku_name             = var.settings.orders.sku_name
@@ -161,6 +172,8 @@ resource "azurerm_mssql_database" "orders" {
 }
 
 resource "azurerm_mssql_database" "fulfillment" {
+  #checkov:skip=CKV_AZURE_224:synthetic data; ledger tables not required
+  #checkov:skip=CKV_AZURE_229:lab: single-zone for cost (S0/Basic/serverless)
   name                        = "fulfillment"
   server_id                   = azurerm_mssql_server.this.id
   sku_name                    = var.settings.fulfillment.sku_name
@@ -177,6 +190,8 @@ resource "azurerm_mssql_database" "fulfillment" {
 }
 
 resource "azurerm_mssql_database" "adapter" {
+  #checkov:skip=CKV_AZURE_224:synthetic data; ledger tables not required
+  #checkov:skip=CKV_AZURE_229:lab: single-zone for cost (S0/Basic/serverless)
   name                 = "adapter"
   server_id            = azurerm_mssql_server.this.id
   sku_name             = var.settings.adapter.sku_name
@@ -191,6 +206,8 @@ resource "azurerm_mssql_database" "adapter" {
 }
 
 resource "azurerm_mssql_database" "adapter_pool" {
+  #checkov:skip=CKV_AZURE_224:synthetic data; ledger tables not required
+  #checkov:skip=CKV_AZURE_229:lab: single-zone for cost (S0/Basic/serverless)
   count                = var.settings.elastic_pool.enabled ? 1 : 0
   name                 = "adapter_pool"
   server_id            = azurerm_mssql_server.this.id
@@ -205,6 +222,8 @@ resource "azurerm_mssql_database" "adapter_pool" {
 }
 
 resource "azurerm_mssql_database" "adapter_hs" {
+  #checkov:skip=CKV_AZURE_224:synthetic data; ledger tables not required
+  #checkov:skip=CKV_AZURE_229:lab: single-zone for cost (S0/Basic/serverless)
   count                       = var.settings.hyperscale.enabled ? 1 : 0
   name                        = "adapter_hs"
   server_id                   = azurerm_mssql_server.this.id

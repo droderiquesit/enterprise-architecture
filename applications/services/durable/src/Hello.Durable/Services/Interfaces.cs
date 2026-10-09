@@ -35,7 +35,7 @@ public interface IFulfillmentStore
 }
 
 /// <summary>Service Bus queue `batch-items` (logged only when Service Bus is not configured).</summary>
-public interface IBatchQueue
+public interface IBatchItemPublisher
 {
     Task EnqueueAsync(EnqueueInput input, CancellationToken cancellationToken);
 }

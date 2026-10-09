@@ -59,7 +59,7 @@ public sealed partial class WorkflowActivities(
     IPaymentService payments,
     IOrdersService orders,
     IFulfillmentStore store,
-    IBatchQueue batchQueue,
+    IBatchItemPublisher batchItems,
     ActivityFaults faults,
     HelloMetrics metrics,
     ILogger<WorkflowActivities> logger)
@@ -134,7 +134,7 @@ public sealed partial class WorkflowActivities(
     public Task EnqueueBatchItems([ActivityTrigger] EnqueueInput input, FunctionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return batchQueue.EnqueueAsync(input, context.CancellationToken);
+        return batchItems.EnqueueAsync(input, context.CancellationToken);
     }
 
     [Function(WorkflowActivityNames.GetOrdersSince)]

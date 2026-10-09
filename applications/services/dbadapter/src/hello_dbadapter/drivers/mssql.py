@@ -11,7 +11,7 @@ Environment:
   SQL_USER / SQL_PASSWORD SQL authentication (local containers, SQL Server on VM without Entra)
   SQL_ENCRYPT             yes (default) | strict | no
   SQL_TRUST_SERVER_CERTIFICATE  no (default); yes only for local/self-signed SQL Server on VM
-  SQL_CONNECT_TIMEOUT     seconds, default 10
+  SQL_CONNECT_TIMEOUT     login timeout seconds, default 10; SQL_QUERY_TIMEOUT per-statement, default 15
   SQL_POOL_MAX            default 20 (mssql-python built-in pooling)
 Boundary: schema ``adapter``, table ``adapter.records`` (created idempotently).
 """
@@ -53,8 +53,7 @@ def build_connection_string(env: dict[str, str] | None = None) -> str:
         f"Database={env.get('SQL_DATABASE', 'adapter')}",
         f"Encrypt={env.get('SQL_ENCRYPT', 'yes')}",
         f"TrustServerCertificate={env.get('SQL_TRUST_SERVER_CERTIFICATE', 'no')}",
-        f"Connection Timeout={env.get('SQL_CONNECT_TIMEOUT', '10')}",
-        "APP=hello-dbadapter",
+        "ConnectRetryCount=2",
     ]
     auth = env.get("SQL_AUTH", "entra").lower()
     if auth == "password":
@@ -84,7 +83,13 @@ class SqlDriver(Driver):
             self._connect = mssql_python.connect
         if self._conn_str is None:
             self._conn_str = build_connection_string()
-        return self._connect(self._conn_str, autocommit=True)
+        # login timeout via connect(timeout=); per-statement timeout via Connection.timeout
+        conn = self._connect(self._conn_str, autocommit=True, timeout=int(os.environ.get("SQL_CONNECT_TIMEOUT", "10")))
+        try:
+            conn.timeout = int(os.environ.get("SQL_QUERY_TIMEOUT", "15"))
+        except Exception:  # fakes / older drivers
+            pass
+        return conn
 
     def _exec(self, sql: str, params: tuple = (), fetch: str | None = None) -> Any:
         conn = self._connection()

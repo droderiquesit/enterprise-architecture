@@ -1,0 +1,47 @@
+{
+  "version": "2.0",
+  "telemetryMode": "OpenTelemetry",
+  "logging": {
+    "logLevel": {
+      "default": "Information",
+      "Host.Aggregator": "Warning",
+      "Host.Results": "Information",
+      "Function": "Information",
+      "DurableTask.AzureStorage": "Warning",
+      "DurableTask.Core": "Warning",
+      "Azure.Core": "Warning",
+      "Azure.Messaging.ServiceBus": "Warning"
+    },
+    "OpenTelemetry": {
+      "logLevel": {
+        "default": "None"
+      }
+    }
+  },
+  "extensions": {
+    "durableTask": {
+      "hubName": "%DURABLE_TASK_HUB%",
+      "storageProvider": {
+        "type": "AzureStorage",
+        "connectionName": "AzureWebJobsStorage",
+        "partitionCount": 4,
+        "maxQueuePollingInterval": "00:00:10"
+      },
+      "tracing": {
+        "DistributedTracingEnabled": true,
+        "Version": "V2",
+        "traceInputsAndOutputs": false,
+        "traceReplayEvents": false
+      },
+      "maxConcurrentActivityFunctions": 10,
+      "maxConcurrentOrchestratorFunctions": 10
+    },
+    "serviceBus": {
+      "prefetchCount": 0,
+      "autoCompleteMessages": true,
+      "maxAutoLockRenewalDuration": "00:05:00",
+      "maxConcurrentCalls": 8
+    }
+  },
+  "functionTimeout": "00:10:00"
+}

@@ -9,17 +9,19 @@
     "type": "web"
   },
   "dashboards": {
-    "enabled": true
+    "enabled": true,
+    "workflow_metric_prefix": null
   },
   "enabled": true,
   "endpoints": [
     {
       "browser_journey": false,
+      "browser_steps": [],
       "health_path": "/healthz",
       "name": "internal",
       "required": false,
       "synthetic": {
-        "enabled": false,
+        "enabled": true,
         "locations": [
           "aws:eu-central-1"
         ],

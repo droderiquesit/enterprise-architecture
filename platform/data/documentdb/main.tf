@@ -87,7 +87,7 @@ module "private_endpoint" {
   subnet_id            = var.foundation_network.subnets["private-endpoints"].id
   target_resource_id   = azurerm_mongo_cluster.this.id
   subresource_names    = ["MongoCluster"]
-  private_dns_zone_ids = compact([try(var.foundation_network.private_dns_zones["documentdb"].id, null)])
+  private_dns_zone_ids = compact([try(var.foundation_network.private_dns_zones["mongocluster"].id, var.foundation_network.private_dns_zones["documentdb"].id, null)])
   tags                 = module.tags.tags
 }
 

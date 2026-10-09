@@ -1,0 +1,73 @@
+# Steps template: bounded-polling telemetry verification of one journey; publishes the JSON evidence file.
+parameters:
+  - name: packageDir
+    type: string
+  - name: environment
+    type: string
+  - name: journeyServices        # entry service first
+    type: object
+  - name: frontendService
+    type: string
+    default: ''
+  - name: marker
+    type: string
+    default: ''
+  - name: pipelineTag
+    type: string
+    default: telemetry.pipeline:fluent-bit
+  - name: infraMetrics
+    type: object
+    default: []
+  - name: requiredTags
+    type: object
+    default: [env, service, version]
+  - name: maxWaitSeconds
+    type: number
+    default: 600
+  - name: datadogSite
+    type: string
+    default: datadoghq.com
+  - name: azureServiceConnection
+    type: string
+  - name: keyVaultName
+    type: string
+  - name: datadogApiKeySecret
+    type: string
+    default: datadog-api-key
+  - name: datadogAppKeySecret
+    type: string
+    default: datadog-app-key
+
+steps:
+  - task: AzureKeyVault@2
+    displayName: Read Datadog keys
+    inputs:
+      azureSubscription: ${{ parameters.azureServiceConnection }}
+      KeyVaultName: ${{ parameters.keyVaultName }}
+      SecretsFilter: ${{ parameters.datadogApiKeySecret }},${{ parameters.datadogAppKeySecret }}
+      RunAsPreJob: false
+  - bash: |
+      set -euo pipefail
+      ARGS=(--site "${{ parameters.datadogSite }}" --env "${{ parameters.environment }}" --pipeline-tag "${{ parameters.pipelineTag }}"
+            --max-wait "${{ parameters.maxWaitSeconds }}" --evidence "$(Build.ArtifactStagingDirectory)/telemetry-evidence.json")
+      while IFS= read -r a; do ARGS+=("$a"); done < <(python3 -c '
+      import json, os
+      for flag, var in (("--journey-service", "JOURNEY_JSON"), ("--infra-metric", "INFRA_JSON"), ("--required-tag", "TAGS_JSON")):
+          for v in json.loads(os.environ[var] or "[]"):
+              print(flag); print(v)')
+      if [ -n "${{ parameters.frontendService }}" ]; then ARGS+=(--frontend-service "${{ parameters.frontendService }}"); fi
+      if [ -n "${{ parameters.marker }}" ]; then ARGS+=(--marker "${{ parameters.marker }}"); fi
+      python3 "${{ parameters.packageDir }}/tools/verify/telemetry_verify.py" "${ARGS[@]}"
+    displayName: Verify telemetry (${{ parameters.environment }})
+    env:
+      DD_API_KEY: $(${{ parameters.datadogApiKeySecret }})
+      DD_APP_KEY: $(${{ parameters.datadogAppKeySecret }})
+      JOURNEY_JSON: ${{ convertToJson(parameters.journeyServices) }}
+      INFRA_JSON: ${{ convertToJson(parameters.infraMetrics) }}
+      TAGS_JSON: ${{ convertToJson(parameters.requiredTags) }}
+  - task: PublishPipelineArtifact@1
+    displayName: Publish telemetry evidence
+    condition: always()
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)/telemetry-evidence.json
+      artifact: telemetry-evidence-${{ parameters.environment }}-$(System.JobAttempt)

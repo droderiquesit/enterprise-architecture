@@ -36,6 +36,11 @@ resource "azurerm_resource_group" "this" {
 }
 
 resource "azurerm_storage_account" "this" {
+  #checkov:skip=CKV_AZURE_59:public_network_access = Disabled is set (checkov only inspects the deprecated public_network_access_enabled)
+  #checkov:skip=CKV_AZURE_206:lab: LRS by design (synthetic data, cost); replication_type is a setting
+  #checkov:skip=CKV_AZURE_36:network_rules bypass None is deliberate: access only via private endpoint
+  #checkov:skip=CKV_AZURE_33:storage logging is a diagnostic setting owned by obs-diagnostics (ADR-0001 §3 rule 4)
+  #checkov:skip=CKV2_AZURE_1:lab: platform-managed keys + infrastructure encryption; CMK out of scope for synthetic data
   name                              = module.naming.unique.storage
   resource_group_name               = azurerm_resource_group.this.name
   location                          = azurerm_resource_group.this.location
@@ -70,6 +75,7 @@ resource "azurerm_storage_account" "this" {
 }
 
 resource "azurerm_storage_table" "this" {
+  #checkov:skip=CKV2_AZURE_20:storage logging is a diagnostic setting owned by obs-diagnostics
   for_each           = local.tables
   name               = each.key
   storage_account_id = azurerm_storage_account.this.id

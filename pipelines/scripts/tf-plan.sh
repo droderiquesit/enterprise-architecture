@@ -27,8 +27,11 @@ elif ! python3 tools/contracts/publish.py check --component "$component" --env "
   echo "contract envelope missing: forcing the Apply job to publish it"; has_changes=true
 elif [[ "${APPLY_CANDIDATE}" == "true" && "${DRY_RUN,,}" != "true" ]]; then
   # no changes: record the new fingerprint so the component is not re-selected next run
+  # needs Storage Blob Data Contributor on `deployments` for the plan identity; without it the
+  # component is simply re-planned (no apply) on the next run
   python3 tools/deploy/record.py write --env "$LAB_ENV" --component "$component" --status succeeded \
-    --selection "$SELECTION_FILE" --store "$RECORDS_URL" --note "plan had no changes" --manifest "$OUT_DIR/manifest.json"
+    --selection "$SELECTION_FILE" --store "$RECORDS_URL" --note "plan had no changes" --manifest "$OUT_DIR/manifest.json" \
+    || echo "##vso[task.logissue type=warning]could not write the no-change record for $component (plan identity lacks write on deployments?)"
 fi
 echo "##vso[task.setvariable variable=has_changes;isOutput=true]$has_changes"
 echo "##vso[task.setvariable variable=plan_exit;isOutput=true]$rc"

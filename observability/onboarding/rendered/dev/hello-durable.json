@@ -9,7 +9,8 @@
     "type": "function"
   },
   "dashboards": {
-    "enabled": true
+    "enabled": true,
+    "workflow_metric_prefix": "hello"
   },
   "enabled": true,
   "endpoints": [],

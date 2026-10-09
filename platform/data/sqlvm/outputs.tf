@@ -45,7 +45,7 @@ output "contract" {
       auth_mode          = "sql-login"
       identity_name      = "obs-dbm"
       username           = "datadog"
-      password_secret_id = "${trimsuffix(var.foundation_identity.key_vault_uri, "/")}/secrets/${var.settings.dbm_secret_name}"
+      password_secret_id = lookup(var.foundation_identity.secret_ids, "dbm-sqlvm-password", "${trimsuffix(var.foundation_identity.key_vault_uri, "/")}/secrets/${var.settings.dbm_secret_name}")
       host               = "localhost"
       port               = 1433
       resource_id        = azurerm_windows_virtual_machine.this.id

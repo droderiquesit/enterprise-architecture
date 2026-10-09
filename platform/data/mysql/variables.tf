@@ -37,6 +37,7 @@ variable "foundation_identity" {
   type = object({
     key_vault_id  = string
     key_vault_uri = string
+    secret_ids    = optional(map(string), {}) # versionless Key Vault secret IDs (values set out-of-band)
     identities = map(object({
       id           = string
       principal_id = string
@@ -65,7 +66,7 @@ variable "settings" {
     # Bump to rotate the (write-only, never stored) break-glass administrator password.
     admin_password_version = optional(number, 1)
     # Secret name convention for the DBM native user created by obs-dbm (value never set here).
-    dbm_password_secret_name = optional(string, "mysql-datadog-password")
+    dbm_password_secret_name = optional(string, "dbm-mysql-password")
   })
 
   validation {

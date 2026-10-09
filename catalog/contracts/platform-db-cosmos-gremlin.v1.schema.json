@@ -256,6 +256,12 @@
             "type": "string"
           }
         },
+        "excluded_databases": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "password_secret_id": {
           "type": "string",
           "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
@@ -362,6 +368,9 @@
         },
         "connection_hint": {
           "type": "string"
+        },
+        "dbm_enabled": {
+          "type": "boolean"
         }
       },
       "additionalProperties": true

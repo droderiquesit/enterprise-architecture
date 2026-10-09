@@ -8,13 +8,13 @@ using Microsoft.Extensions.Logging;
 namespace Hello.Durable.Services;
 
 /// <summary>Sends one message per item id to the `batch-items` queue (MessageId = item id → duplicate-detection safe).</summary>
-public sealed partial class ServiceBusBatchQueue : IBatchQueue, IAsyncDisposable
+public sealed partial class ServiceBusBatchItemPublisher : IBatchItemPublisher, IAsyncDisposable
 {
     private readonly ServiceBusClient? _client;
     private readonly ServiceBusSender? _sender;
-    private readonly ILogger<ServiceBusBatchQueue> _logger;
+    private readonly ILogger<ServiceBusBatchItemPublisher> _logger;
 
-    public ServiceBusBatchQueue(DurableSettings settings, IConfiguration configuration, ILogger<ServiceBusBatchQueue> logger)
+    public ServiceBusBatchItemPublisher(DurableSettings settings, IConfiguration configuration, ILogger<ServiceBusBatchItemPublisher> logger)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _logger = logger;

@@ -9,7 +9,8 @@
     "type": "custom"
   },
   "dashboards": {
-    "enabled": true
+    "enabled": true,
+    "workflow_metric_prefix": null
   },
   "enabled": true,
   "endpoints": [],
@@ -266,7 +267,7 @@
       },
       "notify_no_data": false,
       "priority": 2,
-      "query": "sum(last_15m):sum:otelcol_exporter_send_failed_spans{env:dev}.as_count() + sum:otelcol_exporter_send_failed_metric_points{env:dev}.as_count() + sum:otelcol_exporter_send_failed_log_records{env:dev}.as_count() > 10",
+      "query": "sum(last_15m):sum:otelcol_exporter_send_failed_spans{env:dev}.as_count() + sum:otelcol_exporter_send_failed_metric_points{env:dev}.as_count() > 10",
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,

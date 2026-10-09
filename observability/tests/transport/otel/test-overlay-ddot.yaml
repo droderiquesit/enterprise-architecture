@@ -1,0 +1,14 @@
+# Test-only overlay for the DDOT image (no file exporter in DDOT): Datadog exporter -> mock intake,
+# debug exporter (detailed) so resource attributes can be asserted from the container log.
+exporters:
+  datadog:
+    traces:
+      endpoint: http://intake:8080
+    metrics:
+      endpoint: http://intake:8080
+  debug:
+    verbosity: detailed
+service:
+  pipelines:
+    traces:
+      exporters: [datadog, debug]

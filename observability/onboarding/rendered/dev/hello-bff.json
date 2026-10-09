@@ -9,12 +9,14 @@
     "type": "web"
   },
   "dashboards": {
-    "enabled": true
+    "enabled": true,
+    "workflow_metric_prefix": null
   },
   "enabled": true,
   "endpoints": [
     {
       "browser_journey": false,
+      "browser_steps": [],
       "health_path": "/api/healthz",
       "name": "api",
       "required": false,

@@ -1,0 +1,95 @@
+# Example consumer pipeline for an existing environment (copy into the consumer repository).
+# Templates come from the package repository pinned to a release tag; the Terraform root vendors the
+# matching release tarball (examples/existing-environment/vendor.sh). Keep both on the same version.
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [monitoring/**]
+
+resources:
+  repositories:
+    - repository: obs
+      type: git
+      name: Platform/observability-package          # <project>/<repo> hosting the package
+      ref: refs/tags/observability-v1.0.0
+
+variables:
+  environment: prod
+  rootDir: $(Build.SourcesDirectory)/monitoring
+  packageDir: $(Build.SourcesDirectory)/monitoring/.vendor/observability-1.0.0
+
+stages:
+  - stage: validate
+    jobs:
+      - job: onboarding
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - bash: ./vendor.sh
+            workingDirectory: $(rootDir)
+            displayName: Vendor package release (sha256 verified)
+          - template: pipelines/templates/validate-onboarding.yml@obs
+            parameters:
+              packageDir: $(packageDir)
+              manifestsDir: $(rootDir)/manifests
+              routingFile: $(rootDir)/routing/prod.yaml
+              environment: prod
+              renderedDir: $(rootDir)/rendered/prod
+
+  - stage: deploy                          # plan + apply in ONE stage: apply reads the plan job's output
+    dependsOn: validate
+    jobs:
+      - template: pipelines/templates/terraform-plan.yml@obs
+        parameters:
+          rootDir: $(rootDir)
+          environment: prod
+          azureServiceConnection: sc-monitoring-prod
+          keyVaultName: kv-monitoring-prod
+          backendConfig:
+            resource_group_name: rg-tfstate
+            storage_account_name: sttfstateprod
+            container_name: tfstate
+            key: prod/monitoring.tfstate
+            use_azuread_auth: 'true'
+          preSteps:
+            - bash: ./vendor.sh
+              workingDirectory: $(rootDir)
+              displayName: Vendor package release
+
+      - template: pipelines/templates/terraform-apply.yml@obs
+        parameters:
+          environment: prod
+          adoEnvironment: monitoring-prod
+          rootDir: $(rootDir)
+          azureServiceConnection: sc-monitoring-prod
+          keyVaultName: kv-monitoring-prod
+
+  - stage: verify
+    dependsOn: deploy
+    jobs:
+      - job: telemetry
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - bash: ./vendor.sh
+            workingDirectory: $(rootDir)
+          - template: pipelines/templates/deployment-marker.yml@obs
+            parameters:
+              packageDir: $(packageDir)
+              environment: prod
+              startedAt: $(System.PipelineStartTime)
+              azureServiceConnection: sc-monitoring-prod
+              keyVaultName: kv-monitoring-prod
+              services:
+                - {name: monitoring-config, version: $(Build.BuildNumber), team: platform}
+          - template: pipelines/templates/telemetry-verify.yml@obs
+            parameters:
+              packageDir: $(packageDir)
+              environment: prod
+              journeyServices: [orders-web, orders-api]
+              infraMetrics: ['avg:azure.app_services.requests{*}']
+              azureServiceConnection: sc-monitoring-prod
+              keyVaultName: kv-monitoring-prod

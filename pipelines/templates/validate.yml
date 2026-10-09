@@ -20,6 +20,7 @@ parameters:
 jobs:
   - job: matrix
     displayName: Expand validation matrix
+    timeoutInMinutes: 5
     pool:
       vmImage: ${{ parameters.hostedImage }}
     variables:

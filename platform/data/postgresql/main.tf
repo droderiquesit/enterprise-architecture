@@ -4,6 +4,8 @@ locals {
   identities = var.foundation_identity.identities
   vnet_mode  = var.settings.network_mode == "vnet"
   pg_zone    = try(var.foundation_network.private_dns_zones["postgres"].id, null)
+  # VNet injection prefers the dedicated zone (postgres_vnet) and falls back to the Private Link zone.
+  pg_vnet_zone = try(var.foundation_network.private_dns_zones["postgres_vnet"].id, local.pg_zone)
 
   # catalog/architecture-matrix.yaml databases.postgresql-flexible
   databases = {
@@ -59,6 +61,7 @@ resource "azurerm_resource_group" "this" {
 }
 
 resource "azurerm_postgresql_flexible_server" "this" {
+  #checkov:skip=CKV_AZURE_136:lab: geo-redundant backup off for cost; 7-day local PITR (README)
   name                          = module.naming.unique.globally_unique
   resource_group_name           = azurerm_resource_group.this.name
   location                      = azurerm_resource_group.this.location
@@ -71,7 +74,7 @@ resource "azurerm_postgresql_flexible_server" "this" {
   geo_redundant_backup_enabled  = false
   public_network_access_enabled = false
   delegated_subnet_id           = local.vnet_mode ? var.foundation_network.subnets["postgres"].id : null
-  private_dns_zone_id           = local.vnet_mode ? local.pg_zone : null
+  private_dns_zone_id           = local.vnet_mode ? local.pg_vnet_zone : null
   tags                          = module.tags.tags
 
   # Entra-only: password authentication disabled, so no administrator password exists.
@@ -85,8 +88,8 @@ resource "azurerm_postgresql_flexible_server" "this" {
     # Azure assigns a zone when none is requested; do not churn on it.
     ignore_changes = [zone]
     precondition {
-      condition     = !local.vnet_mode || local.pg_zone != null
-      error_message = "VNet mode needs foundation_network.private_dns_zones.postgres (privatelink.postgres.database.azure.com)."
+      condition     = !local.vnet_mode || local.pg_vnet_zone != null
+      error_message = "VNet mode needs foundation_network.private_dns_zones.postgres_vnet (or postgres)."
     }
   }
 }
@@ -130,6 +133,7 @@ module "private_endpoint" {
 
 # ---------------------------------------------------------------- Elastic Cluster (optional)
 resource "azurerm_postgresql_flexible_server" "elastic" {
+  #checkov:skip=CKV_AZURE_136:lab: geo-redundant backup off for cost; 7-day local PITR (README)
   count                         = var.settings.elastic_cluster.enabled ? 1 : 0
   name                          = "${module.naming.unique.globally_unique}-ec"
   resource_group_name           = azurerm_resource_group.this.name

@@ -58,7 +58,7 @@
       "manifest"
     ],
     "manifest": "manifests/shop-api.yaml",
-    "sha256": "9f496f854c185b10197b0e562d1380dab5378d7ac28d8a9862fded6660818253"
+    "sha256": "9830d907c0e36ee8c6b1987db2e390dbabc779abbd8ccca4ae0e839602485427"
   },
   "idle_behavior": {
     "expected_quiet_hours": {
@@ -694,7 +694,7 @@
   "resources": [
     {
       "entities": [],
-      "id": "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/RG-Shop/providers/Microsoft.Web/sites/app-shop-api",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-Shop/providers/Microsoft.Web/sites/app-shop-api",
       "required": true,
       "role": "app",
       "tags": {},
@@ -702,7 +702,7 @@
     },
     {
       "entities": [],
-      "id": "/subscriptions/11111111-2222-3333-4444-555555555555/resourceGroups/rg-data/providers/Microsoft.Sql/servers/sql-shop/databases/shopdb",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data/providers/Microsoft.Sql/servers/sql-shop/databases/shopdb",
       "required": true,
       "role": "db",
       "tags": {},

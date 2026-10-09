@@ -50,6 +50,7 @@ DEFS = {
             "identity_client_id": NSTR,
             "host": STR, "port": PORT, "resource_id": RID,
             "databases": STRLIST,
+            "excluded_databases": {"type": "object", "additionalProperties": STR},
             "password_secret_id": SECRET, "admin_secret_id": SECRET,
             "required_parameters": {"type": "object", "additionalProperties": STR},
             "setup_reference": {"type": "string", "format": "uri"},
@@ -63,7 +64,7 @@ DEFS = {
         "schemas": STRLIST, "auth_mode": STR, "owner_identity_name": STR,
         "reader_writer_identity_names": STRLIST,
         "grants": {"type": "array", "items": {"$ref": "#/$defs/grant"}},
-        "password_secret_id": SECRET, "login": STR, "connection_hint": STR}),
+        "password_secret_id": SECRET, "login": STR, "connection_hint": STR, "dbm_enabled": BOOL}),
     "logicalStore": obj(["name", "boundary", "owner_identity_name"], {
         "id": STR, "name": STR, "boundary": STR, "owner_identity_name": STR,
         "containers": {"type": "object", "additionalProperties": obj(["name"], {

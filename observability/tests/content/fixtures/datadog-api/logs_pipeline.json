@@ -1,0 +1,8 @@
+{"data": [
+  {"id": "l1", "type": "log", "attributes": {"service": "hello-bff", "status": "info", "tags": ["env:dev", "service:hello-bff", "version:1.4.0", "telemetry.pipeline:fluent-bit"],
+    "attributes": {"trace_id": "844b6a2c7f1d2e3f8441d3d8fd171c9c", "dd": {"trace_id": "9530131215405227164"}}}},
+  {"id": "l2", "type": "log", "attributes": {"service": "hello-orders-api", "status": "info", "tags": ["env:dev", "service:hello-orders-api", "version:1.4.0", "telemetry.pipeline:fluent-bit"],
+    "attributes": {"trace_id": "844b6a2c7f1d2e3f8441d3d8fd171c9c"}}},
+  {"id": "l3", "type": "log", "attributes": {"service": "hello-catalog-api", "status": "info", "tags": ["env:dev", "service:hello-catalog-api", "version:2.0.1", "telemetry.pipeline:fluent-bit"],
+    "attributes": {"dd": {"trace_id": "9530131215405227164"}}}}
+ ]}

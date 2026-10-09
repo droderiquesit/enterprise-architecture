@@ -1,0 +1,5 @@
+{"data": [{"id": "AQAAAZrumres1", "type": "rum", "attributes": {"service": "hello-frontend", "timestamp": "2026-10-09T10:00:01Z",
+  "tags": ["env:dev", "service:hello-frontend", "version:1.4.0"],
+  "attributes": {"type": "resource", "resource": {"url": "https://bff.example/api/orders", "method": "POST", "status_code": 202},
+                 "_dd": {"trace_id": "9530131215405227164", "span_id": "4224211498543234510"}}}}],
+ "meta": {"status": "done", "page": {}}}

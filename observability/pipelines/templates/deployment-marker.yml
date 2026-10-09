@@ -1,0 +1,47 @@
+# Steps template: DORA deployment marker for each deployed service (tools/markers/send_deployment_event.py).
+parameters:
+  - name: packageDir
+    type: string
+  - name: environment
+    type: string
+  - name: services               # list of {name, version, team?}
+    type: object
+  - name: startedAt              # ISO-8601 or Unix time of the deployment start
+    type: string
+  - name: repositoryUrl
+    type: string
+    default: $(Build.Repository.Uri)
+  - name: datadogSite
+    type: string
+    default: datadoghq.com
+  - name: azureServiceConnection
+    type: string
+  - name: keyVaultName
+    type: string
+  - name: datadogApiKeySecret
+    type: string
+    default: datadog-api-key
+  - name: failOnError            # markers are informational by default
+    type: boolean
+    default: false
+
+steps:
+  - task: AzureKeyVault@2
+    displayName: Read Datadog API key
+    inputs:
+      azureSubscription: ${{ parameters.azureServiceConnection }}
+      KeyVaultName: ${{ parameters.keyVaultName }}
+      SecretsFilter: ${{ parameters.datadogApiKeySecret }}
+      RunAsPreJob: false
+  - ${{ each svc in parameters.services }}:
+      - bash: |
+          python3 "${{ parameters.packageDir }}/tools/markers/send_deployment_event.py" \
+            --site "${{ parameters.datadogSite }}" --env "${{ parameters.environment }}" \
+            --service "${{ svc.name }}" --version "${{ svc.version }}" \
+            --commit-sha "$(Build.SourceVersion)" --repository-url "${{ parameters.repositoryUrl }}" \
+            --id "$(Build.BuildId)-${{ svc.name }}" --started-at "${{ parameters.startedAt }}" \
+            --team "${{ svc.team }}"   # empty team is ignored by the script
+        displayName: Deployment marker ${{ svc.name }}
+        continueOnError: ${{ not(parameters.failOnError) }}
+        env:
+          DD_API_KEY: $(${{ parameters.datadogApiKeySecret }})

@@ -37,6 +37,7 @@ variable "foundation_identity" {
   type = object({
     key_vault_id  = string
     key_vault_uri = string
+    secret_ids    = optional(map(string), {}) # versionless Key Vault secret IDs (values set out-of-band)
     identities = map(object({
       id           = string
       principal_id = string
@@ -71,7 +72,7 @@ variable "settings" {
     # write-only; contracts carry only versionless IDs.
     admin_secret_name     = optional(string, "sqlvm-admin-password")
     dbadapter_secret_name = optional(string, "sqlvm-dbadapter-password")
-    dbm_secret_name       = optional(string, "sqlvm-datadog-password")
+    dbm_secret_name       = optional(string, "dbm-sqlvm-password")
     secret_version        = optional(number, 1)
   })
   default = {}

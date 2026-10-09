@@ -9,7 +9,8 @@
     "type": "queue-consumer"
   },
   "dashboards": {
-    "enabled": true
+    "enabled": true,
+    "workflow_metric_prefix": null
   },
   "enabled": true,
   "endpoints": [],
