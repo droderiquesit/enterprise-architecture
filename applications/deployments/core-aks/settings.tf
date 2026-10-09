@@ -9,7 +9,7 @@ variable "settings" {
     replica_ceiling    = optional(number, 6)
     # internal-lb: hello-bff Service type LoadBalancer on an internal Azure LB (HTTP, VNet only).
     # app-routing: Ingress (class webapprouting.kubernetes.azure.com) with TLS from Key Vault; requires the
-    #              AKS application routing add-on (platform-aks web_app_routing) - not enabled today.
+    #              AKS application routing add-on (platform-aks settings.app_routing, enabled by default with an internal NGINX controller).
     exposure = optional(object({
       mode                 = optional(string, "internal-lb")
       host                 = optional(string) # app-routing: DNS host name

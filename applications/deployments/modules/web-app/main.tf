@@ -19,6 +19,8 @@ locals {
 }
 
 resource "azurerm_linux_web_app" "this" {
+  #checkov:skip=CKV_AZURE_65:Detailed error pages are a web-server log category; application logs go through diagnostic settings (obs-diagnostics), not file logs.
+  #checkov:skip=CKV_AZURE_66:Failed request tracing writes to the app file system; HTTP telemetry comes from OTel traces + AppServiceHTTPLogs diagnostic settings.
   #checkov:skip=CKV_AZURE_88:No Azure Files content storage is used (code runs from package / container image).
   #checkov:skip=CKV_AZURE_17:Client certificates are not used; access is network-restricted (private endpoint / deny-by-default).
   #checkov:skip=CKV_AZURE_13:App Service authentication is not used; services authenticate callers themselves (BFF Entra mode) and are private.
@@ -87,6 +89,9 @@ resource "azurerm_linux_web_app" "this" {
 }
 
 resource "azurerm_windows_web_app" "this" {
+  #checkov:skip=CKV_AZURE_80:dotnet_version is v10.0 (latest LTS); the check only knows older framework values.
+  #checkov:skip=CKV_AZURE_65:Detailed error pages are a web-server log category; application logs go through diagnostic settings (obs-diagnostics), not file logs.
+  #checkov:skip=CKV_AZURE_66:Failed request tracing writes to the app file system; HTTP telemetry comes from OTel traces + AppServiceHTTPLogs diagnostic settings.
   #checkov:skip=CKV_AZURE_88:No Azure Files content storage is used (code runs from package / container image).
   #checkov:skip=CKV_AZURE_17:Client certificates are not used; access is network-restricted (private endpoint / deny-by-default).
   #checkov:skip=CKV_AZURE_13:App Service authentication is not used; services are private.

@@ -134,6 +134,29 @@
           }
         }
       }
+    },
+    "app_routing": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "default_controller": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ingress_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     }
   }
 }

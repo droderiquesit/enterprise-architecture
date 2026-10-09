@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rendered by applications/deployments/specialized (Terraform). -->
+<ApplicationManifest ApplicationTypeName="HelloInventoryAppType" ApplicationTypeVersion="${version}" xmlns="http://schemas.microsoft.com/2011/01/fabric" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ServiceManifestImport>
+    <ServiceManifestRef ServiceManifestName="InventoryApiPkg" ServiceManifestVersion="${version}" />
+  </ServiceManifestImport>
+  <DefaultServices>
+    <Service Name="InventoryApi" ServicePackageActivationMode="ExclusiveProcess">
+      <StatelessService ServiceTypeName="InventoryApiType" InstanceCount="-1">
+        <SingletonPartition />
+      </StatelessService>
+    </Service>
+  </DefaultServices>
+</ApplicationManifest>

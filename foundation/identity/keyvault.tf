@@ -76,3 +76,14 @@ resource "azurerm_role_assignment" "secret_officers" {
   principal_id         = each.value
   description          = "Out-of-band secret set/rotation (scripts/set-secrets.sh)"
 }
+
+# Read access to immutable app packages in the bootstrap `packages` container (no SAS tokens anywhere).
+resource "azurerm_role_assignment" "package_readers" {
+  for_each = var.settings.packages_container_id == null ? toset([]) : toset([for i in var.settings.package_reader_identities : i if contains(keys(local.identities), i)])
+
+  scope                = var.settings.packages_container_id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = azurerm_user_assigned_identity.this[each.value].principal_id
+  principal_type       = "ServicePrincipal"
+  description          = "Read app packages (managed-identity download) for ${each.value}"
+}

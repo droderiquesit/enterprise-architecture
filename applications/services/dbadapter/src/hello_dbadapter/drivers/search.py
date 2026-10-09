@@ -46,12 +46,15 @@ class SearchDriver(Driver):
         cred = self._credential()
         if os.environ.get("SEARCH_CREATE_INDEX", "true").lower() == "true":
             self._index_client = SearchIndexClient(endpoint, cred)
-            index = SearchIndex(name=name, fields=[
-                SimpleField(name="id", type=SearchFieldDataType.String, key=True, filterable=True),
-                SimpleField(name="payload", type=SearchFieldDataType.String),
-                SimpleField(name="created_at", type=SearchFieldDataType.DateTimeOffset, sortable=True, filterable=True),
-                SimpleField(name="updated_at", type=SearchFieldDataType.DateTimeOffset, sortable=True),
-            ])
+            index = SearchIndex(
+                name=name,
+                fields=[
+                    SimpleField(name="id", type=SearchFieldDataType.String, key=True, filterable=True),
+                    SimpleField(name="payload", type=SearchFieldDataType.String),
+                    SimpleField(name="created_at", type=SearchFieldDataType.DateTimeOffset, sortable=True, filterable=True),
+                    SimpleField(name="updated_at", type=SearchFieldDataType.DateTimeOffset, sortable=True),
+                ],
+            )
             await self._index_client.create_or_update_index(index)
         self._client = SearchClient(endpoint, name, cred)
 

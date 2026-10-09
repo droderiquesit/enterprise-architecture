@@ -51,8 +51,16 @@ def _order_id(body: Any) -> str:
     return ""
 
 
-def api_journey(client: httpx.Client, skus: list[str], *, order_timeout: float = 90.0, poll_interval: float = 2.0,
-                roundtrip_adapters: bool = False, rng: random.Random | None = None, sleep=time.sleep) -> JourneyResult:
+def api_journey(
+    client: httpx.Client,
+    skus: list[str],
+    *,
+    order_timeout: float = 90.0,
+    poll_interval: float = 2.0,
+    roundtrip_adapters: bool = False,
+    rng: random.Random | None = None,
+    sleep=time.sleep,
+) -> JourneyResult:
     rng = rng or random.Random()
     started = time.perf_counter()
     with tracer.start_as_current_span("journey api", attributes={"journey": "api"}) as span:
@@ -62,8 +70,11 @@ def api_journey(client: httpx.Client, skus: list[str], *, order_timeout: float =
             sku = rng.choice(skus)
             client.get(f"/api/catalog/products/{sku}").raise_for_status()
             key = str(uuid.uuid4())
-            created = client.post("/api/orders", json={"sku": sku, "quantity": rng.randint(1, 3), "customer_ref": f"synthetic-{rng.randint(1, 50):03d}"},
-                                  headers={"Idempotency-Key": key})
+            created = client.post(
+                "/api/orders",
+                json={"sku": sku, "quantity": rng.randint(1, 3), "customer_ref": f"synthetic-{rng.randint(1, 50):03d}"},
+                headers={"Idempotency-Key": key},
+            )
             created.raise_for_status()
             order_id = _order_id(created.json())
             if not order_id:
@@ -93,8 +104,15 @@ def api_journey(client: httpx.Client, skus: list[str], *, order_timeout: float =
             return JourneyResult("api", False, (time.perf_counter() - started) * 1000, f"{type(exc).__name__}: {str(exc)[:160]}")
 
 
-def browser_journey(frontend_url: str, *, order_timeout: float = 90.0, headless: bool = True, executable_path: str | None = None,
-                    rng: random.Random | None = None, user_agent: str = "hello-traffic") -> JourneyResult:
+def browser_journey(
+    frontend_url: str,
+    *,
+    order_timeout: float = 90.0,
+    headless: bool = True,
+    executable_path: str | None = None,
+    rng: random.Random | None = None,
+    user_agent: str = "hello-traffic",
+) -> JourneyResult:
     """Chromium journey through the real UI: products -> order -> wait for terminal status.
     The page's own Datadog RUM (when configured) records this as a real browser session."""
     from playwright.sync_api import sync_playwright

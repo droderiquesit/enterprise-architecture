@@ -17,9 +17,15 @@ async def test_batch_items_from_emulator(monkeypatch):
 
     from hello_jobs import commands
 
-    with servicebus_emulator(servicebus_emulator_config(queues=["batch-items"])) as conn, run_container(
-        "mcr.microsoft.com/azure-storage/azurite:latest", [10002], command=["azurite-table", "--tableHost", "0.0.0.0", "--skipApiVersionCheck", "--loose"],
-        ready=lambda c: "successfully" in c.logs()) as az:
+    with (
+        servicebus_emulator(servicebus_emulator_config(queues=["batch-items"])) as conn,
+        run_container(
+            "mcr.microsoft.com/azure-storage/azurite:latest",
+            [10002],
+            command=["azurite-table", "--tableHost", "0.0.0.0", "--skipApiVersionCheck", "--loose"],
+            ready=lambda c: "successfully" in c.logs(),
+        ) as az,
+    ):
         tables_cs = f"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey={AZURITE_KEY};TableEndpoint=http://{az.host}:{az.port(10002)}/devstoreaccount1;"
         async with ServiceBusClient.from_connection_string(conn) as c, c.get_queue_sender("batch-items") as sender:
             await sender.send_messages([ServiceBusMessage(json.dumps({"item_id": f"it-{i}", "batch_id": "b42"})) for i in range(5)])

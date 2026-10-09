@@ -1,0 +1,15 @@
+# Test-only stand-in for the Datadog Agent OTLP receiver (node/host agent): records what Fluent Bit pushes.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+exporters:
+  file:
+    path: /out/agent-metrics.json
+    flush_interval: 1s
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [file]

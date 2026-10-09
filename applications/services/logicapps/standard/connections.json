@@ -1,0 +1,23 @@
+{
+  "serviceProviderConnections": {
+    "serviceBus": {
+      "displayName": "order-events (managed identity)",
+      "parameterSetName": "ManagedServiceIdentity",
+      "parameterValues": {
+        "fullyQualifiedNamespace": "@appsetting('serviceBus_fullyQualifiedNamespace')",
+        "authProvider": { "Type": "ManagedServiceIdentity" }
+      },
+      "serviceProvider": { "id": "/serviceProviders/serviceBus" }
+    },
+    "AzureBlob": {
+      "displayName": "archive storage (managed identity)",
+      "parameterSetName": "ManagedServiceIdentity",
+      "parameterValues": {
+        "blobStorageEndpoint": "@appsetting('AzureBlob_blobStorageEndpoint')",
+        "authProvider": { "Type": "ManagedServiceIdentity" }
+      },
+      "serviceProvider": { "id": "/serviceProviders/AzureBlob" }
+    }
+  },
+  "managedApiConnections": {}
+}

@@ -58,7 +58,9 @@ class AdxDriver(Driver):
 
             self._ingest = ManagedStreamingIngestClient(kcsb)
         if os.environ.get("ADX_CREATE_TABLE", "true").lower() == "true":
-            self._client.execute_mgmt(self.database, f".create-merge table {self.table} (id:string, payload:dynamic, created_at:datetime, updated_at:datetime, deleted:bool)")
+            self._client.execute_mgmt(
+                self.database, f".create-merge table {self.table} (id:string, payload:dynamic, created_at:datetime, updated_at:datetime, deleted:bool)"
+            )
 
     async def open(self) -> None:
         if self._client is None:

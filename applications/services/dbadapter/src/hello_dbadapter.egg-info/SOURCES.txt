@@ -25,3 +25,6 @@ src/hello_dbadapter/drivers/postgresql.py
 src/hello_dbadapter/drivers/redis_cache.py
 src/hello_dbadapter/drivers/search.py
 src/hello_dbadapter/drivers/tables.py
+tests/test_api.py
+tests/test_drivers_unit.py
+tests/test_integration.py

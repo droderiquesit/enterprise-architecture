@@ -11,4 +11,5 @@ src/hello_worker.egg-info/dependency_links.txt
 src/hello_worker.egg-info/entry_points.txt
 src/hello_worker.egg-info/requires.txt
 src/hello_worker.egg-info/top_level.txt
+tests/test_integration.py
 tests/test_worker.py

@@ -1,7 +1,7 @@
 import httpx
+from fake_bff import build
 from fastapi.testclient import TestClient
 
-from fake_bff import build
 from hello_traffic.journeys import api_journey, discover_api_base, synthetic_headers
 from hello_traffic.runner import run
 from hello_traffic.settings import Settings, load
@@ -47,8 +47,17 @@ def test_runner_rate_and_duration_are_bounded(monkeypatch):
         calls.append(now[0])
         return JourneyResult("api", len(calls) != 3, 5.0)
 
-    s = Settings(frontend_url=None, api_base_url="http://bff", rps=0.5, duration=10, browser_journeys=0, order_timeout=5,
-                 max_error_ratio=0.5, roundtrip_adapters=False, skus=["SKU-0001"])
+    s = Settings(
+        frontend_url=None,
+        api_base_url="http://bff",
+        rps=0.5,
+        duration=10,
+        browser_journeys=0,
+        order_timeout=5,
+        max_error_ratio=0.5,
+        roundtrip_adapters=False,
+        skus=["SKU-0001"],
+    )
     out = run(s, "t", sleep=lambda d: now.__setitem__(0, now[0] + d), clock=lambda: now[0], api_journey_fn=fake_api)
     assert out["journeys"] == 5 and len(calls) == 5 and now[0] <= 10.0  # 0.5 rps x 10 s, bounded by duration
     assert out["failed"] == 1 and out["ok"] is True

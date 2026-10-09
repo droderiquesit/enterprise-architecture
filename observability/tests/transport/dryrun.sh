@@ -13,7 +13,7 @@ ENV_ARGS=(
   -e FLB_FORWARD_SHARED_KEY=dry-run -e FLB_FORWARD_TLS_CRT= -e FLB_FORWARD_TLS_KEY=
   -e EVENTHUB_BROKERS=example.servicebus.windows.net:9093 -e EVENTHUB_TOPICS=app-logs,platform-logs
   -e EVENTHUB_CONSUMER_GROUP=fluent-bit -e KAFKA_SECURITY_PROTOCOL=SASL_SSL -e 'EVENTHUB_CONNECTION_STRING=Endpoint=sb://example/;SharedAccessKeyName=x;SharedAccessKey=y'
-  -e 'FLB_EXCLUDE_PATHS=/var/log/containers/*_kube-system_*.log' -e FLB_THROTTLE_RATE=2000 -e FLB_CANARY_INTERVAL_SEC=60 -e FLB_SYSTEMD_UNIT=hello-worker.service
+  -e 'FLB_EXCLUDE_PATHS=/var/log/containers/*_kube-system_*.log' -e FLB_THROTTLE_RATE=2000 -e FLB_CANARY_INTERVAL_SEC=60 -e FLB_METRICS_INTERVAL_SEC=60 -e FLB_OTLP_HOST=127.0.0.1 -e FLB_ENV=test -e FLB_SYSTEMD_UNIT=hello-worker.service
 )
 rc=0
 for f in sidecar.yaml sidecar-forward.yaml aggregator.yaml aggregator-forward.yaml k8s-daemonset.yaml linux-host.yaml windows-host.yaml; do

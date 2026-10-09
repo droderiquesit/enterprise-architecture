@@ -91,6 +91,8 @@ locals {
     existingConfigMap = local.flb_cm_name
     args              = ["--workdir=/fluent-bit/etc", "--config=/fluent-bit/etc/eh/fluent-bit.yaml"]
     env = concat(
+      # must precede FLB_OTLP_HOST=$(DD_AGENT_HOST) (Kubernetes dependent env expansion)
+      [{ name = "DD_AGENT_HOST", valueFrom = { fieldRef = { fieldPath = "status.hostIP" } } }],
       [for k in sort(keys(module.flb.env)) : { name = k, value = module.flb.env[k] }],
       [{ name = "DD_API_KEY", valueFrom = { secretKeyRef = { name = var.api_key.secret_name, key = "api-key" } } }],
     )
@@ -119,18 +121,9 @@ locals {
     resources   = { requests = { cpu = var.resources.fluent_bit_cpu, memory = var.resources.fluent_bit_memory }, limits = { memory = var.resources.fluent_bit_mem_limit } }
     tolerations = var.fluent_bit.tolerations
     podAnnotations = {
-      # roll pods when config changes; Datadog Agent scrapes Fluent Bit self-metrics (openmetrics)
+      # roll pods when config changes. Fluent Bit self-metrics are pushed over OTLP to the node Agent
+      # (fluentbit_metrics input -> opentelemetry output) so names keep _total, e.g. fluentbit_output_errors_total.
       "checksum/eh-config" = module.flb.files_sha256
-      "ad.datadoghq.com/fluent-bit.checks" = jsonencode({
-        openmetrics = {
-          init_config = {}
-          instances = [{
-            openmetrics_endpoint = "http://%%host%%:2020/api/v2/metrics/prometheus"
-            namespace            = "fluentbit"
-            metrics              = ["fluentbit_input_records_total", "fluentbit_output_proc_records_total", "fluentbit_output_errors_total", "fluentbit_output_retries_failed_total", "fluentbit_output_dropped_records_total", "fluentbit_storage_.*"]
-          }]
-        }
-      })
     }
     livenessProbe  = { httpGet = { path = "/api/v1/health", port = "http" } }
     readinessProbe = { httpGet = { path = "/api/v1/health", port = "http" } }

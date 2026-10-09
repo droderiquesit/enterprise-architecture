@@ -27,7 +27,7 @@ locals {
     "hello-orders-api"    = { purpose = "orders API, Azure SQL", secrets = ["fault-token"] }
     "hello-inventory-api" = { purpose = "inventory API, Cosmos DB NoSQL", secrets = ["fault-token"] }
     "hello-catalog-api"   = { purpose = "catalog API, PostgreSQL + Managed Redis", secrets = ["fault-token"] }
-    "hello-dbadapter"     = { purpose = "per-family DB adapters", secrets = ["fault-token"] }
+    "hello-dbadapter"     = { purpose = "per-family DB adapters", secrets = concat(["fault-token"], local.adapter_secret_names) }
     "hello-worker"        = { purpose = "notifications worker, Table Storage", secrets = [] }
     "hello-durable"       = { purpose = "Durable Functions orchestrations", secrets = ["fault-token"] }
     "hello-functions"     = { purpose = "audit/event functions", secrets = ["fault-token"] }
@@ -45,14 +45,19 @@ locals {
   identities = merge(local.identity_catalogue, { for k, p in var.settings.extra_identities : k => { purpose = p, secrets = [] } })
 
   # Secret *names* only. Values are set out-of-band (scripts/set-secrets.sh); Terraform never sees them.
+  # Key/password-based data APIs that cannot use Entra ID (see platform/data READMEs).
+  adapter_secret_names = [
+    "sqlvm-dbadapter-password", "cassandra-mi-dbadapter-password", "cosmos-cassandra-password",
+    "cosmos-gremlin-key", "cosmos-mongo-connection-string",
+  ]
   dbm_secret_names = [for e in var.settings.dbm_sql_auth_engines : "dbm-${e}-password"]
   secret_names = concat([
     "datadog-api-key",      # agents/collectors -> Datadog intake
     "datadog-app-key",      # pipeline only (Datadog Terraform provider in observability roots)
     "fault-token",          # X-Fault-Token for POST /admin/faults
     "datadog-client-token", # browser RUM token (browser-safe, still stored centrally and injected at deploy)
-  ], local.dbm_secret_names)
-  pipeline_secrets = ["datadog-api-key", "datadog-app-key", "datadog-client-token"]
+  ], local.dbm_secret_names, local.adapter_secret_names)
+  pipeline_secrets = ["datadog-api-key", "datadog-app-key", "datadog-client-token", "fault-token"]
 
   identity_name = { for k, _ in local.identities : k => "${var.environment.name_prefix}-id-${k}-${var.environment.name}-${module.naming.region_short}" }
 }

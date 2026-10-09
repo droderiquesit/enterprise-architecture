@@ -30,8 +30,22 @@ def test_log_shape_inside_span_has_hex_and_decimal_ids():
         lg.info("hello %s", "world", extra={"order_count": 3})
         ctx = span.get_span_context()
     doc = json.loads(buf.getvalue().strip())
-    for key in ("timestamp", "level", "message", "logger", "service", "env", "version", "trace_id", "span_id",
-                "dd.trace_id", "dd.span_id", "dd.service", "dd.env", "dd.version"):
+    for key in (
+        "timestamp",
+        "level",
+        "message",
+        "logger",
+        "service",
+        "env",
+        "version",
+        "trace_id",
+        "span_id",
+        "dd.trace_id",
+        "dd.span_id",
+        "dd.service",
+        "dd.env",
+        "dd.version",
+    ):
         assert key in doc, key
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", doc["timestamp"])
     assert doc["message"] == "hello world"
@@ -58,7 +72,9 @@ def test_exception_fields_and_redaction():
     try:
         raise ValueError("connect failed password=hunter2 for user")
     except ValueError:
-        lg.exception("boom token=abc123 Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig", extra={"db_password": "x", "idempotency_key": "k-1", "conn": "Host=a;Password=p@ss;"})
+        lg.exception(
+            "boom token=abc123 Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig", extra={"db_password": "x", "idempotency_key": "k-1", "conn": "Host=a;Password=p@ss;"}
+        )
     doc = json.loads(buf.getvalue())
     assert doc["error.kind"] == "ValueError"
     assert "hunter2" not in doc["error.message"] and "hunter2" not in doc["error.stack"]

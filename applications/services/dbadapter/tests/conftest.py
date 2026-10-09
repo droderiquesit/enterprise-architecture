@@ -5,7 +5,7 @@ os.environ.setdefault("DD_VERSION", "1.0.0-test")
 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
 os.environ.pop("DB_SERVICE_NAME", None)
 
-import pytest  # noqa: E402
+import pytest
 
 
 @pytest.fixture(autouse=True)

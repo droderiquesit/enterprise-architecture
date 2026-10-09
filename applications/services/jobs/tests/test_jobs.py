@@ -63,9 +63,16 @@ def test_daily_aggregate(tmp_path):
     ]
     f = factory(lambda r: httpx.Response(200, json={"items": orders}))
     uploaded = []
-    out = commands.daily_aggregate({"ORDERS_API_URL": "http://orders", "AGGREGATE_DATE": "2026-10-08", "OUTPUT_PATH": str(tmp_path),
-                                    "AGGREGATE_BLOB_ACCOUNT_URL": "https://acct.blob.core.windows.net"}, f,
-                                   upload=lambda *a: uploaded.append(a) or "https://acct/aggregates/x")
+    out = commands.daily_aggregate(
+        {
+            "ORDERS_API_URL": "http://orders",
+            "AGGREGATE_DATE": "2026-10-08",
+            "OUTPUT_PATH": str(tmp_path),
+            "AGGREGATE_BLOB_ACCOUNT_URL": "https://acct.blob.core.windows.net",
+        },
+        f,
+        upload=lambda *a: uploaded.append(a) or "https://acct/aggregates/x",
+    )
     assert out["orders"] == 2 and out["uploaded"]
     doc = json.loads((tmp_path / "daily-aggregate-2026-10-08.json").read_text())
     assert doc["by_sku"]["SKU-0001"] == {"orders": 2, "quantity": 3, "amount": 37.05}

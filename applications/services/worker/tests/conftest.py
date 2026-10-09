@@ -5,11 +5,11 @@ os.environ.setdefault("DD_SERVICE", "hello-worker")
 os.environ.setdefault("DD_VERSION", "1.0.0-test")
 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
 
-import pytest  # noqa: E402
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter  # noqa: E402
+import pytest
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from hello_common.config import service_info  # noqa: E402
-from hello_common.telemetry import setup_telemetry  # noqa: E402
+from hello_common.config import service_info
+from hello_common.telemetry import setup_telemetry
 
 EXPORTER = InMemorySpanExporter()
 PROVIDER = setup_telemetry(service_info("hello-worker"), span_exporter=EXPORTER)

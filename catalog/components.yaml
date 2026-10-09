@@ -414,7 +414,7 @@ components:
     layer: applications
     kind: terraform
     path: applications/deployments/durable
-    consumes: [platform-functions, platform-messaging, platform-db-sql, obs-telemetry-transport, foundation-identity]
+    consumes: [platform-functions, platform-messaging, platform-db-sql, obs-telemetry-transport, foundation-identity, foundation-network]
     optional_consumes: [deploy-partner-sim]
     artifacts: [svc-durable]
   - id: deploy-functions
@@ -422,8 +422,8 @@ components:
     layer: applications
     kind: terraform
     path: applications/deployments/functions
-    consumes: [platform-functions, platform-messaging, obs-telemetry-transport, foundation-identity]
-    optional_consumes: [platform-appservice, platform-containerapps]
+    consumes: [platform-functions, platform-messaging, obs-telemetry-transport, foundation-identity, platform-shared, foundation-network]
+    optional_consumes: [platform-appservice, platform-containerapps, platform-db-ledger, platform-db-table-storage]
     artifacts: [svc-functions]
   - id: deploy-partner-sim
     produces: [deploy-partner-sim]
@@ -438,14 +438,14 @@ components:
     kind: terraform
     path: applications/deployments/dbadapters
     consumes: [platform-containerapps, platform-shared, obs-telemetry-transport, foundation-identity]
-    optional_consumes: [platform-appservice, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm, platform-db-postgresql, platform-db-mysql, platform-db-cosmos-nosql, platform-db-cosmos-mongo, platform-db-cosmos-cassandra, platform-db-cosmos-gremlin, platform-db-cosmos-table, platform-db-documentdb, platform-db-cassandra-mi, platform-db-redis, platform-db-table-storage, platform-db-ledger, platform-db-horizondb, platform-data-analytics]
+    optional_consumes: [platform-appservice, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm, platform-db-postgresql, platform-db-mysql, platform-db-cosmos-nosql, platform-db-cosmos-mongo, platform-db-cosmos-cassandra, platform-db-cosmos-gremlin, platform-db-cosmos-table, platform-db-documentdb, platform-db-cassandra-mi, platform-db-redis, platform-db-table-storage, platform-db-ledger, platform-db-horizondb, platform-data-analytics, platform-vmss, foundation-network]
     artifacts: [svc-dbadapter]
   - id: deploy-appservice
     produces: [deploy-appservice]
     layer: applications
     kind: terraform
     path: applications/deployments/appservice
-    consumes: [platform-appservice, platform-shared, obs-telemetry-transport, foundation-identity]
+    consumes: [platform-appservice, platform-shared, obs-telemetry-transport, foundation-identity, foundation-network]
     optional_consumes: [platform-db-cosmos-nosql, platform-db-postgresql, platform-db-redis]
     artifacts: [svc-inventory-api, svc-catalog-api]
   - id: deploy-jobs
@@ -462,22 +462,22 @@ components:
     kind: terraform
     path: applications/deployments/vm-workloads
     consumes: [platform-messaging, obs-telemetry-transport, foundation-identity]
-    optional_consumes: [platform-vm, platform-vmss, platform-db-table-storage]
+    optional_consumes: [platform-vm, platform-vmss, platform-db-table-storage, platform-db-cosmos-nosql]
     artifacts: [svc-worker, svc-inventory-api]
   - id: deploy-logicapps
     produces: [deploy-logicapps]
     layer: applications
     kind: terraform
     path: applications/deployments/logicapps
-    consumes: [platform-appservice, platform-messaging, obs-telemetry-transport, foundation-identity]
+    consumes: [platform-appservice, platform-messaging, obs-telemetry-transport, foundation-identity, foundation-network]
     artifacts: [svc-logicapps]
   - id: deploy-specialized
     produces: [deploy-specialized]
     layer: applications
     kind: terraform
     path: applications/deployments/specialized
-    optional_consumes: [platform-servicefabric, platform-aro, platform-specialized-compute]
-    consumes: [obs-telemetry-transport]
+    optional_consumes: [platform-servicefabric, platform-aro, platform-specialized-compute, platform-messaging, platform-db-table-storage]
+    consumes: [obs-telemetry-transport, foundation-identity]
     artifacts: [svc-catalog-api, svc-inventory-api, svc-jobs]
 
   # ------------------------------------------------------------------- docs

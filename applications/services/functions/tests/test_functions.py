@@ -2,11 +2,10 @@ import json
 
 import httpx
 import pytest
+from conftest import EXPORTER, PROVIDER
 
 from hello_common.http import create_client
 from hello_functions import handlers
-
-from conftest import EXPORTER, PROVIDER
 
 TP = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
@@ -97,13 +96,17 @@ def test_cache_warmer_reports_cache_results():
 
 
 def test_quote():
-    f = mock_factory(lambda r: httpx.Response(404) if "9999" in r.url.path else httpx.Response(200, json={"sku": "SKU-0001", "price": 12.35, "currency": "USD"}))
+    f = mock_factory(
+        lambda r: httpx.Response(404) if "9999" in r.url.path else httpx.Response(200, json={"sku": "SKU-0001", "price": 12.35, "currency": "USD"})
+    )
     status, body = handlers.quote("SKU-0001", "3", "http://catalog", f)
     assert status == 200 and body["amount"] == 37.05 and body["unit_price"] == 12.35 and body["valid_until"] > body["quoted_at"]
     assert handlers.quote("SKU-9999", "1", "http://catalog", f)[0] == 404
     assert handlers.quote("bad sku", "1", "http://catalog", f)[0] == 400
     assert handlers.quote("SKU-0001", "0", "http://catalog", f)[0] == 400
     assert handlers.quote("SKU-0001", "1", "", f)[0] == 503
+    down = mock_factory(lambda r: (_ for _ in ()).throw(httpx.ConnectError("refused", request=r)))
+    assert handlers.quote("SKU-0001", "1", "http://catalog", down)[0] == 502
 
 
 def test_host_json_contract():

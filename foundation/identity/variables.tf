@@ -53,6 +53,10 @@ variable "settings" {
     secret_officer_principal_ids = optional(list(string), [])
     # Pipeline principals that read pipeline-only secrets (datadog-app-key, datadog-api-key), e.g. bootstrap apply identity.
     pipeline_reader_principal_ids = optional(list(string), [])
+    # Bootstrap `packages` container (resource id from the bootstrap contract). Workload identities that install
+    # zip packages by managed identity (VM run commands, Windows Consumption, Batch) get Storage Blob Data Reader on it.
+    packages_container_id     = optional(string)
+    package_reader_identities = optional(list(string), ["hello-worker", "hello-inventory-api", "hello-dbadapter", "hello-durable", "hello-functions", "hello-jobs"])
   })
   default = {}
 

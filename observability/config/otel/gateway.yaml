@@ -26,9 +26,11 @@ receivers:
     config:
       scrape_configs:
         - job_name: otel-gateway
-          scrape_interval: 60s
+          scrape_interval: ${env:SELF_SCRAPE_INTERVAL:-60s}
           static_configs:
             - targets: ["127.0.0.1:8888"]
+              labels:
+                env: ${env:DD_ENV:-unknown}
 
 processors:
   memory_limiter:
@@ -115,6 +117,8 @@ service:
               prometheus:
                 host: 0.0.0.0
                 port: 8888
+                # names like otelcol_exporter_send_failed_spans (no _total), as the monitors expect
+                without_type_suffix: true
   pipelines:
     # the OTLP receiver fans out to both trace pipelines: stats see 100% of spans, export is sampled
     traces/stats:

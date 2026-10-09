@@ -5,10 +5,12 @@ receivers:
     config:
       scrape_configs:
         - job_name: fluent-bit-aggregator
-          scrape_interval: 60s
+          scrape_interval: ${env:SELF_SCRAPE_INTERVAL:-60s}
           metrics_path: /api/v2/metrics/prometheus
           static_configs:
             - targets: ["${env:FLUENTBIT_METRICS_TARGET}"]
+              labels:
+                env: ${env:DD_ENV:-unknown}
 service:
   pipelines:
     metrics:

@@ -1,7 +1,5 @@
 """Integration tests against real postgres:17-alpine and redis:7-alpine containers."""
 
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -14,14 +12,18 @@ REDIS_IMAGE = "redis:7-alpine"
 
 
 def _pg_ready(c):
-    return c.exec("pg_isready", "-U", "postgres", "-d", "catalog").returncode == 0 and c.exec(
-        "psql", "-U", "postgres", "-d", "catalog", "-c", "select 1").returncode == 0
+    return (
+        c.exec("pg_isready", "-U", "postgres", "-d", "catalog").returncode == 0
+        and c.exec("psql", "-U", "postgres", "-d", "catalog", "-c", "select 1").returncode == 0
+    )
 
 
 @pytest.fixture(scope="module")
 def stack():
-    with run_container(PG_IMAGE, [5432], env={"POSTGRES_PASSWORD": "localonly", "POSTGRES_DB": "catalog"}, ready=_pg_ready) as pg, \
-         run_container(REDIS_IMAGE, [6379], ready=lambda c: c.exec("redis-cli", "ping").stdout.strip() == "PONG") as rd:
+    with (
+        run_container(PG_IMAGE, [5432], env={"POSTGRES_PASSWORD": "localonly", "POSTGRES_DB": "catalog"}, ready=_pg_ready) as pg,
+        run_container(REDIS_IMAGE, [6379], ready=lambda c: c.exec("redis-cli", "ping").stdout.strip() == "PONG") as rd,
+    ):
         yield pg, rd
 
 
@@ -42,9 +44,9 @@ def _env(monkeypatch, pg, rd):
 def test_end_to_end_with_postgres_and_redis(stack, monkeypatch):
     pg, rd = stack
     _env(monkeypatch, pg, rd)
-    from hello_catalog.main import build_app
-
     import time
+
+    from hello_catalog.main import build_app
 
     with TestClient(build_app()) as c:
         for _ in range(30):

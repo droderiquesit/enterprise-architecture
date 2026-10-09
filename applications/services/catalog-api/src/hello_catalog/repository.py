@@ -49,8 +49,18 @@ RETURNING {_COLUMNS}
 
 def _row_to_product(row: tuple[Any, ...]) -> Product:
     sku, name, description, unit_price, currency, category, active, updated_at = row
-    return with_price(Product(sku=sku, name=name, description=description, unit_price=float(unit_price), currency=currency.strip(),
-                              category=category, active=active, updated_at=updated_at))
+    return with_price(
+        Product(
+            sku=sku,
+            name=name,
+            description=description,
+            unit_price=float(unit_price),
+            currency=currency.strip(),
+            category=category,
+            active=active,
+            updated_at=updated_at,
+        )
+    )
 
 
 class ProductRepository(Protocol):
@@ -166,22 +176,19 @@ class PostgresRepository:
         await self.pool.close(timeout=5)
 
     async def migrate(self) -> None:
-        async with self.pool.connection() as conn:
-            async with conn.transaction():
-                await conn.execute("SELECT pg_advisory_xact_lock(%s)", (MIGRATION_LOCK_ID,))
-                await conn.execute("CREATE SCHEMA IF NOT EXISTS catalog")
-                await conn.execute(
-                    "CREATE TABLE IF NOT EXISTS catalog.schema_migrations (version int PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
-                )
-                cur = await conn.execute("SELECT version FROM catalog.schema_migrations")
-                applied = {row[0] for row in await cur.fetchall()}
-                for version, statements in MIGRATIONS:
-                    if version in applied:
-                        continue
-                    for statement in statements:
-                        await conn.execute(statement)
-                    await conn.execute("INSERT INTO catalog.schema_migrations (version) VALUES (%s) ON CONFLICT DO NOTHING", (version,))
-                    log.info("applied catalog migration", extra={"migration.version": version})
+        async with self.pool.connection() as conn, conn.transaction():
+            await conn.execute("SELECT pg_advisory_xact_lock(%s)", (MIGRATION_LOCK_ID,))
+            await conn.execute("CREATE SCHEMA IF NOT EXISTS catalog")
+            await conn.execute("CREATE TABLE IF NOT EXISTS catalog.schema_migrations (version int PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())")
+            cur = await conn.execute("SELECT version FROM catalog.schema_migrations")
+            applied = {row[0] for row in await cur.fetchall()}
+            for version, statements in MIGRATIONS:
+                if version in applied:
+                    continue
+                for statement in statements:
+                    await conn.execute(statement)
+                await conn.execute("INSERT INTO catalog.schema_migrations (version) VALUES (%s) ON CONFLICT DO NOTHING", (version,))
+                log.info("applied catalog migration", extra={"migration.version": version})
 
     async def ping(self) -> None:
         check_fault("db_error")
@@ -214,8 +221,6 @@ class PostgresRepository:
 
     async def upsert_many(self, products: list[ProductIn]) -> int:
         check_fault("db_error")
-        async with self.pool.connection() as conn:
-            async with conn.transaction():
-                async with conn.cursor() as cur:
-                    await cur.executemany(_UPSERT.split("RETURNING")[0], [p.model_dump() for p in products])
+        async with self.pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
+            await cur.executemany(_UPSERT.split("RETURNING", maxsplit=1)[0], [p.model_dump() for p in products])
         return len(products)

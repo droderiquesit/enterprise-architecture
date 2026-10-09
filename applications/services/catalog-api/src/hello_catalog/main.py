@@ -53,7 +53,9 @@ def build_app(settings: settings_mod.Settings | None = None, repo: ProductReposi
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                log.warning("catalog migration failed; retrying", extra={"error.kind": type(exc).__name__, "error.message": str(exc)[:200], "retry_in_s": delay})
+                log.warning(
+                    "catalog migration failed; retrying", extra={"error.kind": type(exc).__name__, "error.message": str(exc)[:200], "retry_in_s": delay}
+                )
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 30.0)
 

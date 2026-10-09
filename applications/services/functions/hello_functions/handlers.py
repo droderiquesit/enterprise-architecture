@@ -123,9 +123,17 @@ def audit_sink_from_env() -> AuditSink:
 def handle_audit(body: bytes | str, message_id: str, properties: dict[str, Any] | None, sink: AuditSink) -> dict[str, Any]:
     """CONSUMER span linked (not parented) to the producer's traceparent; raises -> runtime retries/dead-letters."""
     props = normalize_properties(properties)
-    with tracer.start_as_current_span("servicebus.process", kind=SpanKind.CONSUMER, links=links_from_properties(props),
-                                      attributes={"messaging.system": "servicebus", "messaging.destination.name": "order-events/subscriptions/audit",
-                                                  "messaging.message.id": message_id, "messaging.operation.type": "process"}):
+    with tracer.start_as_current_span(
+        "servicebus.process",
+        kind=SpanKind.CONSUMER,
+        links=links_from_properties(props),
+        attributes={
+            "messaging.system": "servicebus",
+            "messaging.destination.name": "order-events/subscriptions/audit",
+            "messaging.message.id": message_id,
+            "messaging.operation.type": "process",
+        },
+    ):
         entry = build_audit_entry(body, message_id, props)
         ref = sink.write(entry)
         log.info("audit recorded", extra={"order_id": entry["order_id"], "audit_ref": ref, "sink": type(sink).__name__})
@@ -169,8 +177,18 @@ def quote(sku: str | None, quantity: str | int | None, catalog_url: str | None =
     base = (catalog_url or os.environ.get("CATALOG_API_URL") or "").rstrip("/")
     if not base:
         return 503, {"type": "about:blank", "title": "Service Unavailable", "status": 503, "detail": "CATALOG_API_URL not configured"}
-    with client_factory(base, timeout=5.0, retries=2) as client:
-        r = client.get(f"/products/{sku}")
+    try:
+        with client_factory(base, timeout=5.0, retries=2) as client:
+            r = client.get(f"/products/{sku}")
+    except Exception as exc:  # timeouts / connection errors after bounded retries
+        log.warning("catalog call failed", extra={"error.kind": type(exc).__name__})
+        status = 504 if "Timeout" in type(exc).__name__ else 502
+        return status, {
+            "type": "about:blank",
+            "title": "Bad Gateway" if status == 502 else "Gateway Timeout",
+            "status": status,
+            "detail": f"catalog unavailable: {type(exc).__name__}",
+        }
     if r.status_code == 404:
         return 404, {"type": "about:blank", "title": "Not Found", "status": 404, "detail": f"product {sku} not found"}
     if r.status_code >= 400:
@@ -179,7 +197,11 @@ def quote(sku: str | None, quantity: str | int | None, catalog_url: str | None =
     unit = Decimal(str(p.get("price", p.get("unit_price"))))
     now = datetime.now(UTC)
     return 200, {
-        "sku": sku, "quantity": qty, "unit_price": float(unit), "amount": float((unit * qty).quantize(Decimal("0.01"), ROUND_HALF_UP)),
-        "currency": p.get("currency", "USD"), "quoted_at": now.isoformat().replace("+00:00", "Z"),
+        "sku": sku,
+        "quantity": qty,
+        "unit_price": float(unit),
+        "amount": float((unit * qty).quantize(Decimal("0.01"), ROUND_HALF_UP)),
+        "currency": p.get("currency", "USD"),
+        "quoted_at": now.isoformat().replace("+00:00", "Z"),
         "valid_until": (now + timedelta(minutes=15)).isoformat().replace("+00:00", "Z"),
     }

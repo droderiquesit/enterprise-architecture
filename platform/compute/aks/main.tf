@@ -160,6 +160,14 @@ resource "azurerm_kubernetes_cluster" "this" {
     utc_offset  = var.settings.maintenance.utc_offset
   }
 
+  dynamic "web_app_routing" {
+    for_each = var.settings.app_routing.enabled ? [1] : []
+    content {
+      default_nginx_controller = var.settings.app_routing.default_controller
+      dns_zone_ids             = var.settings.app_routing.dns_zone_ids
+    }
+  }
+
   # Secrets Store CSI driver (Key Vault) for app secret references, with rotation.
   dynamic "key_vault_secrets_provider" {
     for_each = var.settings.key_vault_secrets_provider_enabled ? [1] : []

@@ -73,7 +73,13 @@ class TablesDriver(Driver):
         rid = record_id or new_id()
         now = iso(utcnow())
         existing = await self._get_entity(rid) if record_id else None
-        entity = {"PartitionKey": PARTITION, "RowKey": rid, "payload": dumps(payload), "created_at": existing["created_at"] if existing else now, "updated_at": now}
+        entity = {
+            "PartitionKey": PARTITION,
+            "RowKey": rid,
+            "payload": dumps(payload),
+            "created_at": existing["created_at"] if existing else now,
+            "updated_at": now,
+        }
         await self._table.upsert_entity(entity, mode=UpdateMode.REPLACE)
         return self._rec(entity)
 

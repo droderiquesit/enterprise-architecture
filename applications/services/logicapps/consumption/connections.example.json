@@ -1,0 +1,14 @@
+{
+  "_comment": "Shape of the workflow's $connections parameter value. The deployment root creates a Microsoft.Web/connections (managed API 'servicebus') with parameterValueSet managedIdentityAuth (namespaceEndpoint = sb://<ns>.servicebus.windows.net/) and passes this object; the user-assigned identity needs 'Azure Service Bus Data Sender' on queue batch-items.",
+  "servicebus": {
+    "connectionId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Web/connections/servicebus-batch",
+    "connectionName": "servicebus-batch",
+    "id": "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Web/locations/eastus2/managedApis/servicebus",
+    "connectionProperties": {
+      "authentication": {
+        "type": "ManagedServiceIdentity",
+        "identity": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-logicapps-dev"
+      }
+    }
+  }
+}

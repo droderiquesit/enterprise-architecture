@@ -38,10 +38,10 @@ gaps:
       - https://learn.microsoft.com/en-us/azure/horizondb/configure-maintain/quickstart-create-cluster
   - service_id: functions-on-container-apps
     arm_types:
-      - {type: Microsoft.App/containerApps, api_version: "2026-07-01"}
+      - {type: Microsoft.App/containerApps, api_version: "2026-01-01"}
     azurerm_status: partial
     resolution: azapi
-    reason: "azurerm_container_app exists but exposes `kind` as computed only; Functions on Container Apps V2 requires kind = 'functionapp' at create time. azurerm_linux_function_app has no container_app_environment_id in 5.9.0 (V1 model is legacy anyway)."
+    reason: "Uses 2026-01-01, the newest version embedded in azapi 2.13 schemas (2026-07-01 exists in ARM but is not embedded). azurerm_container_app exists but exposes `kind` as computed only; Functions on Container Apps V2 requires kind = 'functionapp' at create time. azurerm_linux_function_app has no container_app_environment_id in 5.9.0 (V1 model is legacy anyway)."
     owner_component: deploy-functions
     references:
       - https://learn.microsoft.com/en-us/azure/templates/microsoft.app/containerapps
@@ -174,3 +174,13 @@ gaps:
     references:
       - https://learn.microsoft.com/en-us/azure/templates/microsoft.sql/managedinstances
       - https://learn.microsoft.com/en-us/azure/azure-sql/managed-instance/free-offer
+  - service_id: logic-apps-consumption
+    arm_types:
+      - {type: Microsoft.Web/connections, api_version: "2016-06-01"}
+    azurerm_status: partial
+    resolution: azapi
+    reason: "azurerm_api_connection cannot set parameterValueSet = managedIdentityAuth, required for the Service Bus managed API connection to authenticate with the Logic App's managed identity (no SAS keys). azapi schema validation disabled for this resource only."
+    owner_component: deploy-logicapps
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.web/connections
+      - https://learn.microsoft.com/en-us/azure/logic-apps/authenticate-with-managed-identity

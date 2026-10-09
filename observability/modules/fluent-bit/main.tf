@@ -50,6 +50,12 @@ locals {
     var.dd_source != null ? { FLB_DD_SOURCE = var.dd_source } : {},
     var.dd_service != null ? { FLB_DD_SERVICE = var.dd_service } : {},
     contains(["aggregator", "aggregator-forward", "k8s-daemonset", "linux-host", "windows-host"], var.role) ? { FLB_CANARY_INTERVAL_SEC = tostring(var.canary_interval_seconds) } : {},
+    # self-metrics pushed over OTLP/HTTP to the node/host Agent (k8s: DD_AGENT_HOST from status.hostIP)
+    contains(["k8s-daemonset", "linux-host", "windows-host"], var.role) ? {
+      FLB_METRICS_INTERVAL_SEC = "60"
+      FLB_OTLP_HOST            = var.role == "k8s-daemonset" ? "$(DD_AGENT_HOST)" : "127.0.0.1"
+      FLB_ENV                  = lookup(var.static_tags, "env", "unknown")
+    } : {},
     local.is_host ? { FLB_LOG_PATHS = join(",", var.log_paths) } : {},
     var.role == "linux-host" && var.systemd_unit != null ? { FLB_SYSTEMD_UNIT = var.systemd_unit } : {},
     var.role == "k8s-daemonset" ? {

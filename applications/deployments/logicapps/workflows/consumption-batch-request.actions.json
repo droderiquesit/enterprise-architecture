@@ -1,0 +1,33 @@
+{
+  "compose_batch": {
+    "type": "Compose",
+    "inputs": {
+      "batch_id": "@{guid()}",
+      "requested_at": "@{utcNow()}",
+      "items": "@{parameters('batchItems')}",
+      "source": "logic-apps-consumption"
+    },
+    "runAfter": {}
+  },
+  "send_batch_request": {
+    "type": "ApiConnection",
+    "inputs": {
+      "host": {
+        "connection": {
+          "name": "@parameters('$connections')['servicebus']['connectionId']"
+        }
+      },
+      "method": "post",
+      "path": "/@{encodeURIComponent(encodeURIComponent(parameters('queueName')))}/messages",
+      "queries": { "systemProperties": "None" },
+      "body": {
+        "ContentData": "@{base64(string(outputs('compose_batch')))}",
+        "ContentType": "application/json",
+        "MessageId": "@{outputs('compose_batch')['batch_id']}",
+        "Properties": { "source": "logic-apps-consumption" }
+      }
+    },
+    "runAfter": { "compose_batch": ["Succeeded"] },
+    "runtimeConfiguration": { "staticResult": { "staticResultOptions": "Disabled" } }
+  }
+}

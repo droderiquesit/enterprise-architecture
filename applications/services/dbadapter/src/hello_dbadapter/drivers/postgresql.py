@@ -80,9 +80,19 @@ class PostgresDriver(Driver):
         kwargs: dict[str, Any] = {"autocommit": True}
         if auth == "password" and os.environ.get("PG_PASSWORD"):
             kwargs["password"] = os.environ["PG_PASSWORD"]
-        return AsyncConnectionPool(conninfo, connection_class=_Conn, kwargs=kwargs, min_size=1,
-                                   max_size=int(os.environ.get("PG_POOL_MAX", "10")), timeout=5.0, max_lifetime=3000.0,
-                                   max_idle=300.0, check=AsyncConnectionPool.check_connection, open=False, name=self.family)
+        return AsyncConnectionPool(
+            conninfo,
+            connection_class=_Conn,
+            kwargs=kwargs,
+            min_size=1,
+            max_size=int(os.environ.get("PG_POOL_MAX", "10")),
+            timeout=5.0,
+            max_lifetime=3000.0,
+            max_idle=300.0,
+            check=AsyncConnectionPool.check_connection,
+            open=False,
+            name=self.family,
+        )
 
     @property
     def pool(self) -> Any:
@@ -133,7 +143,9 @@ class PostgresDriver(Driver):
             # timestamps are bound parameters: Citus rejects non-IMMUTABLE functions (now()) in DO UPDATE on distributed tables
             f"INSERT INTO adapter.records (id, payload, created_at, updated_at) VALUES (%s, %s, %s, %s) "
             f"ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at RETURNING {COLS}",
-            (rid, Jsonb(payload), ts, ts), fetch="one")
+            (rid, Jsonb(payload), ts, ts),
+            fetch="one",
+        )
         return self._row(row)
 
     async def get(self, record_id: str) -> Record | None:
@@ -147,7 +159,9 @@ class PostgresDriver(Driver):
     async def update(self, record_id: str, payload: dict[str, Any]) -> Record | None:
         from psycopg.types.json import Jsonb
 
-        row = await self._query(f"UPDATE adapter.records SET payload = %s, updated_at = %s WHERE id = %s RETURNING {COLS}", (Jsonb(payload), utcnow(), record_id), fetch="one")
+        row = await self._query(
+            f"UPDATE adapter.records SET payload = %s, updated_at = %s WHERE id = %s RETURNING {COLS}", (Jsonb(payload), utcnow(), record_id), fetch="one"
+        )
         return self._row(row) if row else None
 
     async def delete(self, record_id: str) -> bool:

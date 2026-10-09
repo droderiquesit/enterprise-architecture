@@ -21,8 +21,12 @@ def build_client() -> Any:
     from redis.asyncio.cluster import RedisCluster
 
     kwargs: dict[str, Any] = dict(
-        host=os.environ.get("REDIS_HOST", "localhost"), port=int(os.environ.get("REDIS_PORT", "10000")),
-        ssl=os.environ.get("REDIS_TLS", "true").lower() == "true", socket_timeout=2.0, socket_connect_timeout=3.0, decode_responses=True,
+        host=os.environ.get("REDIS_HOST", "localhost"),
+        port=int(os.environ.get("REDIS_PORT", "10000")),
+        ssl=os.environ.get("REDIS_TLS", "true").lower() == "true",
+        socket_timeout=2.0,
+        socket_connect_timeout=3.0,
+        decode_responses=True,
     )
     auth = os.environ.get("REDIS_AUTH", "entra").lower()
     if auth == "entra":

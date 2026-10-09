@@ -196,3 +196,49 @@ def test_gateway_logs_forward_overlay_is_opt_in(tmp_path):
         assert any("otlp-log-" in json.dumps(e) for e in got["events"])
     finally:
         stack.close()
+
+
+def _metric_points(batches):
+    out = {}
+    for b in batches:
+        for rm in b.get("resourceMetrics", []):
+            for sm in rm["scopeMetrics"]:
+                for m in sm["metrics"]:
+                    for kind in ("sum", "gauge", "histogram", "summary"):
+                        for dp in m.get(kind, {}).get("dataPoints", []):
+                            attrs = {a["key"]: next(iter(a["value"].values())) for a in dp.get("attributes", [])}
+                            out.setdefault(m["name"], []).append(attrs)
+    return out
+
+
+def test_gateway_self_and_fluentbit_metrics_naming(tmp_path):
+    """Self-telemetry names without type suffix (otelcol_exporter_send_failed_spans), Fluent Bit names keep
+    _total (fluentbit_output_errors_total); every scraped point carries env."""
+    from dockerutil import FLB_CONFIG, FLUENT_BIT_IMAGE, fluent_bit_env
+
+    stack = Stack("otelmetrics")
+    try:
+        start_mock_intake(stack)
+        logs = tmp_path / "fb"
+        logs.mkdir()
+        logs.chmod(0o777)
+        stack.run("fluentbit", FLUENT_BIT_IMAGE, env=fluent_bit_env(LOG_FILE_PATH="/var/log/app/app.log"),
+                  volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logs}:/var/log/app"],
+                  cmd=["-c", "/fluent-bit/etc/eh/sidecar.yaml"])
+        _, gport, hport = _run_gateway(stack, OTELCOL_IMAGE, tmp_path / "out",
+                                       extra_configs=["--config=file:/cfg/gateway-scrape-fluentbit.yaml"],
+                                       extra_env={"FLUENTBIT_METRICS_TARGET": "fluentbit:2020", "SELF_SCRAPE_INTERVAL": "5s", "DD_ENV": "test"},
+                                       overlay="test-overlay-fail.yaml")
+        _send(gport, hport)  # trace export to the unreachable endpoint fails -> send_failed_spans
+
+        def _names():
+            pts = _metric_points(_read_json_lines(tmp_path / "out" / "metrics.json"))
+            return pts if ("fluentbit_output_errors_total" in pts and "otelcol_exporter_send_failed_spans" in pts) else None
+
+        pts = wait_for(_names, 90, 3, "self + fluent-bit metrics")
+        print(sorted(pts)[:80])
+        assert not any(n.startswith("otelcol_") and n.endswith("_total") for n in pts)
+        for name in ("fluentbit_output_errors_total", "fluentbit_output_proc_records_total", "otelcol_exporter_send_failed_spans"):
+            assert pts[name] and all(p.get("env") == "test" for p in pts[name]), (name, pts[name][:3])
+    finally:
+        stack.close()

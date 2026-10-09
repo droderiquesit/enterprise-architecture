@@ -1,0 +1,5 @@
+{
+  "archiveContainer": { "type": "String", "value": "@appsetting('ARCHIVE_CONTAINER')" },
+  "topicName": { "type": "String", "value": "order-events" },
+  "subscriptionName": { "type": "String", "value": "archive" }
+}

@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from conftest import FakeRedis, redis_settings
 from fastapi.testclient import TestClient
 
 from hello_catalog import settings as settings_mod
@@ -7,8 +8,6 @@ from hello_catalog.cache import CatalogCache
 from hello_catalog.main import build_app
 from hello_catalog.repository import InMemoryRepository
 from hello_catalog.seed import seed_products
-
-from conftest import FakeRedis, redis_settings
 
 
 def _client(redis=None, enabled=True):

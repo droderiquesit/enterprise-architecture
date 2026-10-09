@@ -52,6 +52,13 @@ pipeline:
       interval_nsec: 0
       samples: 0
 
+    # Fluent Bit self-metrics (names keep _total, e.g. fluentbit_output_errors_total) pushed as OTLP to the
+    # node/host Datadog Agent OTLP receiver -> same metric names as the gateway's Prometheus scrape path.
+    - name: fluentbit_metrics
+      tag: flb.metrics
+      scrape_interval: ${FLB_METRICS_INTERVAL_SEC}
+      scrape_on_start: true
+
   filters:
     # glue plain-text stack traces (unhandled exceptions on stderr) before JSON parsing
     - name: multiline
@@ -121,3 +128,12 @@ pipeline:
       storage.total_limit_size: 512M
       net.keepalive: on
       workers: 2
+
+    - name: opentelemetry
+      match: flb.metrics
+      host: ${FLB_OTLP_HOST}
+      port: 4318
+      metrics_uri: /v1/metrics
+      tls: off
+      add_label: env ${FLB_ENV}
+      retry_limit: 3

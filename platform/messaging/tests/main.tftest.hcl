@@ -113,7 +113,7 @@ run "standard_defaults" {
     error_message = "Standard cannot use Private Link: no private endpoint."
   }
   assert {
-    condition     = toset(keys(azurerm_servicebus_subscription.this)) == toset(["fulfillment", "notifications", "audit"])
+    condition     = toset(keys(azurerm_servicebus_subscription.this)) == toset(["fulfillment", "notifications", "audit", "archive"])
     error_message = "order-events must have fulfillment, notifications and audit subscriptions."
   }
   assert {
@@ -137,7 +137,7 @@ run "standard_defaults" {
     error_message = "consumer grants missing."
   }
   assert {
-    condition     = tolist(output.contract.skipped_grants) == tolist(["queue-send-hello-logicapps"])
+    condition     = tolist(output.contract.skipped_grants) == tolist(["queue-send-hello-logicapps", "sub-recv-archive-hello-logicapps"])
     error_message = "logic app identity absent from contract must be reported as skipped."
   }
   assert {

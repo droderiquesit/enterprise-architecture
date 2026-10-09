@@ -27,9 +27,15 @@ async def test_servicebus_emulator_to_table(monkeypatch, spans):
     from hello_worker.worker import Worker
 
     cfg = servicebus_emulator_config(topics={"order-events": ["notifications", "fulfillment", "audit"]})
-    with servicebus_emulator(cfg) as conn, run_container(
-        "mcr.microsoft.com/azure-storage/azurite:latest", [10002], command=["azurite-table", "--tableHost", "0.0.0.0", "--skipApiVersionCheck", "--loose"],
-        ready=lambda c: "successfully" in c.logs()) as az:
+    with (
+        servicebus_emulator(cfg) as conn,
+        run_container(
+            "mcr.microsoft.com/azure-storage/azurite:latest",
+            [10002],
+            command=["azurite-table", "--tableHost", "0.0.0.0", "--skipApiVersionCheck", "--loose"],
+            ready=lambda c: "successfully" in c.logs(),
+        ) as az,
+    ):
         tables_cs = f"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey={AZURITE_KEY};TableEndpoint=http://{az.host}:{az.port(10002)}/devstoreaccount1;"
         monkeypatch.setenv("SERVICEBUS_CONNECTION_STRING", conn)
         monkeypatch.setenv("TABLES_CONNECTION_STRING", tables_cs)
@@ -45,13 +51,21 @@ async def test_servicebus_emulator_to_table(monkeypatch, spans):
 
         parent_ctx = ot.set_span_in_context(NonRecordingSpan(parse_traceparent(TP)))
         with ot.get_tracer("test-producer").start_as_current_span("orders-api publish", context=parent_ctx):
-            async with ServiceBusClient.from_connection_string(conn) as producer:
-                async with producer.get_topic_sender("order-events") as sender:
-                    body = {"event": "OrderCreated", "order_id": order_id, "sku": "SKU-0004", "quantity": 1, "amount": 34.4, "created_at": "2026-10-09T12:00:00Z"}
-                    await sender.send_messages([
+            async with ServiceBusClient.from_connection_string(conn) as producer, producer.get_topic_sender("order-events") as sender:
+                body = {
+                    "event": "OrderCreated",
+                    "order_id": order_id,
+                    "sku": "SKU-0004",
+                    "quantity": 1,
+                    "amount": 34.4,
+                    "created_at": "2026-10-09T12:00:00Z",
+                }
+                await sender.send_messages(
+                    [
                         ServiceBusMessage(json.dumps(body), message_id=order_id, application_properties={"traceparent": TP}, content_type="application/json"),
                         ServiceBusMessage(b"{not json", message_id="poison-1"),
-                    ])
+                    ]
+                )
         source, sink = ServiceBusSource(s), TableSink(s)
         await sink.open()
         await source.open()

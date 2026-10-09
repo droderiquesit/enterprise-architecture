@@ -12,6 +12,7 @@ Boundary: table ``records`` in database ``adapter``.
 
 from __future__ import annotations
 
+import logging
 import os
 import queue
 import threading
@@ -73,8 +74,8 @@ class _Pool:
 def _safe_close(conn) -> None:
     try:
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # already broken connections may fail to close cleanly
+        logging.getLogger("hello_dbadapter.mysql").debug("close failed: %s", type(exc).__name__)
 
 
 class MySqlDriver(Driver):
@@ -99,9 +100,16 @@ class MySqlDriver(Driver):
         else:
             password = os.environ.get("MYSQL_PASSWORD", "")
         kwargs: dict[str, Any] = dict(
-            host=os.environ.get("MYSQL_HOST", "localhost"), port=int(os.environ.get("MYSQL_PORT", "3306")),
-            user=os.environ.get("MYSQL_USER", "root"), password=password, database=os.environ.get("MYSQL_DATABASE", "adapter"),
-            connect_timeout=5, read_timeout=10, write_timeout=10, autocommit=True, charset="utf8mb4",
+            host=os.environ.get("MYSQL_HOST", "localhost"),
+            port=int(os.environ.get("MYSQL_PORT", "3306")),
+            user=os.environ.get("MYSQL_USER", "root"),
+            password=password,
+            database=os.environ.get("MYSQL_DATABASE", "adapter"),
+            connect_timeout=5,
+            read_timeout=10,
+            write_timeout=10,
+            autocommit=True,
+            charset="utf8mb4",
         )
         if os.environ.get("MYSQL_SSL", "true").lower() == "true":
             kwargs["ssl"] = {"ca": os.environ.get("MYSQL_SSL_CA", "/etc/ssl/certs/ca-certificates.crt")}

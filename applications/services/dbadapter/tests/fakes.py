@@ -255,7 +255,7 @@ class FakeTableClient:
         raise ResourceExistsError("exists")
 
     def query_entities(self, flt, results_per_page=None, select=None):
-        items = [ _Entity(v) for v in self.e.values()]
+        items = [_Entity(v) for v in self.e.values()]
 
         async def gen():
             for i in items:

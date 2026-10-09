@@ -1,0 +1,35 @@
+# Test-only (metrics naming test): like test-overlay.yaml but the Datadog TRACE endpoint is unreachable and
+# an extra OTLP exporter to a closed port (retries off) makes otelcol_exporter_send_failed_spans appear
+# (the Datadog exporter sends traces asynchronously and does not surface send failures there).
+# Base overlay comment: Datadog exporter pointed at the local mock intake
+# (plain HTTP) and an additional file exporter so resource-attribute mapping can be asserted.
+exporters:
+  datadog:
+    traces:
+      endpoint: http://intake:9
+    retry_on_failure:
+      enabled: false
+    sending_queue:
+      enabled: false
+    metrics:
+      endpoint: http://intake:8080
+  otlp/broken:
+    endpoint: intake:9
+    tls:
+      insecure: true
+    retry_on_failure:
+      enabled: false
+    sending_queue:
+      enabled: false
+  file/traces:
+    path: /out/traces.json
+    flush_interval: 1s
+  file/metrics:
+    path: /out/metrics.json
+    flush_interval: 1s
+service:
+  pipelines:
+    traces:
+      exporters: [datadog, file/traces, otlp/broken]
+    metrics:
+      exporters: [datadog, file/metrics]

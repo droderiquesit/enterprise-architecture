@@ -1,0 +1,8 @@
+[project]
+name = "hello-logicapps"
+version = "1.0.0"
+description = "Enterprise Hello Logic Apps artifacts (Standard audit-archive workflow, Consumption batch-request definition)"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -2,8 +2,8 @@ import random
 
 from fastapi.testclient import TestClient
 
-from hello_common.config import ServiceInfo
 from hello_common.app import create_app
+from hello_common.config import ServiceInfo
 from hello_common.faults import FaultInjectedError, FaultRegistry, check_fault
 
 INFO = ServiceInfo(service="faultsvc", version="1", env="test")

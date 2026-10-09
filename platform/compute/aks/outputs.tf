@@ -26,6 +26,11 @@ output "contract" {
       client_id    = local.kubelet.client_id
       principal_id = local.kubelet.principal_id
     }
+    app_routing = {
+      enabled            = var.settings.app_routing.enabled
+      default_controller = var.settings.app_routing.enabled ? var.settings.app_routing.default_controller : null
+      ingress_class      = var.settings.app_routing.enabled ? "webapprouting.kubernetes.azure.com" : null
+    }
     key_vault_secrets_provider = var.settings.key_vault_secrets_provider_enabled ? {
       client_id    = try(azurerm_kubernetes_cluster.this.key_vault_secrets_provider[0].secret_identity[0].client_id, null)
       principal_id = try(azurerm_kubernetes_cluster.this.key_vault_secrets_provider[0].secret_identity[0].object_id, null)

@@ -1,18 +1,52 @@
 """Every driver against a behavioural fake of its SDK, through the shared CRUD contract."""
 
 import pytest
-
 from conftest import exercise_contract
-from fakes import (FakeBlobContainer, FakeCassandraSession, FakeCosmosContainer, FakeFileSystem, FakeGremlinClient, FakeKusto,
-                   FakeLedger, FakeMssql, FakeMySql, FakeRedis, FakeSearchClient, FakeTableClient, FakeToken)
+from fakes import (
+    FakeBlobContainer,
+    FakeCassandraSession,
+    FakeCosmosContainer,
+    FakeFileSystem,
+    FakeGremlinClient,
+    FakeKusto,
+    FakeLedger,
+    FakeMssql,
+    FakeMySql,
+    FakeRedis,
+    FakeSearchClient,
+    FakeTableClient,
+    FakeToken,
+)
+
 from hello_dbadapter.drivers import FAMILIES, UnknownFamily, create_driver, driver_class
 from hello_dbadapter.drivers.base import NotSupported, key_id, seed_id
 
 
 def test_every_family_resolves_to_a_driver_class():
-    expected = {"sql", "sqlmi", "sqlvm", "postgresql", "postgresql-elastic", "horizondb", "mysql", "cosmos-nosql", "cosmos-mongo",
-                "documentdb", "cosmos-cassandra", "cassandra-mi", "cosmos-gremlin", "cosmos-table", "table-storage", "redis", "ledger",
-                "blob", "adls", "search", "adx", "memory"}
+    expected = {
+        "sql",
+        "sqlmi",
+        "sqlvm",
+        "postgresql",
+        "postgresql-elastic",
+        "horizondb",
+        "mysql",
+        "cosmos-nosql",
+        "cosmos-mongo",
+        "documentdb",
+        "cosmos-cassandra",
+        "cassandra-mi",
+        "cosmos-gremlin",
+        "cosmos-table",
+        "table-storage",
+        "redis",
+        "ledger",
+        "blob",
+        "adls",
+        "search",
+        "adx",
+        "memory",
+    }
     assert set(FAMILIES) == expected
     for family in FAMILIES:
         assert driver_class(family).__name__.endswith("Driver")
@@ -45,7 +79,9 @@ def test_mssql_connection_string_modes():
     assert "Server=tcp:eh-sql.database.windows.net,1433" in cs and "Authentication=ActiveDirectoryMSI" in cs
     assert "UID=11111111-2222-3333-4444-555555555555" in cs and "Encrypt=yes" in cs and "PWD" not in cs
     assert "Authentication=ActiveDirectoryDefault" in build_connection_string({"SQL_SERVER": "h"})
-    pw = build_connection_string({"SQL_SERVER": "10.0.0.4,1433", "SQL_AUTH": "password", "SQL_USER": "u", "SQL_PASSWORD": "p", "SQL_TRUST_SERVER_CERTIFICATE": "yes"})
+    pw = build_connection_string(
+        {"SQL_SERVER": "10.0.0.4,1433", "SQL_AUTH": "password", "SQL_USER": "u", "SQL_PASSWORD": "p", "SQL_TRUST_SERVER_CERTIFICATE": "yes"}
+    )
     assert "UID=u;PWD=p" in pw and "TrustServerCertificate=yes" in pw and "Authentication" not in pw
     assert build_connection_string({"SQL_CONNECTION_STRING": "raw;"}) == "raw;"
     with pytest.raises(ValueError):

@@ -417,7 +417,7 @@ services:
     terraform_resources: []
     azapi:
     - type: Microsoft.App/containerApps
-      api_version: '2026-07-01'
+      api_version: '2026-01-01'
       reason: azurerm_container_app exposes 'kind' as computed only; kind=functionapp cannot be set
     component: deploy-functions
     implemented: true
@@ -817,7 +817,10 @@ services:
     - azurerm_logic_app_workflow
     - azurerm_logic_app_trigger_recurrence
     - azurerm_logic_app_action_custom
-    azapi: []
+    azapi:
+    - type: Microsoft.Web/connections
+      api_version: "2016-06-01"
+      reason: Service Bus API connection with managed identity (see provider-gaps.yaml)
     component: deploy-logicapps
     implemented: true
   workload:

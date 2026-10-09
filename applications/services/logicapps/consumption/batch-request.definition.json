@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": { "type": "Object", "defaultValue": {} },
+    "queueName": { "type": "String", "defaultValue": "batch-items" },
+    "batchSize": { "type": "Int", "defaultValue": 10 }
+  },
+  "triggers": {
+    "Recurrence": {
+      "type": "Recurrence",
+      "recurrence": { "frequency": "Hour", "interval": 1 }
+    }
+  },
+  "actions": {
+    "Initialize_batch_id": {
+      "type": "InitializeVariable",
+      "inputs": { "variables": [{ "name": "batchId", "type": "String", "value": "@{guid()}" }] },
+      "runAfter": {}
+    },
+    "For_each_item": {
+      "type": "Foreach",
+      "foreach": "@range(0, parameters('batchSize'))",
+      "runtimeConfiguration": { "concurrency": { "repetitions": 5 } },
+      "actions": {
+        "Send_message_to_batch_items": {
+          "type": "ApiConnection",
+          "inputs": {
+            "host": { "connection": { "name": "@parameters('$connections')['servicebus']['connectionId']" } },
+            "method": "post",
+            "path": "/@{encodeURIComponent(encodeURIComponent(parameters('queueName')))}/messages",
+            "body": {
+              "ContentData": "@{base64(concat('{\"item_id\":\"', variables('batchId'), '-', string(items('For_each_item')), '\",\"batch_id\":\"', variables('batchId'), '\",\"source\":\"logic-apps-consumption\"}'))}",
+              "ContentType": "application/json",
+              "MessageId": "@{variables('batchId')}-@{items('For_each_item')}"
+            },
+            "queries": { "systemProperties": "None" }
+          },
+          "runAfter": {},
+          "retryPolicy": { "type": "exponential", "count": 4, "interval": "PT7S" }
+        }
+      },
+      "runAfter": { "Initialize_batch_id": ["Succeeded"] }
+    }
+  },
+  "outputs": {}
+}

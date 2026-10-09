@@ -33,9 +33,12 @@ class GremlinDriver(Driver):
         db = os.environ.get("GREMLIN_DATABASE", "adapter")
         graph = os.environ.get("GREMLIN_GRAPH", "records")
         self._client = client.Client(
-            os.environ["GREMLIN_ENDPOINT"], "g",
-            username=f"/dbs/{db}/colls/{graph}", password=os.environ["GREMLIN_KEY"],
-            message_serializer=serializer.GraphSONSerializersV2d0(), pool_size=4,
+            os.environ["GREMLIN_ENDPOINT"],
+            "g",
+            username=f"/dbs/{db}/colls/{graph}",
+            password=os.environ["GREMLIN_KEY"],
+            message_serializer=serializer.GraphSONSerializersV2d0(),
+            pool_size=4,
         )
 
     async def close(self) -> None:
@@ -79,8 +82,11 @@ class GremlinDriver(Driver):
         return [self._rec(r) for r in rows]
 
     async def update(self, record_id: str, payload: dict[str, Any]) -> Record | None:
-        rows = await self._submit("property", "g.V(rid).has('pk', pk).property('payload', payload).property('updated_at', ts)",
-                                  {"rid": record_id, "pk": PK, "payload": dumps(payload), "ts": iso(utcnow())})
+        rows = await self._submit(
+            "property",
+            "g.V(rid).has('pk', pk).property('payload', payload).property('updated_at', ts)",
+            {"rid": record_id, "pk": PK, "payload": dumps(payload), "ts": iso(utcnow())},
+        )
         return self._rec(rows[0]) if rows else None
 
     async def delete(self, record_id: str) -> bool:

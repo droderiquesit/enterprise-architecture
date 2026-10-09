@@ -2,7 +2,6 @@
 Requires: frontend `npm run build` output (services/frontend/dist) and a Chromium (PW_CHROMIUM_EXECUTABLE or
 Playwright-managed browsers). Marked integration."""
 
-import json
 import os
 import socket
 import threading
@@ -11,11 +10,11 @@ from pathlib import Path
 
 import pytest
 import uvicorn
+from fake_bff import build
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from fake_bff import build
 from hello_traffic.journeys import api_journey, browser_journey, make_api_client
 
 DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"

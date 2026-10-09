@@ -122,5 +122,5 @@ class CatalogCache:
         if self.client is not None:
             try:
                 await self.client.aclose()
-            except Exception:  # pragma: no cover
-                pass
+            except Exception as exc:  # pragma: no cover
+                log.debug("cache close failed", extra={"error.kind": type(exc).__name__})

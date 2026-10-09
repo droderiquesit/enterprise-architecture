@@ -73,6 +73,7 @@ variable "settings" {
       fulfillment   = { consumer = "hello-durable", max_delivery_count = 10, lock_duration = "PT2M" }
       notifications = { consumer = "hello-worker", max_delivery_count = 10, lock_duration = "PT1M" }
       audit         = { consumer = "hello-functions", max_delivery_count = 10, lock_duration = "PT1M" }
+      archive       = { consumer = "hello-logicapps", max_delivery_count = 10, lock_duration = "PT1M" }
     })
     queue_name               = optional(string, "batch-items")
     queue_max_delivery_count = optional(number, 5)

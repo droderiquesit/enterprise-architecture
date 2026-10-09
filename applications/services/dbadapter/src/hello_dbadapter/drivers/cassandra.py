@@ -55,9 +55,7 @@ class CassandraDriver(Driver):
         if os.environ.get("CASSANDRA_CREATE_KEYSPACE", "true").lower() == "true":
             rf = int(os.environ.get("CASSANDRA_REPLICATION_FACTOR", "3"))
             session.execute(f"CREATE KEYSPACE IF NOT EXISTS {self.keyspace} WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': {rf}}}")
-        session.execute(
-            f"CREATE TABLE IF NOT EXISTS {self.keyspace}.records (id text PRIMARY KEY, payload text, created_at timestamp, updated_at timestamp)"
-        )
+        session.execute(f"CREATE TABLE IF NOT EXISTS {self.keyspace}.records (id text PRIMARY KEY, payload text, created_at timestamp, updated_at timestamp)")
         return session
 
     async def open(self) -> None:
@@ -92,7 +90,11 @@ class CassandraDriver(Driver):
         from datetime import datetime
 
         created_dt = datetime.fromisoformat(created.replace("Z", "+00:00")) if created else now
-        await self._exec("INSERT", f"INSERT INTO {self.keyspace}.records (id, payload, created_at, updated_at) VALUES (%s, %s, %s, %s)", (rid, dumps(payload), created_dt, now))
+        await self._exec(
+            "INSERT",
+            f"INSERT INTO {self.keyspace}.records (id, payload, created_at, updated_at) VALUES (%s, %s, %s, %s)",
+            (rid, dumps(payload), created_dt, now),
+        )
         return Record(rid, payload, created, iso(now))
 
     async def get(self, record_id: str) -> Record | None:

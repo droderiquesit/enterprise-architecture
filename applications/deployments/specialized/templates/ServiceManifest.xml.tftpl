@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rendered by applications/deployments/specialized (Terraform). hello-inventory-api as a guest executable. -->
+<ServiceManifest Name="InventoryApiPkg" Version="${version}" xmlns="http://schemas.microsoft.com/2011/01/fabric" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ServiceTypes>
+    <StatelessServiceType ServiceTypeName="InventoryApiType" UseImplicitHost="true" />
+  </ServiceTypes>
+  <CodePackage Name="Code" Version="${version}">
+    <EntryPoint>
+      <ExeHost>
+        <Program>Hello.InventoryApi.exe</Program>
+        <WorkingFolder>CodePackage</WorkingFolder>
+      </ExeHost>
+    </EntryPoint>
+    <EnvironmentVariables>
+%{ for k in sort(keys(env)) ~}
+      <EnvironmentVariable Name="${k}" Value="${replace(replace(replace(replace(env[k], "&", "&amp;"), "<", "&lt;"), ">", "&gt;"), "\"", "&quot;")}" />
+%{ endfor ~}
+    </EnvironmentVariables>
+  </CodePackage>
+  <Resources>
+    <Endpoints>
+      <Endpoint Name="InventoryApiEndpoint" Protocol="http" Port="${port}" Type="Input" />
+    </Endpoints>
+  </Resources>
+</ServiceManifest>

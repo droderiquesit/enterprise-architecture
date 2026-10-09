@@ -1,0 +1,40 @@
+# deploy-functions — hello-functions on three Functions hosting options
+
+- **Owner**: applications layer. **Status**: implemented (mock tests).
+- **Hosts** (catalog/architecture-matrix.yaml): `premium` — Elastic Premium EP1 Linux (platform-functions `premium`),
+  Python 3.13, function `audit` (Service Bus topic `order-events` / subscription `audit` → Confidential Ledger or Table
+  Storage); `dedicated` — the platform-appservice Linux plan, `cache_warmer` (timer, always on); `aca` — **Functions on
+  Container Apps V2** (`Microsoft.App/containerApps` `kind=functionapp`, **azapi**) running `quote` (HTTP) from the
+  svc-functions image. Each host sets `AzureWebJobs.<name>.Disabled=true` for the functions it does not own
+  (`settings.function_names`, default `audit`, `cache_warmer`, `quote`).
+- **Consumed contracts**: platform-functions, platform-messaging, obs-telemetry-transport, foundation-identity; optional
+  platform-appservice, platform-containerapps (+ platform-shared for ACR — **not in components.yaml**), foundation-network,
+  platform-db-ledger, platform-db-table-storage (**not in components.yaml**; null ⇒ AUDIT_STORE=log).
+- **Produced contract**: `deploy-functions`: `function_apps.{premium,dedicated,aca}.{id,name,hostname,functions}`, `apps`.
+
+## Provider gap (azapi)
+`Microsoft.App/containerApps@2026-01-01` with `kind = "functionapp"`: azurerm_container_app exposes `kind` as computed.
+catalog/provider-gaps.yaml lists api_version `2026-07-01`, but azapi 2.13.0's embedded schema only knows up to
+`2026-01-01`; this root uses 2026-01-01 with schema validation (request: update the gap entry).
+
+## App settings
+Identity storage (`storage_uses_managed_identity` + `AzureWebJobsStorage__credential/__clientId`, host storage = the
+premium runtime account), `content_share_force_disabled` + `WEBSITE_RUN_FROM_PACKAGE=<package URL>` with
+`WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID` (no Azure Files, no SAS), `ServiceBusConnection__*` (identity),
+`AUDIT_STORE`, `LEDGER_ENDPOINT/LEDGER_COLLECTION=order-audit` or `TABLES_ENDPOINT/AUDIT_TABLE`, `CACHE_WARM_SCHEDULE`,
+`CATALOG_API_URL`, `FUNCTIONS_HOST`, OTel (HTTP to gateway), `FAULT_TOKEN` as Key Vault reference. ACA host: same
+env, Key Vault secret refs, Fluent Bit sidecar (ACA log route).
+
+## Rollback
+Premium/Dedicated run from the package URL: re-apply with the previous svc-functions artifact. ACA: previous digest.
+
+## Cost
+EP1 (always ≥1 instance) ≈ $150/month (dominant; disable with `premium_enabled=false`), Dedicated shares the P0v3
+plan, ACA scale-to-zero ≈ $0 idle.
+
+## Limitations
+Python packages for run-from-package must include `.python_packages` (built by the Python builder). Network:
+private endpoints when foundation-network is supplied, else deny-by-default restrictions.
+
+Docs: https://learn.microsoft.com/azure/container-apps/functions-overview , https://learn.microsoft.com/azure/azure-functions/run-functions-from-deployment-package ,
+https://learn.microsoft.com/azure/azure-functions/disable-function

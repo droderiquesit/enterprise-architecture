@@ -89,7 +89,7 @@ class BlobDriver(Driver):
         self.fault_hook()
         out = []
         async for item in self._container.list_blobs(name_starts_with=PREFIX):
-            doc = await self._read(item.name[len(PREFIX):-5])
+            doc = await self._read(item.name[len(PREFIX) : -5])
             if doc:
                 out.append(Record(**doc))
             if len(out) >= limit:

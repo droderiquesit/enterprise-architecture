@@ -10,6 +10,7 @@ messaging:
       fulfillment: {consumer: hello-durable, purpose: start OrderProcessing orchestration}
       notifications: {consumer: hello-worker, purpose: write notification record to Table Storage}
       audit: {consumer: hello-functions, purpose: append audit entry to Confidential Ledger (or Table Storage when ledger disabled)}
+      archive: {consumer: logic-apps-standard (hello-logicapps), purpose: archive order events to Blob Storage}
     queues:
       batch-items: {consumer: hello-jobs (ACA event-driven job), producers: [hello-durable BatchProcessing, logic-apps-consumption]}
 architectures:
@@ -128,7 +129,7 @@ architectures:
     rollback: rolling run-command reinstall of previous package
   vmss-uniform:
     workloads: [hello-dbadapter-sqlvm]
-    deployment: deploy-vm-workloads
+    deployment: deploy-dbadapters
     rollback: model update with previous package version + rolling upgrade
   batch:
     workloads: [hello-jobs daily-aggregate task]

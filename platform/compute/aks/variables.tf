@@ -104,7 +104,13 @@ variable "settings" {
     image_cleaner_enabled              = optional(bool, true)
     defender_enabled                   = optional(bool, false) # Defender sensor uses the platform-shared workspace
     host_encryption_enabled            = optional(bool, false) # needs Microsoft.Compute/EncryptionAtHost registration
-    key_vault_secrets_provider_enabled = optional(bool, true)  # Secrets Store CSI driver with rotation
+    key_vault_secrets_provider_enabled = optional(bool, true)
+    # Application routing add-on (managed NGINX ingress). Internal controller by default; TLS certs from Key Vault.
+    app_routing = optional(object({
+      enabled            = optional(bool, true)
+      default_controller = optional(string, "Internal") # AnnotationControlled | External | Internal | None
+      dns_zone_ids       = optional(list(string), [])
+    }), {}) # Secrets Store CSI driver with rotation
     # Workload identity federation: identity key => Kubernetes namespace/service account.
     workload_identities = optional(map(object({
       namespace       = string

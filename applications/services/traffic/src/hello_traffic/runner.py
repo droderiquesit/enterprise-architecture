@@ -24,8 +24,9 @@ def _record(r: JourneyResult) -> None:
     outcome = "success" if r.ok else "failure"
     _journeys.add(1, {"journey": r.kind, "outcome": outcome})
     _duration.record(r.duration_ms, {"journey": r.kind, "outcome": outcome})
-    (log.info if r.ok else log.warning)("journey finished", extra={"journey": r.kind, "outcome": outcome, "duration_ms": round(r.duration_ms, 1),
-                                                                  "detail": r.detail, "order_id": r.order_id})
+    (log.info if r.ok else log.warning)(
+        "journey finished", extra={"journey": r.kind, "outcome": outcome, "duration_ms": round(r.duration_ms, 1), "detail": r.detail, "order_id": r.order_id}
+    )
 
 
 def run(s: Settings, version: str, *, sleep=time.sleep, clock=time.monotonic, api_journey_fn=api_journey, browser_journey_fn=browser_journey) -> dict[str, Any]:
@@ -61,7 +62,9 @@ def run(s: Settings, version: str, *, sleep=time.sleep, clock=time.monotonic, ap
     total = len(results)
     failed = sum(1 for r in results if not r.ok)
     return {
-        "journeys": total, "failed": failed, "error_ratio": round(failed / total, 3) if total else 0.0,
+        "journeys": total,
+        "failed": failed,
+        "error_ratio": round(failed / total, 3) if total else 0.0,
         "by_kind": {k: sum(1 for r in results if r.kind == k) for k in ("api", "browser")},
         "ok": total == 0 or failed / total <= s.max_error_ratio,
     }

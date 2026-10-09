@@ -46,7 +46,14 @@ class MongoDriver(Driver):
         from pymongo import AsyncMongoClient
 
         uri = os.environ["MONGO_URI"]
-        kwargs: dict[str, Any] = dict(serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, socketTimeoutMS=10000, maxPoolSize=20, retryWrites=False, appname=f"hello-dbadapter-{self.family}")
+        kwargs: dict[str, Any] = dict(
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            socketTimeoutMS=10000,
+            maxPoolSize=20,
+            retryWrites=False,
+            appname=f"hello-dbadapter-{self.family}",
+        )
         if os.environ.get("MONGO_AUTH", "connection_string").lower() == "entra":
             kwargs.update(authMechanism="MONGODB-OIDC", authMechanismProperties=oidc_properties(), tls=True)
         self._client = AsyncMongoClient(uri, **kwargs)
@@ -69,9 +76,7 @@ class MongoDriver(Driver):
         self.fault_hook()
         rid = record_id or new_id()
         now = utcnow()
-        await self._collection.update_one(
-            {"_id": rid}, {"$set": {"payload": payload, "updated_at": now}, "$setOnInsert": {"created_at": now}}, upsert=True
-        )
+        await self._collection.update_one({"_id": rid}, {"$set": {"payload": payload, "updated_at": now}, "$setOnInsert": {"created_at": now}}, upsert=True)
         return await self.get(rid)  # type: ignore[return-value]
 
     async def get(self, record_id: str) -> Record | None:

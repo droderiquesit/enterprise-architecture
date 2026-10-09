@@ -150,6 +150,7 @@ resource "kubernetes_manifest" "secret_provider" {
 }
 
 resource "kubernetes_deployment_v1" "app" {
+  #checkov:skip=CKV_K8S_15:Images are digest-pinned (immutable); IfNotPresent cannot run a different image than the digest.
   for_each         = local.apps
   wait_for_rollout = true
 

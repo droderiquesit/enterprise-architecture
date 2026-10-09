@@ -1,0 +1,21 @@
+# Lint configuration for every Enterprise Hello Python project (used by applications/python/build.sh).
+target-version = "py313"
+line-length = 160
+extend-exclude = ["**/node_modules", "**/.venv", "**/dist", "**/build"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "ASYNC", "PL"]
+ignore = [
+  "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR2004",  # complexity/arity heuristics
+  "S101",      # assert (tests)
+  "S311",      # random for synthetic data / jitter, not crypto
+  "S608",      # SQL built from constant column lists; values are always bound parameters
+  "RUF012", "SIM105", "PLC0415", "PLW0603", "B008", "RUF001", "RUF002", "RUF003",
+]
+
+[lint.per-file-ignores]
+"**/tests/**" = ["S104", "S105", "S106", "S108", "S603", "S607", "PLW1510", "ASYNC", "B017", "E402", "RUF015", "SIM117"]
+"**/testing.py" = ["S603", "S607", "S108", "S103", "PLW1510"]
+
+[lint.isort]
+known-first-party = ["hello_common", "hello_catalog", "hello_dbadapter", "hello_worker", "hello_partner_sim", "hello_jobs", "hello_traffic", "hello_functions"]

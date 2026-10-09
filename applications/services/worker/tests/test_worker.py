@@ -11,19 +11,21 @@ import pytest
 
 from hello_worker.sinks import MemorySink
 from hello_worker.sources import MemorySource
-from hello_worker.worker import Worker, parse_event, PoisonMessage
+from hello_worker.worker import PoisonMessage, Worker, parse_event
 
 TP = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
 
 def event(order_id="11111111-1111-1111-1111-111111111111", **kw):
-    return json.dumps({"event": "OrderCreated", "order_id": order_id, "sku": "SKU-0001", "quantity": 2, "amount": 24.7,
-                       "created_at": "2026-10-09T12:00:00Z", **kw}).encode()
+    return json.dumps(
+        {"event": "OrderCreated", "order_id": order_id, "sku": "SKU-0001", "quantity": 2, "amount": 24.7, "created_at": "2026-10-09T12:00:00Z", **kw}
+    ).encode()
 
 
 def make(source=None, sink=None, **kw):
-    return Worker(source or MemorySource(), sink or MemorySink(), entity="order-events/subscriptions/notifications",
-                  receive_wait=0.05, **{"retry_delay_base": 0.01, **kw})
+    return Worker(
+        source or MemorySource(), sink or MemorySink(), entity="order-events/subscriptions/notifications", receive_wait=0.05, **{"retry_delay_base": 0.01, **kw}
+    )
 
 
 async def run_until_empty(w, source, timeout=5.0):
@@ -119,8 +121,14 @@ async def test_bounded_concurrency():
 
 
 def test_process_health_and_graceful_sigterm(tmp_path):
-    env = {**os.environ, "MESSAGING_MODE": "memory", "TABLE_MODE": "memory", "PORT": "18381", "LOG_FILE_PATH": str(tmp_path / "worker.log"),
-           "RECEIVE_WAIT_SECONDS": "1"}
+    env = {
+        **os.environ,
+        "MESSAGING_MODE": "memory",
+        "TABLE_MODE": "memory",
+        "PORT": "18381",
+        "LOG_FILE_PATH": str(tmp_path / "worker.log"),
+        "RECEIVE_WAIT_SECONDS": "1",
+    }
     proc = subprocess.Popen([sys.executable, "-m", "hello_worker"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         ok = False

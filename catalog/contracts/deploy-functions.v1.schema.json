@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deploy-functions.v1.schema.json",
+  "title": "deploy-functions contract v1",
+  "description": "Produced by applications/deployments/functions (output \"contract\"). Application resources, endpoints, log routes and scale-to-zero flags for observability and the smoke tooling. No secrets: no deployment tokens, keys or connection strings; secrets appear only as Key Vault references inside resources.",
+  "type": "object",
+  "required": [
+    "component",
+    "architecture",
+    "apps",
+    "endpoints",
+    "idle_behavior",
+    "rollback",
+    "function_apps"
+  ],
+  "properties": {
+    "component": {
+      "type": "string",
+      "pattern": "^deploy-"
+    },
+    "architecture": {
+      "type": "string"
+    },
+    "resource_group_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "apps": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/app"
+      }
+    },
+    "endpoints": {
+      "type": "object",
+      "description": "Smoke convention (tools/smoke/smoke.py): base URL serving /healthz, /readyz, /version",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^https?://"
+      }
+    },
+    "idle_behavior": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "scale_to_zero"
+        ],
+        "properties": {
+          "scale_to_zero": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "deploy_steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/deploy_step"
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "required": [
+        "method",
+        "how"
+      ],
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "how": {
+          "type": "string"
+        }
+      }
+    },
+    "function_apps": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "functions"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "app": {
+      "type": "object",
+      "description": "One application resource (consumed by observability: diagnostics, monitoring, lab).",
+      "required": [
+        "id",
+        "name",
+        "type",
+        "service",
+        "architecture",
+        "app_log_route",
+        "sidecar",
+        "url",
+        "scale_to_zero"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Azure resource id (AKS: <cluster id>/namespaces/<ns>/deployments/<name>)"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "description": "ARM resource type, or Kubernetes/Deployment"
+        },
+        "service": {
+          "type": "string",
+          "pattern": "^hello-[a-z0-9-]+$",
+          "description": "DD_SERVICE base name"
+        },
+        "architecture": {
+          "type": "string"
+        },
+        "hosting": {
+          "type": "string"
+        },
+        "app_log_route": {
+          "enum": [
+            "sidecar",
+            "daemonset",
+            "eventhub",
+            "host",
+            "none"
+          ]
+        },
+        "sidecar": {
+          "type": "boolean"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^https?://"
+        },
+        "urls": {
+          "type": "object",
+          "properties": {
+            "public": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^https?://"
+            },
+            "private": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^https?://"
+            }
+          }
+        },
+        "health_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "readiness_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scale_to_zero": {
+          "type": "boolean"
+        },
+        "min_replicas": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_replicas": {
+          "type": "number",
+          "minimum": 0
+        },
+        "version": {
+          "type": "string"
+        },
+        "image": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "@sha256:[a-f0-9]{64}$"
+        },
+        "identity_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision_suffix": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "staging_slot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "service_account": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "otlp_target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "log_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "deploy_step": {
+      "type": "object",
+      "required": [
+        "kind",
+        "app",
+        "package_uri",
+        "package_sha256"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "webapp-zip",
+            "functionapp-flex",
+            "logicapp-zip",
+            "swa",
+            "vmss-update-instances",
+            "vmss-flex-rollout",
+            "batch-job"
+          ]
+        },
+        "app": {
+          "type": "string"
+        },
+        "resource_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resource_group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "package_uri": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^https?://"
+        },
+        "package_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "slot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

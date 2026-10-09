@@ -315,23 +315,52 @@ def test_aggregator_forward_and_eventhub_kafka(stack, tmp_path):
 
 
 def test_linux_host_config_with_canary(stack, tmp_path):
-    """linux-host.yaml (VM/VMSS service): tails the app log glob, emits the canary, tags the pipeline."""
+    """linux-host.yaml (VM/VMSS service): tails the app log glob, emits the canary, tags the pipeline, and
+    pushes its self-metrics over OTLP to the local Agent (stand-in collector) with _total names + env."""
     _, base = start_mock_intake(stack)
+    out = tmp_path / "agentout"
+    out.mkdir()
+    out.chmod(0o777)
+    stack.run("agent", "otel/opentelemetry-collector-contrib:0.162.0", user="0",
+              volumes=[f"{HERE / 'otel'}:/test:ro", f"{out}:/out"], cmd=["--config=file:/test/agent-standin.yaml"])
     logdir = tmp_path / "hostlogs"
     logdir.mkdir()
     logdir.chmod(0o777)
     stack.run(
         "host", FLUENT_BIT_IMAGE,
-        env=fluent_bit_env(FLB_LOG_PATHS="/var/log/enterprise-hello/*.log", HOSTNAME="vm-test"),
+        env=fluent_bit_env(FLB_LOG_PATHS="/var/log/enterprise-hello/*.log", HOSTNAME="vm-test",
+                           FLB_METRICS_INTERVAL_SEC="2", FLB_OTLP_HOST="agent", FLB_ENV="test"),
         volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logdir}:/var/log/enterprise-hello"],
         cmd=["-c", "/fluent-bit/etc/eh/linux-host.yaml"],
     )
     target = logdir / "hello-worker.log"
-    target.write_text((SAMPLES / "app.log").read_text())
+    target.touch()
+    time.sleep(8)  # discovered first: hosts start tailing at the end (no re-shipping of history on install)
+    with target.open("a") as fh:
+        fh.write((SAMPLES / "app.log").read_text())
     wait_for(lambda: len([e for e in received(base)["events"] if not _is_canary(e)]) >= len(SIDECAR_IDS)
              and any(_is_canary(e) for e in received(base)["events"]), 60, what="host events + canary")
+    print(json.dumps(received(base)["events"])[:3000])
     time.sleep(3)
     got = received(base)
     _assert_app_events(got["events"])
     _assert_canary(got["events"])
     assert all(e.get("log.file.path", "").startswith("/var/log/enterprise-hello/") for e in got["events"] if not _is_canary(e))
+
+    def _metrics():
+        f = out / "agent-metrics.json"
+        if not f.exists():
+            return None
+        pts = {}
+        for line in f.read_text().splitlines():
+            for rm in json.loads(line).get("resourceMetrics", []):
+                for sm in rm["scopeMetrics"]:
+                    for m in sm["metrics"]:
+                        for kind in ("sum", "gauge"):
+                            for dp in m.get(kind, {}).get("dataPoints", []):
+                                pts.setdefault(m["name"], []).append({a["key"]: next(iter(a["value"].values())) for a in dp.get("attributes", [])})
+        return pts if "fluentbit_output_errors_total" in pts else None
+
+    pts = wait_for(_metrics, 60, what="fluent-bit OTLP self-metrics")
+    assert all(p.get("env") == "test" for p in pts["fluentbit_output_errors_total"]), pts["fluentbit_output_errors_total"][:2]
+    assert "fluentbit_input_records_total" in pts

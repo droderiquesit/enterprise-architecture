@@ -87,8 +87,8 @@ class SqlDriver(Driver):
         conn = self._connect(self._conn_str, autocommit=True, timeout=int(os.environ.get("SQL_CONNECT_TIMEOUT", "10")))
         try:
             conn.timeout = int(os.environ.get("SQL_QUERY_TIMEOUT", "15"))
-        except Exception:  # fakes / older drivers
-            pass
+        except (AttributeError, TypeError):  # fakes / older drivers without a settable query timeout
+            conn.timeout_unsupported = True
         return conn
 
     def _exec(self, sql: str, params: tuple = (), fetch: str | None = None) -> Any:
@@ -106,7 +106,7 @@ class SqlDriver(Driver):
 
     async def _run(self, operation: str, sql: str, params: tuple = (), fetch: str | None = None) -> Any:
         self.fault_hook()
-        with self.client_span(operation, **{"db.query.text": sql.split("\n")[0][:120], "db.namespace": os.environ.get("SQL_DATABASE", "adapter")}):
+        with self.client_span(operation, **{"db.query.text": sql.split("\n", maxsplit=1)[0][:120], "db.namespace": os.environ.get("SQL_DATABASE", "adapter")}):
             return await self.in_thread(self._exec, sql, params, fetch)
 
     async def open(self) -> None:
@@ -131,7 +131,9 @@ class SqlDriver(Driver):
         return self._row(row) if row else None
 
     async def list(self, limit: int) -> list[Record]:
-        rows = await self._run("SELECT", "SELECT TOP (?) id, payload, created_at, updated_at FROM adapter.records ORDER BY created_at DESC", (int(limit),), fetch="all")
+        rows = await self._run(
+            "SELECT", "SELECT TOP (?) id, payload, created_at, updated_at FROM adapter.records ORDER BY created_at DESC", (int(limit),), fetch="all"
+        )
         return [self._row(r) for r in rows]
 
     async def update(self, record_id: str, payload: dict[str, Any]) -> Record | None:

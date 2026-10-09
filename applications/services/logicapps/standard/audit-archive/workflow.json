@@ -1,0 +1,58 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_messages_are_available_in_a_topic": {
+        "type": "ServiceProvider",
+        "inputs": {
+          "parameters": {
+            "topicName": "@parameters('topicName')",
+            "subscriptionName": "@parameters('subscriptionName')",
+            "isSessionsEnabled": false
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "serviceBus",
+            "operationId": "receiveTopicMessages",
+            "serviceProviderId": "/serviceProviders/serviceBus"
+          }
+        },
+        "splitOn": "@triggerOutputs()?['body']"
+      }
+    },
+    "actions": {
+      "Compose_archive_record": {
+        "type": "Compose",
+        "inputs": {
+          "messageId": "@triggerBody()?['messageId']",
+          "enqueuedTimeUtc": "@triggerBody()?['enqueuedTimeUtc']",
+          "userProperties": "@triggerBody()?['userProperties']",
+          "content": "@triggerBody()?['contentData']",
+          "archivedAt": "@utcNow()",
+          "workflowRunId": "@workflow()?['run']?['name']"
+        },
+        "runAfter": {}
+      },
+      "Upload_blob_to_archive": {
+        "type": "ServiceProvider",
+        "inputs": {
+          "parameters": {
+            "containerName": "@parameters('archiveContainer')",
+            "blobName": "@{formatDateTime(utcNow(), 'yyyy/MM/dd')}/@{triggerBody()?['messageId']}.json",
+            "content": "@outputs('Compose_archive_record')",
+            "overrideIfExists": "true"
+          },
+          "serviceProviderConfiguration": {
+            "connectionName": "AzureBlob",
+            "operationId": "uploadBlob",
+            "serviceProviderId": "/serviceProviders/AzureBlob"
+          }
+        },
+        "runAfter": { "Compose_archive_record": ["Succeeded"] },
+        "retryPolicy": { "type": "exponential", "count": 4, "interval": "PT10S", "maximumInterval": "PT5M" }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}

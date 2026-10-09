@@ -2,10 +2,10 @@ import pytest
 from opentelemetry import trace
 
 from hello_common.azure_auth import TokenCache
+from hello_common.config import ServiceInfo
 from hello_common.idempotency import IdempotencyCache, IdempotencyConflict, InvalidIdempotencyKey, validate_key
 from hello_common.propagation import links_from_properties, normalize_properties, parse_traceparent
 from hello_common.telemetry import ALLOWED_METRIC_ATTRIBUTES, build_resource
-from hello_common.config import ServiceInfo
 
 
 def test_parse_traceparent_and_links():

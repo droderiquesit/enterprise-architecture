@@ -1,0 +1,96 @@
+# Rendered by applications/deployments/vm-workloads (Terraform templatefile) and executed by an Azure VM managed
+# run command. Installs/updates ${service} ${version} as a Windows service from an immutable package read with the
+# VM's user-assigned identity (IMDS token, no SAS); secrets are read from Key Vault on the host (never in state).
+# Releases: ${app_root}\releases\<version>; ${app_root}\current is a junction; failed health check => rollback.
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+$Service    = '${service}'
+$ClientId   = '${client_id}'
+$PackageUrl = '${package_url}'
+$PackageSha = '${package_sha256}'
+$Version    = '${version}'
+$AppRoot    = '${app_root}'
+$LogDir     = '${log_dir}'
+$Exe        = '${exe}'
+$HealthUrl  = '${health_url}'
+
+function Write-Log([string]$Level, [string]$Message) {
+  $o = [ordered]@{ timestamp = (Get-Date).ToUniversalTime().ToString('o'); level = $Level; message = $Message; logger = 'install-windows-service'; service = $Service }
+  Write-Output ($o | ConvertTo-Json -Compress)
+}
+function Get-ImdsToken([string]$Resource) {
+  $uri = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$([uri]::EscapeDataString($Resource))&client_id=$ClientId"
+  for ($i = 0; $i -lt 5; $i++) {
+    try { return (Invoke-RestMethod -Uri $uri -Headers @{ Metadata = 'true' } -TimeoutSec 10).access_token } catch { Start-Sleep -Seconds 3 }
+  }
+  throw "IMDS token for $Resource failed"
+}
+
+# ---- package ------------------------------------------------------------------------------------------
+$work = Join-Path $env:TEMP ("hello-" + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $work | Out-Null
+$zip = Join-Path $work 'pkg.zip'
+$st = Get-ImdsToken 'https://storage.azure.com/'
+Invoke-WebRequest -Uri $PackageUrl -Headers @{ Authorization = "Bearer $st"; 'x-ms-version' = '2023-11-03' } -OutFile $zip -UseBasicParsing -TimeoutSec 600
+if ((Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLowerInvariant() -ne $PackageSha) { throw 'package sha256 mismatch' }
+
+New-Item -ItemType Directory -Force -Path "$AppRoot\releases", $LogDir | Out-Null
+$release = Join-Path "$AppRoot\releases" ("$Version-" + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))
+Expand-Archive -Path $zip -DestinationPath $release -Force
+if (-not (Test-Path (Join-Path $release $Exe))) { throw "$Exe not found in package" }
+
+# ---- environment (service-scoped, registry REG_MULTI_SZ; ACL limited to SYSTEM/Administrators) --------------
+$envVars = [ordered]@{}
+%{ for k, v in env ~}
+$envVars['${k}'] = '${replace(v, "'", "''")}'
+%{ endfor ~}
+%{ if length(secrets) > 0 ~}
+$kt = Get-ImdsToken 'https://vault.azure.net'
+%{ for k, id in secrets ~}
+$envVars['${k}'] = (Invoke-RestMethod -Uri '${id}?api-version=7.4' -Headers @{ Authorization = "Bearer $kt" } -TimeoutSec 10).value
+%{ endfor ~}
+Remove-Variable kt
+%{ endif ~}
+
+# ---- service --------------------------------------------------------------------------------------------
+$current = Join-Path $AppRoot 'current'
+$previous = $null
+if (Test-Path $current) { $previous = (Get-Item $current).Target | Select-Object -First 1 }
+$svc = Get-Service -Name $Service -ErrorAction SilentlyContinue
+if ($svc -and $svc.Status -ne 'Stopped') { Stop-Service -Name $Service -Force; (Get-Service $Service).WaitForStatus('Stopped', '00:01:00') }
+if (Test-Path $current) { cmd /c rmdir "$current" | Out-Null }
+New-Item -ItemType Junction -Path $current -Target $release | Out-Null
+if (-not $svc) {
+  New-Service -Name $Service -BinaryPathName "`"$current\$Exe`"" -DisplayName "Enterprise Hello $Service" -StartupType Automatic | Out-Null
+  sc.exe failure $Service reset= 86400 actions= restart/5000/restart/5000/restart/30000 | Out-Null
+}
+$regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$Service"
+New-ItemProperty -Path $regPath -Name Environment -PropertyType MultiString -Value ($envVars.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -Force | Out-Null
+Remove-Variable envVars
+
+function Test-Health {
+  for ($i = 0; $i -lt 30; $i++) {
+    try { if ((Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200) { return $true } } catch { }
+    Start-Sleep -Seconds 2
+  }
+  return $false
+}
+
+Start-Service -Name $Service
+if (Test-Health) {
+  Write-Log 'INFO' "installed $Version"
+  Get-ChildItem "$AppRoot\releases" | Sort-Object CreationTime -Descending | Select-Object -Skip 3 | Where-Object { $_.FullName -ne $release } | Remove-Item -Recurse -Force
+  Remove-Item -Recurse -Force $work
+  exit 0
+}
+Write-Log 'ERROR' "health check failed for $Version; rolling back"
+if ($previous -and (Test-Path $previous)) {
+  Stop-Service -Name $Service -Force -ErrorAction SilentlyContinue
+  cmd /c rmdir "$current" | Out-Null
+  New-Item -ItemType Junction -Path $current -Target $previous | Out-Null
+  Start-Service -Name $Service
+}
+Remove-Item -Recurse -Force $work
+exit 1

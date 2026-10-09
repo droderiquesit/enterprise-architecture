@@ -13,3 +13,5 @@ src/hello_catalog_api.egg-info/dependency_links.txt
 src/hello_catalog_api.egg-info/entry_points.txt
 src/hello_catalog_api.egg-info/requires.txt
 src/hello_catalog_api.egg-info/top_level.txt
+tests/test_api.py
+tests/test_integration.py

@@ -1,0 +1,133 @@
+# Generated: upstream contract variables (ADR-0001 §5). Only the fields this root uses.
+# Optional producers (catalog/components.yaml optional_consumes) default to null; every resource that
+# depends on them is guarded with count/for_each.
+
+variable "obs_telemetry_transport" {
+  description = "obs-telemetry-transport contract v1 (required)."
+  type = object({
+    datadog_site      = string
+    api_key_secret_id = string
+    otlp = object({
+      grpc_endpoint            = string
+      http_endpoint            = string
+      headers_secret_id        = optional(string)
+      default_protocol         = optional(string, "http/protobuf")
+      node_agent_grpc_port     = optional(number, 4317)
+      node_agent_http_port     = optional(number, 4318)
+      host_agent_grpc_endpoint = optional(string, "http://localhost:4317")
+    })
+    fluentbit = object({
+      forward_host                 = string
+      forward_port                 = number
+      sidecar_image                = optional(string, "fluent/fluent-bit:5.1.3")
+      sidecar_config               = optional(string)
+      sidecar_forward_config       = optional(string)
+      sidecar_parsers              = optional(string)
+      sidecar_lua                  = optional(string)
+      sidecar_mode                 = optional(string, "datadog")
+      logs_intake_host             = optional(string)
+      forward_shared_key_secret_id = optional(string)
+    })
+    env = optional(map(map(string)), {})
+  })
+}
+
+variable "foundation_identity" {
+  description = "foundation-identity contract v1 (optional; null when the producer is not enabled)."
+  type = object({
+    key_vault_id  = string
+    key_vault_uri = string
+    identities = map(object({
+      id           = string
+      principal_id = string
+      client_id    = string
+      name         = string
+    }))
+    secret_ids = map(string)
+  })
+  default = null
+}
+
+variable "platform_servicefabric" {
+  description = "platform-servicefabric contract v1 (optional; null when the producer is not enabled)."
+  type = object({
+    enabled             = bool
+    resource_group_name = optional(string)
+    cluster_id          = optional(string)
+    cluster_name        = optional(string)
+    management_endpoint = optional(string)
+    client_endpoint     = optional(string)
+    app_port            = optional(number, 8080)
+  })
+  default = null
+}
+
+variable "platform_aro" {
+  description = "platform-aro contract v1 (optional; null when the producer is not enabled)."
+  type = object({
+    enabled        = bool
+    cluster_id     = optional(string)
+    cluster_name   = optional(string)
+    api_server_url = optional(string)
+    console_url    = optional(string)
+    ingress_ip     = optional(string)
+  })
+  default = null
+}
+
+variable "platform_specialized_compute" {
+  description = "platform-specialized-compute contract v1 (optional; null when the producer is not enabled)."
+  type = object({
+    resource_group_name = optional(string)
+    vms = optional(map(object({
+      id       = string
+      name     = string
+      kind     = string
+      workload = string
+    })), {})
+    automation = optional(object({
+      account_id    = string
+      account_name  = string
+      schedule_name = string
+      identity      = optional(string)
+    }))
+  })
+  default = null
+}
+
+variable "platform_messaging" {
+  description = "platform-messaging contract v1 (optional; null when the producer is not enabled)."
+  type = object({
+    namespace_id   = string
+    namespace_name = string
+    fqdn           = string
+    topic = object({
+      name = string
+      id   = string
+    })
+    subscriptions = map(object({
+      name = string
+      id   = string
+    }))
+    queues = map(object({
+      name = string
+      id   = string
+    }))
+  })
+  default = null
+}
+
+variable "platform_db_table_storage" {
+  description = "platform-db-table-storage contract v1 (optional; null when the producer is not enabled)."
+  type = object({
+    account = object({
+      id       = string
+      name     = string
+      endpoint = string
+    })
+    databases = map(object({
+      name = string
+    }))
+  })
+  default = null
+}
