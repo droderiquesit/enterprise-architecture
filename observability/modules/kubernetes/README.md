@@ -26,12 +26,28 @@ exec plugin; the repository's lab Kubernetes root is one example).
   agent and trace-agent, plus the cluster-agent and clusterchecks Deployments.
 * All containers have bounded requests and limits.
 
-## API key, never in state
-* `api_key.mode = write_only` (default): a Secret `datadog-api-key` (key `api-key`) is created in both
-  namespaces from the **ephemeral** input `api_key_wo` through `kubernetes_secret_v1.data_wo`. Bump `revision`
-  to rotate.
-* `existing`: the caller syncs the Secret, for example with the Secrets Store CSI driver + Azure Key Vault
-  provider `secretObjects`, or with External Secrets.
+## API key: Delinea DSV, never in Terraform
+* `api_key.mode = dsv_secret_backend` (default): the chart Secret holds only the reference
+  `ENC[<dsv.api_key_ref>]`. Agents (all DaemonSet containers) and cluster-checks runners run
+  `secret_backend_command = /opt/dsv-fetch/dsv-fetch` with `agent-backend` - the stdlib `images/dsv-fetch/dsv_fetch.py`
+  from a ConfigMap mounted with `defaultMode 0500` (root-owned, no group/other rights, interpreter = the Agent image's
+  `python3`; the chart has no hook for extra init containers, so the `dsv-fetch install` init-container variant is not
+  used). Authentication: AKS workload identity (`azure.workload.identity/use` pod label via `additionalLabels`,
+  client-id annotation on the service accounts `datadog` and `datadog-cluster-checks` - the runners get a dedicated
+  service account). `DSV_*` env on both. DB passwords in cluster checks use the same `ENC[dsv://...]` handles.
+  Fluent Bit: a dsv-fetch init container (`dsv.fetch_image`, non-root, read-only rootfs) writes
+  `/dsv-secrets/fluentbit-env.yaml` into an emptyDir `medium: Memory` (1 Mi) that `k8s-daemonset.yaml` includes; no
+  `DD_API_KEY` env. Verified by `helm template` of datadog 3.253.2 (env order, labels, service accounts, mounts).
+* **Cluster Agent**: its image has no Python interpreter, so dsv-fetch cannot run there. With
+  `api_key.cluster_agent_secret_name` the DCA's `DD_API_KEY` comes from that Secret (maintained by the Delinea dsv-k8s
+  syncer; the entry follows the chart's own `DD_API_KEY`, and the later duplicate wins); without it the DCA's secret
+  backend is disabled and features that need a valid key (orchestrator explorer, DCA telemetry) cannot authenticate -
+  cluster-check dispatch still works.
+* **To verify**: that DSV accepts tokens obtained through AKS workload-identity federation (DSV maps users by the
+  identity's resource id, `xms_mirid`).
+* `existing` (documented fallback): Secret `<secret_name>` (key `api-key`) in both namespaces, maintained by the
+  Delinea DSV Kubernetes syncer (dsv-k8s); Fluent Bit takes `DD_API_KEY` from it and includes an empty placeholder
+  env file.
 
 ## Fluent Bit
 * The ConfigMap `fluent-bit-obs-config` holds `fluent-bit.yaml`, `parsers.yaml` and `enterprise_hello.lua`. It
@@ -50,4 +66,4 @@ References:
 - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest_in_the_agent/?tab=kubernetesdaemonset
 - https://docs.datadoghq.com/containers/cluster_agent/clusterchecks/
 - https://github.com/fluent/helm-charts/tree/main/charts/fluent-bit ; https://docs.fluentbit.io/manual/pipeline/filters/kubernetes
-- https://learn.microsoft.com/azure/aks/csi-secrets-store-driver (alternative `existing` mode)
+- https://docs.datadoghq.com/agent/configuration/secrets-management/ ; https://learn.microsoft.com/azure/aks/workload-identity-overview

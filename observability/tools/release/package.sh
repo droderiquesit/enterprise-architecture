@@ -33,11 +33,11 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "${STAGE}/${NAME}" "$OUT"
 
-INCLUDE=(modules config schemas archetypes tools pipelines examples README.md CHANGELOG.md UPGRADING.md VERSION)
+INCLUDE=(modules config schemas archetypes tools pipelines examples images README.md CHANGELOG.md UPGRADING.md VERSION)
 for item in "${INCLUDE[@]}"; do
   [[ -e "${PKG_ROOT}/${item}" ]] || { echo "note: ${item} not present, skipped" >&2; continue; }
   tar -C "$PKG_ROOT" \
-      --exclude='.terraform' --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' \
+      --exclude='.terraform' --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' --exclude='.ruff_cache' \
       --exclude='.vendor' --exclude='terraform.tfstate*' --exclude='*.tfplan' --exclude='dist' \
       --exclude='.terraform.tfstate.lock.info' --exclude='*.auto.tfvars.json' \
       -cf - "$item" | tar -C "${STAGE}/${NAME}" -xf -

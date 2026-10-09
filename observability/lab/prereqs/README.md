@@ -10,11 +10,11 @@
   (config.json), `obs-monitoring` (RUM references).
 - **Why the client token is in a contract**: Datadog documents client tokens as the credential for end-user facing
   applications (API keys "cannot be used to send data from a browser ... as they would be exposed client-side").
-  Every visitor downloads it with `config.json`; it only submits RUM data. API/application keys never leave Key Vault.
+  Every visitor downloads it with `config.json`; it only submits RUM data. API/application keys never leave Delinea DSV (pipeline masked variables only).
 - **Settings** (`components.obs-prereqs`): `datadog_site` (default `datadoghq.com`), `rum_applications` map
   (default `{hello-frontend = {}}`; per app `type`, `service`, `session_sample_rate` 100, `session_replay_sample_rate` 0,
   `default_privacy_level` `mask-user-input`, `track_user_interactions` true). Names: `<prefix>-<env>-<key>`.
-- **Credentials**: provider reads `DD_API_KEY`/`DD_APP_KEY` from the pipeline environment (Key Vault secrets
+- **Credentials**: provider reads `DD_API_KEY`/`DD_APP_KEY` from the pipeline environment (read from Delinea DSV,
   `datadog-api-key`, `datadog-app-key`).
 - **Cost at defaults**: no Azure cost. Datadog RUM is billed per session (1k-session units); the lab traffic generator
   produces ~2 browser journeys per run -> a few hundred sessions/month at 100% sampling; replay off.

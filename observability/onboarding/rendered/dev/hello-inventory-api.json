@@ -444,7 +444,7 @@
       "team-orders"
     ]
   },
-  "package_version": "1.1.0",
+  "package_version": "2.0.0",
   "presence_ref": "deploy-appservice.apps.hello-inventory-api.url",
   "resources": [
     {

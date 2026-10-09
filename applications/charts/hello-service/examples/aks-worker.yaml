@@ -1,11 +1,16 @@
 # hello-worker on AKS - values exactly as rendered by applications/deployments/core-aks (terraform test fixture,
-# run "defaults": internal-lb exposure, Key Vault CSI enabled). Regenerate: REGEN_EXAMPLES=1 pytest tests/charts -k terraform
+# run "defaults": internal-lb exposure, secretsMode dsv). Regenerate: REGEN_EXAMPLES=1 pytest tests/charts -k terraform
 # Release: helm upgrade --install hello-worker applications/charts/hello-service -n hello -f <this file>
 autoscaling:
   enabled: true
   maxReplicas: 3
   minReplicas: 1
   targetCPUUtilizationPercentage: 70
+dsv:
+  auth: azure
+  baseUrl: https://contoso.secretsvaultcloud.com/v1
+  tenant: contoso
+  tld: com
 env:
   AZURE_CREDENTIAL_MODE: workload_identity
   DD_SITE: datadoghq.com
@@ -47,16 +52,11 @@ ingress:
   host: ''
   tls:
     enabled: true
-    keyVaultCertificateUri: ''
-    secretName: keyvault-hello-bff-tls
+    secretName: hello-bff-tls
 k8sService:
   internalLoadBalancer: false
   port: 80
   type: ClusterIP
-keyVault:
-  enabled: false
-  name: eh-kv-ident-dev-abcde
-  tenantId: 00000000-0000-0000-0000-000000000000
 kind: worker
 logFile:
   enabled: false
@@ -76,6 +76,9 @@ resources:
     cpu: 100m
     memory: 192Mi
 secretEnv: {}
+secretsMode: dsv
+secretsSync:
+  secretName: ''
 service:
   domain: notifications
   env: dev

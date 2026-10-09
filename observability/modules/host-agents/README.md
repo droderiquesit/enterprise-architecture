@@ -4,8 +4,8 @@ Installs the Datadog Agent and Fluent Bit on **existing** VMs and VM scale sets 
 
 | Kind | Datadog Agent | Fluent Bit + Agent OTLP/logs-off configuration |
 |---|---|---|
-| `vm` | `azurerm_virtual_machine_extension` (publisher `Datadog.Agent`, type `DatadogLinuxAgent` / `DatadogWindowsAgent`, handler `7.0`, auto minor upgrade) with settings `{site, agentVersion}` | `azurerm_virtual_machine_run_command` `observability-setup` (managed run command; re-runs when the script hash changes) |
-| `vmss` | `azurerm_virtual_machine_scale_set_extension` (same type) | `CustomScript` extension (Linux `Microsoft.Azure.Extensions/CustomScript 2.1` with a gzip `script`; Windows `CustomScriptExtension 1.10` with a gzip+base64 PowerShell stub), `provision_after_extensions = [DatadogAgent]`, `force_update_tag` = script hash. New autoscaled instances get it automatically. A Manual upgrade policy needs an instance upgrade. |
+| `vm` | installed by the setup script (pinned; see below) | `azurerm_virtual_machine_run_command` `observability-setup` (managed run command; re-runs when the script hash changes) |
+| `vmss` | installed by the setup script | `CustomScript` extension (Linux `Microsoft.Azure.Extensions/CustomScript 2.1` with a gzip `script`; Windows `CustomScriptExtension 1.10` with a gzip+base64 PowerShell stub), `force_update_tag` = script hash. New autoscaled instances get it automatically. A Manual upgrade policy needs an instance upgrade. |
 
 Why CustomScript for VMSS: managed run commands are per VM instance (`virtualMachineScaleSets/virtualMachines/
 runCommands`). Instance ids change with autoscale, and the resource is not in azurerm. Constraint: a scale set
@@ -19,28 +19,35 @@ it into the image.
    * `DD_LOGS_ENABLED=false` and `DD_OTLP_CONFIG_LOGS_ENABLED=false`
    * `DD_TAGS`
 
-   The Agent is restarted only on change. The extension cannot set OTLP options, because its settings are only
-   `site`, `agentVersion` and an `agentConfiguration` URI.
+   The Agent is restarted only on change.
 2. Fluent Bit pinned at `5.1.3` from `packages.fluentbit.io`: apt with a signed-by keyring plus `apt-mark hold`,
-   or yum/dnf. The MSI is SHA256-verified. The packaged `fluent-bit.service` is disabled and `fluent-bit-eh.service`
+   or yum/dnf. The MSI is verified against a pinned SHA256. The packaged `fluent-bit.service` is disabled and `fluent-bit-eh.service`
    runs `-c /etc/fluent-bit-eh/fluent-bit.yaml`. The config is staged, checked with `--dry-run`, then swapped,
    and the service restarts only on change.
-3. The Datadog API key for Fluent Bit is read **at run time from Key Vault** with the host's user-assigned
-   identity (IMDS token, then the Key Vault REST API), so it is never in Terraform state. The fallback is the
-   protected run-command parameter `DD_API_KEY`. VMSS instances must use Key Vault, which a precondition
-   enforces.
-
-## Agent API key
-* Preferred: `datadog.api_key_key_vault = { secret_url (VERSIONED; validation enforces it), source_vault_id }`.
-  This uses the extension's `protectedSettingsFromKeyVault`. The secret value must be `{"api_key":"<key>"}` and
-  the vault needs `enabled_for_deployment`.
-* Fallback: `api_key` (sensitive), which is stored in state as a protected setting.
+3. Secrets (Delinea DSV; nothing secret in Terraform, extension settings or run-command parameters): the installer
+   embeds `images/dsv-fetch/dsv_fetch.py` and installs it twice with `dsv-fetch install` - `/opt/eh-dsv-fetch/dsv-fetch`
+   (root, 0500) and `/opt/eh-dsv-fetch/agent/dsv-fetch` (owned by `dd-agent`, 0500, as the Agent requires of a
+   `secret_backend_command`), interpreter = the Agent's embedded Python 3.13 (else the OS `python3` >= 3.11). Non-secret
+   DSV settings + the host identity client id go to `/etc/eh-dsv/dsv.json`.
+   * **Agent (Linux)**: installed by the installer itself (no Datadog VM extension: its `api_key` would be a protected
+     setting). `datadog.yaml` is written first (`api_key: ENC[<datadog.api_key_ref>]`, `secret_backend_command`,
+     `secret_backend_arguments: [agent-backend, --config, /etc/eh-dsv/dsv.json]`), then the official install script runs
+     with `DD_INSTALL_ONLY=true` and the pinned `DD_AGENT_MINOR_VERSION` (it keeps an existing `datadog.yaml`, so no
+     `DD_API_KEY` is needed).
+   * **Fluent Bit (Linux)**: `fluent-bit-eh.service` has `RuntimeDirectory=fluent-bit-eh` (tmpfs, 0700) and
+     `ExecStartPre=dsv-fetch init ... --format env-yaml` writing `/run/fluent-bit-eh/fluentbit-env.yaml` (0400), which
+     `linux-host.yaml` includes. Every (re)start re-reads DSV (rotation = restart).
+   * **Windows**: the Agent cannot use a script as secret backend (Win32 executable required), so the PowerShell
+     installer reads the key from DSV itself (IMDS token -> `POST /v1/token` -> `GET /v1/secrets/<path>`) and writes it
+     into `C:\ProgramData\Datadog\datadog.yaml` and the Fluent Bit include `C:\ProgramData\fluent-bit-eh\secrets\fluentbit-env.yaml`
+     (ACL: SYSTEM, Administrators, ddagentuser read). Rotation = re-run (`setup_revision`). MSIs are verified against
+     pinned SHA256 values (`windows_msi_sha256`; neither vendor publishes checksum files).
 
 Inputs: `hosts` (map of `{resource_id, os_type, kind, location, service_tags, log_paths, systemd_unit,
-windows_event_log, identity_client_id, install_agent, install_fluent_bit}`), `datadog {site, agent_version
-(pinned 7.x.y), extension_version, api_key_secret_id, process_collection, api_key_key_vault}`, `api_key`,
-`fluent_bit_version`.
-Outputs: `agent_extensions`, `setup`, `otlp_endpoint`, `scripts_sha256`, `installer_scripts`.
+windows_event_log, identity_client_id (required), install_agent, install_fluent_bit}`), `datadog {site, agent_version
+(pinned 7.x.y), api_key_ref (dsv://), process_collection}`, `secrets {tenant, tld, base_url, auth}`, `dsv_fetch_source`,
+`windows_msi_sha256`, `setup_revision`, `fluent_bit_version`.
+Outputs: `setup`, `otlp_endpoint`, `scripts_sha256`, `installer_scripts`.
 
 Verification:
 * `tests/hosts.tftest.hcl` (mock providers).
@@ -55,4 +62,4 @@ References:
 - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest_in_the_agent/
 - https://docs.fluentbit.io/manual/installation/downloads/linux/ubuntu and https://docs.fluentbit.io/manual/installation/downloads/windows
 - https://learn.microsoft.com/azure/virtual-machines/run-command-overview ; https://learn.microsoft.com/azure/virtual-machines/extensions/custom-script-linux
-- https://learn.microsoft.com/azure/virtual-machines/extensions/key-vault-linux (protectedSettingsFromKeyVault)
+- https://docs.datadoghq.com/agent/configuration/secrets-management/ (secret_backend_command requirements)

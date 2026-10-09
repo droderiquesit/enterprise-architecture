@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: platform pipeline.
-# Source: catalog/components.yaml (sha256 prefix 20078edd5cecfe4f)
+# Source: catalog/components.yaml (sha256 prefix ad03afa1790a66e3)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -1634,6 +1634,8 @@ stages:
       - Validate
       - Security
       - Build
+      - P_foundation_identity
+      - C_foundation_identity
       - P_foundation_network
       - C_foundation_network
       - P_obs_telemetry_transport
@@ -1649,7 +1651,7 @@ stages:
       - P_platform_db_sqlvm
       - C_platform_db_sqlvm
     lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_dbm'], 'true'), eq(dependencies.Build.outputs['B_img_dsv_fetch.ready.ready'], 'true'), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_mysql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_mysql'], 'true'))), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_postgresql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_postgresql'], 'true'))), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sql'], 'true'))), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sqlmi.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlmi'], 'true'))), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sqlvm.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlvm'], 'true'))), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_dbm'], 'true'), eq(dependencies.Build.outputs['B_img_dsv_fetch.ready.ready'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_mysql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_mysql'], 'true'))), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_postgresql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_postgresql'], 'true'))), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sql'], 'true'))), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sqlmi.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlmi'], 'true'))), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sqlvm.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlvm'], 'true'))), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
       - template: ../templates/terraform-plan.yml
@@ -1689,12 +1691,14 @@ stages:
       - Validate
       - Security
       - Build
+      - P_foundation_identity
+      - C_foundation_identity
       - P_obs_telemetry_transport
       - C_obs_telemetry_transport
       - P_platform_aks
       - C_platform_aks
     lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_kubernetes'], 'true'), eq(dependencies.Build.outputs['B_img_dsv_fetch.ready.ready'], 'true'), and(or(in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_aks'], 'true'))), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_kubernetes'], 'true'), eq(dependencies.Build.outputs['B_img_dsv_fetch.ready.ready'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_aks'], 'true'))), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
       - template: ../templates/terraform-plan.yml
@@ -1705,7 +1709,7 @@ stages:
             - img-dsv-fetch
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          secretEnv: true
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_obs_kubernetes
     displayName: apply obs-kubernetes
@@ -1724,7 +1728,7 @@ stages:
           artifacts: *id041
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          secretEnv: true
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - template: ../templates/retire.yml

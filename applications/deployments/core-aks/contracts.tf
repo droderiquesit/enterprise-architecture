@@ -20,10 +20,6 @@ variable "platform_aks" {
       service_account = string
       client_id       = string
     }))
-    key_vault_secrets_provider = optional(object({
-      client_id    = optional(string)
-      principal_id = optional(string)
-    }))
   })
 }
 

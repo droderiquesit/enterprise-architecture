@@ -26,7 +26,7 @@ locals {
   # secret FILES read by the config (${file:...}); dsv-fetch init --format files writes them from Delinea DSV
   secret_files = concat(["dd-api-key"], var.bearer_auth ? ["otlp-bearer-token"] : [])
   secrets_dir  = "/dsv-secrets"
-  image      = var.distribution == "ddot" ? var.images.ddot : var.images.upstream
+  image        = var.distribution == "ddot" ? var.images.ddot : var.images.upstream
 }
 
 check "ddot_has_no_bearertokenauth" {

@@ -168,7 +168,7 @@
       "team-web"
     ]
   },
-  "package_version": "1.1.0",
+  "package_version": "2.0.0",
   "presence_ref": "deploy-frontend.url",
   "resources": [],
   "runtime": "browser",

@@ -69,12 +69,13 @@ locals {
 
 # ---------------------------------------------------------------- ARO (Helm values for the shared chart)
 # The same chart as AKS (applications/charts/hello-service) with OpenShift values: no fixed runAsUser (the
-# restricted-v2 SCC assigns the UID), a Route instead of an Ingress, no AKS workload identity webhook / Key Vault
-# CSI add-on (database secrets come from existing Secrets: settings.aro_secret_env). Terraform renders the values;
+# restricted-v2 SCC assigns the UID), a Route instead of an Ingress, no AKS workload identity webhook (and no Key Vault):
+# database secrets come from existing Secrets synced from Delinea DSV by the dsv-k8s syncer
+# (settings.aro_secret_env). Terraform renders the values;
 # scripts/deploy-aro.sh installs them (the ARO API needs an OpenShift login, which Terraform does not hold).
 locals {
   aro_client_id   = try(local.ids["hello-catalog-api"].client_id, null)
-  aro_chart_owned = ["DD_AGENT_HOST", "DD_ENV", "DD_SERVICE", "DD_VERSION", "AZURE_CLIENT_ID", "FAULTS_ENABLED", "PORT", "LOG_FILE_PATH"]
+  aro_chart_owned = ["DD_AGENT_HOST", "DD_ENV", "DD_SERVICE", "DD_VERSION", "AZURE_CLIENT_ID", "FAULTS_ENABLED", "PORT", "LOG_FILE_PATH", "DSV_TENANT", "DSV_TLD", "DSV_BASE_URL", "DSV_AUTH"]
   aro_image       = try(var.artifacts["svc-catalog-api"].image, null)
   aro_ready       = local.aro_enabled && local.aro_client_id != null && can(regex("@sha256:[a-f0-9]{64}$", coalesce(local.aro_image, "x")))
   aro_values = local.aro_enabled ? {
@@ -94,9 +95,13 @@ locals {
       digest     = try(split("@", local.aro_image)[1], "")
       pullPolicy = "IfNotPresent"
     }
-    identity          = { clientId = coalesce(local.aro_client_id, "missing"), workloadIdentity = false }
-    port              = 8080
-    env               = { for n, v in module.env["aro"].env : n => v if !contains(local.aro_chart_owned, n) }
+    identity = { clientId = coalesce(local.aro_client_id, "missing"), workloadIdentity = false }
+    port     = 8080
+    # ARO has no AKS workload identity webhook: the pod cannot authenticate to DSV, so no dsv:// settings are
+    # rendered (DSV_AUTH=none) and secrets come from Secrets synced by the Delinea dsv-k8s syncer (aro_secret_env).
+    env               = { for n, v in module.env["aro"].env : n => v if !contains(local.aro_chart_owned, n) && !startswith(v, "dsv://") }
+    dsv               = { auth = "none" }
+    secretsMode       = "synced"
     existingSecretEnv = var.settings.aro_secret_env
     telemetry         = { agentHostFromHostIP = true, disableAgentLogCollection = true }
     faults            = { enabled = false }

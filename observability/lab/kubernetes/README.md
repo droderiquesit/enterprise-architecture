@@ -4,8 +4,10 @@
 `modules/kubernetes`.
 
 * **Consumes:**
-  * `obs_telemetry_transport.datadog_site`
-  * `platform_aks` (resource_group_name, cluster_id, cluster_name, access.private_cluster/entra_server_app_id)
+  * `obs_telemetry_transport` v2 (`datadog_site`, `api_key_ref`, `secrets`)
+  * `foundation_identity` v2 (`identities["obs-collector"]`: workload identity of the Agents / Fluent Bit)
+  * `artifacts["img-dsv-fetch"]` (dsv-fetch image for the Fluent Bit init container)
+  * `platform_aks` (resource_group_name, cluster_id, cluster_name, oidc_issuer_url, access.private_cluster/entra_server_app_id)
 * **Produces:** `obs-kubernetes` v1 (`catalog/contracts/obs-kubernetes.v1.schema.json`): the agent local
   service, OTLP ports, `DD_AGENT_HOST` convention, cluster-agent service, Fluent Bit namespace and exclusions,
   `log_route = daemonset`, `cluster_id`.
@@ -23,10 +25,15 @@
   **plan** pipeline identities' principal ids (bootstrap contract `identities.{apply,plan}.principal_id`).
 
 ## API key
-`TF_VAR_datadog_api_key` is an **ephemeral** variable. `pipelines/templates/terraform-plan.yml` and
-`terraform-apply.yml` link the Key Vault-backed variable group (`datadogVariableGroup`) only for this component (and
-the Datadog-provider roots) and map `$(datadog-api-key)` into the env of the plan / apply step - never into a file or
-tfvars. It is written with `kubernetes_secret_v1.data_wo` and never stored in state or the saved plan.
+No API key input any more (1.x `TF_VAR_datadog_api_key` removed). Default `settings.api_key_mode = dsv_secret_backend`:
+the Agents resolve `ENC[<obs_telemetry_transport.api_key_ref>]` with dsv-fetch and Fluent Bit reads it via a dsv-fetch
+init container (image = `artifacts["img-dsv-fetch"]`, else the transport contract's `secrets.fetch_image`), both with
+AKS workload identity of `obs-collector`. This root federates that identity with `datadog/datadog`,
+`datadog/datadog-cluster-checks` and `fluent-bit/fluent-bit` (`azurerm_federated_identity_credential`; the apply
+identity needs write access to federated credentials of the identity). Cluster Agent: no Python in its image -
+`settings.cluster_agent_secret_name` (dsv-k8s syncer Secret) or degraded (see the module README).
+Fallback `api_key_mode = existing`: Secret `synced_secret_name` maintained by the Delinea dsv-k8s syncer.
+**To verify on a real cluster**: DSV accepting AKS workload-identity tokens (users are mapped by `xms_mirid`).
 
 ## Settings
 * `kubelogin_mode`, `kubelet_tls_mode` (aks_rotation)

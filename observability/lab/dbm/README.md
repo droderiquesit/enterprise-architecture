@@ -6,7 +6,7 @@ The checks run as an ACI Agent in the delegated `aci` subnet by default, or as A
 * **Consumes:**
   * `obs_telemetry_transport.datadog_site`
   * `foundation_network.subnets[settings.subnet_key]`
-  * `foundation_identity` (key_vault_uri, `identities["obs-dbm"]`)
+  * `foundation_identity` v2 (`identities["obs-dbm"]`, `secrets.base_path`), `obs_telemetry_transport` v2 (`api_key_ref`, `secrets`)
   * optional: `platform_db_{postgresql,mysql,sql,sqlmi,sqlvm}`. Only their `dbm` block is read: supported,
     engine, deployment_type, auth_mode, identity_client_id, host, port, databases, password_secret_id.
     `self_hosted_azure_vm` maps to Datadog's `virtual_machine`.
@@ -38,4 +38,4 @@ Destroy removes the container group and its resource group. Database users and g
 * The ACI gets a private IP only.
 * Databases are reached through VNet injection or private endpoints. That needs private DNS resolution from
   the `aci` subnet (spoke VNet, linked private DNS zones).
-* Egress is required to the Datadog intake and to Key Vault.
+* Egress is required to the Datadog intake and to the DSV tenant.

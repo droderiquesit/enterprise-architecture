@@ -191,16 +191,13 @@ def test_unified_service_tagging_and_env(values, helm_bin):
 def test_no_plaintext_secrets(values, helm_bin):
     docs = render(values)
     assert not by_kind(docs, "Secret"), "the chart never creates Secret objects"
+    assert not by_kind(docs, "SecretProviderClass"), "no Key Vault / Secrets Store CSI driver"
     for w in workloads(docs):
         for e in pod_template(w)["spec"]["containers"][0]["env"]:
             if SECRETISH.search(e["name"]):
-                assert "value" not in e and "secretKeyRef" in e["valueFrom"], e
-    for spc in by_kind(docs, "SecretProviderClass"):
-        objs = yaml.safe_load(spc["spec"]["parameters"]["objects"])["array"]
-        for raw in objs:
-            o = yaml.safe_load(raw)
-            assert o["objectType"] == "secret" and re.fullmatch(r"[A-Za-z0-9-]+", o["objectName"])
-        assert spc["spec"]["parameters"]["usePodIdentity"] == "false"
+                # a secret setting is either a Delinea DSV reference (resolved by the app) or a secretKeyRef
+                assert ("value" in e and e["value"].startswith("dsv://")) or "secretKeyRef" in e["valueFrom"], e
+            assert "vault.azure.net" not in (e.get("value") or "") and not (e.get("value") or "").startswith("@Microsoft.KeyVault(")
 
 
 @pytest.mark.parametrize("values", EXAMPLES, ids=IDS)
@@ -226,19 +223,41 @@ def test_hpa_pdb_service(values, helm_bin):
         assert svc[0]["spec"]["selector"] == {"app.kubernetes.io/name": v["service"]["name"]}
 
 
-def test_bff_internal_lb_and_kv(helm_bin):
+def test_bff_internal_lb_and_dsv_refs(helm_bin):
     docs = render(CHART / "examples" / "aks-bff.yaml")
     svc = by_kind(docs, "Service")[0]
     assert svc["spec"]["type"] == "LoadBalancer"
     assert svc["metadata"]["annotations"]["service.beta.kubernetes.io/azure-load-balancer-internal"] == "true"
-    spc = by_kind(docs, "SecretProviderClass")[0]
-    assert spc["metadata"]["name"] == "hello-bff-kv" and spc["spec"]["secretObjects"][0]["secretName"] == "hello-bff-kv"
-    pod = by_kind(docs, "Deployment")[0]["spec"]["template"]["spec"]
-    assert {"name": "kv-secrets", "csi": {"driver": "secrets-store.csi.k8s.io", "readOnly": True,
-                                          "volumeAttributes": {"secretProviderClass": "hello-bff-kv"}}} in pod["volumes"]
+    dep = by_kind(docs, "Deployment")[0]
+    pod = dep["spec"]["template"]
+    env = {e["name"]: e for e in pod["spec"]["containers"][0]["env"]}
+    # secretsMode=dsv: the env value IS the reference; the app resolves it with its workload identity
+    assert env["FAULT_TOKEN"] == {"name": "FAULT_TOKEN", "value": "dsv://eh/dev/fault-token#value"}
+    assert env["DSV_AUTH"]["value"] == "azure" and env["DSV_TENANT"]["value"] == "contoso" and env["AZURE_CLIENT_ID"]["value"]
+    assert pod["metadata"]["labels"]["azure.workload.identity/use"] == "true"
+    assert not any("csi" in v for v in pod["spec"]["volumes"]) and not by_kind(docs, "SecretProviderClass")
 
 
-def test_worker_has_no_keyvault(helm_bin):
+def test_synced_secrets_fallback(helm_bin, tmp_path):
+    v = load_values(CHART / "examples" / "aks-bff.yaml")
+    v["secretsMode"] = "synced"
+    docs = render(v, tmp=tmp_path)
+    env = {e["name"]: e for e in by_kind(docs, "Deployment")[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert env["FAULT_TOKEN"]["valueFrom"]["secretKeyRef"] == {"name": "hello-bff-dsv", "key": "FAULT_TOKEN"}
+    v["secretsSync"] = {"secretName": "bff-from-dsv-syncer"}
+    env = {e["name"]: e for e in by_kind(render(v, tmp=tmp_path), "Deployment")[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert env["FAULT_TOKEN"]["valueFrom"]["secretKeyRef"]["name"] == "bff-from-dsv-syncer"
+    assert not by_kind(docs, "Secret"), "the syncer owns the Secret; the chart never creates one"
+
+
+def test_dsv_reference_accepted_in_env(helm_bin, tmp_path):
+    v = load_values(CHART / "examples" / "aks-bff.yaml")
+    v["env"]["PG_PASSWORD"] = "dsv://eh/dev/pg-password#value"
+    env = {e["name"]: e for e in by_kind(render(v, tmp=tmp_path), "Deployment")[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert env["PG_PASSWORD"]["value"] == "dsv://eh/dev/pg-password#value"
+
+
+def test_worker_has_no_secrets(helm_bin):
     docs = render(CHART / "examples" / "aks-worker.yaml")
     assert not by_kind(docs, "SecretProviderClass") and not by_kind(docs, "Service")
 
@@ -247,12 +266,11 @@ def test_ingress_app_routing(helm_bin, tmp_path):
     v = load_values(CHART / "examples" / "aks-bff.yaml")
     v["k8sService"] = {"type": "ClusterIP", "port": 80, "internalLoadBalancer": False}
     v["ingress"].update({"enabled": True, "host": "api.hello.example.com",
-                         "tls": {"enabled": True, "secretName": "keyvault-hello-bff-tls",
-                                 "keyVaultCertificateUri": "https://kv1.vault.azure.net/certificates/hello-api"}})
+                         "tls": {"enabled": True, "secretName": "hello-api-tls"}})
     ing = by_kind(render(v, tmp=tmp_path), "Ingress")[0]
     assert ing["spec"]["ingressClassName"] == "webapprouting.kubernetes.azure.com"
-    assert ing["metadata"]["annotations"]["kubernetes.azure.com/tls-cert-keyvault-uri"].endswith("/certificates/hello-api")
-    assert ing["spec"]["tls"][0] == {"hosts": ["api.hello.example.com"], "secretName": "keyvault-hello-bff-tls"}
+    assert "kubernetes.azure.com/tls-cert-keyvault-uri" not in (ing["metadata"].get("annotations") or {})
+    assert ing["spec"]["tls"][0] == {"hosts": ["api.hello.example.com"], "secretName": "hello-api-tls"}
     assert ing["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"] == {"name": "hello-bff", "port": {"name": "http"}}
 
 
@@ -311,10 +329,17 @@ REJECT = {
     "missing_digest_null": lambda v: v["image"].update(digest=None),
     "fault_token_plain_env": lambda v: v["env"].update(FAULT_TOKEN="x"),
     "password_plain_env": lambda v: v["env"].update(PG_PASSWORD="x"),
+    "connection_string_plain_env": lambda v: v["env"].update(SERVICEBUS_CONNECTION_STRING="Endpoint=sb://x/;SharedAccessKey=y"),
+    "inline_password_value": lambda v: v["env"].update(DB_DSN="Server=x;Password=y"),
+    "key_vault_reference_env": lambda v: v["env"].update(SOME_SETTING="@Microsoft.KeyVault(SecretUri=https://kv.vault.azure.net/secrets/x)"),
     "chart_owned_env": lambda v: v["env"].update(DD_VERSION="other"),
-    "faults_without_token": lambda v: (v.update(secretEnv={}, keyVault={"enabled": False}), v["faults"].update(enabled=True)),
-    "secret_env_without_keyvault": lambda v: v["keyVault"].update(enabled=False),
-    "secret_env_versioned_id": lambda v: v["secretEnv"].update(FAULT_TOKEN=v["secretEnv"]["FAULT_TOKEN"] + "/0123456789abcdef"),
+    "chart_owned_dsv_env": lambda v: v["env"].update(DSV_AUTH="none"),
+    "datadog_key_in_app": lambda v: v["secretEnv"].update(DD_API_KEY="dsv://eh/dev/datadog-api-key#value"),
+    "faults_without_token": lambda v: (v.update(secretEnv={}), v["faults"].update(enabled=True)),
+    "secret_env_literal": lambda v: v["secretEnv"].update(FAULT_TOKEN="literal-token"),
+    "secret_env_key_vault_id": lambda v: v["secretEnv"].update(FAULT_TOKEN="https://kv.vault.azure.net/secrets/fault-token"),
+    "removed_key_vault_values": lambda v: v.update(keyVault={"enabled": True, "name": "kv1", "tenantId": "00000000-0000-0000-0000-000000000000"}),
+    "unknown_secrets_mode": lambda v: v.update(secretsMode="csi"),
     "hpa_above_ceiling": lambda v: v["autoscaling"].update(maxReplicas=50),
     "root_allowed": lambda v: v.update(podSecurityContext={"runAsNonRoot": False, "seccompProfile": {"type": "RuntimeDefault"}}),
     "unknown_kind": lambda v: v.update(kind="daemonset"),
@@ -338,11 +363,18 @@ def test_min_greater_than_max_fails(helm_bin, tmp_path):
     assert res.returncode != 0 and "minReplicas" in res.stderr
 
 
-def test_faults_enabled_with_keyvault_token(helm_bin, tmp_path):
+def test_faults_enabled_with_dsv_token(helm_bin, tmp_path):
     docs = render(_bad(lambda v: v["faults"].update(enabled=True)), tmp=tmp_path)
     env = {e["name"]: e for e in by_kind(docs, "Deployment")[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
     assert env["FAULTS_ENABLED"]["value"] == "true"
-    assert env["FAULT_TOKEN"]["valueFrom"]["secretKeyRef"] == {"name": "hello-bff-kv", "key": "FAULT_TOKEN"}
+    assert env["FAULT_TOKEN"]["value"] == "dsv://eh/dev/fault-token#value"
+
+
+def test_dsv_mode_needs_endpoint_and_workload_identity(helm_bin, tmp_path):
+    res = template(_bad(lambda v: v.update(dsv={"tenant": "", "baseUrl": ""})), tmp=tmp_path)
+    assert res.returncode != 0 and "dsv.tenant or dsv.baseUrl" in res.stderr
+    res = template(_bad(lambda v: v["identity"].update(workloadIdentity=False)), tmp=tmp_path)
+    assert res.returncode != 0 and "secretsMode=synced" in res.stderr
 
 
 def test_chart_metadata():

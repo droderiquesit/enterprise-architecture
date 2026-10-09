@@ -22,7 +22,7 @@ deployment storage = Flex `blobContainer` with the user-assigned identity (no ke
 (`hellodurable<env>`), `RECONCILE_SCHEDULE`, `ServiceBusConnection__fullyQualifiedNamespace/__credential/__clientId`,
 `SERVICEBUS_FQDN`, `BATCH_ITEMS_QUEUE`, `SQL_CONNECTION_STRING` (no password) + `SQL_USE_AZURE_CREDENTIAL=true`,
 `STORAGE_MODE=sql`, `ORDERS_API_URL`/`INVENTORY_API_URL`/`PARTNER_API_URL` (settings override > upstream contracts > unset ⇒ simulated), `PAYMENT_TIMEOUT_SECONDS`,
-`DURABLE_HISTORY_RETENTION_DAYS`, `FAULTS_ENABLED`, `FAULT_TOKEN` (Key Vault reference),
+`DURABLE_HISTORY_RETENTION_DAYS`, `FAULTS_ENABLED`, `FAULT_TOKEN` (`dsv://` reference resolved by the app), `DSV_*`,
 `FAULT_ACTIVITY_FAILURE_RATE` (only when faults_enabled), `OTEL_*` (gateway, `http/protobuf`, generic endpoint so the
 host emits Durable V2 spans), `AzureFunctionsJobHost__telemetryMode=OpenTelemetry`. Flex forbids
 `WEBSITE_RUN_FROM_PACKAGE` / `FUNCTIONS_WORKER_RUNTIME` (not set). Function placement: Flex disables

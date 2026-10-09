@@ -40,7 +40,7 @@ output "contract" {
     public_api    = { origin = local.bff_origin, base_path = "/api", external = var.settings.exposure.mode == "app-routing" }
     idle_behavior = { for k in keys(local.apps) : k => { scale_to_zero = false } }
     secrets = {
-      mechanism = local.csi ? "secrets-store-csi-driver (workload identity)" : "none (key_vault_secrets_provider disabled on platform-aks: FAULT_TOKEN not injected)"
+      mechanism = var.settings.secrets_mode == "dsv" ? "delinea-dsv references resolved by the app (workload identity)" : "delinea dsv-k8s syncer Secret (secretKeyRef)"
     }
     exposure = var.settings.exposure.mode
     # Helm releases (one per workload) - for rollback tooling and drift checks. No values (they are in state only).

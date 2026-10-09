@@ -178,9 +178,9 @@ variable "kubernetes" {
     api_key_mode              = optional(string, "dsv_secret_backend")
     identity_client_id        = optional(string, "00000000-0000-0000-0000-000000000000")
     cluster_agent_secret_name = optional(string)
-    cluster_name           = optional(string, "aks-prod-weu")
-    host                   = optional(string, "https://aks-prod-weu.hcp.westeurope.azmk8s.io:443")
-    cluster_ca_certificate = optional(string, "")
+    cluster_name              = optional(string, "aks-prod-weu")
+    host                      = optional(string, "https://aks-prod-weu.hcp.westeurope.azmk8s.io:443")
+    cluster_ca_certificate    = optional(string, "")
   })
   default = {}
 }
@@ -193,10 +193,10 @@ variable "dbm" {
     runners' dsv-fetch secret backend (ENC[dsv://...]).
   EOT
   type = object({
-    enabled         = optional(bool, true)
-    host            = optional(string, "psql-orders-prod.postgres.database.azure.com")
-    resource_id     = optional(string, "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data-prod/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-orders-prod")
-    password_ref    = optional(string, "dsv://monitoring/prod/dbm-orders-postgresql#value")
+    enabled      = optional(bool, true)
+    host         = optional(string, "psql-orders-prod.postgres.database.azure.com")
+    resource_id  = optional(string, "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data-prod/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-orders-prod")
+    password_ref = optional(string, "dsv://monitoring/prod/dbm-orders-postgresql#value")
   })
   default = {}
 }

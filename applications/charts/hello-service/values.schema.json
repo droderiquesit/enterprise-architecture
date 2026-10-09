@@ -177,84 +177,71 @@
       "propertyNames": {
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
         "not": {
+          "enum": [
+            "DD_AGENT_HOST",
+            "DD_ENV",
+            "DD_SERVICE",
+            "DD_VERSION",
+            "AZURE_CLIENT_ID",
+            "FAULTS_ENABLED",
+            "LOG_FILE_PATH",
+            "PORT",
+            "DD_API_KEY",
+            "DD_APP_KEY",
+            "DSV_TENANT",
+            "DSV_TLD",
+            "DSV_BASE_URL",
+            "DSV_AUTH",
+            "DSV_CLIENT_ID",
+            "DSV_CLIENT_SECRET"
+          ]
+        }
+      },
+      "patternProperties": {
+        "^OTEL_EXPORTER_OTLP_HEADERS$": {
+          "type": "string",
+          "pattern": "^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$"
+        },
+        "(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|PRIVATE_KEY)$": {
+          "type": "string",
+          "pattern": "^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$",
+          "description": "secret-looking name: only a Delinea DSV reference is accepted"
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "not": {
           "anyOf": [
             {
-              "enum": [
-                "DD_AGENT_HOST",
-                "DD_ENV",
-                "DD_SERVICE",
-                "DD_VERSION",
-                "AZURE_CLIENT_ID",
-                "FAULTS_ENABLED",
-                "LOG_FILE_PATH",
-                "PORT",
-                "FAULT_TOKEN",
-                "OTEL_EXPORTER_OTLP_HEADERS",
-                "DD_API_KEY",
-                "DD_APP_KEY"
-              ]
+              "pattern": "[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]=|[Pp][Ww][Dd]=|[Aa]ccount[Kk]ey=|[Ss]hared[Aa]ccess[Kk]ey=|[Ss]ecret="
             },
             {
-              "pattern": "(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|PRIVATE_KEY)$"
+              "pattern": "^@Microsoft\\.KeyVault\\("
+            },
+            {
+              "pattern": "\\.vault\\.azure\\.net/"
             }
           ]
         }
       },
-      "additionalProperties": {
-        "type": "string"
-      },
-      "description": "Non-secret env. Chart-owned and secret-looking names are rejected."
+      "description": "Environment. Chart-owned names are rejected; secret-looking names must carry a dsv:// reference (resolved by the app); literal credentials and Key Vault references are rejected."
     },
     "secretEnv": {
       "type": "object",
       "propertyNames": {
-        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+        "not": {
+          "enum": [
+            "DD_API_KEY",
+            "DD_APP_KEY"
+          ]
+        }
       },
       "additionalProperties": {
         "type": "string",
-        "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$"
+        "pattern": "^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$"
       },
-      "description": "name -> versionless Key Vault secret id"
-    },
-    "keyVault": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "name": {
-          "type": "string",
-          "pattern": "^([A-Za-z0-9-]{3,24})?$"
-        },
-        "tenantId": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "if": {
-        "properties": {
-          "enabled": {
-            "const": true
-          }
-        },
-        "required": [
-          "enabled"
-        ]
-      },
-      "then": {
-        "properties": {
-          "name": {
-            "minLength": 3
-          },
-          "tenantId": {
-            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-          }
-        },
-        "required": [
-          "name",
-          "tenantId"
-        ]
-      }
+      "description": "name -> Delinea DSV reference (dsv://<path>#<element>); rendered as the env value (secretsMode=dsv) or read from the dsv-k8s syncer Secret (secretsMode=synced)."
     },
     "existingSecretEnv": {
       "type": "object",
@@ -577,10 +564,6 @@
             },
             "secretName": {
               "type": "string"
-            },
-            "keyVaultCertificateUri": {
-              "type": "string",
-              "pattern": "^(|https://[^/]+/certificates/[A-Za-z0-9-]+)$"
             }
           },
           "additionalProperties": false
@@ -801,6 +784,57 @@
         }
       },
       "additionalProperties": false
+    },
+    "dsv": {
+      "type": "object",
+      "properties": {
+        "tenant": {
+          "type": "string",
+          "pattern": "^([a-z0-9][a-z0-9-]{0,62})?$"
+        },
+        "tld": {
+          "type": "string",
+          "enum": [
+            "com",
+            "eu",
+            "com.au",
+            "ca",
+            ""
+          ]
+        },
+        "baseUrl": {
+          "type": "string",
+          "pattern": "^(|https?://[^/]+(:[0-9]+)?/v1)$"
+        },
+        "auth": {
+          "type": "string",
+          "enum": [
+            "azure",
+            "client_credentials",
+            "none"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Delinea DSV runtime env for the app (non-secret)."
+    },
+    "secretsMode": {
+      "type": "string",
+      "enum": [
+        "dsv",
+        "synced"
+      ],
+      "description": "dsv: env value = dsv:// reference (app resolves with workload identity); synced: secretKeyRef to the Secret maintained by the Delinea dsv-k8s syncer (fallback)."
+    },
+    "secretsSync": {
+      "type": "object",
+      "properties": {
+        "secretName": {
+          "type": "string",
+          "pattern": "^([a-z0-9]([-a-z0-9]{0,251}[a-z0-9])?)?$"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "allOf": [
@@ -879,37 +913,7 @@
           }
         ]
       },
-      "description": "faults.enabled requires FAULT_TOKEN from Key Vault or an existing Secret."
-    },
-    {
-      "if": {
-        "properties": {
-          "secretEnv": {
-            "minProperties": 1
-          }
-        },
-        "required": [
-          "secretEnv"
-        ]
-      },
-      "then": {
-        "properties": {
-          "keyVault": {
-            "properties": {
-              "enabled": {
-                "const": true
-              }
-            },
-            "required": [
-              "enabled"
-            ]
-          }
-        },
-        "required": [
-          "keyVault"
-        ]
-      },
-      "description": "secretEnv needs keyVault.enabled (Secrets Store CSI driver)."
+      "description": "faults.enabled requires FAULT_TOKEN as a dsv:// reference (secretEnv) or from an existing Secret."
     }
   ]
 }

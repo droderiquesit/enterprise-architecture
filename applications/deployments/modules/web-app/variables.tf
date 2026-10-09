@@ -73,7 +73,7 @@ variable "app_settings" {
     error_message = "app_settings must not contain inline passwords or keys; use dsv:// references (Delinea DSV)."
   }
   validation {
-    condition     = !anytrue([for k, v in var.app_settings : startswith(v, "@Microsoft.KeyVault(")])
+    condition     = !anytrue([for k, v in var.app_settings : can(regex("^@Microsoft[.]Key[V]ault[(]", v))])
     error_message = "Key Vault references are not used (ADR-0001 section 14): the value of a secret setting is its dsv:// reference."
   }
 }

@@ -309,6 +309,7 @@ components:
     secret_env:                 # Datadog Terraform provider keys (DSV, fetched with the deploy agent identity)
       DD_API_KEY: datadog-api-key
       DD_APP_KEY: datadog-app-key
+      TF_VAR_datadog_azure_client_secret: datadog-azure-client-secret?   # only for settings.app_auth = secret
     catalog_refs: [datadog-azure-native-integration]
   - id: obs-telemetry-transport
     layer: observability
@@ -316,7 +317,7 @@ components:
     path: observability/lab/telemetry-transport
     consumes: [foundation-network, foundation-identity, platform-containerapps]
     produces: [obs-telemetry-transport]
-    inputs: [observability/modules/host-agents/scripts/**]   # Batch log setup script (templatefile, not a module source)
+    inputs: [observability/images/dsv-fetch/**, observability/modules/host-agents/scripts/**]   # Batch log setup script (templatefile, not a module source)
     depends_on: [foundation-secrets]
     artifacts: [img-dsv-fetch]  # init container of the Fluent Bit aggregator / OTel gateway (resolves dsv:// refs)
     secret_outputs: generated_secrets   # eventhub-fluentbit-listen -> DSV after apply (tools/secrets/publish.py)
@@ -336,20 +337,20 @@ components:
     # deploy-vm-workloads: ordering only (its run commands create the app log directories the Fluent Bit installer
     # tails, and two managed run commands on one VM should not race); the root declares no variable for it.
     optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm, deploy-vm-workloads]
+    inputs: [observability/images/dsv-fetch/**]
   - id: obs-kubernetes
     layer: observability
     kind: terraform
     path: observability/lab/kubernetes
-    consumes: [obs-telemetry-transport, platform-aks]
+    consumes: [obs-telemetry-transport, platform-aks, foundation-identity]
     produces: [obs-kubernetes]
     artifacts: [img-dsv-fetch]  # Datadog Agent secret_backend_command + Fluent Bit init container on AKS
-    secret_env:
-      TF_VAR_datadog_api_key: datadog-api-key
+    inputs: [observability/images/dsv-fetch/**]
   - id: obs-dbm
     layer: observability
     kind: terraform
     path: observability/lab/dbm
-    consumes: [obs-telemetry-transport, foundation-network]
+    consumes: [obs-telemetry-transport, foundation-network, foundation-identity]
     artifacts: [img-dsv-fetch]  # Datadog Agent secret backend (ENC[dsv://...]) for DBM passwords
     optional_consumes: [platform-db-postgresql, platform-db-mysql, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm]
   - id: obs-monitoring

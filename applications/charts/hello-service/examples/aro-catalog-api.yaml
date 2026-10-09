@@ -1,7 +1,7 @@
 # hello-catalog-api on Azure Red Hat OpenShift - the shape applications/deployments/specialized renders into its
 # contract (aro.helm.values) and scripts/deploy-aro.sh installs with `helm upgrade --install --rollback-on-failure`.
 # OpenShift: no fixed runAsUser (restricted-v2 SCC assigns the UID), Route instead of Ingress, no AKS workload
-# identity webhook / Key Vault CSI add-on: database credentials come from an existing Secret created out of band.
+# identity webhook (no Key Vault): database credentials come from an existing Secret synced from Delinea DSV by the dsv-k8s syncer.
 kind: deployment
 service:
   name: hello-catalog-api

@@ -7,15 +7,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "hello-service.labels" . | nindent 4 }}
-  {{- if or .Values.ingress.tls.keyVaultCertificateUri .Values.ingress.annotations }}
+  {{- with .Values.ingress.annotations }}
   annotations:
-    {{- with .Values.ingress.tls.keyVaultCertificateUri }}
-    # AKS application routing add-on: certificate synced from Key Vault into Secret keyvault-<name>.
-    kubernetes.azure.com/tls-cert-keyvault-uri: {{ . | quote }}
-    {{- end }}
-    {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
   {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
@@ -23,7 +17,8 @@ spec:
   tls:
     - hosts:
         - {{ .Values.ingress.host | quote }}
-      secretName: {{ default (printf "keyvault-%s-tls" $name) .Values.ingress.tls.secretName }}
+      # existing TLS Secret (e.g. synced from Delinea DSV by the dsv-k8s syncer, or cert-manager); no Key Vault
+      secretName: {{ default (printf "%s-tls" $name) .Values.ingress.tls.secretName }}
   {{- end }}
   rules:
     - host: {{ .Values.ingress.host | quote }}

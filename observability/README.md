@@ -119,7 +119,8 @@ pairs (critical 1h/5m, warning 6h/30m; thresholds per timeframe in `global-defau
 ## 2. Install (consumer)
 
 Prerequisites: Terraform >= 1.14 (tested 1.16.5), DataDog/datadog provider `~> 4.25`, Python 3.11+ with
-`pyyaml` and `jsonschema` (only for validate/render in CI), a Datadog API key + application key in Key Vault.
+`pyyaml` and `jsonschema` (only for validate/render in CI), a Datadog API key + application key in
+Delinea DevOps Secrets Vault (DSV) - the package uses no Azure Key Vault (section 12).
 
 1. Pick a release: `observability-<version>.tar.gz` and its `.sha256` from the release feed.
 2. Copy `examples/existing-environment/` into your repository; set `package.lock.json` `{version, sha256, url}` and
@@ -192,7 +193,8 @@ references paths outside the package, remote state, or a subscription id other t
 `pipelines/templates/`: `validate-onboarding.yml` (schema + semantic validation, rendered drift check),
 `terraform-plan.yml` (OIDC, saved plan artifact, destroy summary), `terraform-apply.yml` (deployment job applying
 the saved plan behind an ADO Environment), `telemetry-verify.yml` (bounded polling, evidence artifact),
-`deployment-marker.yml`. Reference them from the package repository pinned to a release tag
+`deployment-marker.yml`, `dsv-secrets.yml` (reads the Datadog keys from Delinea DSV with the agent's managed identity
+into masked variables; the jobs that need keys run on a self-hosted pool). Reference them from the package repository pinned to a release tag
 (`resources.repositories` + `template: pipelines/templates/<t>.yml@obs`); a vendored tarball cannot provide templates
 because ADO expands templates before any step runs.
 
@@ -256,3 +258,30 @@ tier, cost controls, permissions, verification queries, removal).
   plan on overlap.
 * Not collected: NSG / VNet flow logs (Storage-only Network Watcher feature; options in the guide).
 
+
+## 12. Secrets: Delinea DSV (2.0.0)
+
+No secret value is an input, output or state value of this package, and no Azure Key Vault is used. Every secret is a
+**reference** `dsv://<path>#<element>` (element default `value`) into Delinea DevOps Secrets Vault, read at run time by
+the workload with its Azure managed identity (Entra token for `https://management.azure.com/` -> DSV
+`POST /v1/token` `grant_type=azure` -> `GET /v1/secrets/<path>`). The DSV endpoint (`tenant`, `tld` or `base_url`) and the
+references are ordinary inputs (contract `obs-telemetry-transport` v2 `api_key_ref`, `secrets`).
+
+| Consumer | How the secret is read |
+|---|---|
+| Your application (instrumentation hook) | env / app setting whose VALUE is the `dsv://` reference + `DSV_*` env; the app resolves it at start-up (the source repository's `hello_common` / `Hello.Common`; your own apps need an equivalent resolver) |
+| Fluent Bit sidecar (ACA / ACI), aggregator, DaemonSet | `images/dsv-fetch` `init --format env-yaml` writes `/dsv-secrets/fluentbit-env.yaml`; the config `includes:` it. ACA: init container (Consumption profile) or refresher container (Dedicated profiles); ACI: refresher container (ACI init containers have no managed identity); AKS: init container + in-memory emptyDir with workload identity |
+| OTel gateway | `init --format files --file-mode 0444` -> `${file:/dsv-secrets/dd-api-key}` |
+| Datadog Agent on Linux VMs / VMSS / AKS / ACI (DBM) | `api_key: ENC[dsv://...]` + `secret_backend_command` = dsv-fetch `agent-backend` (0500, owned by the Agent user) |
+| Datadog Agent / Fluent Bit on Windows | the installer reads DSV (PowerShell, IMDS) and writes ACL-restricted files (re-run to rotate) |
+| Pipelines | `pipelines/templates/dsv-secrets.yml` on a self-hosted agent with a managed identity |
+
+Optional `env://NAME` references are **not** supported; consumers without DSV can still use the modules by pointing
+`secrets.base_url` at any service implementing the same two DSV endpoints, or by writing the env-yaml / files
+themselves (the Fluent Bit / OTel configs only need the files to exist).
+
+Known limits: AKS workload-identity tokens with DSV are **not verified** (DSV maps users by the identity's resource id,
+`xms_mirid`); fallback: Delinea dsv-k8s syncer (`modules/kubernetes` `api_key.mode = "existing"`). The Datadog Cluster
+Agent image has no Python interpreter: give it a syncer Secret (`api_key.cluster_agent_secret_name`). Values that still
+land in Terraform state are listed in the source repository's `docs/known-limitations.md` (e.g. Event Hubs
+authorization rule keys, which azurerm stores as computed attributes).

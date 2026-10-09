@@ -28,10 +28,10 @@ Platforms, databases, RBAC data-plane grants, diagnostic settings and telemetry 
 
 | Module | Kind | Purpose |
 |---|---|---|
-| `app-env` | pure | Wraps `observability/modules/instrumentation` (instrumentation contract) and adds identity (`AZURE_CLIENT_ID`, `AZURE_CREDENTIAL_MODE`), `FAULTS_ENABLED` (default false), `FAULT_TOKEN` as a Key Vault reference, `PORT`, `LOG_LEVEL`, `GIT_COMMIT`. Outputs env, secret env (name → versionless secret id), App Service settings (`@Microsoft.KeyVault(SecretUri=...)`), Container Apps sidecar patch, ACI sidecar, Kubernetes labels. |
-| `container-app` | azurerm | One Container App: user-assigned identity (ACR pull + Key Vault secret refs), digest-pinned image, `/healthz` liveness/startup + `/readyz` readiness, HTTP scale rule, Fluent Bit sidecar on a shared EmptyDir, multiple-revision traffic weights. |
-| `web-app` | azurerm | Linux/Windows web app (code or container), Key Vault reference identity, VNet integration, health check, private endpoint or deny-by-default access restrictions, `staging` slot when the SKU supports slots. |
-| `vm-script` | pure | Renders the Linux install script for run commands / CustomScript: package read with the host's managed identity (IMDS token, no SAS), sha256 check, env file, secrets fetched from Key Vault **on the host** (never in state), health check + rollback. |
+| `app-env` | pure | Wraps `observability/modules/instrumentation` (instrumentation contract) and adds identity (`AZURE_CLIENT_ID`, `AZURE_CREDENTIAL_MODE`), `FAULTS_ENABLED` (default false), `FAULT_TOKEN` as a Delinea DSV reference (`dsv://...`, resolved by the app), the DSV runtime env (`DSV_TENANT/TLD/BASE_URL/AUTH`), `PORT`, `LOG_LEVEL`, `GIT_COMMIT`. Outputs env (incl. `dsv://` values), secret env (name → `dsv://` reference), App Service settings (same map, no Key Vault references), Container Apps sidecar patch (dsv-fetch init/refresher container), ACI sidecar, Kubernetes labels. |
+| `container-app` | azurerm | One Container App: user-assigned identity (ACR pull; the app and dsv-fetch read DSV with it), no Container Apps secrets except the sidecar config files, digest-pinned image, `/healthz` liveness/startup + `/readyz` readiness, HTTP scale rule, Fluent Bit sidecar on a shared EmptyDir with a dsv-fetch init container (Consumption profile) or refresher container (Dedicated profiles) writing its key, multiple-revision traffic weights. |
+| `web-app` | azurerm | Linux/Windows web app (code or container), user-assigned identity (no Key Vault reference identity; `@Microsoft.KeyVault(` values are rejected), VNet integration, health check, private endpoint or deny-by-default access restrictions, `staging` slot when the SKU supports slots. |
+| `vm-script` | pure | Renders the Linux install script for run commands / CustomScript: package read with the host's managed identity (IMDS token, no SAS), sha256 check, env file (secret settings as `dsv://` references the service resolves at start-up), health check + rollback. |
 | `service-meta` | pure | Team/domain/tier/owner/runtime/artifact per service (mirrors observability onboarding metadata). |
 
 ## Helm (Kubernetes workloads)
@@ -65,10 +65,17 @@ and pushes the chart (`helm package` → `helm push oci://<acr>/helm`); see the 
   Logs: ACA + ACI → Fluent Bit sidecar tailing `LOG_FILE_PATH=/var/log/app/app.log` on a shared EmptyDir;
   AKS → Fluent Bit DaemonSet; App Service / Functions / Logic Apps → diagnostic settings (no sidecar);
   VM/VMSS → host Fluent Bit service; ACA **jobs** → stdout + ContainerAppConsoleLogs (a sidecar would never exit).
-- **Secrets**: Key Vault versionless ids only. ACA `secret { key_vault_secret_id, identity }`; App Service/Functions
-  `@Microsoft.KeyVault(SecretUri=...)`; AKS Secrets Store CSI driver add-on (SecretProviderClass with the pod's
-  workload identity); VM/VMSS fetched on the host via IMDS. **Exception**: ACI has no Key Vault references — the
-  partner-sim root reads `fault-token` and `datadog-api-key` with a data source (sensitive, in the Entra-only state).
+- **Secrets** (ADR-0001 §14, Delinea DSV, no Azure Key Vault): every secret setting is a plain env var / app setting
+  whose VALUE is a `dsv://<path>#<element>` reference (from `foundation_identity.secrets.refs` or a platform contract's
+  `*_secret_id` field), plus `DSV_TENANT/TLD/BASE_URL/AUTH` and `AZURE_CLIENT_ID`; `hello_common` / `Hello.Common`
+  resolve them at start-up with the workload's managed identity (ACA/App Service/Functions: `IDENTITY_ENDPOINT`;
+  ACI/VM/VMSS: IMDS; AKS: workload identity - **unverified with DSV**, fallback chart `secretsMode=synced` with the
+  Delinea dsv-k8s syncer). Third-party sidecars (Fluent Bit) get their key from the `dsv-fetch` helper (registry
+  artifact `img-dsv-fetch`, `artifacts["img-dsv-fetch"]` in core-aca/dbadapters/jobs/partner-sim): ACA init container
+  on the Consumption profile, refresher container on Dedicated profiles and on ACI (ACI init containers have no
+  managed identity). No secret value is in any plan or state of these roots, with one documented exception:
+  logicapps' Standard host storage access key (runtime-read setting, key access required outside ASE v3).
+  Host-read settings (`AzureWebJobsStorage`, trigger connections) stay identity-based - they cannot be `dsv://`.
 - **Contract** (`output "contract"`, schema `catalog/contracts/deploy-<id>.v1.schema.json`): `apps.<key>` =
   `{id, name, type, service, architecture, app_log_route, sidecar, url, urls{public,private}, health/readiness/version
   paths, scale_to_zero, min/max replicas, version, image, identity_name}`, `endpoints` (base URLs serving `/healthz`,
@@ -95,5 +102,5 @@ python3 -m pytest tests/charts -q                                    # hello-ser
 ```
 
 Docs: https://learn.microsoft.com/azure/container-apps/ , https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan ,
-https://learn.microsoft.com/azure/aks/workload-identity-overview , https://learn.microsoft.com/azure/aks/csi-secrets-store-driver ,
+https://learn.microsoft.com/azure/aks/workload-identity-overview , https://learn.microsoft.com/azure/container-apps/managed-identity#control-managed-identity-availability ,
 https://learn.microsoft.com/azure/app-service/app-service-key-vault-references , https://learn.microsoft.com/azure/static-web-apps/

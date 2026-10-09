@@ -1,5 +1,5 @@
 # hello-catalog-api on a local kind cluster (tests/charts smoke): local image loaded with `kind load`, Postgres and
-# Redis in namespace deps, password from an existing Secret, no workload identity / Key Vault / Datadog Agent on the node.
+# Redis in namespace deps, password from an existing Secret, no workload identity / DSV / Datadog Agent on the node.
 # image.digest is set by the test from the loaded image id.
 kind: deployment
 service: {name: hello-catalog-api, version: 0.1.0-e2e, env: kind, team: catalog, domain: catalog, tier: high, logsSource: python}

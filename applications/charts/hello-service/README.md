@@ -4,7 +4,7 @@
   `helm lint --strict`, `helm template` + `kubeconform -strict` (Kubernetes 1.36.0 schemas, the platform-aks default),
   pytest assertions (`tests/charts`) and a kind v1.36.4 smoke (install, probes, BFF → catalog, upgrade, rollback).
   Not deployed to AKS/ARO from this sandbox (no Azure credentials).
-- **Chart version** `1.0.0` (semver of the chart, independent of the applications). The application version is
+- **Chart version** `2.0.0` (2.0.0: Key Vault / CSI removed, secrets as DSV references - breaking values change) (semver of the chart, independent of the applications). The application version is
   `service.version` (set per release by the deployer); `appVersion` is informational only (`helm package --app-version` may override it).
 - **Engines**: Helm 4 CLI (pinned `v4.3.0`) and the Terraform `hashicorp/helm` 3.3 provider (Helm v3 SDK); rendering is
   tested to be identical with Helm `v3.22.0`. `kubeVersion: >=1.30.0-0`.
@@ -42,9 +42,17 @@ selector `app.kubernetes.io/name` only (immutable; identical to the pre-Helm obj
 `logs.datadoghq.com/source`; pods add `azure.workload.identity/use: "true"` (when `identity.workloadIdentity`) and the
 annotation `ad.datadoghq.com/<container>.logs: "[]"` (logs come from the Fluent Bit DaemonSet only).
 
-**Secrets**: the chart never creates a `Secret` with data. `secretEnv` (name → *versionless* Key Vault secret id) renders a
-`SecretProviderClass` (Azure provider, `clientID` = workload identity), the read-only CSI volume and `secretKeyRef`s
-to the synced Secret `<name>-kv`; `existingSecretEnv` references Secrets created out of band (ARO, kind).
+**Secrets** (chart 2.0.0, Delinea DSV - no Key Vault, no Secrets Store CSI driver): the chart never creates a `Secret`.
+`secretEnv` maps names to **DSV references** (`dsv://<path>#<element>`). With `secretsMode: dsv` (default) each reference
+is rendered as the env VALUE together with `DSV_TENANT/DSV_TLD/DSV_BASE_URL/DSV_AUTH` (from `dsv`) and `AZURE_CLIENT_ID`;
+the application resolves it at start-up with its AKS workload identity (federated token). **Open verification**: DSV maps
+Azure users by the managed identity's resource id (`xms_mirid` claim) - that it accepts a workload-identity-federated
+token is not verified yet. Documented fallback `secretsMode: synced`: the Delinea DSV Kubernetes syncer (dsv-k8s)
+maintains the Secret `secretsSync.secretName` (default `<fullname>-dsv`, one key per `secretEnv` name) and the chart
+references it with `secretKeyRef`. `existingSecretEnv` references other Secrets created out of band (ARO, kind).
+The schema accepts secret-looking names (`*PASSWORD`, `*SECRET`, `*TOKEN`, `*API_KEY`, `*ACCESS_KEY`, `*PRIVATE_KEY`,
+`OTEL_EXPORTER_OTLP_HEADERS`) in `env` only with a `dsv://` value, and rejects inline credentials (`Password=`,
+`AccountKey=`, `SharedAccessKey=`, `Secret=`), `@Microsoft.KeyVault(` values and Key Vault URLs.
 
 ## Values reference
 
@@ -65,9 +73,10 @@ Enforced by `values.schema.json` (draft-07; `additionalProperties: false` everyw
 | `identity.workloadIdentity` | `true` | SA client-id annotation + pod label + projected token; `false` on ARO/kind |
 | `serviceAccount.create` / `.name` / `.annotations` | `true` / fullname / `{}` | SA has `automountServiceAccountToken: false` |
 | `port` | `8080` | `PORT`; worker: health port (8081 for hello-worker) |
-| `env` | `{}` | non-secret; chart-owned names and `*PASSWORD/*SECRET/*TOKEN/*API_KEY/*ACCESS_KEY`, `FAULT_TOKEN`, `OTEL_EXPORTER_OTLP_HEADERS` are rejected |
-| `secretEnv` | `{}` | name → `https://<vault>/secrets/<name>` (versionless); requires `keyVault.enabled` |
-| `keyVault.enabled` / `.name` / `.tenantId` | `false` | Secrets Store CSI driver (AKS add-on) |
+| `env` | `{}` | chart-owned names (incl. `DSV_*`, `DD_API_KEY`) rejected; secret-looking names only with a `dsv://` value; inline credentials / Key Vault references rejected |
+| `secretEnv` | `{}` | name → `dsv://<path>#<element>` (literals and Key Vault ids rejected) |
+| `dsv.{tenant,tld,baseUrl,auth}` | `"", com, "", azure` | DSV runtime env for the app; `secretsMode: dsv` needs tenant or baseUrl and `identity.workloadIdentity` |
+| `secretsMode` / `secretsSync.secretName` | `dsv` / `<fullname>-dsv` | `synced` = dsv-k8s syncer Secret via `secretKeyRef` (fallback) |
 | `existingSecretEnv` | `{}` | name → `{secretName, key}` |
 | `telemetry.agentHostFromHostIP` | `true` | `DD_AGENT_HOST` from `status.hostIP` |
 | `telemetry.disableAgentLogCollection` | `true` | `ad.datadoghq.com/<c>.logs: "[]"` |
@@ -80,7 +89,7 @@ Enforced by `values.schema.json` (draft-07; `additionalProperties: false` everyw
 | `probes.startup/liveness/readiness` | `/healthz`, `/healthz`, `/readyz` | periods/thresholds configurable |
 | `k8sService.{type,port,internalLoadBalancer,annotations}` | `ClusterIP, 80, false` | `internalLoadBalancer` → `service.beta.kubernetes.io/azure-load-balancer-internal` |
 | `ingress.{enabled,className,host,path,annotations}` | `false`, `webapprouting.kubernetes.azure.com` | AKS application routing add-on |
-| `ingress.tls.{enabled,secretName,keyVaultCertificateUri}` | `true`, `keyvault-<name>-tls` | `kubernetes.azure.com/tls-cert-keyvault-uri` |
+| `ingress.tls.{enabled,secretName}` | `true`, `<name>-tls` | existing TLS Secret (dsv-k8s syncer or cert-manager); no Key Vault certificate sync |
 | `openshift.enabled` | `false` | drops `runAsUser/runAsGroup/fsGroup` (SCC assigns) |
 | `openshift.route.{enabled,host,tls}` | `false`, edge + Redirect | `route.openshift.io/v1` Route instead of Ingress |
 | `networkPolicy.{enabled,allowFromNamespaces,allowFromCIDRs}` | `false` | ingress to the app port from the namespace, listed namespaces and CIDRs |
@@ -112,7 +121,7 @@ helm upgrade --install hello-worker applications/charts/hello-service -n hello \
 
 - **AKS** — `applications/deployments/core-aks`: one `helm_release` per workload (`atomic`, `wait`, `cleanup_on_fail`,
   `timeout` 600 s, `max_history` 10, `lint`), values = `yamlencode()` of a typed object built from the contracts
-  (platform-aks workload identities, foundation-identity Key Vault ids, the instrumentation contract, artifacts).
+  (platform-aks workload identities, foundation-identity v2 DSV references, the instrumentation contract, artifacts).
   Chart source: this directory by default; `settings.helm.chart_repository = "oci://<acr>/helm"` +
   `chart_version` consume the published chart instead.
 - **ARO** — `applications/deployments/specialized` renders the values into its contract (`aro.helm.values`);
@@ -124,10 +133,10 @@ helm upgrade --install hello-worker applications/charts/hello-service -n hello \
 
 ```bash
 python3 -m pytest tests/charts -q                     # lint/template/kubeconform(1.36)/schema + TF-rendered values
-helm package applications/charts/hello-service --version "1.0.0+src<sha12>" -d out/charts
+helm package applications/charts/hello-service --version "2.0.0+src<sha12>" -d out/charts
 az acr login --name "$ACR_NAME" --expose-token --output tsv --query accessToken \
   | helm registry login "$ACR_NAME.azurecr.io" --username 00000000-0000-0000-0000-000000000000 --password-stdin
-helm push out/charts/hello-service-1.0.0+src<sha12>.tgz "oci://$ACR_NAME.azurecr.io/helm"
+helm push out/charts/hello-service-2.0.0+src<sha12>.tgz "oci://$ACR_NAME.azurecr.io/helm"
 ```
 
   To deploy the published chart from core-aks set `settings.helm.chart_repository = "oci://<acr>.azurecr.io/helm"` and
@@ -154,7 +163,7 @@ pipeline so the next `terraform plan` shows no drift. A failed upgrade rolls bac
 |---|---|
 | CKV_K8S_40 high UID | images declare numeric non-root users (1654/10001); a pinned UID would break OpenShift SCC ranges — set `podSecurityContext.runAsUser` if required |
 | CKV2_K8S_6 NetworkPolicy | opt-in (`networkPolicy.enabled`): the internal LB / app routing source ranges are environment-specific |
-| CKV_K8S_35 secrets as env | the application contract reads `FAULT_TOKEN` from env; values come from Key Vault via the CSI-synced Secret |
+| CKV_K8S_35 secrets as env | the application contract reads `FAULT_TOKEN` from env; the env value is a `dsv://` reference resolved by the app (or a dsv-k8s syncer Secret in secretsMode synced) |
 | CKV_K8S_38 SA token mounted | required by AKS workload identity; disabled when `identity.workloadIdentity: false` |
 
 Docs: https://helm.sh/docs/topics/charts/ , https://helm.sh/docs/topics/registries/ ,

@@ -120,7 +120,6 @@ variable "settings" {
       "hello-orders-api"  = { namespace = "hello", service_account = "hello-orders-api" }
       "hello-catalog-api" = { namespace = "hello", service_account = "hello-catalog-api" }
       "hello-worker"      = { namespace = "hello", service_account = "hello-worker" }
-      "obs-collector"     = { namespace = "datadog", service_account = "datadog-agent" }
     })
   })
   default = {}

@@ -154,10 +154,6 @@ variables {
         client_id       = "33333333-3333-3333-3333-000000000003"
       }
     }
-    key_vault_secrets_provider = {
-      client_id    = "44444444-4444-4444-4444-444444444444"
-      principal_id = "55555555-5555-5555-5555-555555555555"
-    }
   }
   platform_shared = {
     acr_id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-shared/providers/Microsoft.ContainerRegistry/registries/ehcrshareddevabcde"
@@ -449,12 +445,12 @@ run "defaults" {
     error_message = "Faults disabled by default; chart-owned env (FAULTS_ENABLED, DD_*, AZURE_CLIENT_ID, PORT) and FAULT_TOKEN never in plain env."
   }
   assert {
-    condition     = alltrue([for k, r in helm_release.app : alltrue([for n, v in yamldecode(r.values[0]).env : !can(regex("(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY)$", n))]) && alltrue([for n, id in yamldecode(r.values[0]).secretEnv : can(regex("^https://[^/]+/secrets/[A-Za-z0-9-]+$", id))])])
-    error_message = "No plaintext secrets: secret env carries versionless Key Vault ids only."
+    condition     = alltrue([for k, r in helm_release.app : alltrue([for n, v in yamldecode(r.values[0]).env : !can(regex("(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY)$", n)) || startswith(v, "dsv://")]) && alltrue([for n, id in yamldecode(r.values[0]).secretEnv : can(regex("^dsv://", id))])])
+    error_message = "No plaintext secrets: secret settings carry Delinea DSV references only."
   }
   assert {
-    condition     = length([for k, r in helm_release.app : k if yamldecode(r.values[0]).keyVault.enabled]) == 3 && local.kv_name == "eh-kv-ident-dev-abcde" && !yamldecode(helm_release.app["hello-worker"].values[0]).keyVault.enabled && yamldecode(helm_release.app["hello-bff"].values[0]).secretEnv["FAULT_TOKEN"] == var.foundation_identity.secret_ids["fault-token"]
-    error_message = "SecretProviderClass (chart keyVault.enabled) per HTTP app reading fault-token (worker has no fault token)."
+    condition     = yamldecode(helm_release.app["hello-bff"].values[0]).secretEnv["FAULT_TOKEN"] == var.foundation_identity.secrets.refs["fault-token"] && length(yamldecode(helm_release.app["hello-worker"].values[0]).secretEnv) == 0 && alltrue([for k, r in helm_release.app : yamldecode(r.values[0]).secretsMode == "dsv" && yamldecode(r.values[0]).dsv.baseUrl == "https://contoso.secretsvaultcloud.com/v1" && !can(yamldecode(r.values[0]).keyVault) && !contains(keys(yamldecode(r.values[0]).env), "DSV_AUTH")])
+    error_message = "HTTP apps get FAULT_TOKEN as a dsv:// reference (worker none); DSV runtime env via chart dsv values; no Key Vault / CSI."
   }
   assert {
     condition     = yamldecode(helm_release.app["hello-bff"].values[0]).k8sService.type == "LoadBalancer" && yamldecode(helm_release.app["hello-bff"].values[0]).k8sService.internalLoadBalancer && !yamldecode(helm_release.app["hello-bff"].values[0]).ingress.enabled && length(data.kubernetes_service_v1.bff) == 1 && yamldecode(helm_release.app["hello-orders-api"].values[0]).k8sService.type == "ClusterIP"
@@ -482,7 +478,7 @@ run "defaults" {
   }
 }
 
-run "app_routing_and_no_csi" {
+run "app_routing_and_synced_secrets" {
   command = plan
   variables {
     platform_aks = {
@@ -497,20 +493,20 @@ run "app_routing_and_no_csi" {
         "hello-catalog-api" = { namespace = "hello", service_account = "hello-catalog-api", client_id = "c3" }
         "hello-worker"      = { namespace = "hello", service_account = "hello-worker", client_id = "c4" }
       }
-      key_vault_secrets_provider = null
     }
     settings = {
       faults_enabled = true
-      exposure       = { mode = "app-routing", host = "api.hello.example.com", tls_cert_keyvault_id = "https://kv.vault.azure.net/certificates/hello-api" }
+      secrets_mode   = "synced"
+      exposure       = { mode = "app-routing", host = "api.hello.example.com", tls_secret_name = "hello-api-tls" }
     }
   }
   assert {
-    condition     = yamldecode(helm_release.app["hello-bff"].values[0]).ingress.enabled && yamldecode(helm_release.app["hello-bff"].values[0]).ingress.host == "api.hello.example.com" && yamldecode(helm_release.app["hello-bff"].values[0]).ingress.tls.keyVaultCertificateUri == "https://kv.vault.azure.net/certificates/hello-api" && yamldecode(helm_release.app["hello-bff"].values[0]).k8sService.type == "ClusterIP" && length(data.kubernetes_service_v1.bff) == 0
-    error_message = "app-routing mode uses the managed NGINX ingress with TLS from Key Vault."
+    condition     = yamldecode(helm_release.app["hello-bff"].values[0]).ingress.enabled && yamldecode(helm_release.app["hello-bff"].values[0]).ingress.host == "api.hello.example.com" && yamldecode(helm_release.app["hello-bff"].values[0]).ingress.tls.secretName == "hello-api-tls" && yamldecode(helm_release.app["hello-bff"].values[0]).k8sService.type == "ClusterIP" && length(data.kubernetes_service_v1.bff) == 0
+    error_message = "app-routing mode uses the managed NGINX ingress with TLS from an existing Secret (no Key Vault)."
   }
   assert {
-    condition     = alltrue([for k, r in helm_release.app : !yamldecode(r.values[0]).keyVault.enabled && length(yamldecode(r.values[0]).secretEnv) == 0 && !yamldecode(r.values[0]).faults.enabled]) && output.contract.public_api.origin == "https://api.hello.example.com"
-    error_message = "No CSI driver => no SecretProviderClass and no FAULT_TOKEN, so faults stay disabled; public origin from the ingress host."
+    condition     = alltrue([for k, r in helm_release.app : yamldecode(r.values[0]).secretsMode == "synced"]) && yamldecode(helm_release.app["hello-bff"].values[0]).faults.enabled && !yamldecode(helm_release.app["hello-worker"].values[0]).faults.enabled && output.contract.public_api.origin == "https://api.hello.example.com" && output.contract.secrets.mechanism == "delinea dsv-k8s syncer Secret (secretKeyRef)"
+    error_message = "Fallback secrets_mode = synced (dsv-k8s syncer Secret); faults on only where FAULT_TOKEN exists; public origin from the ingress host."
   }
 }
 

@@ -3,12 +3,12 @@ name: hello-service
 description: >-
   Generic application chart for every Enterprise Hello workload on Kubernetes (AKS, ARO, kind):
   HTTP services (Deployment + Service), background workers (Deployment with a health port) and
-  scheduled jobs (CronJob). Digest-pinned images, workload identity, Key Vault secrets through the
-  Secrets Store CSI driver, Datadog unified service tagging and the OTel instrumentation contract.
+  scheduled jobs (CronJob). Digest-pinned images, workload identity, secret settings as Delinea DSV
+  references resolved by the application (or a dsv-k8s syncer Secret), Datadog unified service tagging and the OTel instrumentation contract.
 type: application
 # Chart version: semver of the CHART (templates/schema), independent from the application version.
 # Bump MINOR for backwards-compatible template/values additions, MAJOR for breaking values changes.
-version: 1.0.0
+version: 2.0.0
 # appVersion is informational only: one chart serves many applications. The deployed application version is
 # `service.version` (DD_VERSION, app.kubernetes.io/version, tags.datadoghq.com/version), set per release by the
 # deployer (Terraform / deploy script); `helm package --app-version` may override this field.

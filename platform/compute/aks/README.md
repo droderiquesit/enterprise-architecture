@@ -31,8 +31,9 @@
   principal ids (bootstrap contract `identities.<id>.principal_id`) into `cluster_admin_principals`: deploy-core-aks
   and obs-kubernetes manage Kubernetes objects through the Entra-authenticated API (local accounts are disabled).
 - **Federated identity credentials** binding foundation identities to this cluster's issuer:
-  `hello/hello-bff`, `hello/hello-orders-api`, `hello/hello-catalog-api`, `hello/hello-worker`,
-  `datadog/datadog-agent` (obs-collector). They live here because the issuer belongs to this cluster:
+  `hello/hello-bff`, `hello/hello-orders-api`, `hello/hello-catalog-api`, `hello/hello-worker`.
+  The observability service accounts (`datadog/datadog`, `datadog/datadog-cluster-checks`, `fluent-bit/fluent-bit`
+  on the obs-collector identity) are federated by `observability/lab/kubernetes`, which owns those workloads. They live here because the issuer belongs to this cluster:
   recreating the cluster changes the issuer and must replace the credentials in the same apply.
 
 Not here: namespaces, service accounts, Deployments (deploy-core-aks), Datadog Agent/Fluent Bit Helm releases

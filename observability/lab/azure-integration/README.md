@@ -3,7 +3,7 @@
 **Owner:** observability. **Purpose:** Datadog ↔ Azure integration for the lab subscription(s) through
 `modules/azure-integration`.
 
-* **Consumes:** optional `foundation_identity.key_vault_id`, which holds the app registration client secret.
+* **Consumes:** nothing for secrets. `app_auth = secret` takes the client secret from the pipeline input `TF_VAR_datadog_azure_client_secret` (read from Delinea DSV just in time).
 * **Produces:** no contract. Outputs: `integration_id`, `mode`, `azure_logs_dashboard_url`, `azure_log_metrics`,
   `native_log_forwarding`.
 
@@ -26,12 +26,13 @@
   (false), `dashboard_entra`
 
 ## Providers
-* The Datadog provider reads `DD_API_KEY` and `DD_APP_KEY` from the pipeline environment (Key Vault).
+* The Datadog provider reads `DD_API_KEY` and `DD_APP_KEY` from the pipeline environment (Delinea DSV, masked variables).
 * `api_url = https://api.<site>/`
 
 ## Secrets
-With `app_auth = secret`, the client secret is read with a data source and lands in state (sensitive) as
-`datadog_integration_azure.client_secret`. Use `secretless` to avoid that.
+Default `app_auth = secretless`: no secret. With `app_auth = secret` the client secret arrives as the sensitive
+variable `datadog_azure_client_secret` (pipeline, from DSV) and lands in state as `datadog_integration_azure.client_secret`
+(datadog provider 4.25 has no write-only argument) - documented exception. No data source reads secrets.
 
 ## Cost
 No Azure cost. Datadog bills the Azure-monitored hosts and containers it discovers; tag filters bound this.

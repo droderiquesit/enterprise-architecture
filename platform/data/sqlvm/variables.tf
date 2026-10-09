@@ -73,6 +73,7 @@ variable "settings" {
     # DSV secret names (<prefix>/<env>/<name>); contracts carry only dsv:// references.
     admin_secret_name     = optional(string, "sqlvm-admin-password")
     dbadapter_secret_name = optional(string, "sqlvm-dbadapter-password")
+    host_identity_name    = optional(string, "obs-dbm") # user-assigned identity for host agents (DSV auth)
     dbm_secret_name       = optional(string, "dbm-sqlvm-password")
   })
   default = {}

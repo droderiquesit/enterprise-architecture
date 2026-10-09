@@ -15,6 +15,47 @@
 
 ## Version-specific notes
 
+### 2.0.0 (from 1.x) - MAJOR: Key Vault -> Delinea DSV
+Secrets move from Azure Key Vault to Delinea DevOps Secrets Vault. Nothing secret passes through Terraform any more.
+
+1. **Put the secrets into DSV** (operators: `dsv secret create --path <base>/<name> --data '{"value":"..."}'`):
+   `datadog-api-key`, `datadog-app-key` (pipelines), `fluentbit-shared-key`, `eventhub-fluentbit-listen` (written after
+   the first 2.0 apply from the sensitive output `generated_secrets`), optional `otlp-bearer-token` / `otlp-headers`,
+   DBM passwords. Create a DSV Azure auth provider and one DSV user per managed identity (`external-id` = identity
+   resource id) with read on exactly its paths: collectors (aggregator/gateway, Agents, Fluent Bit), every app identity,
+   host identities, the self-hosted pipeline agent identity.
+2. **Contract**: consumers of `obs-telemetry-transport` must move to v2 (field renames + `secrets` block, see
+   CHANGELOG). Publish v2 before switching consumers.
+3. **Inputs** (rename / replace):
+   | 1.x | 2.0 |
+   |---|---|
+   | `telemetry-transport.datadog.api_key_secret_id` | `datadog.api_key_ref` + `secrets {tenant, tld, base_url, fetch_image}` |
+   | `telemetry-transport.key_vault`, `event_hub.listen_*` | removed; `event_hub.listen_connection_string_ref` |
+   | `aggregator.forward_shared_key_secret_id`, `forward_tls.{cert,key}_secret_id` | `forward_shared_key_ref`, `forward_tls.{cert,key}_ref` |
+   | `gateway.auth.{token_secret_id, client_headers_secret_id}` | `gateway.auth.{token_ref, client_headers_ref}` |
+   | `instrumentation.key_vault_identity_id` | `identity_client_id` (+ `telemetry` v2) |
+   | `host-agents.api_key`, `datadog.{api_key_key_vault, api_key_secret_id, extension_version}` | `datadog.api_key_ref`, `secrets`; `hosts[*].identity_client_id` required |
+   | `kubernetes.api_key = {mode = "write_only"}`, `api_key_wo` | `api_key.mode = "dsv_secret_backend"` (default) + `dsv {...}`, or `existing` (dsv-k8s syncer) |
+   | `dbm.password_ref.kind = "key_vault"`, `aci.{key_vault_uri, api_key_secret_name}` | `kind = "dsv"` + `name = "dsv://..."`, `aci.{api_key_ref, dsv}` |
+   | pipeline `keyVaultName` / `datadog*KeySecret` | `dsv`, `datadogApiKeyRef`, `datadogAppKeyRef`, `dsvFetchPath`; self-hosted pool with a managed identity |
+4. **Expected plan diffs** (review before applying):
+   - destroyed: `azurerm_key_vault_secret.fluentbit_listen`, `azurerm_role_assignment.kv_secrets_user`, the Datadog VM /
+     VMSS extensions (**removing the extension uninstalls the Agent**: after the apply, bump `host-agents.setup_revision`
+     and apply again so the run command / CustomScript re-installs the pinned Agent with the DSV secret backend),
+     `kubernetes_secret_v1.api_key` (both namespaces);
+   - updated in place: aggregator / gateway Container Apps (new revision with dsv-fetch init containers and EmptyDir;
+     Container Apps secrets now hold only config files), app Container Apps / ACI groups using the instrumentation patch,
+     Helm releases (Datadog: `apiKey: ENC[...]` + secret backend; Fluent Bit: init container, no `DD_API_KEY` env),
+     VM run commands / VMSS CustomScript (new installer).
+   - **ACA init containers need the Consumption profile of a workload-profiles environment** (Microsoft Learn: no
+     managed identity for init containers in consumption-only environments or on Dedicated profiles). The package
+     falls back to a refresher container on Dedicated profiles (`refresher_containers`).
+5. **AKS workload identity**: federate the collector identity with `datadog/datadog`, `datadog/datadog-cluster-checks`
+   and `fluent-bit/fluent-bit` (the lab root `obs-kubernetes` does it). That DSV accepts AKS workload-identity tokens is
+   **not verified**; if it does not, use `api_key.mode = "existing"` with the Delinea dsv-k8s syncer.
+6. **State hygiene**: after 2.0 the Datadog API key is no longer in Terraform state. Rotate the API key once (1.x states
+   may contain it as a protected setting / data-source value) and purge old state versions per your retention policy.
+
 ### 1.1.0 (from 1.0.x)
 MINOR: new modules and optional inputs; no monitor key renamed, no rendered schema change. Expect these plan diffs:
 

@@ -71,6 +71,10 @@ state account; `plans` container readable only by the apply identity):
 | VM / VMSS / Service Fabric / specialized VM break-glass passwords | platform/compute | used when no SSH key is set (`random_password`) |
 | Event Hubs authorization rule keys | `obs-telemetry-transport` | the rule resource holds its keys; the listen connection string is published to DSV (`eventhub-fluentbit-listen`) by `tools/secrets/publish.py` from the sensitive output `generated_secrets` |
 
+| Logic Apps Standard runtime storage account key | `deploy-logicapps` | required by the WS1 plan content share outside ASE v3 (identity-based content share unsupported) |
+| `datadog-azure-client-secret` | `obs-azure-integration` | only when `settings.app_auth = secret` (default `secretless` needs none); `datadog_integration_azure.client_secret` has no write-only variant |
+| AKS `kube_config` computed fields | `obs-kubernetes` | read through `data.azurerm_kubernetes_cluster` to configure the helm/kubernetes providers (local accounts are disabled, so they hold no usable admin credential) |
+
 Never stored: `mysql-admin-password` (`administrator_password_wo`, ephemeral input) and the HorizonDB admin password
 (ephemeral). Observability and application roots document their own remaining items (e.g. Logic Apps Standard storage
 key fallback) in their READMEs.
@@ -86,6 +90,11 @@ key fallback) in their READMEs.
   tokens obtained through workload identity federation is **not verified**; fallback: Delinea's dsv-k8s syncer or
   host-level agents.
 * DSV is a public SaaS endpoint (no Private Link): every reader needs HTTPS egress to `<tenant>.secretsvaultcloud.<tld>`.
+* Windows hosts: the Datadog Agent API key is fetched from DSV by the installer; a rotated key reaches Windows Agents only
+  when the installer re-runs (Linux hosts resolve it through the Agent `secret_backend_command` on every Agent restart).
+* Unverified on real Azure: Container Apps init containers authenticating with the app's managed identity, uid 65532
+  write access to ACA/ACI EmptyDir volumes, init containers on Functions-on-Container-Apps, ConfigMap file mode 0500 with
+  `fsGroup` on AKS, and which of two duplicate env vars wins on the Datadog Cluster Agent.
 * No secondary vault: a DSV outage blocks new starts and pipeline steps that need secrets (running processes keep cached
   values) - by design (no copies of DSV secrets elsewhere).
 * `foundation-secrets` never deletes DSV objects; managed users of removed identities are reported, not removed.

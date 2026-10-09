@@ -8,6 +8,9 @@ output "contract" {
       name               = azurerm_windows_virtual_machine.this.name
       private_ip_address = azurerm_network_interface.this.private_ip_address
       principal_id       = azurerm_windows_virtual_machine.this.identity[0].principal_id
+      # user-assigned identity used by host agents to authenticate to Delinea DSV (null when not attached)
+      identity_client_id = try(local.host_identity.client_id, null)
+      identity_id        = try(local.host_identity.id, null)
       os                 = "windows"
       image              = "${var.settings.image.publisher}:${var.settings.image.offer}:${var.settings.image.sku}:${var.settings.image.version}"
       auto_shutdown      = var.settings.auto_shutdown.enabled ? "${var.settings.auto_shutdown.time} ${var.settings.auto_shutdown.timezone}" : null

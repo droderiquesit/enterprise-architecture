@@ -36,6 +36,18 @@
         },
         "private_ip_address": {
           "type": "string"
+        },
+        "identity_client_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identity_id": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": true

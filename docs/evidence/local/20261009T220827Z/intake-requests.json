@@ -1,0 +1,11 @@
+{
+  "log_requests": 75,
+  "other_requests_by_path": {
+    "/api/v2/series": 26,
+    "/api/v0.2/traces": 10,
+    "/api/beta/sketches": 15,
+    "/api/v0.2/stats": 5,
+    "/api/v2/rum": 2
+  },
+  "gateway_otlp_log_records_accepted_and_dropped": 537.0
+}

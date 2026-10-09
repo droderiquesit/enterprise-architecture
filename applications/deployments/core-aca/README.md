@@ -9,13 +9,13 @@
 - **Produced contract**: `deploy-core-aca` (`catalog/contracts/deploy-core-aca.v1.schema.json`): `apps.<svc>.{id,url,...}`,
   `public_api.origin` (consumed by deploy-frontend/deploy-jobs), `endpoints`, `idle_behavior`, `apps.<svc>.revision_suffix`.
 - **Resources**: resource group, 3 × `azurerm_container_app` (module `container-app`), each with user-assigned
-  identity, ACR pull by identity, Key Vault secret refs (`fault-token`, Datadog API key for the sidecar), Fluent Bit
+  identity, ACR pull by identity, Delinea DSV references (`FAULT_TOKEN` env value resolved by the app; the sidecar's Datadog API key written by a dsv-fetch init container into an EmptyDir, image `artifacts["img-dsv-fetch"]`), Fluent Bit
   sidecar + EmptyDir, startup/liveness `/healthz`, readiness `/readyz`, HTTP concurrency scale rule.
 
 ## App settings (owned here)
 | Service | Settings |
 |---|---|
-| all | `DD_ENV/SERVICE/VERSION`, `OTEL_*` (gateway, `http/protobuf`), `LOG_FILE_PATH=/var/log/app/app.log`, `LOG_LEVEL`, `PORT=8080`, `AZURE_CLIENT_ID`, `FAULTS_ENABLED` (false), `FAULT_TOKEN` (Key Vault ref), `GIT_COMMIT` |
+| all | `DD_ENV/SERVICE/VERSION`, `OTEL_*` (gateway, `http/protobuf`), `LOG_FILE_PATH=/var/log/app/app.log`, `LOG_LEVEL`, `PORT=8080`, `AZURE_CLIENT_ID`, `FAULTS_ENABLED` (false), `FAULT_TOKEN` (`dsv://` reference), `DSV_TENANT/TLD/BASE_URL/AUTH`, `GIT_COMMIT` |
 | hello-bff | `CATALOG_API_URL`, `ORDERS_API_URL` (internal FQDNs), `INVENTORY_API_URL` (setting), `ADAPTERS_JSON`, `CORS_ALLOWED_ORIGINS`, `AUTH_MODE` (+ `ENTRA_*`) |
 | hello-orders-api | `SQL_CONNECTION_STRING` (no password, no `Authentication=`), `SQL_USE_AZURE_CREDENTIAL=true`, `CATALOG_API_URL`, `MESSAGING_MODE=servicebus`, `SERVICEBUS_FQDN`, `SERVICEBUS_TOPIC` |
 | hello-catalog-api | `PG_HOST/PORT/DATABASE`, `PG_USER=hello-catalog-api`, `PG_AUTH=entra`, `REDIS_HOST/PORT/AUTH`, `CACHE_TTL_SECONDS`, `AZURE_CREDENTIAL_MODE=managed_identity` |

@@ -665,7 +665,7 @@
       "team-fulfillment"
     ]
   },
-  "package_version": "1.1.0",
+  "package_version": "2.0.0",
   "presence_ref": "deploy-durable.function_app.id",
   "resources": [
     {

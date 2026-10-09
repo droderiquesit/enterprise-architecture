@@ -1,25 +1,23 @@
 # Enterprise Hello core services on AKS (namespace `hello`): hello-bff, hello-orders-api, hello-catalog-api,
 # hello-worker - one Helm release per workload from the repository chart applications/charts/hello-service
-# (Deployment, workload identity ServiceAccount, Service, PDB, HPA, SecretProviderClass, optional Ingress /
-# NetworkPolicy). Values are rendered here from the upstream contracts (yamlencode of a typed object).
+# (Deployment, workload identity ServiceAccount, Service, PDB, HPA, optional Ingress / NetworkPolicy). Values are rendered here from the upstream contracts (yamlencode of a typed object).
 # Logs: stdout -> Fluent Bit DaemonSet (obs-kubernetes). Traces: OTLP to the node-local Datadog Agent
-# (status.hostIP via the downward API). Secrets: Key Vault via the Secrets Store CSI driver add-on
-# (SecretProviderClass with the workload identity) synced to a Kubernetes Secret.
+# (status.hostIP via the downward API). Secrets (ADR-0001 §14): secret settings are env values holding Delinea DSV
+# references (chart secretEnv); the app resolves them at start-up with its AKS workload identity. Fallback
+# settings.secrets_mode = synced: the chart reads a Secret maintained by the Delinea dsv-k8s syncer. No Key Vault.
 module "meta" {
   source = "../modules/service-meta"
 }
 
 locals {
-  ids     = var.foundation_identity.identities
-  meta    = module.meta.services
-  ns      = var.settings.namespace
-  apps    = { for k, a in var.settings.apps : k => a if a.enabled }
-  http    = { for k, a in local.apps : k => a if k != "hello-worker" }
-  port    = { for k in keys(local.apps) : k => k == "hello-worker" ? 8081 : 8080 }
-  wi      = var.platform_aks.workload_identities
-  csi     = var.platform_aks.key_vault_secrets_provider != null
-  kv_name = regex("^https://([^.]+)\\.", var.foundation_identity.key_vault_uri)[0]
-  redis   = var.platform_db_redis
+  ids   = var.foundation_identity.identities
+  meta  = module.meta.services
+  ns    = var.settings.namespace
+  apps  = { for k, a in var.settings.apps : k => a if a.enabled }
+  http  = { for k, a in local.apps : k => a if k != "hello-worker" }
+  port  = { for k in keys(local.apps) : k => k == "hello-worker" ? 8081 : 8080 }
+  wi    = var.platform_aks.workload_identities
+  redis = var.platform_db_redis
 
   svc_url = { for k in keys(local.http) : k => "http://${k}.${local.ns}.svc.cluster.local" }
 
@@ -88,7 +86,7 @@ module "env" {
   identity_client_id = local.wi[each.key].client_id
   faults = {
     enabled   = var.settings.faults_enabled
-    token_ref = local.csi && each.key != "hello-worker" ? lookup(var.foundation_identity.secrets.refs, "fault-token", null) : null
+    token_ref = each.key != "hello-worker" ? lookup(var.foundation_identity.secrets.refs, "fault-token", null) : null
   }
   port               = local.port[each.key]
   log_level          = var.settings.log_level
@@ -121,10 +119,11 @@ locals {
 
   # Env vars the chart renders itself from service/identity/faults/port (labels and env cannot disagree);
   # the schema rejects them in `env`.
-  chart_owned_env = ["DD_AGENT_HOST", "DD_ENV", "DD_SERVICE", "DD_VERSION", "AZURE_CLIENT_ID", "FAULTS_ENABLED", "PORT", "LOG_FILE_PATH"]
+  chart_owned_env = ["DD_AGENT_HOST", "DD_ENV", "DD_SERVICE", "DD_VERSION", "AZURE_CLIENT_ID", "FAULTS_ENABLED", "PORT", "LOG_FILE_PATH", "DSV_TENANT", "DSV_TLD", "DSV_BASE_URL", "DSV_AUTH"]
+  dsv             = var.obs_telemetry_transport.secrets
 
   image      = { for k in keys(local.apps) : k => try(var.artifacts[local.meta[k].artifact].image, null) }
-  secret_env = { for k in keys(local.apps) : k => local.csi ? module.env[k].secret_env : {} }
+  secret_env = { for k in keys(local.apps) : k => module.env[k].secret_env }
   bff_lb     = var.settings.exposure.mode == "internal-lb"
 
   release_values = {
@@ -152,16 +151,19 @@ locals {
       }
       serviceAccount = { create = true, name = local.wi[k].service_account }
       port           = local.port[k]
-      env            = { for n, v in module.env[k].env : n => v if !contains(local.chart_owned_env, n) }
+      env            = { for n, v in module.env[k].env : n => v if !contains(local.chart_owned_env, n) && !contains(keys(local.secret_env[k]), n) }
       secretEnv      = local.secret_env[k]
-      keyVault = {
-        enabled  = length(local.secret_env[k]) > 0
-        name     = local.kv_name
-        tenantId = var.environment.tenant_id
+      dsv = {
+        tenant  = coalesce(local.dsv.tenant, "")
+        tld     = coalesce(local.dsv.tld, "com")
+        baseUrl = local.dsv.base_url
+        auth    = coalesce(local.dsv.auth, "azure")
       }
-      telemetry = { agentHostFromHostIP = true, disableAgentLogCollection = true }
-      logFile   = { enabled = false } # stdout -> Fluent Bit DaemonSet
-      # Faults need FAULT_TOKEN from Key Vault (CSI); without it FAULTS_ENABLED stays false (chart schema rule).
+      secretsMode = var.settings.secrets_mode
+      secretsSync = { secretName = "" }
+      telemetry   = { agentHostFromHostIP = true, disableAgentLogCollection = true }
+      logFile     = { enabled = false } # stdout -> Fluent Bit DaemonSet
+      # Faults need FAULT_TOKEN (dsv:// reference); without it FAULTS_ENABLED stays false (chart schema rule).
       faults = { enabled = var.settings.faults_enabled && contains(keys(local.secret_env[k]), "FAULT_TOKEN") }
       resources = {
         requests = { cpu = a.cpu_request, memory = a.memory_request }
@@ -183,10 +185,10 @@ locals {
         enabled   = k == "hello-bff" && var.settings.exposure.mode == "app-routing"
         className = "webapprouting.kubernetes.azure.com"
         host      = var.settings.exposure.host == null ? "" : var.settings.exposure.host
+        # existing TLS Secret (Delinea dsv-k8s syncer or cert-manager); no Key Vault certificate sync
         tls = {
-          enabled                = true
-          secretName             = "keyvault-${var.settings.exposure.tls_secret_name}"
-          keyVaultCertificateUri = var.settings.exposure.tls_cert_keyvault_id == null ? "" : var.settings.exposure.tls_cert_keyvault_id
+          enabled    = true
+          secretName = var.settings.exposure.tls_secret_name
         }
       }
       networkPolicy = {

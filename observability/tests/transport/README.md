@@ -1,20 +1,24 @@
 # Transport & collection tests
 
 `./run.sh`: terraform fmt, validate and test for 11 modules and 6 lab roots, contract schema checks, then
-`pytest`. Requires docker. Set `TERRAFORM_BIN` to use a wrapper. Set `EH_NETWORK_TESTS=1` to include the host
+`pytest`. Requires docker. Secrets in every docker test travel the production path: values stored in the mock Delinea DSV
+(`tools/secrets/mock_dsv.py`), written by the **real `dsv-fetch` image** (`observability/images/dsv-fetch`, built as
+`dsv-fetch:dev` when missing; `DSV_FETCH_IMAGE` overrides) with `init --format env-yaml|files` into the directory the
+collector mounts at `/dsv-secrets`; the mock intake records only the sha256 of the received `DD-API-KEY` and the tests
+compare it with the DSV value. Set `TERRAFORM_BIN` to use a wrapper. Set `EH_NETWORK_TESTS=1` to include the host
 installer test.
 
 | Test | What it proves (synthetic data, local docker only) |
 |---|---|
-| `dryrun.sh` / `test_dry_run_all_configs` | `fluent-bit --dry-run` passes for 8 configs |
+| `dryrun.sh` / `test_dry_run_all_configs` | `fluent-bit --dry-run` passes for 8 configs with the dsv-fetch env-yaml include (placeholder file); a config whose include is missing is rejected (fail closed) |
 | `test_fluentbit.py::test_sidecar_direct_to_datadog` | `sidecar.yaml` tails the spec-shaped log file and sends to a mock Datadog intake (`mock_intake/`, gzip-decoding `POST /api/v2/logs`). JSON is parsed; the timestamp becomes the event time; .NET and Python stack traces are merged into one event each; secrets are redacted (key=value, JSON field, Bearer JWT, storage AccountKey); ddsource, service and tags are set; trace_id, span_id and dd.trace_id are kept; no duplicates; the API key header and gzip are present; the self-metrics endpoint keeps `_total`; every record carries `telemetry.pipeline:fluent-bit`; sidecars emit no canary |
 | `::test_aggregator_forward_and_eventhub_kafka` | sidecar-forward goes to the aggregator `forward` input (shared key). The aggregator `kafka` input reads Azure diagnostic batches (`{"records":[...]}`) from Apache Kafka 4.1 with SASL PLAIN `$ConnectionString`, the Event Hubs convention. Records are split, app JSON fields are lifted, and `azure.<provider>` source plus resource tags are set. ACA console logs: an allow-listed job is kept; a sidecar app's stdout and the fluent-bit container are dropped. The canary arrives with env and the pipeline tag. |
 | `::test_aggregator_azure_platform_and_control_plane_logs` | Activity Log (Administrative, Service Health), Entra ID SignInLogs, Key Vault AuditEvent (403), AKS kube-audit-admin (exec), Storage read through the `activity-logs` / `platform-logs` hubs: Datadog forwarder conventions (`ddsource` azure.authorization / azure.subscription / azure.activedirectory / azure.keyvault / azure.containerservice / azure.storage, `service:azure`, `subscription_id` / `resource_group` / `tenant` / `resource_type` / `region` / `category` / `azure_log_type` tags, subscription env mapping replacing the static env), Azure fields verbatim (operationName, resultType, identity claims, level), Entra token metadata not redacted, kube-audit JSON not lifted (`aks_audit.*` added), redelivered batches deduplicated, an application category on the platform hub dropped, an oversized record truncated and flagged |
 | `test_category_policy.py` | category-policy.json names only categories in the Microsoft Learn snapshot; tiers disjoint; no application category; AKS defaults avoid full kube-audit |
 | `::test_linux_host_config_with_canary` | `linux-host.yaml` tails a glob, emits the canary, and pushes self-metrics over OTLP (names keep `_total`, `env` attribute) to an Agent stand-in |
 | `test_otel_gateway.py` (7) | upstream and DDOT run gateway.yaml: OTLP gRPC + HTTP, legacy `deployment.environment` mapped to `deployment.environment.name`, `service.version` default, command line dropped. The real datadog exporter posts traces and APM stats to the mock. Also: bearer auth rejects a wrong token; OTLP logs accepted and dropped by default; forwarded only with the overlay; `otelcol_exporter_send_failed_spans` (no suffix) and `fluentbit_output_errors_total` (with suffix) both carry `env`; all overlays validate |
-| `test_dbm_local.py` | DBM SQL scripts (twice) on PostgreSQL 17 and MySQL 8.4; Agent 7.84.2 runs the rendered DBM configs with `ENC[file@...]`; `can_connect` OK, DBM payloads emitted |
-| `test_host_installer.py` (network) | rendered Linux installer in ubuntu:24.04: pinned package, dry-run, 0600 env file, Agent drop-in, idempotent, agent-only host |
+| `test_dbm_local.py` | DBM SQL scripts (twice) on PostgreSQL 17 and MySQL 8.4; Agent 7.84.2 runs the rendered DBM configs and the rendered ACI `datadog.yaml` with the ACI start command: API key + passwords `ENC[dsv://...]` resolved by dsv-fetch `agent-backend` against a mock DSV container (`agent secret`: permissions OK, 3 resolved); `can_connect` OK, DBM payloads emitted |
+| `test_host_installer.py` (network) | rendered Linux installer in ubuntu:24.04: pinned Agent (install script, `DD_INSTALL_ONLY`, `api_key: ENC[dsv://...]`) and Fluent Bit packages, dsv-fetch installed root 0500 + dd-agent 0500, dry-run, non-secret 0600 env file, Agent drop-in, idempotent; then the unit's `ExecStartPre` against a mock DSV writes the 0400 tmpfs env file, Fluent Bit dry-runs with it, and the Agent backend called as dd-agent returns the DSV value; agent-only host |
 | `contract_check.py` | `output "contract"` of the mock-provider plans validates against the JSON schemas |
 
 Not covered locally:

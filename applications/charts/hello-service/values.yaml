@@ -58,23 +58,36 @@ port: 8080
 # -- Non-secret environment (name -> string). Rendered sorted, AFTER DD_AGENT_HOST so values may reference
 #    $(DD_AGENT_HOST) (e.g. OTEL_EXPORTER_OTLP_ENDPOINT=http://$(DD_AGENT_HOST):4317).
 #    Chart-owned names (DD_AGENT_HOST, DD_ENV, DD_SERVICE, DD_VERSION, AZURE_CLIENT_ID, FAULTS_ENABLED,
-#    LOG_FILE_PATH, PORT) and secret-looking names (*PASSWORD, *SECRET, *TOKEN, *API_KEY, *ACCESS_KEY,
-#    OTEL_EXPORTER_OTLP_HEADERS) are rejected by the schema: put secrets in secretEnv / existingSecretEnv.
+#    LOG_FILE_PATH, PORT, DSV_*) are rejected. Secret-looking names (*PASSWORD, *SECRET, *TOKEN, *API_KEY,
+#    *ACCESS_KEY, *CONNECTION_STRING, OTEL_EXPORTER_OTLP_HEADERS) are accepted ONLY with a dsv:// reference value.
 env: {}
 
-# -- Secret environment from Azure Key Vault: name -> VERSIONLESS secret id
-#    (https://<vault>.vault.azure.net/secrets/<name>). Requires keyVault.enabled: the chart renders a
-#    SecretProviderClass (Secrets Store CSI driver, authenticated with identity.clientId), mounts it
-#    read-only and syncs it to the Secret "<fullname>-kv"; env uses secretKeyRef. Values never pass Helm.
+# -- Secret settings as Delinea DSV references (ADR-0001 §14): name -> dsv://<path>#<element>. References are
+#    not secrets: in secretsMode=dsv (default) they are rendered as plain env values and the application
+#    resolves them at start-up (hello_common / Hello.Common) with its AKS workload identity (AZURE_CLIENT_ID +
+#    federated token). Literal values are rejected by the schema.
 secretEnv: {}
 
-keyVault:
-  enabled: false
-  name: ""          # Key Vault name (required when enabled)
-  tenantId: ""      # Entra tenant id (required when enabled)
+# -- Delinea DSV runtime env for the app (DSV_TENANT, DSV_TLD, DSV_BASE_URL, DSV_AUTH). Non-secret.
+dsv:
+  tenant: ""
+  tld: com
+  baseUrl: ""       # https://<tenant>.secretsvaultcloud.<tld>/v1 (empty = derived by the app from tenant/tld)
+  auth: azure       # azure (managed/workload identity) | client_credentials (local tests only) | none
 
-# -- Secret environment from EXISTING Kubernetes Secrets (name -> {secretName, key}); for clusters without
-#    the CSI driver (kind smoke, ARO). The chart never creates Secret objects with literal values.
+# -- How secretEnv reaches the container:
+#    dsv    (default): env value = the dsv:// reference; the app reads DSV itself with workload identity.
+#           OPEN VERIFICATION: DSV maps Azure users by the identity's resource id (xms_mirid claim); that DSV
+#           accepts a token obtained through AKS workload-identity federation is not verified yet.
+#    synced (documented fallback): the Delinea DSV Kubernetes syncer (dsv-k8s) maintains the Secret
+#           secretsSync.secretName (default "<fullname>-dsv", one key per secretEnv name, value = the resolved
+#           secret); the chart references it with secretKeyRef. The chart never creates Secret objects.
+secretsMode: dsv
+secretsSync:
+  secretName: ""
+
+# -- Secret environment from other EXISTING Kubernetes Secrets (name -> {secretName, key}), e.g. ARO without
+#    workload identity (Secrets synced by dsv-k8s) or kind smoke tests. The chart never creates Secrets.
 existingSecretEnv: {}
 
 # -- Telemetry wiring (instrumentation contract, observability/modules/instrumentation).
@@ -92,7 +105,7 @@ logFile:
   sizeLimit: 128Mi
 
 # -- Fault injection (ADR-0001 §9). FAULTS_ENABLED is rendered from here (default false). The token must come
-#    from secretEnv.FAULT_TOKEN (Key Vault) or existingSecretEnv.FAULT_TOKEN - never plain env.
+#    from secretEnv.FAULT_TOKEN (dsv:// reference) or existingSecretEnv.FAULT_TOKEN - never a literal.
 faults:
   enabled: false
 
@@ -152,8 +165,7 @@ ingress:
   annotations: {}
   tls:
     enabled: true
-    secretName: ""                  # default "keyvault-<fullname>-tls" (app routing Key Vault sync naming)
-    keyVaultCertificateUri: ""      # kubernetes.azure.com/tls-cert-keyvault-uri (versionless certificate URI)
+    secretName: ""                  # existing TLS Secret (default "<fullname>-tls"), e.g. synced from DSV by dsv-k8s
 
 # -- OpenShift (ARO). enabled: drop runAsUser/runAsGroup/fsGroup so the restricted-v2 SCC assigns the UID.
 openshift:

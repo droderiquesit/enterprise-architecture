@@ -1,9 +1,10 @@
 locals {
-  component   = "platform-db-sqlvm"
-  workload    = "data-sqlvm"
-  identities  = var.foundation_identity.identities
-  admin_login = "ehsqladmin"
-  vm_name     = substr(module.naming.names.virtual_machine, 0, 64)
+  host_identity = try(var.foundation_identity.identities[var.settings.host_identity_name], null)
+  component     = "platform-db-sqlvm"
+  workload      = "data-sqlvm"
+  identities    = var.foundation_identity.identities
+  admin_login   = "ehsqladmin"
+  vm_name       = substr(module.naming.names.virtual_machine, 0, 64)
   # Windows computer names are limited to 15 characters.
   computer_name = substr(replace("${var.environment.name_prefix}sqlvm${var.environment.name}", "-", ""), 0, 15)
 }
@@ -83,8 +84,11 @@ resource "azurerm_windows_virtual_machine" "this" {
     version   = var.settings.image.version
   }
 
+  # System identity for the SQL IaaS extension; the user-assigned obs-dbm identity lets the host's Datadog Agent and
+  # Fluent Bit read their secrets from Delinea DSV (DSV maps users by user-assigned identity resource id, ADR §14).
   identity {
-    type = "SystemAssigned"
+    type         = local.host_identity == null ? "SystemAssigned" : "SystemAssigned, UserAssigned"
+    identity_ids = local.host_identity == null ? null : [local.host_identity.id]
   }
 
   boot_diagnostics {} # managed storage account

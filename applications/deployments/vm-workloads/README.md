@@ -10,7 +10,7 @@
 - **Package delivery (no SAS in state)**: scripts get an IMDS token for `https://storage.azure.com/` with the host's
   user-assigned identity and download the immutable package URL, verify sha256, install a new release directory,
   switch atomically, health-check (`/healthz`) and roll back automatically on failure. Secrets (inventory `FAULT_TOKEN`)
-  are fetched from Key Vault on the host with an IMDS token for `https://vault.azure.net` — never in Terraform state.
+  are `dsv://` references in the env file / service environment; the services resolve them from Delinea DSV at start-up with the host identity (IMDS) — no secret value in Terraform state or on disk.
 - **Consumed contracts**: platform-messaging, obs-telemetry-transport, foundation-identity; optional platform-vm, platform-vmss,
   platform-db-table-storage (worker `TABLE_MODE=table`), platform-db-cosmos-nosql (inventory Cosmos) — all registered in catalog/components.yaml.
 - **Produced contract**: `deploy-vm-workloads`: `apps.{worker-vm,inventory-vm,worker-vmss}`, `deploy_steps`.

@@ -25,7 +25,7 @@ pytestmark = pytest.mark.skipif(not TERRAFORM or os.environ.get("SKIP_TERRAFORM_
                                 reason="terraform not installed or SKIP_TERRAFORM_TESTS=1")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 HEADER = ("# {name} on AKS - values exactly as rendered by applications/deployments/core-aks (terraform test fixture,\n"
-          "# run \"defaults\": internal-lb exposure, Key Vault CSI enabled). Regenerate: REGEN_EXAMPLES=1 pytest tests/charts -k terraform\n"
+          "# run \"defaults\": internal-lb exposure, secretsMode dsv). Regenerate: REGEN_EXAMPLES=1 pytest tests/charts -k terraform\n"
           "# Release: helm upgrade --install {name} applications/charts/hello-service -n hello -f <this file>\n")
 
 
@@ -43,7 +43,7 @@ def _verbose_plan(root: str, tmp_path_factory) -> str:
 @pytest.fixture(scope="module")
 def core_aks_values(tmp_path_factory) -> dict[str, dict]:
     out = _verbose_plan("applications/deployments/core-aks", tmp_path_factory)
-    first_run = out.split('run "app_routing_and_no_csi"')[0]
+    first_run = out.split('run "app_routing_and_synced_secrets"')[0]
     vals: dict[str, dict] = {}
     for m in re.finditer(r'# helm_release\.app\["([a-z-]+)"\] will be created.*?\+ <<-EOT\n(.*?)\n\s*EOT', first_run, re.S):
         vals.setdefault(m.group(1), yaml.safe_load(textwrap.dedent(m.group(2))))
@@ -74,7 +74,11 @@ def test_terraform_core_aks_values_render(core_aks_values, helm_bin, tmp_path):
         expected = {"Deployment", "ServiceAccount", "PodDisruptionBudget", "HorizontalPodAutoscaler"}
         assert expected <= set(kinds), (name, kinds)
         assert ("Service" in kinds) == (name != "hello-worker")
-        assert ("SecretProviderClass" in kinds) == (name != "hello-worker")
+        assert "SecretProviderClass" not in kinds and "Secret" not in kinds
+        env = {e["name"]: e for e in by_kind(docs, "Deployment")[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
+        assert env["DSV_AUTH"]["value"] == "azure" and env["DSV_BASE_URL"]["value"].endswith("/v1")
+        if name != "hello-worker":   # secret settings are dsv:// references resolved by the app (workload identity)
+            assert env["FAULT_TOKEN"]["value"].startswith("dsv://")
 
 
 def test_terraform_aro_values_render(aro_values, helm_bin, tmp_path):

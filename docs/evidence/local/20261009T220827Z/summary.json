@@ -1,0 +1,574 @@
+{
+  "label": "locally-verified (docker, mock Datadog intake)",
+  "started_utc": "2026-10-09T22:08:27+00:00",
+  "git_commit": "7fd2dcc",
+  "version": "0.1.0-e2e",
+  "command": "python3 tests/integration/run_e2e.py",
+  "images": {
+    "hello-bff:0.1.0-e2e": "sha256:59a112fc42bd61cca534ef68bd70e1a29375c42cdf48426a256f07e3e7fd5e68 3c5834e-dirty 2026-10-09T21:37:18.757152486Z",
+    "hello-orders-api:0.1.0-e2e": "sha256:081f0eb9ed32f5cc21f0540466cb4b7566d6b1e6c1ea5b52d110ba6ac117147f 3c5834e-dirty 2026-10-09T21:37:34.228427971Z",
+    "hello-inventory-api:0.1.0-e2e": "sha256:8cee17f83ee3938de82d7654c465195365734e5898fc046c4895f94633429b73 3c5834e-dirty 2026-10-09T21:37:52.62593669Z",
+    "hello-durable:0.1.0-e2e": "sha256:23fc72fa8bba3e98ea198440ac716d040f1c9802cf8709d82ee2401426bcc1fc 3c5834e-dirty 2026-10-09T21:38:23.510838961Z",
+    "hello-catalog-api:0.1.0-e2e": "sha256:7b90e34363040ee69e5f4644cd64dc07dd805b5f55b4684ec64d1053fc386e40 3c5834e-dirty 2026-10-09T21:24:25.603429211Z",
+    "hello-dbadapter:0.1.0-e2e": "sha256:51bfb8f1df3dcf6f379ade3c5b086e0f4ce057338963dce26f24e400129f4827 3c5834e-dirty 2026-10-09T21:25:19.287426721Z",
+    "hello-worker:0.1.0-e2e": "sha256:6aa34fa0b991083f4edc66a127398a5f0f8ef7dbe469610fecdbeef953c2346f 3c5834e-dirty 2026-10-09T21:26:08.041000737Z",
+    "hello-partner-sim:0.1.0-e2e": "sha256:bce1960337bcfd01bf2ccfdd017f65a23c408e15d8c0604bb9ddda4d2ead4e19 3c5834e-dirty 2026-10-09T21:26:45.910224116Z",
+    "hello-frontend:0.1.0-e2e": "sha256:f27fc66af6122a7277f3f8e9bef254eb397d1c08c6f30b3f198af28040a6bc63 3c5834e-dirty 2026-10-09T21:27:11.427979515Z"
+  },
+  "image_source_check": {
+    "head": "7fd2dcc",
+    "per_image": {
+      "hello-bff:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      },
+      "hello-orders-api:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      },
+      "hello-inventory-api:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      },
+      "hello-durable:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      },
+      "hello-catalog-api:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      },
+      "hello-dbadapter:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      },
+      "hello-worker:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      },
+      "hello-partner-sim:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      },
+      "hello-frontend:0.1.0-e2e": {
+        "revision_label": "3c5834e-dirty",
+        "app_source_diff_to_worktree": " 25 files changed, 2169 insertions(+), 9 deletions(-)"
+      }
+    }
+  },
+  "readiness": {
+    "ready_after_s": 32.3
+  },
+  "seed": {
+    "inventory_seed": {
+      "seeded": 20
+    },
+    "catalog_products": 20
+  },
+  "order_id": "0f3fbc8e-6cd1-4325-865f-43a027ebc0a6",
+  "order_status": "Fulfilled",
+  "trace_id": "000000000000000092f6620584d318dc",
+  "journey": {
+    "timeline": [
+      "Pending 10:09:13 PM",
+      "Fulfilled 10:09:16 PM"
+    ],
+    "footer": "hello-frontend 0.1.0-e2e \u00b7 env e2e \u00b7 api hello-bff 0.1.0-e2e \u00b7 RUM on",
+    "product_rows": 20,
+    "seconds_to_terminal_status": 4.2,
+    "adapter_result": "ok write 3.31ms \u00b7 read 1.45ms \u00b7 update 1.95ms \u00b7 delete 1.52ms",
+    "console_errors": [],
+    "traceparent": "00-000000000000000092f6620584d318dc-0f99fa9491ffacb5-01",
+    "adapter_traceparent": "00-00000000000000002ceac91191f48261-575f9e4bfbb1847a-01",
+    "api_requests": [
+      {
+        "method": "GET",
+        "url": "/api/catalog/products",
+        "traceparent": "00-00000000000000007096214601297ac4-63776f6e57b68bca-01"
+      },
+      {
+        "method": "GET",
+        "url": "/api/version",
+        "traceparent": "00-000000000000000032bffac04dc1cb64-70bca0ea9dbba7a7-01"
+      },
+      {
+        "method": "POST",
+        "url": "/api/orders",
+        "traceparent": "00-000000000000000092f6620584d318dc-0f99fa9491ffacb5-01"
+      },
+      {
+        "method": "GET",
+        "url": "/api/orders/0f3fbc8e-6cd1-4325-865f-43a027ebc0a6",
+        "traceparent": "00-000000000000000007487c833406efa9-4cc2595dc5a2f9a0-01"
+      },
+      {
+        "method": "GET",
+        "url": "/api/orders/0f3fbc8e-6cd1-4325-865f-43a027ebc0a6",
+        "traceparent": "00-0000000000000000b795052a6ead5e71-5077fc09bcc5e3c2-01"
+      },
+      {
+        "method": "GET",
+        "url": "/api/orders/0f3fbc8e-6cd1-4325-865f-43a027ebc0a6",
+        "traceparent": "00-0000000000000000897ee310bf163da4-24559ee95248fdb2-01"
+      },
+      {
+        "method": "GET",
+        "url": "/api/adapters",
+        "traceparent": "00-0000000000000000e502c381e591fe58-3dc5e414cd55199c-01"
+      },
+      {
+        "method": "POST",
+        "url": "/api/adapters/postgresql/roundtrip",
+        "traceparent": "00-00000000000000002ceac91191f48261-575f9e4bfbb1847a-01"
+      },
+      {
+        "method": "GET",
+        "url": "/api/catalog/products",
+        "traceparent": "00-000000000000000059182aa9c60ad594-6afe9cc4ef834bb2-01"
+      }
+    ]
+  },
+  "finished_utc": "2026-10-09T22:10:35+00:00",
+  "results": [
+    {
+      "id": "rum",
+      "check": "1. RUM view + resource + action events captured (Playwright route -> mock intake)",
+      "result": "pass",
+      "detail": {
+        "event_types": {
+          "resource": 11,
+          "action": 5,
+          "view": 5
+        },
+        "bff_resource_events": 7,
+        "rum_requests_forwarded_to_mock": 2,
+        "post_orders_resource_trace_id_matches_traceparent": true
+      },
+      "evidence": "rum-events.sample.json"
+    },
+    {
+      "id": "trace_correlation",
+      "check": "2. Browser traceparent trace_id in hello-bff, hello-orders-api, hello-catalog-api spans + DB client span",
+      "result": "pass",
+      "detail": {
+        "trace_id": "000000000000000092f6620584d318dc",
+        "services_in_trace": [
+          "hello-bff",
+          "hello-catalog-api",
+          "hello-durable",
+          "hello-inventory-api",
+          "hello-orders-api",
+          "hello-partner-sim"
+        ],
+        "bff_server_parent_is_browser_span": true,
+        "sql_server_client_spans_in_trace": 10,
+        "orders_api_sql_spans": [
+          "INSERT orders.idempotency orders.orders",
+          "SELECT orders.idempotency",
+          "SELECT orders.orders",
+          "UPDATE"
+        ],
+        "postgresql_client_spans_in_trace": 2,
+        "catalog_postgresql_spans": [
+          "SELECT",
+          "catalog"
+        ],
+        "redis_spans_in_trace": 2,
+        "postgresql_client_spans_in_products_list_trace": 2,
+        "span_count": 75
+      },
+      "evidence": "trace-journey.json"
+    },
+    {
+      "id": "durable_workflow",
+      "check": "3. hello-durable orchestration/activity spans exist and are tied to the order's trace",
+      "result": "pass",
+      "detail": {
+        "instance_id": "order-0f3fbc8e-6cd1-4325-865f-43a027ebc0a6",
+        "orchestration_spans": 1,
+        "activities": {
+          "activity:ReserveInventory": 2,
+          "activity:UpdateOrderStatus": 6,
+          "activity:ChargePayment": 2,
+          "activity:RecordFulfillment": 2,
+          "activity:RecordWorkflowOutcome": 2
+        },
+        "same_trace_as_browser": true,
+        "spans_with_link_to_browser_trace": 3,
+        "status": "Fulfilled",
+        "downstream_server_spans": {
+          "hello-catalog-api GET /products/{sku}": 1,
+          "hello-bff POST /api/orders": 1,
+          "hello-orders-api POST /orders/": 1,
+          "hello-partner-sim POST /payments": 1,
+          "hello-orders-api PATCH /orders/{id:guid}/status": 3,
+          "hello-inventory-api POST /inventory/{sku}/reserve": 1
+        }
+      },
+      "evidence": "durable-workflow.json"
+    },
+    {
+      "id": "worker_consumer",
+      "check": "4. hello-worker servicebus.process consumer span links to the producer span",
+      "result": "pass",
+      "detail": {
+        "servicebus_process_spans": 2,
+        "linked_to_browser_trace": 1,
+        "link_targets_a_producer_span": 1,
+        "new_trace_not_parent": true,
+        "producer_spans": [
+          "send order-events"
+        ]
+      },
+      "evidence": "worker-consumer.json"
+    },
+    {
+      "id": "logs_fluentbit",
+      "check": "5. Logs of every app arrive via Fluent Bit with ddsource/service/env/version + pipeline tag; journey logs carry the trace_id",
+      "result": "pass",
+      "detail": {
+        "per_service": {
+          "hello-bff": {
+            "events": 45,
+            "with_required_ddtags": 45,
+            "with_ddsource": 45
+          },
+          "hello-orders-api": {
+            "events": 31,
+            "with_required_ddtags": 31,
+            "with_ddsource": 31
+          },
+          "hello-inventory-api": {
+            "events": 7,
+            "with_required_ddtags": 7,
+            "with_ddsource": 7
+          },
+          "hello-durable": {
+            "events": 413,
+            "with_required_ddtags": 413,
+            "with_ddsource": 413
+          },
+          "hello-catalog-api": {
+            "events": 15,
+            "with_required_ddtags": 15,
+            "with_ddsource": 15
+          },
+          "hello-partner-sim": {
+            "events": 11,
+            "with_required_ddtags": 11,
+            "with_ddsource": 11
+          },
+          "hello-worker": {
+            "events": 10,
+            "with_required_ddtags": 10,
+            "with_ddsource": 10
+          },
+          "hello-dbadapter-postgresql": {
+            "events": 6,
+            "with_required_ddtags": 6,
+            "with_ddsource": 6
+          }
+        },
+        "journey_log_services_with_trace_id": [
+          "hello-catalog-api",
+          "hello-inventory-api",
+          "hello-orders-api",
+          "hello-partner-sim"
+        ],
+        "dd_trace_id_mismatches": 0,
+        "events_without_pipeline_tag": 0,
+        "problems": [],
+        "note": "hello-durable lines are the Functions host console stream (plain text, no trace_id); see README"
+      },
+      "evidence": "logs-sample.json"
+    },
+    {
+      "id": "no_duplicates",
+      "check": "6. No duplicates: unique marker log count == 1 per service; no duplicated events/spans",
+      "result": "pass",
+      "detail": {
+        "marker_counts": {
+          "hello-orders-api": 1,
+          "hello-catalog-api": 1,
+          "hello-inventory-api": 1,
+          "hello-partner-sim": 1,
+          "hello-worker": 1,
+          "hello-durable": 1,
+          "hello-bff": 1,
+          "hello-dbadapter-postgresql": 1
+        },
+        "identical_structured_app_events": 0,
+        "repeated_plaintext_host_lines (also repeated in source file)": 40,
+        "transport_duplicates_vs_source_file": 0,
+        "duplicate_span_ids": 0
+      },
+      "evidence": "duplicates.json"
+    },
+    {
+      "id": "tags",
+      "check": "7. Required tags / resource attributes on spans, metrics, logs and RUM",
+      "result": "pass",
+      "detail": {
+        "span_problems": [],
+        "metrics_resource_missing": {
+          "hello-bff": [],
+          "hello-orders-api": [],
+          "hello-inventory-api": [],
+          "hello-durable": [],
+          "hello-catalog-api": [],
+          "hello-partner-sim": [],
+          "hello-worker": [],
+          "hello-dbadapter-postgresql": []
+        },
+        "rum_tags_ok": true,
+        "workflow_metric_points": 2,
+        "order_id_in_metric_attributes": []
+      },
+      "evidence": "tags.json"
+    },
+    {
+      "id": "redaction",
+      "check": "8. Secret redaction at the intake (app path + Fluent Bit transport path)",
+      "result": "pass",
+      "detail": {
+        "fake_secret_found_at_intake": false,
+        "app_path_events": 1,
+        "app_path_redacted": true,
+        "transport_path_events": 1,
+        "transport_path_redacted": true
+      },
+      "evidence": "redaction.json"
+    },
+    {
+      "id": "faults",
+      "check": "9. Fault injection: 201 + BFF errors + recovery after expiry; wrong token 403; FAULTS_ENABLED=false 404",
+      "result": "pass",
+      "detail": {
+        "wrong_token": 403,
+        "missing_token": 403,
+        "disabled_service_catalog": 404,
+        "activate": 201,
+        "bff_during_fault": 500,
+        "bff_more": [
+          500,
+          503,
+          503
+        ],
+        "recovered_after_s": 33.9,
+        "fault_trace_spans": 7,
+        "fault_trace_logs": 8
+      },
+      "evidence": "faults.json"
+    },
+    {
+      "id": "idempotency",
+      "check": "10. Idempotency-Key on POST /api/orders replays the same order",
+      "result": "pass",
+      "detail": {
+        "first": {
+          "status": 202,
+          "order_id": "98a75938-7e13-4e11-9d08-e9dfe6dbd3d3"
+        },
+        "replay": {
+          "status": 202,
+          "order_id": "98a75938-7e13-4e11-9d08-e9dfe6dbd3d3",
+          "replayed_header": {
+            "Idempotent-Replayed": "true"
+          }
+        },
+        "same_key_different_body": {
+          "status": 409,
+          "body": {
+            "type": "urn:enterprise-hello:problem:idempotency-key-reused",
+            "title": "Idempotency-Key reused",
+            "status": 409,
+            "detail": "The Idempotency-Key was already used with a different request body.",
+            "instance": "/orders",
+            "trace_id": "082fcccb9602eb74d37c8d6d29f9443d"
+          }
+        },
+        "orders_with_customer_ref": 1
+      },
+      "evidence": "idempotency.json"
+    },
+    {
+      "id": "exporter_transport",
+      "check": "11. OTel gateway datadog exporter delivers traces/metrics to the (mock) intake; OTLP logs not forwarded",
+      "result": "pass",
+      "detail": {
+        "other_requests_by_path": {
+          "/api/v2/series": 26,
+          "/api/v0.2/traces": 10,
+          "/api/beta/sketches": 15,
+          "/api/v0.2/stats": 5,
+          "/api/v2/rum": 2
+        },
+        "gateway_otlp_log_records_accepted_then_dropped_by_nop": 537.0
+      },
+      "evidence": "intake-requests.json"
+    },
+    {
+      "id": "secrets_dsv",
+      "check": "12. Secrets resolved from DSV (mock), no secret value in logs/intake",
+      "result": "pass",
+      "detail": {
+        "ok": true,
+        "mode": "DSV_AUTH=client_credentials against tools/secrets/mock_dsv.py (azure managed-identity grant: unit-tested only, no IMDS locally)",
+        "per_identity": {
+          "e2e-orders-api": {
+            "token_requests": 1,
+            "read": [
+              "eh/e2e/orders-api/fault-token",
+              "eh/e2e/orders-api/servicebus-connection-string",
+              "eh/e2e/orders-api/sql-connection-string"
+            ],
+            "expected": [
+              "eh/e2e/orders-api/fault-token",
+              "eh/e2e/orders-api/servicebus-connection-string",
+              "eh/e2e/orders-api/sql-connection-string"
+            ],
+            "ok": true
+          },
+          "e2e-durable": {
+            "token_requests": 1,
+            "read": [
+              "eh/e2e/durable/servicebus-connection-string",
+              "eh/e2e/durable/sql-connection-string"
+            ],
+            "expected": [
+              "eh/e2e/durable/servicebus-connection-string",
+              "eh/e2e/durable/sql-connection-string"
+            ],
+            "ok": true
+          },
+          "e2e-catalog-api": {
+            "token_requests": 1,
+            "read": [
+              "eh/e2e/catalog-api/pg"
+            ],
+            "expected": [
+              "eh/e2e/catalog-api/pg"
+            ],
+            "ok": true
+          },
+          "e2e-dbadapter-postgresql": {
+            "token_requests": 1,
+            "read": [
+              "eh/e2e/dbadapter-postgresql/pg"
+            ],
+            "expected": [
+              "eh/e2e/dbadapter-postgresql/pg"
+            ],
+            "ok": true
+          },
+          "e2e-worker": {
+            "token_requests": 1,
+            "read": [
+              "eh/e2e/worker/servicebus-connection-string",
+              "eh/e2e/worker/tables-connection-string"
+            ],
+            "expected": [
+              "eh/e2e/worker/servicebus-connection-string",
+              "eh/e2e/worker/tables-connection-string"
+            ],
+            "ok": true
+          },
+          "e2e-observability": {
+            "token_requests": 2,
+            "read": [
+              "eh/e2e/datadog-api-key"
+            ],
+            "expected": [
+              "eh/e2e/datadog-api-key"
+            ],
+            "ok": true
+          }
+        },
+        "unexpected_identities": [],
+        "unauthenticated_reads": [],
+        "init_services": {
+          "dsv-fetch-flb": {
+            "state": "exited",
+            "exit_code": "0"
+          },
+          "dsv-fetch-otel": {
+            "state": "exited",
+            "exit_code": "0"
+          }
+        },
+        "secret_files": {
+          "/hold/flb/fluentbit-env.yaml": {
+            "mode": "0o400",
+            "uid": 65532,
+            "fstype": "tmpfs"
+          },
+          "/hold/otel/dd-api-key": {
+            "mode": "0o400",
+            "uid": 10001,
+            "fstype": "tmpfs"
+          }
+        },
+        "leak_scan": {
+          "needles": 22,
+          "needle_labels": [
+            "dsv-client-secret:e2e-catalog-api",
+            "dsv-client-secret:e2e-dbadapter-postgresql",
+            "dsv-client-secret:e2e-durable",
+            "dsv-client-secret:e2e-observability",
+            "dsv-client-secret:e2e-orders-api",
+            "dsv-client-secret:e2e-worker",
+            "eh/e2e/catalog-api/pg#value",
+            "eh/e2e/datadog-api-key#value",
+            "eh/e2e/dbadapter-postgresql/pg#value",
+            "eh/e2e/durable/servicebus-connection-string#value",
+            "eh/e2e/durable/servicebus-connection-string#value:SharedAccessKey",
+            "eh/e2e/durable/sql-connection-string#value",
+            "eh/e2e/durable/sql-connection-string#value:Password",
+            "eh/e2e/orders-api/fault-token#value",
+            "eh/e2e/orders-api/servicebus-connection-string#value",
+            "eh/e2e/orders-api/servicebus-connection-string#value:SharedAccessKey",
+            "eh/e2e/orders-api/sql-connection-string#value",
+            "eh/e2e/orders-api/sql-connection-string#value:Password",
+            "eh/e2e/worker/servicebus-connection-string#value",
+            "eh/e2e/worker/servicebus-connection-string#value:SharedAccessKey",
+            "eh/e2e/worker/tables-connection-string#value",
+            "eh/e2e/worker/tables-connection-string#value:AccountKey"
+          ],
+          "haystacks": {
+            "intake": 751541,
+            "logs:log-perms": 0,
+            "logs:dsv-secrets-holder": 0,
+            "logs:dsv-fetch-otel": 150,
+            "logs:intake": 0,
+            "logs:otel-gateway": 18261,
+            "logs:catalog-api": 6826,
+            "logs:dsv-fetch-flb": 160,
+            "logs:flb-inventory": 2826,
+            "logs:flb-worker": 2730,
+            "logs:flb-catalog": 2762,
+            "logs:partner-sim": 4513,
+            "logs:flb-bff": 2634,
+            "logs:flb-dbadapter": 2826,
+            "logs:flb-durable": 2762,
+            "logs:worker": 3620,
+            "logs:bff": 71932,
+            "logs:flb-orders": 2730,
+            "logs:inventory-api": 3345,
+            "logs:dbadapter-postgresql": 2296,
+            "logs:durable": 505968,
+            "logs:flb-partner": 2762,
+            "logs:frontend": 2904,
+            "logs:orders-api": 19791,
+            "otel-file:metrics.jsonl": 2054224,
+            "otel-file:traces.jsonl": 452596
+          },
+          "leaks": []
+        }
+      },
+      "evidence": "secrets-dsv.json"
+    }
+  ],
+  "totals": {
+    "pass": 12
+  }
+}

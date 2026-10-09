@@ -8,13 +8,16 @@ variable "settings" {
     trace_sample_ratio = optional(number, 1)
     replica_ceiling    = optional(number, 6)
     # internal-lb: hello-bff Service type LoadBalancer on an internal Azure LB (HTTP, VNet only).
-    # app-routing: Ingress (class webapprouting.kubernetes.azure.com) with TLS from Key Vault; requires the
+    # app-routing: Ingress (class webapprouting.kubernetes.azure.com) with TLS from an existing Secret
+    #              (tls_secret_name, e.g. synced from Delinea DSV by the dsv-k8s syncer); requires the
     #              AKS application routing add-on (platform-aks settings.app_routing, enabled by default with an internal NGINX controller).
+    # dsv (default): secret settings are dsv:// env values resolved by the app with workload identity;
+    # synced (fallback): the chart reads the Secret <release>-dsv maintained by the Delinea dsv-k8s syncer
+    secrets_mode = optional(string, "dsv")
     exposure = optional(object({
-      mode                 = optional(string, "internal-lb")
-      host                 = optional(string) # app-routing: DNS host name
-      tls_cert_keyvault_id = optional(string) # app-routing: Key Vault certificate URI (versionless)
-      tls_secret_name      = optional(string, "hello-bff-tls")
+      mode            = optional(string, "internal-lb")
+      host            = optional(string) # app-routing: DNS host name
+      tls_secret_name = optional(string, "hello-bff-tls")
     }), {})
     cors_allowed_origins = optional(list(string), [])
     auth_mode            = optional(string, "none")
@@ -61,6 +64,10 @@ variable "settings" {
   validation {
     condition     = (var.settings.helm.chart_repository == null || (startswith(coalesce(var.settings.helm.chart_repository, "x"), "oci://") && var.settings.helm.chart_version != null)) && var.settings.helm.timeout_seconds >= 60 && var.settings.helm.timeout_seconds <= 1800 && var.settings.helm.max_history >= 2
     error_message = "helm: chart_repository must be oci://... with chart_version; 60 <= timeout_seconds <= 1800; max_history >= 2 (rollback needs history)."
+  }
+  validation {
+    condition     = contains(["dsv", "synced"], var.settings.secrets_mode)
+    error_message = "secrets_mode must be dsv (app resolves dsv:// references with workload identity) or synced (Delinea dsv-k8s syncer Secret)."
   }
   validation {
     condition     = contains(["azurecli", "workloadidentity"], var.settings.kubelogin_mode)

@@ -11,11 +11,15 @@
 
 ## App settings
 Common OTel/DD env (gateway), `LOG_FILE_PATH`, `LATENCY_MS_MEAN`, `PARTNER_FAILURE_RATE` (lab), `AZURE_CLIENT_ID`,
-`AZURE_CREDENTIAL_MODE=managed_identity`, `FAULTS_ENABLED` (false). **Secrets**: ACI has no Key Vault references, so
-`FAULT_TOKEN` (app) and `DD_API_KEY` (sidecar) are read with `data.azurerm_key_vault_secret` at plan time and set as
-`secure_environment_variables` (sensitive; stored only in the Entra-only, private state account). The plan identity
-needs Key Vault Secrets User on those two secrets. `settings.resolve_secrets=false` disables this (no faults, sidecar
-cannot ship). Both secrets must live in the foundation Key Vault (precondition).
+`AZURE_CREDENTIAL_MODE=managed_identity`, `FAULTS_ENABLED` (false). **Secrets** (Delinea DSV, ADR-0001 §14): no secret value
+in this root, its plan or its state (the 1.x Key Vault data source and `secure_environment_variables` are gone).
+`FAULT_TOKEN` is a plain env var holding its `dsv://` reference, resolved by the app at start-up with the group's
+user-assigned identity (IMDS) - `DSV_*` env is set. The Fluent Bit sidecar's `DD_API_KEY` is written by a third
+container, **dsv-fetch** (image `artifacts["img-dsv-fetch"]`), into the shared emptyDir `/dsv-secrets/fluentbit-env.yaml`
+and refreshed hourly; it is a regular container because ACI init containers cannot use managed identities (Microsoft
+Learn). Fluent Bit fails fast until the file exists and is restarted by `restart_policy = Always` (first start may
+show one or two Fluent Bit restarts). `settings.resolve_secrets` was removed. ACI emptyDir is disk-backed (not tmpfs):
+the file is 0400 and lives only as long as the container group.
 
 ## Rollback / smoke
 Re-apply with the previous digest (the group is updated/recreated; single instance ⇒ brief outage). Smoke from the VNet:

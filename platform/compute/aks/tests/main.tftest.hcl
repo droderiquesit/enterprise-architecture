@@ -123,16 +123,12 @@ run "secure_defaults" {
     error_message = "without a user pool, workloads schedule on the system pool."
   }
   assert {
-    condition     = toset(keys(azurerm_federated_identity_credential.workload)) == toset(["hello-bff", "hello-orders-api", "hello-catalog-api", "hello-worker", "obs-collector"])
+    condition     = toset(keys(azurerm_federated_identity_credential.workload)) == toset(["hello-bff", "hello-orders-api", "hello-catalog-api", "hello-worker"])
     error_message = "federated credentials for the AKS workloads + Datadog agent."
   }
   assert {
     condition     = azurerm_federated_identity_credential.workload["hello-bff"].subject == "system:serviceaccount:hello:hello-bff"
     error_message = "federated subject must be the service account."
-  }
-  assert {
-    condition     = azurerm_federated_identity_credential.workload["obs-collector"].subject == "system:serviceaccount:datadog:datadog-agent"
-    error_message = "Datadog agent federated subject."
   }
   assert {
     condition     = azurerm_role_assignment.cluster_admin["deploy-agent"].role_definition_name == "Azure Kubernetes Service RBAC Cluster Admin"

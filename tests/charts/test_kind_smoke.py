@@ -6,7 +6,7 @@ What it proves (beyond helm template/kubeconform): the chart installs on a real 
 (namespace with Pod Security `restricted` enforced), digest-pinned images start with the hardened securityContext
 (read-only root FS, non-root, drop ALL), /healthz + /readyz + /version answer through `kubectl port-forward`,
 hello-bff reaches hello-catalog-api through in-cluster DNS, and `helm upgrade` / `helm rollback` work per release.
-Not covered (no Azure): workload identity webhook, Key Vault CSI driver, app routing, Datadog Agent/Fluent Bit.
+Not covered (no Azure): workload identity webhook, Delinea DSV resolution, app routing, Datadog Agent/Fluent Bit.
 
 Needs docker, kind, kubectl, helm and the local images hello-bff:0.1.0-e2e and hello-catalog-api:0.1.0-e2e
 (tests/integration/build_images.sh); postgres:17-alpine and redis:7-alpine are pulled when missing. ~2.5 GB disk.

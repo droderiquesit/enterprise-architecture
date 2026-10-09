@@ -13,8 +13,8 @@
 - **Produced contract**: `deploy-appservice`: `apps.hello-inventory-api.{id,url,staging_slot,...}`, `endpoints`, `deploy_steps[webapp-zip]`.
 
 ## App settings
-Common OTel/DD env (gateway), `AZURE_CLIENT_ID`, `FAULTS_ENABLED`, `FAULT_TOKEN` = `@Microsoft.KeyVault(SecretUri=...)`
-(resolved with `key_vault_reference_identity_id` = the app identity), inventory `STORAGE_MODE`, `COSMOS_ENDPOINT/DATABASE/
+Common OTel/DD env (gateway), `AZURE_CLIENT_ID`, `FAULTS_ENABLED`, `FAULT_TOKEN` = `dsv://...` reference
+(resolved by the app at start-up with its identity; `DSV_*` settings), inventory `STORAGE_MODE`, `COSMOS_ENDPOINT/DATABASE/
 CONTAINER`, `COSMOS_CONNECTION_MODE=gateway`; catalog container `PG_*`, `REDIS_*`, `WEBSITES_PORT=8080`. No sidecars:
 logs via diagnostic settings (AppServiceConsoleLogs → Event Hubs, obs-diagnostics).
 

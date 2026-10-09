@@ -9,7 +9,7 @@
 - **ARO** — `hello-catalog-api` with the shared Helm chart [`applications/charts/hello-service`](../../charts/hello-service/README.md):
   Terraform renders the release values into the contract (`aro.helm.{release,chart,chart_path,values}`) with OpenShift
   settings (`openshift.enabled`: no fixed `runAsUser` — the restricted-v2 SCC assigns the UID; `openshift.route.enabled`:
-  edge-TLS Route instead of an Ingress; no AKS workload identity webhook / Key Vault CSI add-on). `scripts/deploy-aro.sh`
+  edge-TLS Route instead of an Ingress; no AKS workload identity webhook, so no `dsv://` settings: secrets come from Secrets synced from Delinea DSV by the dsv-k8s syncer, chart `secretsMode=synced`, `DSV_AUTH=none`). `scripts/deploy-aro.sh`
   runs `helm upgrade --install --rollback-on-failure` (Helm 3: `--atomic`) `--wait --history-max 10`.
   **Prerequisite**: an OpenShift login — the pipeline provides `OC_TOKEN` (deployer service account / Entra-integrated
   identity; kubeadmin via `az aro list-credentials` is not used) and the script runs `oc login --server <api> --token`;

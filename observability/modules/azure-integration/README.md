@@ -15,7 +15,8 @@ custom_metrics, resource_collection, cspm, usage_metrics, app_service_plan and c
 Output: `integration_id`, which is the integration id (`<tenant>:<client>`) or the monitor resource id.
 
 ## Secrets
-* `client_secret` is a sensitive input that the caller sources from Key Vault. The module never outputs it.
+* `auth = secretless` is the **default** (no secret anywhere). `client_secret` (auth = secret only) is a sensitive input the
+  pipeline reads from Delinea DSV just in time (never tfvars). The module never outputs it.
   `datadog_integration_azure.client_secret` is stored (encrypted) in state. This is a provider limitation: there
   is no write-only variant in datadog 4.25.
 * `auth = secretless` uses Datadog's secretless (workload identity federation) auth, so no secret is involved.
