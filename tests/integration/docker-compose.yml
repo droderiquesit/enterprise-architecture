@@ -1,0 +1,397 @@
+# Enterprise Hello - LOCAL end-to-end integration stack (docker compose). TEST ONLY, synthetic data only.
+# Driven by tests/integration/run_e2e.py; see tests/integration/README.md for what is real / emulated / mocked.
+#
+#   real:      app images built from this repo (tests/integration/build_images.sh), SQL Server, PostgreSQL, Redis,
+#              Fluent Bit 5.1.3 (observability/config/fluent-bit/sidecar.yaml, unmodified), OTel collector contrib
+#              0.162.0 (observability/config/otel/gateway.yaml + test overlay), Chromium + Datadog Browser RUM SDK
+#   emulated:  Azure Service Bus (official emulator), Azure Storage (Azurite)
+#   mocked:    Datadog intake (observability/tests/transport/mock_intake), Cosmos DB (inventory STORAGE_MODE=memory)
+#
+# Every published port binds to 127.0.0.1 only. Credentials below are throw-away local values (not secrets).
+name: eh-e2e
+
+x-version: &version "0.1.0-e2e"
+
+# ---- telemetry env every app gets (mirrors observability/modules/instrumentation `env` for a gateway target)
+x-otel-env: &otel-env
+  DD_ENV: e2e
+  DD_VERSION: *version
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-gateway:4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  OTEL_TRACES_SAMPLER: parentbased_traceidratio
+  OTEL_TRACES_SAMPLER_ARG: "1"
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_LOGS_EXPORTER: none
+  OTEL_PROPAGATORS: tracecontext,baggage
+  OTEL_METRIC_EXPORT_INTERVAL: "5000"
+  OTEL_BSP_SCHEDULE_DELAY: "1000"
+  LOG_LEVEL: information
+  LOG_FILE_PATH: /var/log/app/app.log
+  FAULTS_ENABLED: "false"
+  GIT_COMMIT: ${E2E_GIT_COMMIT:-unknown}
+
+x-dotnet-env: &dotnet-env
+  <<: *otel-env
+  OTEL_DOTNET_AUTO_LOGS_ENABLED: "false"
+
+x-python-env: &python-env
+  <<: *otel-env
+  OTEL_PYTHON_LOG_CORRELATION: "true"
+  OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "false"
+  OTEL_PYTHON_EXCLUDED_URLS: healthz,readyz,version
+
+# ---- Fluent Bit sidecar: observability/config/fluent-bit/ mounted read-only at /fluent-bit/etc/eh and started with
+# sidecar.yaml (parsers.yaml + lua/enterprise_hello.lua resolved relative to it), exactly as observability/tests/transport
+# runs it; the modules ship the same three files (main config, parsers.yaml, lua/) side by side.
+x-flb: &flb
+  image: fluent/fluent-bit:5.1.3
+  command: ["-c", "/fluent-bit/etc/eh/sidecar.yaml"]
+  restart: unless-stopped
+  depends_on:
+    log-perms: { condition: service_completed_successfully }
+    intake: { condition: service_started }
+
+x-flb-env: &flb-env
+  LOG_FILE_PATH: /var/log/app/app.log
+  FLB_STATE_DIR: /var/log/app/.flb
+  # TEST-ONLY override: plain HTTP to the mock intake. Deployments use http-intake.logs.<site>:443 with TLS on.
+  FLB_DD_HOST: intake
+  FLB_DD_PORT: "8080"
+  FLB_DD_TLS: "off"
+  DD_API_KEY: test-not-a-real-key
+
+x-flb-files: &flb-files ../../observability/config/fluent-bit:/fluent-bit/etc/eh:ro
+
+x-sql-conn-orders: &sql-orders "Server=tcp:mssql,1433;Database=orders;User Id=sa;Password=E2e-Local0nly!Pass;Encrypt=True;TrustServerCertificate=True;Connect Timeout=15"
+x-sql-conn-fulfillment: &sql-fulfillment "Server=tcp:mssql,1433;Database=fulfillment;User Id=sa;Password=E2e-Local0nly!Pass;Encrypt=True;TrustServerCertificate=True;Connect Timeout=15"
+x-sb-conn: &sb-conn "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+# Azurite's well-known development account (public, documented by Microsoft; not a secret)
+x-azurite-conn: &azurite-conn "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
+
+services:
+  # ------------------------------------------------------------------------------------------ plumbing
+  log-perms:
+    # named volumes are created root:root 0755; the apps run non-root (uid 1654 .NET chiseled, 10001 Python)
+    image: python:3.13-slim
+    command: ["python", "-c", "import os; [os.chmod(os.path.join('/v', d), 0o777) for d in os.listdir('/v')]"]
+    volumes:
+      - logs-bff:/v/bff
+      - logs-orders:/v/orders
+      - logs-catalog:/v/catalog
+      - logs-inventory:/v/inventory
+      - logs-partner:/v/partner
+      - logs-worker:/v/worker
+      - logs-durable:/v/durable
+      - logs-dbadapter:/v/dbadapter
+
+  intake:
+    # mock Datadog intake, reused unmodified from the transport tests
+    image: python:3.13-slim
+    command: ["python", "-u", "/mock/mock_intake.py"]
+    volumes:
+      - ../../observability/tests/transport/mock_intake:/mock:ro
+    ports: ["127.0.0.1:18090:8080"]
+
+  otel-gateway:
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    command: ["--config=/etc/eh/gateway.yaml", "--config=/etc/eh/e2e-overlay.yaml"]
+    environment:
+      DD_API_KEY: test-not-a-real-key
+      DD_SITE: datadoghq.com
+      DD_ENV: e2e
+      DD_HOSTNAME: otel-gateway-e2e
+      TRACE_SAMPLING_PERCENTAGE: "100"
+      GATEWAY_MEMORY_LIMIT_MIB: "400"
+      GATEWAY_MEMORY_SPIKE_MIB: "100"
+      SELF_SCRAPE_INTERVAL: 10s
+      OTEL_RESOURCE_ATTRIBUTES: service.name=otel-gateway,deployment.environment.name=e2e
+    volumes:
+      - ../../observability/config/otel/gateway.yaml:/etc/eh/gateway.yaml:ro
+      - ./config/otel/e2e-overlay.yaml:/etc/eh/e2e-overlay.yaml:ro
+      - ${E2E_WORK_DIR:-./.work}/otel:/out
+    ports: ["127.0.0.1:18133:13133"]
+    depends_on: [intake]
+
+  # ------------------------------------------------------------------------------------------ data + brokers
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: E2e-Local0nly!Pass
+      MSSQL_PID: Developer
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'E2e-Local0nly!Pass' -C -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+
+  mssql-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    entrypoint: ["/opt/mssql-tools18/bin/sqlcmd", "-S", "mssql", "-U", "sa", "-P", "E2e-Local0nly!Pass", "-C", "-b", "-i", "/init/init.sql"]
+    volumes: ["./config/mssql/init.sql:/init/init.sql:ro"]
+    depends_on:
+      mssql: { condition: service_healthy }
+
+  servicebus-emulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    environment:
+      ACCEPT_EULA: "Y"
+      SQL_SERVER: mssql
+      MSSQL_SA_PASSWORD: E2e-Local0nly!Pass
+    volumes:
+      - ./config/servicebus/config.json:/ServiceBus_Emulator/ConfigFiles/Config.json:ro
+    depends_on:
+      mssql: { condition: service_healthy }
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: ["azurite", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--skipApiVersionCheck", "--loose", "--inMemoryPersistence"]
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: e2e-local-only
+      POSTGRES_DB: catalog
+    volumes: ["./config/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d catalog"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  # ------------------------------------------------------------------------------------------ applications
+  catalog-api:
+    image: hello-catalog-api:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      <<: *python-env
+      DD_SERVICE: hello-catalog-api
+      OTEL_SERVICE_NAME: hello-catalog-api
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-catalog,domain=catalog,tier=backend,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
+      PG_HOST: postgres
+      PG_DATABASE: catalog
+      PG_USER: postgres
+      PG_AUTH: password
+      PG_PASSWORD: e2e-local-only
+      PG_SSLMODE: disable
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: none
+      REDIS_TLS: "false"
+      SEED_ON_STARTUP: "true"
+      FAULTS_ENABLED: "false"   # check 9: a FAULTS_ENABLED=false service answers 404 on /admin/faults
+    volumes: [logs-catalog:/var/log/app]
+    ports: ["127.0.0.1:18082:8080"]
+    depends_on:
+      log-perms: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      otel-gateway: { condition: service_started }
+
+  orders-api:
+    image: hello-orders-api:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      <<: *dotnet-env
+      DD_SERVICE: hello-orders-api
+      OTEL_SERVICE_NAME: hello-orders-api
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-orders,domain=orders,tier=backend,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
+      SQL_CONNECTION_STRING: *sql-orders
+      STORAGE_MODE: sql
+      MESSAGING_MODE: servicebus
+      SERVICEBUS_CONNECTION_STRING: *sb-conn
+      CATALOG_API_URL: http://catalog-api:8080
+      FAULTS_ENABLED: "true"
+      FAULT_TOKEN: e2e-fault-token-local-only
+    volumes: [logs-orders:/var/log/app]
+    ports: ["127.0.0.1:18083:8080"]
+    depends_on:
+      log-perms: { condition: service_completed_successfully }
+      mssql-init: { condition: service_completed_successfully }
+      servicebus-emulator: { condition: service_started }
+      otel-gateway: { condition: service_started }
+
+  inventory-api:
+    image: hello-inventory-api:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      <<: *dotnet-env
+      DD_SERVICE: hello-inventory-api
+      OTEL_SERVICE_NAME: hello-inventory-api
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-inventory,domain=inventory,tier=backend,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
+      STORAGE_MODE: memory   # Cosmos DB emulator is too heavy for this sandbox: in-memory store (README: known gaps)
+    volumes: [logs-inventory:/var/log/app]
+    ports: ["127.0.0.1:18084:8080"]
+    depends_on:
+      log-perms: { condition: service_completed_successfully }
+      otel-gateway: { condition: service_started }
+
+  partner-sim:
+    image: hello-partner-sim:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      <<: *python-env
+      DD_SERVICE: hello-partner-sim
+      OTEL_SERVICE_NAME: hello-partner-sim
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-payments,domain=payments,tier=external-sim,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
+      LATENCY_MS_MEAN: "40"
+      PARTNER_FAILURE_RATE: "0"
+    volumes: [logs-partner:/var/log/app]
+    ports: ["127.0.0.1:18085:8080"]
+    depends_on:
+      log-perms: { condition: service_completed_successfully }
+      otel-gateway: { condition: service_started }
+
+  dbadapter-postgresql:
+    image: hello-dbadapter:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      <<: *python-env
+      DD_SERVICE: hello-dbadapter-postgresql
+      DB_SERVICE_NAME: hello-dbadapter-postgresql
+      OTEL_SERVICE_NAME: hello-dbadapter-postgresql
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-data,domain=data,tier=backend,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
+      DB_FAMILY: postgresql
+      PG_HOST: postgres
+      PG_DATABASE: adapter
+      PG_USER: postgres
+      PG_AUTH: password
+      PG_PASSWORD: e2e-local-only
+      PG_SSLMODE: disable
+    volumes: [logs-dbadapter:/var/log/app]
+    ports: ["127.0.0.1:18086:8080"]
+    depends_on:
+      log-perms: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      otel-gateway: { condition: service_started }
+
+  worker:
+    image: hello-worker:${E2E_VERSION:-0.1.0-e2e}
+    # hello-worker exits when the broker is unreachable at startup (the emulator needs ~30-60 s after SQL Server);
+    # restart like ACA/systemd would.
+    restart: on-failure
+    environment:
+      <<: *python-env
+      DD_SERVICE: hello-worker
+      OTEL_SERVICE_NAME: hello-worker
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-notifications,domain=notifications,tier=worker,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
+      MESSAGING_MODE: servicebus
+      SERVICEBUS_CONNECTION_STRING: *sb-conn
+      SB_TOPIC: order-events
+      SB_SUBSCRIPTION: notifications
+      TABLE_MODE: table
+      TABLES_CONNECTION_STRING: *azurite-conn
+      PORT: "8081"
+    volumes: [logs-worker:/var/log/app]
+    ports: ["127.0.0.1:18087:8081"]
+    depends_on:
+      log-perms: { condition: service_completed_successfully }
+      servicebus-emulator: { condition: service_started }
+      azurite: { condition: service_started }
+      otel-gateway: { condition: service_started }
+
+  durable:
+    image: hello-durable:${E2E_VERSION:-0.1.0-e2e}
+    # The Functions host writes worker + host logs to stdout (FunctionAppLogs in Azure). hello-durable has no
+    # LOG_FILE_PATH sink, so for the local sidecar path the host's console stream is tee'd into the shared volume
+    # (stand-in for FunctionAppLogs -> Event Hubs -> aggregator, which observability/tests/transport covers).
+    entrypoint: ["/bin/bash", "-c", "set -o pipefail; /opt/startup/start_nonappservice.sh 2>&1 | tee -a /var/log/app/app.log"]
+    environment:
+      <<: *dotnet-env
+      DD_SERVICE: hello-durable
+      OTEL_SERVICE_NAME: hello-durable
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-fulfillment,domain=fulfillment,tier=workflow,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
+      LOG_FILE_PATH: ""   # not supported by the Functions worker (see entrypoint)
+      AzureWebJobsStorage: *azurite-conn
+      DURABLE_TASK_HUB: hellodurablee2e
+      RECONCILE_SCHEDULE: "0 0 3 * * *"
+      ServiceBusConnection: *sb-conn
+      SERVICEBUS_CONNECTION_STRING: *sb-conn
+      SQL_CONNECTION_STRING: *sql-fulfillment
+      STORAGE_MODE: sql
+      ORDERS_API_URL: http://orders-api:8080
+      INVENTORY_API_URL: http://inventory-api:8080
+      PARTNER_API_URL: http://partner-sim:8080
+      AzureFunctionsJobHost__telemetryMode: OpenTelemetry
+    volumes: [logs-durable:/var/log/app]
+    ports: ["127.0.0.1:18088:8080"]
+    depends_on:
+      log-perms: { condition: service_completed_successfully }
+      mssql-init: { condition: service_completed_successfully }
+      servicebus-emulator: { condition: service_started }
+      azurite: { condition: service_started }
+      otel-gateway: { condition: service_started }
+
+  bff:
+    image: hello-bff:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      <<: *dotnet-env
+      DD_SERVICE: hello-bff
+      OTEL_SERVICE_NAME: hello-bff
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-web,domain=web,tier=frontend-api,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
+      CATALOG_API_URL: http://catalog-api:8080
+      ORDERS_API_URL: http://orders-api:8080
+      INVENTORY_API_URL: http://inventory-api:8080
+      ADAPTERS_JSON: '[{"family":"postgresql","url":"http://dbadapter-postgresql:8080"}]'
+      CORS_ALLOWED_ORIGINS: http://localhost:18080
+      AUTH_MODE: none
+      RATE_LIMIT_PERMIT_LIMIT: "1000"
+    volumes: [logs-bff:/var/log/app]
+    ports: ["127.0.0.1:18081:8080"]
+    depends_on:
+      log-perms: { condition: service_completed_successfully }
+      otel-gateway: { condition: service_started }
+
+  frontend:
+    image: hello-frontend:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      DD_SITE: datadoghq.com
+      API_ORIGIN: http://localhost:18081
+    volumes: ["./config/frontend/config.json:/config/config.json:ro"]
+    ports: ["127.0.0.1:18080:8080"]
+
+  # ------------------------------------------------------------------------------------------ Fluent Bit sidecars
+  flb-bff:
+    <<: *flb
+    environment: { <<: *flb-env, FLB_DD_SERVICE: hello-bff, FLB_DD_SOURCE: csharp, FLB_DD_TAGS: "env:e2e,service:hello-bff,version:0.1.0-e2e,team:hello-web,domain:web,tier:frontend-api,application:enterprise-hello,region:local" }
+    volumes: [*flb-files, logs-bff:/var/log/app]
+  flb-orders:
+    <<: *flb
+    environment: { <<: *flb-env, FLB_DD_SERVICE: hello-orders-api, FLB_DD_SOURCE: csharp, FLB_DD_TAGS: "env:e2e,service:hello-orders-api,version:0.1.0-e2e,team:hello-orders,domain:orders,tier:backend,application:enterprise-hello,region:local" }
+    volumes: [*flb-files, logs-orders:/var/log/app]
+  flb-inventory:
+    <<: *flb
+    environment: { <<: *flb-env, FLB_DD_SERVICE: hello-inventory-api, FLB_DD_SOURCE: csharp, FLB_DD_TAGS: "env:e2e,service:hello-inventory-api,version:0.1.0-e2e,team:hello-inventory,domain:inventory,tier:backend,application:enterprise-hello,region:local" }
+    volumes: [*flb-files, logs-inventory:/var/log/app]
+  flb-durable:
+    <<: *flb
+    environment: { <<: *flb-env, FLB_DD_SERVICE: hello-durable, FLB_DD_SOURCE: csharp, FLB_DD_TAGS: "env:e2e,service:hello-durable,version:0.1.0-e2e,team:hello-fulfillment,domain:fulfillment,tier:workflow,application:enterprise-hello,region:local" }
+    volumes: [*flb-files, logs-durable:/var/log/app]
+  flb-catalog:
+    <<: *flb
+    environment: { <<: *flb-env, FLB_DD_SERVICE: hello-catalog-api, FLB_DD_SOURCE: python, FLB_DD_TAGS: "env:e2e,service:hello-catalog-api,version:0.1.0-e2e,team:hello-catalog,domain:catalog,tier:backend,application:enterprise-hello,region:local" }
+    volumes: [*flb-files, logs-catalog:/var/log/app]
+  flb-partner:
+    <<: *flb
+    environment: { <<: *flb-env, FLB_DD_SERVICE: hello-partner-sim, FLB_DD_SOURCE: python, FLB_DD_TAGS: "env:e2e,service:hello-partner-sim,version:0.1.0-e2e,team:hello-payments,domain:payments,tier:external-sim,application:enterprise-hello,region:local" }
+    volumes: [*flb-files, logs-partner:/var/log/app]
+  flb-worker:
+    <<: *flb
+    environment: { <<: *flb-env, FLB_DD_SERVICE: hello-worker, FLB_DD_SOURCE: python, FLB_DD_TAGS: "env:e2e,service:hello-worker,version:0.1.0-e2e,team:hello-notifications,domain:notifications,tier:worker,application:enterprise-hello,region:local" }
+    volumes: [*flb-files, logs-worker:/var/log/app]
+  flb-dbadapter:
+    <<: *flb
+    environment: { <<: *flb-env, FLB_DD_SERVICE: hello-dbadapter-postgresql, FLB_DD_SOURCE: python, FLB_DD_TAGS: "env:e2e,service:hello-dbadapter-postgresql,version:0.1.0-e2e,team:hello-data,domain:data,tier:backend,application:enterprise-hello,region:local" }
+    volumes: [*flb-files, logs-dbadapter:/var/log/app]
+
+volumes:
+  logs-bff:
+  logs-orders:
+  logs-catalog:
+  logs-inventory:
+  logs-partner:
+  logs-worker:
+  logs-durable:
+  logs-dbadapter:

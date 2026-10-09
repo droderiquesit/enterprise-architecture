@@ -1,0 +1,87 @@
+%% Delivery: universal Azure DevOps pipeline (azure-pipelines.yml + pipelines/generated/component-stages.yml).
+%% Sources: pipelines/README.md, tools/README.md, tools/changeset, tools/deploy, tools/report, ADR-0001 sections 4-5.
+flowchart TB
+  subgraph LEGEND["Legend"]
+    direction LR
+    lg1["A"] la@--> lg2["B: application / data traffic"]
+    lg3["A"] lt@-.-> lg4["B: telemetry"]
+    lg5["A"] lc@==> lg6["B: deployment / control"]
+  end
+
+  GIT["git push to main / PR build validation /<br/>nightly schedule / manual run (mode, components)"]
+
+  subgraph SELECT["Select (tools/changeset)"]
+    FP["fingerprints per component<br/>validation_fp (files, modules, tests, docs)<br/>deploy_fp (rendered config, versions, contract majors, artifact source fp)"]
+    REC[("deployment records<br/>deployments/&lt;env&gt;/&lt;id&gt;.json")]
+    SEL["selection.json + ADO output variables<br/>modes: pr | deploy | manual | reconcile | drift | retire"]
+  end
+
+  subgraph CHECKS["Validate + Security (Microsoft-hosted, no credentials)"]
+    VAL["tools/validate/component.py matrix<br/>fmt, init -backend=false, validate, terraform test (mocks),<br/>unit tests, pipeline lint, ownership, versions, generated-file check"]
+    SEC["gitleaks, trivy fs, checkov<br/>(pinned, checksum-verified)"]
+  end
+
+  BUILD["Build (deployPool, build identity)<br/>reuse image/package tagged with source fingerprint<br/>or build + push by digest, SBOM, provenance"]
+
+  subgraph WAVES["C_&lt;component&gt; stages in dependency order (generated), parallel where independent"]
+    direction LR
+    W0["foundation-*, obs-prereqs,<br/>obs-azure-integration<br/>(bootstrap is manual)"] w01@==> W1["platform-*"]
+    W1 w12@==> W2["obs-telemetry-transport"]
+    W2 w23@==> W3["deploy-* , obs-hosts,<br/>obs-kubernetes, obs-dbm"]
+    W3 w34@==> W4["obs-diagnostics, obs-monitoring<br/>(after all selected deployments)"]
+  end
+
+  subgraph STAGE["one component stage (state boundary = &lt;env&gt;/&lt;id&gt;.tfstate)"]
+    PLAN["Plan job (plan identity)<br/>render tfvars, materialize upstream contracts,<br/>artifact digests, terraform plan -detailed-exitcode,<br/>plan_policy.py (protected deletes need approvals.yaml)"]
+    PLANS[("plans container<br/>(plan file, sensitive)")]
+    MAN["manifest.json binding<br/>commit, config/contracts/artifacts sha, plan sha256"]
+    APPLY["Apply deployment job (apply identity)<br/>environment lab-&lt;env&gt; approvals + exclusive lock<br/>only when the plan has changes; re-verifies the binding"]
+    POST["deploy_steps (deploy-zip.sh / deploy-swa.sh)<br/>+ smoke.sh for deployment roots"]
+    PUB["publish contract envelope<br/>contracts/&lt;env&gt;/&lt;contract&gt;/v1.json"]
+    WREC["write deployment record"]
+  end
+
+  RETIRE["Retire (environment lab-&lt;env&gt;-retire)<br/>destroy approved retirements consumers-first<br/>from the commit in their record"]
+  VERIFY["Verify: tools/smoke/smoke.py (HTTP /healthz /readyz /version)<br/>+ observability/tools/verify/telemetry_verify.py"]
+  DRIFT["Drift report (drift mode)"]
+  EVID["Evidence: tools/report/report.py<br/>deployment-report.md + evidence.json<br/>-> evidence/&lt;env&gt;/runs/&lt;build id&gt;/<br/>+ Datadog DORA deployment events"]
+
+  AZ["Azure subscription"]
+  DDOG[("Datadog")]
+
+  GIT c1@==> SELECT
+  FP c2@==> SEL
+  REC c3@==> SEL
+  SEL c4@==> VAL
+  SEL c5@==> SEC
+  VAL c6@==> BUILD
+  SEC c7@==> BUILD
+  BUILD c8@==> WAVES
+  WAVES c9@==>|"each C_ stage"| PLAN
+  PLAN c10@==> PLANS
+  PLAN c11@==> MAN
+  MAN c12@==> APPLY
+  PLANS c13@==> APPLY
+  APPLY c14@==> AZ
+  APPLY c15@==> POST
+  APPLY c16@==> PUB
+  PUB c17@==>|"consumed by downstream plans"| PLAN
+  APPLY c18@==> WREC
+  WREC c19@==> REC
+  WAVES c20@==> RETIRE
+  RETIRE c21@==> VERIFY
+  RETIRE c22@==> DRIFT
+  VERIFY c23@==> EVID
+  DRIFT c24@==> EVID
+
+  POST a1@-->|"HTTP smoke"| AZ
+  VERIFY a2@-->|"HTTP probes"| AZ
+  VERIFY t1@-.->|"read-only API queries: RUM, spans, logs, metrics"| DDOG
+  EVID t2@-.->|"DORA deployment events"| DDOG
+
+  classDef app stroke:#1f6feb,stroke-width:2px
+  classDef tel stroke:#8250df,stroke-width:2px,stroke-dasharray:6 4
+  classDef ctl stroke:#bc4c00,stroke-width:3.5px
+  class la,a1,a2 app
+  class lt,t1,t2 tel
+  class lc,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,c21,c22,c23,c24,w01,w12,w23,w34 ctl

@@ -1,0 +1,130 @@
+%% Foundation layer: bootstrap, hub/spoke network, subnets + delegations, private endpoints, private DNS,
+%% egress, identities / Key Vault, governance and deployment-agent access.
+%% Sources: bootstrap/README.md, foundation/*/README.md, ADR-0001 sections 4 and 8.
+flowchart TB
+  subgraph LEGEND["Legend"]
+    direction LR
+    lg1["A"] la@--> lg2["B: application / data traffic"]
+    lg3["A"] lt@-.-> lg4["B: telemetry"]
+    lg5["A"] lc@==> lg6["B: deployment / control"]
+  end
+
+  subgraph ADO["Azure DevOps (outside Azure VNet)"]
+    PIPE["Universal pipeline<br/>azure-pipelines.yml"]
+    MSH["Microsoft-hosted agents<br/>(Validate, Security, PR Select)<br/>no service connection"]
+  end
+
+  subgraph BOOT["bootstrap (manual, local state first, then migrated)"]
+    STATE[("State storage account<br/>ZRS, versioning, soft delete,<br/>shared keys off, CanNotDelete lock<br/>containers: tfstate, contracts, plans,<br/>deployments, evidence, packages")]
+    PID["Pipeline identities<br/>plan (Reader) / apply (Contributor +<br/>constrained RBAC Admin) / build (packages,<br/>AcrPush) / validate (no roles)<br/>federated credentials (Entra issuer)"]
+  end
+
+  ARM["Azure Resource Manager<br/>(public management plane)"]
+  INET(("Internet /<br/>Datadog intake"))
+
+  subgraph HUB["Hub VNet 10.40.0.0/20 (topology = hub-spoke only)"]
+    FWSUB["AzureFirewallSubnet + AzureFirewallManagementSubnet<br/>(firewall_subnet)"]
+    BASSUB["AzureBastionSubnet (bastion_subnet)"]
+    AGWSUB["appgw (appgw_subnet)"]
+  end
+
+  subgraph SPOKE["Spoke VNet 10.41.0.0/16 - default_outbound_access disabled on every subnet, NSG per subnet"]
+    direction TB
+    subgraph SUBS_COMPUTE["compute subnets"]
+      S_COMPUTE["compute 10.41.10.0/24"]
+      S_AKS["aks-nodes 10.41.0.0/22"]
+      S_ACA["aca-infra 10.41.4.0/23<br/>deleg. Microsoft.App/environments"]
+      S_APPSVC["appsvc-integration 10.41.12.0/26<br/>deleg. Microsoft.Web/serverFarms"]
+      S_FLEX["flex-integration 10.41.12.64/26<br/>deleg. Microsoft.App/environments"]
+      S_ACI["aci 10.41.12.128/26<br/>deleg. Microsoft.ContainerInstance/containerGroups"]
+      S_BATCH["batch 10.41.14.0/24"]
+      S_SF["sfmc / aro-master / aro-worker"]
+    end
+    subgraph SUBS_DATA["data subnets (VNet injection)"]
+      S_PG["postgres 10.41.13.0/27<br/>deleg. Microsoft.DBforPostgreSQL/flexibleServers"]
+      S_MY["mysql 10.41.13.32/27<br/>deleg. Microsoft.DBforMySQL/flexibleServers"]
+      S_MI["sqlmi 10.41.13.64/26<br/>deleg. Microsoft.Sql/managedInstances"]
+      S_CAS["cassandra-mi 10.41.13.128/26"]
+    end
+    S_PE["private-endpoints 10.41.11.0/24"]
+    S_OBS["observability 10.41.13.192/26"]
+    S_AGENTS["deploy-agents 10.41.12.192/26<br/>(deleg. Microsoft.DevOpsInfrastructure/pools in MDP mode)<br/>service endpoint Microsoft.Storage"]
+  end
+
+  subgraph EGRESS["egress (foundation-network)"]
+    NAT["NAT Gateway + static public IP<br/>(egress = nat-gateway, default)"]
+    RT["route table 0.0.0.0/0 -> firewall<br/>(egress = firewall, two-pass switch)"]
+    FW["Azure Firewall Basic/Standard<br/>(foundation-edge, off by default)"]
+  end
+
+  subgraph DNS["Private DNS (foundation-network)"]
+    ZONES["~27 privatelink.* zones<br/>blob, vault, sql, postgres, cosmos_*, redis,<br/>servicebus, acr, webapps, aca, batch, ...<br/>linked to spoke (+ hub)"]
+    INTZ["lab internal zone<br/>&lt;env&gt;.&lt;prefix&gt;.lab.internal<br/>(VM auto-registration)"]
+  end
+
+  subgraph IDENT["foundation-identity"]
+    KV[("Key Vault (RBAC, public access off,<br/>purge protection, 7 d soft delete)<br/>secrets set out-of-band")]
+    UAI["Workload user-assigned identities<br/>hello-*, obs-collector, obs-dbm,<br/>aks-control-plane, aks-kubelet, deploy-agent"]
+  end
+
+  subgraph GOV["foundation-governance (subscription scope)"]
+    BUDGET["Monthly budget + action group<br/>(alerts only, does not cap spend)"]
+    POLICY["Policy: RG tags (audit), allowed locations,<br/>NIC public IP (audit)"]
+  end
+
+  subgraph AGENTS["foundation-deploy-agents"]
+    VMSSAG["Self-hosted agents: VMSS (0 instances idle)<br/>or Managed DevOps Pool"]
+  end
+
+  PE_KV["PE vault"]
+  PE_STATE["PE blob (bootstrap phase 2)"]
+  PE_PLAT["PEs of platform resources<br/>(SQL, Cosmos, Redis, ACR Premium,<br/>Service Bus Premium, storage, Event Hubs)"]
+
+  %% control / deployment
+  PIPE c1@==> MSH
+  PIPE c2@==> VMSSAG
+  MSH c3@==>|"ARM only (PR builds: none)"| ARM
+  MSH c4@==>|"phase 1: temporary IP allowlist"| STATE
+  VMSSAG c5@==> ARM
+  VMSSAG c6@==>|"phase 2: private only"| PE_STATE
+  VMSSAG c7@==> PE_KV
+  VMSSAG c8@==> PE_PLAT
+  PID c9@==>|"workload identity federation"| PIPE
+  POLICY c10@==> SPOKE
+  VMSSAG c11@==> S_AGENTS
+
+  %% application / data paths
+  S_PE a1@--- PE_KV
+  S_PE a2@--- PE_STATE
+  S_PE a3@--- PE_PLAT
+  PE_KV a4@--> KV
+  PE_STATE a5@--> STATE
+  ZONES a6@--> PE_KV
+  ZONES a7@--> PE_PLAT
+  SUBS_COMPUTE a8@--> NAT
+  S_OBS a9@--> NAT
+  S_AGENTS a10@--> NAT
+  NAT a11@--> INET
+  SUBS_COMPUTE a12@--> RT
+  RT a13@--> FW
+  FW a14@--> INET
+  FWSUB a15@--- FW
+  HUB a16@<--> SPOKE
+  UAI a17@--> KV
+  SUBS_COMPUTE a18@--> S_PE
+
+  %% telemetry
+  S_OBS t1@-.-> INET
+
+  MSH x1@-. "cannot reach private endpoints" .-x PE_PLAT
+
+  classDef app stroke:#1f6feb,stroke-width:2px
+  classDef tel stroke:#8250df,stroke-width:2px,stroke-dasharray:6 4
+  classDef ctl stroke:#bc4c00,stroke-width:3.5px
+  classDef blocked stroke:#cf222e,stroke-width:2px,stroke-dasharray:2 3
+  class la,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18 app
+  class lt,t1 tel
+  class lc,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11 ctl
+  class x1 blocked
+  classDef optional stroke-dasharray:4 3,fill:#f6f8fa
+  class FW,FWSUB,BASSUB,AGWSUB,RT optional

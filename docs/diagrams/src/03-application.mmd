@@ -1,0 +1,137 @@
+%% Application layer: Enterprise Hello services, data ownership boundaries, messaging and durable workflows.
+%% Sources: ADR-0001 section 9, applications/services/*/README.md, catalog/architecture-matrix.yaml.
+flowchart LR
+  subgraph LEGEND["Legend"]
+    direction LR
+    lg1["A"] la@--> lg2["B: application / data traffic"]
+    lg3["A"] lt@-.-> lg4["B: telemetry"]
+    lg5["A"] lc@==> lg6["B: deployment / control"]
+  end
+
+  BROWSER["Browser<br/>hello-frontend SPA (React 19)<br/>Static Web Apps (westeurope) or nginx container"]
+  TRAFFIC["hello-traffic<br/>ACA scheduled job<br/>Playwright + API journeys"]
+
+  subgraph EDGE["entry"]
+    BFF["hello-bff (.NET 10)<br/>/api/catalog, /api/orders, /api/inventory, /api/adapters<br/>CORS, rate limit, optional Entra JWT"]
+  end
+
+  subgraph CAT_B["boundary: hello-catalog-api"]
+    CAT["hello-catalog-api (FastAPI)<br/>GET /products, /products/{sku}"]
+    PGDB[("PostgreSQL db catalog<br/>schema catalog")]
+    REDIS[("Managed Redis<br/>prefix catalog: (cache-aside, TTL 60 s)")]
+  end
+
+  subgraph ORD_B["boundary: hello-orders-api"]
+    ORD["hello-orders-api (.NET 10)<br/>POST /orders (Idempotency-Key), GET /orders/{id},<br/>PATCH /orders/{id}/status (internal)"]
+    SQLO[("Azure SQL db orders<br/>schema orders")]
+  end
+
+  subgraph INV_B["boundary: hello-inventory-api"]
+    INV["hello-inventory-api (.NET 10)<br/>GET /inventory/{sku}, POST reserve / release"]
+    COSMOS[("Cosmos DB NoSQL<br/>db inventory / container items")]
+  end
+
+  subgraph SBUS["Service Bus (platform-messaging)"]
+    TOPIC{{"topic order-events"}}
+    S_F["sub fulfillment"]
+    S_N["sub notifications"]
+    S_A["sub audit"]
+    S_R["sub archive"]
+    Q_B["queue batch-items"]
+  end
+
+  subgraph DUR_B["boundary: hello-durable (Functions Flex Consumption)"]
+    STARTER["OrderEventsStarter<br/>(instance id order-{order_id})"]
+    ORCH["OrderProcessing orchestration<br/>Reserve -> Charge (timer race) -> RecordFulfillment<br/>-> UpdateOrderStatus; compensation ReleaseInventory"]
+    BATCHO["BatchProcessing (fan-out/fan-in)"]
+    RECON["Reconciliation orchestration"]
+    SQLF[("Azure SQL db fulfillment<br/>schema fulfillment")]
+    DSTORE[("Durable runtime storage<br/>task hub (Azure Storage provider)")]
+  end
+
+  PARTNER["hello-partner-sim (ACI, private IP)<br/>POST /payments (idempotent by order_id)"]
+
+  subgraph WRK_B["boundary: hello-worker"]
+    WORKER["hello-worker (VM / VMSS / AKS)"]
+    TBLN[("Table Storage table notifications")]
+  end
+
+  subgraph FN_B["boundary: hello-functions"]
+    AUDIT["hello-functions audit<br/>(Premium EP1)"]
+    LEDGER[("Confidential Ledger collection order-audit<br/>(or Table Storage when ledger disabled)")]
+    WARM["cache_warmer timer (Dedicated)"]
+    QUOTE["quote HTTP (Functions on ACA)"]
+  end
+
+  subgraph LA_B["boundary: Logic Apps"]
+    LASTD["Logic Apps Standard<br/>audit-archive workflow"]
+    BLOB[("Blob container order-archive")]
+    LACON["Logic Apps Consumption<br/>hourly batch request"]
+  end
+
+  subgraph JOBS_B["boundary: hello-jobs"]
+    JREC["reconcile-trigger (ACA scheduled job)"]
+    JBATCH["process-batch-items (ACA event job, KEDA)"]
+    JSEED["seed (ACA manual job)"]
+    JAGG["daily-aggregate (Azure Batch task)"]
+    TBLB[("Table Storage table batchitems")]
+    AGGF[("daily-aggregate-&lt;date&gt;.json<br/>(task dir / optional blob)")]
+  end
+
+  subgraph ADP_B["boundary: hello-dbadapter-&lt;family&gt; (one per enabled DB family)"]
+    ADP["hello-dbadapter-&lt;family&gt;<br/>POST /roundtrip"]
+    ADPDB[("db/keyspace/table 'adapter' in the family's store")]
+  end
+
+  BROWSER a1@-->|"/api/* + W3C traceparent"| BFF
+  TRAFFIC a2@--> BROWSER
+  TRAFFIC a3@--> BFF
+  BFF a4@--> CAT
+  BFF a5@--> ORD
+  BFF a6@--> INV
+  BFF a7@--> ADP
+  CAT a8@--> PGDB
+  CAT a9@--> REDIS
+  ORD a10@-->|"price: GET /products/{sku}"| CAT
+  ORD a11@--> SQLO
+  ORD a12@-->|"OrderCreated (MessageId = order id)"| TOPIC
+  TOPIC a13@--- S_F
+  TOPIC a14@--- S_N
+  TOPIC a15@--- S_A
+  TOPIC a16@--- S_R
+  S_F a17@--> STARTER
+  STARTER a18@--> ORCH
+  ORCH a19@-->|"reserve / release"| INV
+  INV a20@--> COSMOS
+  ORCH a21@-->|"ChargePayment"| PARTNER
+  ORCH a22@-->|"RecordFulfillment (MERGE)"| SQLF
+  ORCH a23@-->|"PATCH status Reserved/Charged/Fulfilled/Failed"| ORD
+  ORCH a24@--- DSTORE
+  BATCHO a25@-->|"EnqueueBatchItems"| Q_B
+  LACON a26@--> Q_B
+  Q_B a27@--> JBATCH
+  JREC a28@-->|"POST /api/workflows/reconciliation"| RECON
+  RECON a29@-->|"GET /orders?since"| ORD
+  RECON a30@--> SQLF
+  S_N a31@--> WORKER
+  WORKER a32@--> TBLN
+  S_A a33@--> AUDIT
+  AUDIT a34@--> LEDGER
+  S_R a35@--> LASTD
+  LASTD a36@--> BLOB
+  WARM a37@--> CAT
+  QUOTE a38@--> CAT
+  JBATCH a39@--> TBLB
+  JAGG a40@-->|"GET /orders?since"| ORD
+  JAGG a44@--> AGGF
+  JSEED a41@-->|"POST /seed"| CAT
+  JSEED a45@-->|"POST /inventory/seed"| INV
+  ADP a42@--> ADPDB
+  BROWSER a43@-->|"polls GET /api/orders/{id}"| BFF
+
+  classDef app stroke:#1f6feb,stroke-width:2px
+  classDef tel stroke:#8250df,stroke-width:2px,stroke-dasharray:6 4
+  classDef ctl stroke:#bc4c00,stroke-width:3.5px
+  class la,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32,a33,a34,a35,a36,a37,a38,a39,a40,a41,a42,a43,a44,a45 app
+  class lt tel
+  class lc ctl

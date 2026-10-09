@@ -81,7 +81,7 @@ resource "azurerm_virtual_machine_extension" "datadog" {
 
 resource "azurerm_virtual_machine_run_command" "setup" {
   for_each           = { for k, h in local.vms : k => h if h.install_fluent_bit || h.install_agent }
-  name               = "eh-observability-setup"
+  name               = "observability-setup"
   location           = each.value.location
   virtual_machine_id = each.value.resource_id
   tags               = var.tags
@@ -148,7 +148,7 @@ locals {
 # installer into the image or set install_fluent_bit = false and call scripts/ from that extension.
 resource "azurerm_virtual_machine_scale_set_extension" "setup" {
   for_each                     = { for k, h in local.vmsss : k => h if h.install_fluent_bit || h.install_agent }
-  name                         = "eh-observability-setup"
+  name                         = "observability-setup"
   virtual_machine_scale_set_id = each.value.resource_id
   publisher                    = each.value.os_type == "linux" ? "Microsoft.Azure.Extensions" : "Microsoft.Compute"
   type                         = each.value.os_type == "linux" ? "CustomScript" : "CustomScriptExtension"

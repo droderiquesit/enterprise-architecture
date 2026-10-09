@@ -1,0 +1,46 @@
+# Worked example for docs/guides/service-onboarding-tutorial.md (NOT part of the lab onboarding set).
+# An existing .NET API on Azure Container Apps with its own Azure SQL database, onboarded with literal resource ids.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: invoices-api
+  display_name: Invoices API
+  team: orders
+  owner: orders@example.com
+  application: enterprise-hello
+  domain: billing
+  tier: high
+  env: dev
+  repository: https://dev.azure.com/example-org/billing/_git/invoices-api
+  runbook_url: https://runbooks.example.com/billing/invoices-api
+  description: Example service used by the onboarding tutorial.
+  languages: [dotnet]
+  depends_on: ["datastore:invoices-sql"]
+spec:
+  architecture: aca
+  runtime: dotnet
+  telemetry:
+    profile: http-api
+    logs: {route: sidecar}
+    dbm: {enabled: true, engine: sqlserver}
+  resources:
+    - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-billing-dev/providers/Microsoft.App/containerApps/ca-invoices-api-dev
+      type: Microsoft.App/containerApps
+      role: app
+    - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-billing-dev/providers/Microsoft.Sql/servers/sql-billing-dev/databases/invoices
+      type: Microsoft.Sql/servers/databases
+      role: invoices-db
+  endpoints:
+    - name: internal
+      url: https://ca-invoices-api-dev.internal.example.azurecontainerapps.io
+      visibility: private
+      health_path: /readyz
+  slos:
+    - {name: availability, type: availability, target: 99.5, timeframe: 30d}
+    - {name: latency, type: latency, target: 99.0, timeframe: 30d, threshold_ms: 500}
+  monitors:
+    params: {}
+  notifications:
+    default: [team-orders]
+    critical: [team-orders, oncall]
+    warning: [team-orders]

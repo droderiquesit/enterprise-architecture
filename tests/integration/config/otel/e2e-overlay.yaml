@@ -1,0 +1,25 @@
+# Local e2e overlay for observability/config/otel/gateway.yaml (merged as a second --config, the same mechanism
+# the telemetry-transport / otel-collector modules use for their overlays). TEST ONLY:
+#   * the datadog exporter's traces + metrics endpoints point at the mock Datadog intake over plain HTTP
+#     (`traces.endpoint` / `metrics.endpoint` overrides; real deployments use https://*.<DD_SITE>)
+#   * an additional `file` exporter on the traces + metrics pipelines, because the mock intake only records
+#     request metadata for Datadog-native (msgpack/protobuf) payloads; span-level assertions read these files.
+# Everything else (receivers, processors, connector, sampling, logs accept-and-drop) is the unmodified gateway.yaml.
+exporters:
+  datadog:
+    traces:
+      endpoint: http://intake:8080
+    metrics:
+      endpoint: http://intake:8080
+  file/traces:
+    path: /out/traces.jsonl
+    flush_interval: 1s
+  file/metrics:
+    path: /out/metrics.jsonl
+    flush_interval: 1s
+service:
+  pipelines:
+    traces:
+      exporters: [datadog, file/traces]
+    metrics:
+      exporters: [datadog, file/metrics]

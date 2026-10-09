@@ -90,12 +90,12 @@ run "lab_defaults" {
   }
 }
 
-run "reject_public_receiver_via_lab" {
+run "tail_sampling_forces_single_replica" {
   command = plan
   variables {
     settings = { gateway_sampling = "tail", gateway_max_replicas = 3, gateway_hosting = "container_app" }
   }
-  # lab forces max_replicas = 1 for tail sampling -> plan succeeds
+  # the lab forces max_replicas = 1 for tail sampling, so the module validation passes
   assert {
     condition     = output.contract.gateway.sampling == "tail"
     error_message = "Tail sampling wired with a single replica."

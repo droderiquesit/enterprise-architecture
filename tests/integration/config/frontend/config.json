@@ -1,0 +1,17 @@
+{
+  "env": "e2e",
+  "service": "hello-frontend",
+  "version": "0.1.0-e2e",
+  "apiBaseUrl": "http://localhost:18081",
+  "rum": {
+    "applicationId": "00000000-0000-4000-8000-00000000e2e0",
+    "clientToken": "pub00000000000000000000000000000e2e",
+    "site": "datadoghq.com",
+    "sessionSampleRate": 100,
+    "sessionReplaySampleRate": 0,
+    "traceSampleRate": 100,
+    "trackUserInteractions": true,
+    "defaultPrivacyLevel": "mask-user-input",
+    "allowedTracingUrls": ["http://localhost:18081"]
+  }
+}

@@ -1,0 +1,100 @@
+%% Platform layer: compute platforms, databases, storage and messaging (one Terraform root per box group).
+%% Defaults per root README; "off" = implemented but disabled by default, "blocked" = prerequisites missing.
+%% Sources: platform/README.md, platform/*/README.md, platform/data/README.md, catalog/architecture-matrix.yaml.
+flowchart LR
+  subgraph LEGEND["Legend"]
+    direction LR
+    lg1["A"] la@--> lg2["B: application / data traffic"]
+    lg3["A"] lt@-.-> lg4["B: telemetry"]
+    lg5["A"] lc@==> lg6["B: deployment / control"]
+  end
+
+  FND["foundation contracts<br/>foundation-network (subnets, DNS zones, egress)<br/>foundation-identity (identities, Key Vault)"]
+
+  subgraph SHARED["platform-shared"]
+    ACR[("ACR Standard, Entra-only<br/>(Premium + PE in enterprise profile)")]
+    LAW[("Log Analytics 30 d, 1 GB/day cap<br/>(platform features only, not app logs)")]
+  end
+
+  subgraph MSG["platform-messaging"]
+    SB["Service Bus (Standard; Premium + PE in enterprise)<br/>local auth off"]
+    TOPIC["topic order-events<br/>subs: fulfillment, notifications, audit, archive"]
+    QUEUE["queue batch-items"]
+  end
+
+  subgraph COMPUTE["compute platforms"]
+    AKS["platform-aks<br/>private API, CNI overlay + Cilium,<br/>workload identity, 1-2 x D2s_v5"]
+    ACA["platform-containerapps<br/>workload profiles: Consumption + dedicated-d4 (0-1)<br/>ingress external (minimal) / internal (enterprise)"]
+    APPSVC["platform-appservice<br/>Linux P0v3, Windows P0v3<br/>Windows container P1v3 (off), WS1 Logic Apps (off)"]
+    FUNC["platform-functions<br/>Flex FC1 + host storage + Durable runtime storage<br/>EP1 (off), Y1 Windows (off), Durable Task Scheduler (off, azapi)"]
+    VM["platform-vm<br/>Ubuntu 24.04 + Windows Server 2025 (B2s_v2)<br/>auto-shutdown 19:00 UTC"]
+    VMSS["platform-vmss<br/>Flexible 1-3 + Uniform 1-2 (Manual upgrade)"]
+    BATCH["platform-batch<br/>no-public-IP pool 0-2 nodes, Entra-only"]
+    SF["platform-servicefabric (off)"]
+    ARO["platform-aro (blocked)"]
+    SPEC["platform-specialized-compute<br/>CVM / dedicated host / GPU / Automation / AML (off)<br/>AVS (blocked, cataloged only)"]
+  end
+
+  subgraph DATA["databases and stores (platform/data)"]
+    SQL[("platform-db-sql<br/>dbs orders, fulfillment (serverless), adapter")]
+    PG[("platform-db-postgresql<br/>Flexible B1ms: catalog, adapter<br/>elastic cluster (off)")]
+    MY[("platform-db-mysql<br/>Flexible: adapter")]
+    COS[("Cosmos NoSQL / Mongo RU / Cassandra /<br/>Gremlin / Table (serverless accounts)")]
+    DOC[("platform-db-documentdb M10")]
+    REDIS[("platform-db-redis<br/>Managed Redis Balanced_B0, keys off")]
+    TBL[("platform-db-table-storage<br/>tables notifications, adapterrecords")]
+    LEDGER[("platform-db-ledger<br/>public endpoint (no Private Link)")]
+    SQLVM[("platform-db-sqlvm<br/>SQL Server 2022 on VM")]
+    SQLMI[("platform-db-sqlmi (off)")]
+    CASMI[("platform-db-cassandra-mi (off)")]
+    HDB[("platform-db-horizondb (blocked, preview)")]
+    ANA[("platform-data-analytics<br/>blob + ADLS on; ADX / Search / Synapse off")]
+  end
+
+  PE["private endpoints in<br/>private-endpoints subnet"]
+  VNETINJ["VNet injection<br/>(postgres, mysql, sqlmi, cassandra-mi subnets)"]
+
+  %% control
+  FND c1@==> SHARED
+  FND c2@==> MSG
+  FND c3@==> COMPUTE
+  FND c4@==> DATA
+  SHARED c5@==>|"log_analytics_workspace_id, acr_login_server"| AKS
+  SHARED c6@==> ACA
+  SHARED c7@==> BATCH
+  ACR c8@==>|"image pull by identity (AcrPull)"| COMPUTE
+
+  %% data paths (workloads deployed later by applications/ roots)
+  COMPUTE a1@--> PE
+  COMPUTE a2@--> VNETINJ
+  PE a3@--> SQL
+  PE a4@--> COS
+  PE a5@--> DOC
+  PE a6@--> REDIS
+  PE a7@--> TBL
+  PE a8@--> ANA
+  PE a9@-->|"Premium only"| SB
+  VNETINJ a10@--> PG
+  VNETINJ a11@--> MY
+  VNETINJ a12@--> SQLMI
+  VNETINJ a13@--> CASMI
+  COMPUTE a14@-->|"public endpoint, Entra auth"| LEDGER
+  COMPUTE a15@-->|"Standard SKU: public endpoint, Entra-only"| SB
+  SB a16@--- TOPIC
+  SB a17@--- QUEUE
+  COMPUTE a18@--> SQLVM
+
+  %% telemetry: platform roots create no diagnostic settings (owned by obs-diagnostics)
+  DATA t1@-.->|"Azure Monitor metrics (Datadog integration)"| DDI["obs-azure-integration /<br/>obs-diagnostics (see telemetry diagram)"]
+  COMPUTE t2@-.-> DDI
+
+  classDef app stroke:#1f6feb,stroke-width:2px
+  classDef tel stroke:#8250df,stroke-width:2px,stroke-dasharray:6 4
+  classDef ctl stroke:#bc4c00,stroke-width:3.5px
+  class la,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18 app
+  class lt,t1,t2 tel
+  class lc,c1,c2,c3,c4,c5,c6,c7,c8 ctl
+  classDef off fill:#f6f8fa,stroke-dasharray:4 3
+  classDef blocked fill:#ffebe9,stroke:#cf222e
+  class SF,SPEC,SQLMI,CASMI off
+  class ARO,HDB blocked

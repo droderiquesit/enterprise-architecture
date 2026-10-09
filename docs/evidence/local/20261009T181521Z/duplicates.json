@@ -1,0 +1,34 @@
+{
+  "marker_counts": {
+    "hello-orders-api": 1,
+    "hello-catalog-api": 1,
+    "hello-inventory-api": 1,
+    "hello-partner-sim": 1,
+    "hello-worker": 1,
+    "hello-durable": 1,
+    "hello-bff": 1,
+    "hello-dbadapter-postgresql": 1
+  },
+  "marker_definitions": {
+    "hello-orders-api": "message startswith 'Order 5f43c0a8-faf5-4576-8cba-90dc8c000e77 created'",
+    "hello-catalog-api": "'product upserted' sku=E2E-MARKER-9329CB64 (direct POST /products)",
+    "hello-inventory-api": "'Reservation ... order 5f43c0a8-faf5-4576-8cba-90dc8c000e77'",
+    "hello-partner-sim": "'payment processed' order_id=5f43c0a8-faf5-4576-8cba-90dc8c000e77",
+    "hello-worker": "'notification recorded' order_id=5f43c0a8-faf5-4576-8cba-90dc8c000e77",
+    "hello-durable": "'OrderProcessing for 5f43c0a8-faf5-4576-8cba-90dc8c000e77 completed'",
+    "hello-bff": "retry attempt 2 log of the single fault-window request trace a91a8da07bc44c97ac1e61ca666d5148",
+    "hello-dbadapter-postgresql": "'POST /roundtrip 200' of the browser roundtrip trace 000000000000000011ef9cce2c38ef68"
+  },
+  "identical_events_total": 20,
+  "identical_structured_app_events": 0,
+  "identical_events_examples": [
+    "info: Microsoft.Azure.WebJobs.Hosting.OptionsLoggingService[0]\n      ScriptJobHostOptions\n      {\n        \"FileWatchingEnabled\": true,\n        \"FileLoggingMode\"",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "      \n",
+    "info: Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener[0]\n      Message processing error (Action=Receive, EntityPath=order-events/Subscriptions/f"
+  ],
+  "duplicate_span_ids": 0,
+  "spans_total": 588,
+  "log_events_total": 622
+}

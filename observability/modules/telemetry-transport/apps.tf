@@ -26,7 +26,6 @@ module "gateway_config" {
 }
 
 locals {
-  config_dir = "${path.module}/../../config"
 
   agg_enabled = var.aggregator.hosting == "container_app"
   gw_enabled  = var.gateway.hosting == "container_app"

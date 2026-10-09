@@ -259,3 +259,12 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
 - 2026-10-09: Batch pool start-task telemetry setup (Fluent Bit) is observability-owned content (script published by the
   instrumentation contract) referenced by the platform-batch pool start task; platform-batch owns only the reference.
 - 2026-10-09: Static Web Apps is not available in swedencentral; the frontend SWA resource uses a separate `swa_location` (default westeurope).
+
+## See also
+
+- Diagrams: [docs/diagrams](../diagrams/README.md)
+- Component ownership (generated from the registry): [docs/guides/component-ownership.md](../guides/component-ownership.md)
+- Architecture deployment matrix: [docs/guides/architecture-deployment-matrix.md](../guides/architecture-deployment-matrix.md)
+- Known limitations: [docs/known-limitations.md](../known-limitations.md)
+- Implementation checklist: [docs/IMPLEMENTATION_CHECKLIST.md](../IMPLEMENTATION_CHECKLIST.md)
+- Evidence: [docs/evidence](../evidence/README.md)

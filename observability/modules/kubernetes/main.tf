@@ -84,7 +84,7 @@ module "flb" {
 }
 
 locals {
-  flb_cm_name = "fluent-bit-eh-config"
+  flb_cm_name = "fluent-bit-obs-config"
   fluent_bit_values = {
     kind              = "DaemonSet"
     image             = { repository = var.charts.fluent_bit_image, tag = var.charts.fluent_bit_tag }
@@ -97,7 +97,7 @@ locals {
       [{ name = "DD_API_KEY", valueFrom = { secretKeyRef = { name = var.api_key.secret_name, key = "api-key" } } }],
     )
     extraVolumes = [{
-      name = "eh-config"
+      name = "obs-config"
       configMap = {
         name = local.flb_cm_name
         items = [
@@ -107,7 +107,7 @@ locals {
         ]
       }
     }]
-    extraVolumeMounts = [{ name = "eh-config", mountPath = "/fluent-bit/etc/eh", readOnly = true }]
+    extraVolumeMounts = [{ name = "obs-config", mountPath = "/fluent-bit/etc/eh", readOnly = true }]
     daemonSetVolumes = [
       { name = "varlog", hostPath = { path = "/var/log" } },
       { name = "flbstate", hostPath = { path = "/var/fluent-bit/state", type = "DirectoryOrCreate" } },
@@ -123,7 +123,7 @@ locals {
     podAnnotations = {
       # roll pods when config changes. Fluent Bit self-metrics are pushed over OTLP to the node Agent
       # (fluentbit_metrics input -> opentelemetry output) so names keep _total, e.g. fluentbit_output_errors_total.
-      "checksum/eh-config" = module.flb.files_sha256
+      "checksum/obs-config" = module.flb.files_sha256
     }
     livenessProbe  = { httpGet = { path = "/api/v1/health", port = "http" } }
     readinessProbe = { httpGet = { path = "/api/v1/health", port = "http" } }

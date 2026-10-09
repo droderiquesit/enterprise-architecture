@@ -171,15 +171,17 @@ def data_for(workloads: list[str], databases: dict) -> list[str]:
     for w in workloads:
         svc = _workload_service(w)
         for db_id, d in databases.items():
-            owners = [d.get("owner", "")] + list(d.get("also") or [])
-            for o in owners:
+            owners = [(d.get("owner", ""), False)] + [(a, True) for a in d.get("also") or []]
+            for o, is_also in owners:
                 o_svc = str(o).split(" ")[0]
                 if not o_svc or o_svc == "none":
                     continue
                 if svc.endswith("*") and o_svc.startswith(svc.rstrip("*")):
                     continue  # wildcard adapters: summarised below
                 if o_svc == svc:
-                    out.append(f"{db_id} ({d.get('boundary', '')})")
+                    paren = re.search(r"\(([^)]*)\)", str(o))
+                    boundary = paren.group(1) if (is_also and paren) else d.get("boundary", "")
+                    out.append(f"{db_id} ({boundary})")
         if svc.endswith("*"):
             out.append("one database family per adapter instance (see Databases below)")
     return sorted(set(out))
@@ -251,6 +253,11 @@ def render_architecture_matrix() -> str:
             f"| `{esc(name)}` | {esc(', '.join(a.get('workloads') or []))} | {dep_cell} | {col('artifact')} | {col('runtime_config')} | "
             f"{data} | {logs} | {traces} | {col('smoke')} | {rollback} |"
         )
+    conflicts = load("tools/docs/architecture-matrix-supplement.yaml").get("conflicts") or []
+    if conflicts:
+        lines += ["", "## Open inconsistencies between catalog and deployment code", "",
+                  "These rows are rendered from the catalog as-is; the deployment code differs as described (reported to the owners).", ""]
+        lines += [f"* `{esc(c['architecture'])}` - {esc(c['issue'])} (source: [{c['source']}](../../{c['source']}))" for c in conflicts]
     lines += [
         "",
         "## Databases (owner service and data boundary)",
@@ -330,6 +337,121 @@ def render_alert_runbooks() -> dict[str, str]:
     return pages
 
 
+# ----------------------------------------------------------------------------------- alert response
+SECTION_ORDER = [
+    "error-rate", "http-5xx", "latency", "missing-telemetry", "error-logs", "consumer-errors", "workflow-failures",
+    "workflow-duration", "job-missed", "job-errors", "rum-errors", "rum-performance", "replicas-unavailable",
+    "container-restarts", "aca-5xx", "aca-restarts", "appservice-5xx", "appservice-latency", "functions-5xx", "host-cpu",
+    "aci-not-reporting", "logicapp-failed", "sql-cpu", "sql-connections", "sql-deadlocks", "sql-storage", "postgres-down",
+    "postgres-cpu", "postgres-connections", "postgres-storage", "mysql-cpu", "mysql-connections", "mysql-storage",
+    "cosmos-ru", "cosmos-availability", "storage-availability", "storage-latency", "queue-backlog", "queue-lag",
+    "queue-dead-letter", "queue-errors", "eventhub-throttled", "redis-load", "redis-memory", "pipeline-canary",
+    "fluentbit-errors", "fluentbit-dropped", "fluentbit-not-reporting", "otel-export", "otel-refused",
+    "otel-not-reporting", "slo-burn-rate", "slo-availability", "slo-latency", "synthetics",
+]
+
+# Lab-specific notes (facts from the lab code/READMEs) appended to the archetype troubleshooting text.
+LAB_NOTES = {
+    "missing-telemetry": "Lab: ACA/ACI traces go to the OTel gateway (`obs-telemetry-transport`, internal ingress); AKS/VM traces to the "
+                         "Datadog Agent on `$(DD_AGENT_HOST)` / `localhost:4317`. Check `OTEL_EXPORTER_OTLP_ENDPOINT` in the app settings "
+                         "owned by the deployment root.",
+    "error-logs": "Lab: logs carry `dd.trace_id`; use `GET /admin/faults` (with `X-Fault-Token`) to rule out an active fault injection "
+                  "([fault-injection.md](fault-injection.md)).",
+    "error-rate": "Lab: check active faults (`GET /admin/faults`), recent deployments (DORA events from the Evidence stage) and the "
+                  "dependency monitors of the same service. Roll back per [rollback.md](rollback.md).",
+    "http-5xx": "Lab: 503 problems from `/readyz`-gated dependencies mean a dependency is down; the BFF maps transport failures to "
+                "504 `dependency-timeout`, 503 `dependency-unavailable` (circuit open), 502 `dependency-error`.",
+    "consumer-errors": "Lab: consumers are hello-worker (`notifications`), hello-functions `audit`, hello-jobs `process-batch-items` "
+                       "(`batch-items`). Poison messages go to the dead-letter queue by design.",
+    "workflow-failures": "Lab: `hello.workflow.completed{workflow,outcome}` from hello-durable; `outcome:compensated` means payment failed "
+                         "after a reservation (partner-sim failure/decline or `PAYMENT_TIMEOUT_SECONDS`). Inspect an instance with "
+                         "`GET /api/workflows/order-<order_id>` on the durable app (private).",
+    "workflow-duration": "Lab: OrderProcessing races `ChargePayment` (3 attempts) against a durable timer; partner-sim latency is "
+                         "`LATENCY_MS_MEAN` + jitter.",
+    "job-missed": "Lab: ACA jobs `seed` (manual), `reconcile` and `traffic` (scheduled), `batchitems` (event). "
+                  "`az containerapp job execution list -n <job> -g <rg>`.",
+    "rum-errors": "Lab: browser config comes from `config.json` written by `deploy-frontend`; `apiBaseUrl` pointing to "
+                  "`https://api.invalid` means no API contract was available at deploy time; CORS errors mean the SWA origin "
+                  "is missing from the BFF `cors_allowed_origins` (two-pass setting).",
+    "pipeline-canary": "Lab: the canary is a Fluent Bit `dummy` input in the aggregator (`service:telemetry-canary`). When it alerts, "
+                       "treat every application no-data alert in the same window as a pipeline problem. Check the aggregator "
+                       "Container App replicas/logs and the `datadog-api-key` secret (rotation: [secret-rotation.md](secret-rotation.md)).",
+    "otel-refused": "Lab: the gateway accepts OTLP logs and drops them on purpose (nop exporter); refused spans/metrics usually "
+                    "mean memory limiter pressure - raise `gateway.memory` or replicas in `obs-telemetry-transport`.",
+    "queue-backlog": "Lab: in the `minimal` profile the subscriptions `notifications`, `audit` and `archive` exist but have no consumer "
+                     "deployed, so they accumulate until the 14-day TTL; disable `queue.*` for them or deploy the consumers.",
+    "queue-dead-letter": "Lab: max delivery count 10 (subscriptions) / 5 (`batch-items`); dead-letter on expiry. Inspect with Service "
+                         "Bus Explorer; poison messages are dead-lettered intentionally by hello-worker and hello-jobs.",
+    "eventhub-throttled": "Lab: Event Hubs Standard 1 TU by default (`obs-telemetry-transport` `event_hub.capacity`, auto-inflate "
+                          "optional). Diagnostic settings of every app write here.",
+    "aci-not-reporting": "Lab: hello-partner-sim runs as a single ACI container group (restart policy Always); re-apply "
+                         "`deploy-partner-sim` to recreate it.",
+    "postgres-down": "Lab: PostgreSQL Flexible Server (B1ms) for `catalog`; a manually stopped server "
+                     "shows here.",
+    "sql-cpu": "Lab: S0 (`orders`), serverless 1 vCore (`fulfillment`, auto-pause 60 min), Basic (`adapter`).",
+    "slo-burn-rate": "Open the SLO, then the service error/latency monitors; check recent deployments and dependency health.",
+}
+
+GENERIC = {
+    "slo-availability": ("Availability SLO (metric-based: (hits - errors) / hits of `trace.http.server.request`).",
+                         "1. Open the SLO and its burn-rate alerts.\n2. Follow the error-rate and http-5xx procedures above."),
+    "slo-latency": ("Latency SLO (time-slice on the p95 of `trace.http.server.request` against `threshold_ms`).",
+                    "1. Open the SLO.\n2. Follow the latency procedure above."),
+    "slo-burn-rate": ("SLO burn-rate alert (`slo alert`): critical 1h/5m, warning 6h/30m window pairs.",
+                      "1. Identify which SLO burns (availability or latency).\n2. Follow the matching procedure."),
+    "synthetics": ("Synthetic API or browser test failed. Lab tests are created paused (`synthetics_paused = true`); private "
+                   "endpoints run only from a configured private location.",
+                   "1. Open the test result and the failing step/assertion.\n2. Compare with APM for the same window.\n"
+                   "3. If only the synthetic fails, check DNS/ingress/private location reachability."),
+}
+
+
+def render_alert_response() -> str:
+    by_section: dict[str, list[tuple[str, str, dict]]] = defaultdict(list)
+    for f in sorted(glob.glob(str(REPO / "observability/archetypes/**/*.yaml"), recursive=True)):
+        d = yaml.safe_load(Path(f).read_text()) or {}
+        mons = d.get("monitors") or {}
+        for key, m in mons.items():
+            if isinstance(m, dict) and m.get("runbook_section"):
+                by_section[m["runbook_section"]].append((key, str(Path(f).relative_to(REPO)), m))
+    lines = [GENERATED, "", "# Alert response procedures", "",
+             "One section per runbook anchor used by the monitors of the observability package. The summary and troubleshooting",
+             "steps are taken verbatim from the archetypes (`observability/archetypes/**`, placeholders like `[[service]]` are filled",
+             "per service in the rendered monitor message); **Lab** notes add facts specific to this repository. Per-service",
+             "pages listing the actual monitors: [alerts/README.md](alerts/README.md).", "",
+             "General first steps for every alert: (1) check the telemetry pipeline canary ([pipeline-canary](#pipeline-canary)) -",
+             "a broken pipeline looks like silence; (2) check deployment events for the service in the last hour; (3) check active",
+             "fault injections ([fault-injection.md](fault-injection.md)); (4) roll back if a release correlates ([rollback.md](rollback.md)).",
+             "", "Sections: " + " ".join(f"[{s}](#{s})" for s in SECTION_ORDER), ""]
+    extra = sorted(set(by_section) - set(SECTION_ORDER))
+    for sec in SECTION_ORDER + extra:
+        lines += [f"## {sec}", ""]
+        mons = by_section.get(sec, [])
+        if mons:
+            seen_summary = set()
+            for key, src, m in mons:
+                summ = (m.get("summary") or "").strip()
+                if summ and summ not in seen_summary:
+                    seen_summary.add(summ)
+                    lines += [f"**{summ}**", ""]
+            lines.append("Monitors: " + ", ".join(f"`{k}` ({m.get('severity', '-')}, {src.split('/', 1)[1]})" for k, src, m in mons) + ".")
+            lines.append("")
+            seen_ts = set()
+            for key, src, m in mons:
+                ts = (m.get("troubleshooting") or "").strip()
+                if ts and ts not in seen_ts:
+                    seen_ts.add(ts)
+                    lines += [ts, ""]
+        elif sec in GENERIC:
+            summ, ts = GENERIC[sec]
+            lines += [f"**{summ}**", "", ts, ""]
+        else:
+            lines += ["No archetype monitor currently uses this section.", ""]
+        if sec in LAB_NOTES:
+            lines += [f"Lab: {LAB_NOTES[sec]}" if not LAB_NOTES[sec].startswith("Lab:") else LAB_NOTES[sec], ""]
+    return "\n".join(lines)
+
+
 # --------------------------------------------------------------------------------------- README status
 def render_status_block() -> str:
     entries = []
@@ -361,6 +483,7 @@ def outputs() -> dict[str, str]:
         "docs/guides/architecture-deployment-matrix.md": render_architecture_matrix(),
     }
     out.update(render_alert_runbooks())
+    out["docs/runbooks/alert-response.md"] = render_alert_response()
     readme = (REPO / "README.md")
     if readme.exists():
         text = readme.read_text()

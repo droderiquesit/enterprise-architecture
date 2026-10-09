@@ -20,7 +20,7 @@ from dockerutil import HERE, PACKAGE, Stack, wait_for
 
 AGENT_IMAGE = "datadog/agent:7.84.2"
 PG_IMAGE = os.environ.get("PG_IMAGE", "postgres:17-alpine")
-MYSQL_IMAGE = "mysql:8.4"
+MYSQL_IMAGE = os.environ.get("MYSQL_IMAGE", "mysql:8.4")
 PW = "dbm-test-only-Pw-1"  # synthetic, local container only
 
 pytestmark = pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")

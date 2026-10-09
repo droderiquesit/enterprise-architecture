@@ -11,3 +11,8 @@ provider "azapi" {
   subscription_id = var.environment.subscription_id
   tenant_id       = var.environment.tenant_id
 }
+
+# Datadog credentials from DD_API_KEY / DD_APP_KEY (pipeline: Key Vault -> environment). Never in tfvars.
+provider "datadog" {
+  api_url = "https://api.${var.settings.datadog_site}/"
+}
