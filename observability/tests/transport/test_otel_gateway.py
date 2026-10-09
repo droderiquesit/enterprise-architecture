@@ -153,3 +153,46 @@ def test_gateway_overlays_validate():
          "--config=file:/c/gateway-scrape-fluentbit.yaml"],
         capture_output=True, text=True, timeout=120)
     assert res.returncode == 0, res.stderr
+
+
+def _send_logs(grpc_port, http_port):
+    return subprocess.run([sys.executable, str(HERE / "otel" / "send_logs.py"), f"http://127.0.0.1:{grpc_port}",
+                           f"http://127.0.0.1:{http_port}"], capture_output=True, text=True, timeout=60)
+
+
+def test_gateway_accepts_and_drops_otlp_logs_by_default(tmp_path):
+    """Functions host exports host/worker logs over OTLP: accepted (no client errors) but never forwarded."""
+    stack = Stack("otellogs")
+    try:
+        _, base = start_mock_intake(stack)
+        gw, gport, hport = _run_gateway(stack, OTELCOL_IMAGE, tmp_path / "out",
+                                        extra_configs=["--config=file:/test/test-overlay-logs.yaml"])
+        res = _send_logs(gport, hport)
+        print(res.stdout, res.stderr)
+        assert res.returncode == 0, "gateway must accept OTLP logs (gRPC + HTTP) without errors"
+        time.sleep(8)
+        got = received(base)
+        assert got["events"] == [] and not any(o["path"].startswith("/api/v2/logs") for o in got["others"])
+        assert "otlp-log-" not in stack.logs(gw)
+    finally:
+        stack.close()
+
+
+def test_gateway_logs_forward_overlay_is_opt_in(tmp_path):
+    stack = Stack("otellogsfwd")
+    try:
+        _, base = start_mock_intake(stack)
+        _, gport, hport = _run_gateway(stack, OTELCOL_IMAGE, tmp_path / "out",
+                                       extra_configs=["--config=file:/cfg/gateway-logs-forward.yaml",
+                                                      "--config=file:/test/test-overlay-logs.yaml"])
+        res = _send_logs(gport, hport)
+        assert res.returncode == 0, res.stderr
+        def _forwarded():
+            r = received(base)
+            return r if any("otlp-log-" in json.dumps(e) for e in r["events"]) else None
+
+        got = wait_for(_forwarded, 60, what="forwarded OTLP logs")
+        print(json.dumps(got["events"])[:1500])
+        assert any("otlp-log-" in json.dumps(e) for e in got["events"])
+    finally:
+        stack.close()

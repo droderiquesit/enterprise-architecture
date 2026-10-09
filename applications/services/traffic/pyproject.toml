@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hello-traffic"
+version = "1.0.0"
+description = "Enterprise Hello synthetic traffic generator (httpx API journeys + Playwright Chromium browser journeys)"
+requires-python = ">=3.13,<3.14"
+dependencies = ["hello-common", "playwright==1.63.0"]
+
+[project.scripts]
+hello-traffic = "hello_traffic.__main__:main"
+
+[tool.uv.sources]
+hello-common = { path = "../../shared/python/hello_common", editable = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: real Chromium against the built frontend bundle"]
+addopts = "-m 'not integration'"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]

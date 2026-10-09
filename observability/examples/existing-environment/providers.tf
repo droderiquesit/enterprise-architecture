@@ -14,3 +14,26 @@ provider "azurerm" {
 provider "azapi" {
   subscription_id = var.azure_subscription_id
 }
+
+# Existing AKS cluster (Entra ID auth via kubelogin). Only the monitoring namespaces are written.
+provider "kubernetes" {
+  host                   = var.kubernetes.host
+  cluster_ca_certificate = base64decode(var.kubernetes.cluster_ca_certificate)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "kubelogin"
+    args        = ["get-token", "--login", "azurecli", "--server-id", "6dae42f8-4368-4678-94ff-3960e28e3630"]
+  }
+}
+
+provider "helm" {
+  kubernetes = {
+    host                   = var.kubernetes.host
+    cluster_ca_certificate = base64decode(var.kubernetes.cluster_ca_certificate)
+    exec = {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "kubelogin"
+      args        = ["get-token", "--login", "azurecli", "--server-id", "6dae42f8-4368-4678-94ff-3960e28e3630"]
+    }
+  }
+}

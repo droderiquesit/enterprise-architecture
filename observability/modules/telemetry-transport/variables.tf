@@ -191,6 +191,8 @@ variable "gateway" {
     max_replicas        = optional(number, 3)
     sampling            = optional(string, "probabilistic")
     sampling_percentage = optional(number, 100)
+    # OTLP logs: drop (default; app logs only via Fluent Bit) | forward (opt-in, duplicates if a Fluent Bit route exists)
+    otlp_logs = optional(string, "drop")
     # optional bearertokenauth on OTLP: token for the server, full header string for clients
     auth = optional(object({
       token_secret_id          = string

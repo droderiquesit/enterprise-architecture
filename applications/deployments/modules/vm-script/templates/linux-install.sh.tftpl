@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Rendered by applications/deployments/modules/vm-script (deployment root: ${component}).
+# Installs ${app} ${version} from an immutable package read with the VM's user-assigned identity (IMDS token,
+# no SAS), writes /etc/${app}/${app}.env (non-secret values rendered by Terraform + secrets fetched from Key
+# Vault on the host), and (re)starts the systemd unit with a health check. Idempotent; safe to re-run.
+set -euo pipefail
+APP='${app}'
+export AZURE_CLIENT_ID='${client_id}'
+PACKAGE_URL='${package_url}'
+PACKAGE_SHA256='${package_sha256}'
+ETC="/etc/$APP"
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+log() { printf '{"timestamp":"%s","level":"%s","message":"%s","logger":"vm-install","service":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$1" "$2" "$APP"; }
+die() { log ERROR "$1"; exit 1; }
+json_field() { sed -n "s/.*\"$1\":\"\\([^\"]*\\)\".*/\\1/p"; }
+imds_token() {
+  curl -fsS --retry 5 --retry-delay 2 --max-time 10 -H Metadata:true \
+    "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=$1&client_id=$AZURE_CLIENT_ID" | json_field access_token
+}
+
+[[ $(id -u) -eq 0 ]] || die "must run as root"
+command -v curl >/dev/null || die "curl missing"
+
+# ---- package (Storage Blob Data Reader for the identity on the packages container) -----------------
+STOKEN=$(imds_token https%3A%2F%2Fstorage.azure.com%2F)
+curl -fsS --retry 5 --retry-delay 3 --max-time 600 -H "Authorization: Bearer $STOKEN" -H "x-ms-version: 2023-11-03" \
+  -o "$WORK/pkg.zip" "$PACKAGE_URL" || die "package download failed"
+echo "$PACKAGE_SHA256  $WORK/pkg.zip" | sha256sum -c --status || die "package sha256 mismatch"
+
+# ---- environment file ------------------------------------------------------------------------------
+umask 027
+install -d -m 0750 "$ETC"
+echo '${env_b64}' | base64 -d > "$WORK/app.env"
+%{ if length(secrets) > 0 ~}
+KTOKEN=$(imds_token https%3A%2F%2Fvault.azure.net)
+%{ for name, id in secrets ~}
+val=$(curl -fsS --retry 3 --max-time 10 -H "Authorization: Bearer $KTOKEN" '${id}?api-version=7.4' | json_field value) || die "Key Vault read failed for ${name}"
+printf '%s="%s"\n' '${name}' "$(printf '%s' "$val" | sed 's/\\/\\\\/g; s/"/\\"/g')" >> "$WORK/app.env"
+%{ endfor ~}
+unset val KTOKEN
+%{ endif ~}
+
+%{ if mode == "package-install-sh" ~}
+# ---- service install (installer shipped in the package: deploy/install.sh) --------------------------
+command -v unzip >/dev/null || { command -v apt-get >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -q unzip; } || true
+mkdir -p "$WORK/pkg"
+if command -v unzip >/dev/null; then unzip -q "$WORK/pkg.zip" -d "$WORK/pkg"; else python3 -m zipfile -e "$WORK/pkg.zip" "$WORK/pkg"; fi
+HEALTH_URL='${health_url}' bash "$WORK/pkg/deploy/install.sh" "$WORK/pkg.zip" --env-file "$WORK/app.env"
+%{ else ~}
+# ---- generic Python service (wheelhouse package: wheels/, requirements.txt, VERSION) ----------------
+PY=$${PYTHON_BIN:-python3.13}
+if ! command -v "$PY" >/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y -q && apt-get install -y -q software-properties-common
+  add-apt-repository -y ppa:deadsnakes/ppa && apt-get update -y -q && apt-get install -y -q python3.13 python3.13-venv
+fi
+BASE="/opt/$APP"
+mkdir -p "$WORK/pkg" && "$PY" -m zipfile -e "$WORK/pkg.zip" "$WORK/pkg"
+VERSION=$(tr -d '[:space:]' < "$WORK/pkg/VERSION")
+[[ "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]] || die "invalid VERSION"
+id -u "$APP" >/dev/null 2>&1 || useradd --system --home-dir "$BASE" --no-create-home --shell /usr/sbin/nologin "$APP"
+install -d -m 0755 "$BASE/releases"
+install -d -m 0750 -o "$APP" -g "$APP" "/var/log/$APP"
+# Shared host log directory tailed by the Fluent Bit host service (observability): sticky + writable.
+install -d -m 1777 /var/log/hello
+REL="$BASE/releases/$VERSION-$(date -u +%Y%m%dT%H%M%SZ)"
+"$PY" -m venv "$REL/venv"
+"$REL/venv/bin/pip" install -q --no-index --find-links "$WORK/pkg/wheels" -r "$WORK/pkg/requirements.txt"
+"$REL/venv/bin/pip" install -q --no-index --no-deps --find-links "$WORK/pkg/wheels" ${pip_packages}
+install -m 0640 -o root -g "$APP" "$WORK/app.env" "$ETC/$APP.env"
+cat > "/etc/systemd/system/$APP.service" <<UNIT
+[Unit]
+Description=$APP (Enterprise Hello)
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=$APP
+EnvironmentFile=$ETC/$APP.env
+ExecStart=$BASE/current/venv/bin/python -m ${python_module}
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/$APP /var/log/hello
+[Install]
+WantedBy=multi-user.target
+UNIT
+previous=$(readlink -f "$BASE/current" 2>/dev/null || true)
+ln -sfn "$REL" "$BASE/current.new" && mv -Tf "$BASE/current.new" "$BASE/current"
+systemctl daemon-reload && systemctl enable "$APP" >/dev/null && systemctl restart "$APP"
+for _ in $(seq 1 30); do curl -fsS --max-time 2 '${health_url}' >/dev/null 2>&1 && { log INFO "installed $VERSION"; exit 0; }; sleep 2; done
+log ERROR "health check failed; rolling back"
+if [[ -n "$previous" && -d "$previous" ]]; then ln -sfn "$previous" "$BASE/current.new" && mv -Tf "$BASE/current.new" "$BASE/current"; systemctl restart "$APP" || true; fi
+exit 1
+%{ endif ~}

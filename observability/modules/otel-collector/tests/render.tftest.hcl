@@ -12,8 +12,8 @@ run "upstream_default" {
     error_message = "Memory limiter derived from container memory."
   }
   assert {
-    condition     = !strcontains(output.config_env["OTELCOL_CONFIG_BASE"], "logs:\n      receivers")
-    error_message = "Gateway must not define a logs pipeline (logs only via Fluent Bit)."
+    condition     = strcontains(output.config_env["OTELCOL_CONFIG_BASE"], "exporters: [nop]") && !contains(keys(output.config_env), "OTELCOL_CONFIG_LOGS_FORWARD")
+    error_message = "OTLP logs are accepted and dropped by default (app logs only via Fluent Bit)."
   }
 }
 
@@ -40,4 +40,25 @@ run "ddot_with_auth_is_flagged" {
     bearer_auth  = true
   }
   expect_failures = [check.ddot_has_no_bearertokenauth]
+}
+
+run "logs_forward_opt_in" {
+  command = plan
+  variables {
+    env       = "dev"
+    otlp_logs = "forward"
+  }
+  assert {
+    condition     = contains(output.args, "--config=env:OTELCOL_CONFIG_LOGS_FORWARD")
+    error_message = "Forward overlay only when opted in."
+  }
+}
+
+run "reject_bad_logs_mode" {
+  command = plan
+  variables {
+    env       = "dev"
+    otlp_logs = "keep"
+  }
+  expect_failures = [var.otlp_logs]
 }

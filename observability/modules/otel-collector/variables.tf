@@ -68,3 +68,17 @@ variable "images" {
   })
   default = {}
 }
+
+variable "otlp_logs" {
+  description = <<-EOT
+    What the gateway does with OTLP LOGS (e.g. Azure Functions host/worker logs exported because
+    OTEL_EXPORTER_OTLP_ENDPOINT is set): drop (default - accepted and discarded, app logs arrive via Fluent Bit)
+    or forward (opt-in, only for sources without a Fluent Bit route; otherwise duplicates).
+  EOT
+  type        = string
+  default     = "drop"
+  validation {
+    condition     = contains(["drop", "forward"], var.otlp_logs)
+    error_message = "otlp_logs must be drop or forward."
+  }
+}

@@ -59,6 +59,7 @@ locals {
       host_agent_grpc_endpoint = "http://localhost:4317"
       gateway_distribution     = local.gw_enabled ? var.gateway.distribution : "external"
       internal_only            = true
+      logs_policy              = local.gw_enabled ? var.gateway.otlp_logs : "drop"
     }
     fluentbit = {
       forward_host                 = local.forward_host

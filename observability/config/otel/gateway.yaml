@@ -77,6 +77,11 @@ connectors:
       peer_tags_aggregation: true
 
 exporters:
+  # OTLP logs are ACCEPTED and DROPPED by default: the Functions host (and other SDKs) export host/worker
+  # logs over OTLP whenever OTEL_EXPORTER_OTLP_ENDPOINT is set, but application logs must reach Datadog
+  # only through Fluent Bit (FunctionAppLogs -> Event Hubs -> aggregator). Accepting (instead of having
+  # no logs receiver) avoids client-side export errors/retries. Opt-in forwarding: gateway-logs-forward.yaml.
+  nop: {}
   datadog:
     api:
       key: ${env:DD_API_KEY}
@@ -124,5 +129,9 @@ service:
       receivers: [otlp, datadog/connector, prometheus/self]
       processors: [memory_limiter, resourcedetection, resource/unified_tags, batch]
       exporters: [datadog]
-    # No logs pipeline on purpose: application logs reach Datadog only through Fluent Bit
-    # (ADR-0001 §10). Clients set OTEL_LOGS_EXPORTER=none (instrumentation module).
+    # Logs: accept-and-drop (see exporters.nop). Application logs reach Datadog only through Fluent Bit
+    # (ADR-0001 §10); clients also set OTEL_LOGS_EXPORTER=none (instrumentation module).
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter]
+      exporters: [nop]

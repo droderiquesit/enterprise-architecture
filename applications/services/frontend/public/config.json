@@ -1,0 +1,6 @@
+{
+  "env": "local",
+  "service": "hello-frontend",
+  "version": "0.0.0-dev",
+  "apiBaseUrl": "http://localhost:8080"
+}

@@ -9,6 +9,14 @@ terraform {
       source  = "Azure/azapi"
       version = "~> 2.13"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.3"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 3.3"
+    }
     datadog = {
       source  = "DataDog/datadog"
       version = "~> 4.25"

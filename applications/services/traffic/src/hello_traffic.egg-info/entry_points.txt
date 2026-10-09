@@ -1,0 +1,2 @@
+[console_scripts]
+hello-traffic = hello_traffic.__main__:main

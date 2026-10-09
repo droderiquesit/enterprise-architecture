@@ -17,6 +17,8 @@ mock_provider "azurerm" {
 }
 
 mock_provider "azapi" {}
+mock_provider "helm" {}
+mock_provider "kubernetes" {}
 
 run "onboards_existing_resources_verbatim" {
   command = plan
@@ -54,6 +56,10 @@ run "onboards_existing_resources_verbatim" {
     error_message = "PostgreSQL platform logs exported"
   }
   assert {
+    condition     = length(module.kubernetes) == 1
+    error_message = "Agent + Fluent Bit on the existing AKS cluster expected"
+  }
+  assert {
     condition     = length(module.azure_integration) == 1
     error_message = "Azure integration expected"
   }
@@ -73,4 +79,15 @@ run "fault_injection_cannot_be_enabled" {
     fault_injection_enabled = true
   }
   expect_failures = [var.fault_injection_enabled]
+}
+
+run "dbm_cluster_checks" {
+  command = plan
+  variables {
+    dbm = { enabled = true }
+  }
+  assert {
+    condition     = output.dbm["orders-postgresql"].hosting == "cluster_checks" && output.dbm["orders-postgresql"].password_source == "env"
+    error_message = "DBM runs as cluster checks with an env/secret password reference"
+  }
 }

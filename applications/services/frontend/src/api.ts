@@ -20,9 +20,10 @@ export interface Order {
   updated_at?: string;
 }
 
+/** hello-bff GET /api/adapters item: internal adapter URLs are hidden; roundtrip_path is relative to the BFF. */
 export interface Adapter {
   family: string;
-  url?: string;
+  roundtrip_path?: string;
 }
 
 export interface RoundtripResult {
@@ -149,8 +150,10 @@ export class ApiClient {
     return asList<Adapter>(await this.request('GET', '/api/adapters'), 'adapters', 'items');
   }
 
-  async roundtrip(family: string): Promise<RoundtripResult> {
-    return this.request<RoundtripResult>('POST', `/api/adapters/${encodeURIComponent(family)}/roundtrip`, {});
+  async roundtrip(adapter: Adapter | string): Promise<RoundtripResult> {
+    const a = typeof adapter === 'string' ? { family: adapter } : adapter;
+    const path = a.roundtrip_path && a.roundtrip_path.startsWith('/api/') ? a.roundtrip_path : `/api/adapters/${encodeURIComponent(a.family)}/roundtrip`;
+    return this.request<RoundtripResult>('POST', path, {});
   }
 
   async version(): Promise<Record<string, string>> {

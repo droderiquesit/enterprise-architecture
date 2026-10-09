@@ -54,6 +54,40 @@ module "diagnostics" {
   destination = var.diagnostics.destination
 }
 
+module "dbm" {
+  source = "./.vendor/observability-1.0.0/modules/dbm"
+  count  = var.dbm.enabled ? 1 : 0
+
+  hosting = "cluster_checks"
+  datadog = { site = var.datadog_site, env = var.env }
+  databases = {
+    orders-postgresql = {
+      engine          = "postgres"
+      deployment_type = "flexible_server"
+      host            = var.dbm.host
+      port            = 5432
+      username        = "datadog"
+      auth            = "password"
+      password_ref    = { kind = "env", name = "DD_DBM_ORDERS_PG_PASSWORD" }
+      resource_id     = var.dbm.resource_id
+    }
+  }
+}
+
+module "kubernetes" {
+  source = "./.vendor/observability-1.0.0/modules/kubernetes"
+  count  = var.kubernetes.enabled ? 1 : 0
+
+  cluster_name = var.kubernetes.cluster_name
+  datadog      = { site = var.datadog_site, env = var.env }
+  api_key      = { mode = "existing" }
+
+  cluster_checks = var.dbm.enabled ? module.dbm[0].cluster_check_confd : {}
+  cluster_check_env = var.dbm.enabled ? {
+    DD_DBM_ORDERS_PG_PASSWORD = { secret_name = var.dbm.password_secret, secret_key = "password" }
+  } : {}
+}
+
 # Instrumentation hooks: env vars / app settings / k8s patches the application owners apply in their own
 # deployment code (this root never changes application settings).
 module "instrumentation" {

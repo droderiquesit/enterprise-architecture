@@ -115,3 +115,33 @@ variable "azure_integration" {
   })
   default = {}
 }
+
+variable "kubernetes" {
+  description = <<-EOT
+    Existing AKS cluster for the Datadog Agent (DaemonSet + Cluster Agent) and the Fluent Bit DaemonSet
+    (modules/kubernetes). api_key_mode = existing: the Secret "datadog-api-key" is synced by your secret operator
+    (Secrets Store CSI / External Secrets) - no key passes through Terraform.
+  EOT
+  type = object({
+    enabled                = optional(bool, true)
+    cluster_name           = optional(string, "aks-prod-weu")
+    host                   = optional(string, "https://aks-prod-weu.hcp.westeurope.azmk8s.io:443")
+    cluster_ca_certificate = optional(string, "")
+  })
+  default = {}
+}
+
+variable "dbm" {
+  description = <<-EOT
+    Datadog Database Monitoring for the existing PostgreSQL server, run as cluster checks by the Cluster Agent on the
+    existing AKS cluster (no new compute). The DBM user/grants are created by the DBA with the package SQL
+    (modules/dbm/sql/postgres-flexible.sql); the password lives in the Kubernetes Secret named below.
+  EOT
+  type = object({
+    enabled         = optional(bool, true)
+    host            = optional(string, "psql-orders-prod.postgres.database.azure.com")
+    resource_id     = optional(string, "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data-prod/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-orders-prod")
+    password_secret = optional(string, "datadog-dbm-postgres")
+  })
+  default = {}
+}

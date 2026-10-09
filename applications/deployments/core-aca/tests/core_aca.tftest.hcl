@@ -350,13 +350,6 @@ variables {
       "datadog-client-token" = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-client-token"
     }
   }
-  platform_db_redis = {
-    cache = {
-      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-redis/providers/Microsoft.Cache/redisEnterprise/eh-amr-data-dev-sec"
-      hostname = "eh-amr-data-dev-sec.swedencentral.redis.azure.net"
-      port     = 10000
-    }
-  }
 }
 # END FIXTURE
 

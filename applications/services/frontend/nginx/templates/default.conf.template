@@ -1,0 +1,41 @@
+# Rendered at container start by the nginx image (envsubst limited to NGINX_ENVSUBST_FILTER variables).
+map $uri $hello_cache_control {
+    default                 "no-cache";
+    ~^/assets/              "public, max-age=31536000, immutable";
+    /config.json            "no-store";
+}
+
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${API_ORIGIN} ${DD_INTAKE_ORIGIN}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cache-Control $hello_cache_control always;
+
+    location = /healthz {
+        access_log off;
+        default_type application/json;
+        return 200 '{"status":"ok"}';
+    }
+
+    # runtime configuration: mounted file (ACA secret volume / ACI volume / k8s ConfigMap)
+    location = /config.json {
+        default_type application/json;
+        alias ${CONFIG_PATH};
+    }
+
+    location /assets/ {
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

@@ -113,9 +113,15 @@ variables {
     }
   }
   foundation_network = {
-    resource_group_name  = "rg-net"
-    location             = "swedencentral"
-    internal_dns_zone    = "lab.internal"
+    resource_group_name = "rg-net"
+    location            = "swedencentral"
+    internal_dns_zone   = "lab.internal"
+    private_dns_zones = {
+      webapps = {
+        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/privateDnsZones/privatelink.azurewebsites.net"
+        name = "privatelink.azurewebsites.net"
+      }
+    }
     internal_dns_zone_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/privateDnsZones/lab.internal"
     subnets = {
       compute = {

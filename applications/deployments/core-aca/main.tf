@@ -40,12 +40,12 @@ locals {
       var.settings.auth_mode == "entra" ? { ENTRA_TENANT_ID = var.environment.tenant_id, ENTRA_AUDIENCE = coalesce(var.settings.entra_audience, "api://hello-bff") } : {},
     )
     "hello-orders-api" = {
-      # Entra managed identity auth: no password in the connection string.
-      SQL_CONNECTION_STRING = "Server=tcp:${var.platform_db_sql.server.fqdn},${var.platform_db_sql.server.port};Database=${local.sql_db.name};Authentication=Active Directory Managed Identity;User Id=${local.ids["hello-orders-api"].client_id};Encrypt=True"
-      CATALOG_API_URL       = local.internal_url["hello-catalog-api"]
-      MESSAGING_MODE        = "servicebus"
-      SERVICEBUS_FQDN       = local.sb_fqdn
-      SERVICEBUS_TOPIC      = var.platform_messaging.topic.name
+      SQL_CONNECTION_STRING    = "Server=tcp:${var.platform_db_sql.server.fqdn},${var.platform_db_sql.server.port};Database=${local.sql_db.name};Encrypt=True"
+      SQL_USE_AZURE_CREDENTIAL = "true" # token from AzureCredentialFactory (workload/managed identity); no password
+      CATALOG_API_URL          = local.internal_url["hello-catalog-api"]
+      MESSAGING_MODE           = "servicebus"
+      SERVICEBUS_FQDN          = local.sb_fqdn
+      SERVICEBUS_TOPIC         = var.platform_messaging.topic.name
     }
     "hello-catalog-api" = merge(
       {

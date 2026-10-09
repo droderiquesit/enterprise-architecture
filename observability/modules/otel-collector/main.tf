@@ -6,6 +6,7 @@ locals {
     var.bearer_auth ? { OTELCOL_CONFIG_AUTH = file("${local.dir}/gateway-auth.yaml") } : {},
     var.sampling == "tail" ? { OTELCOL_CONFIG_TAIL = file("${local.dir}/gateway-tail-sampling.yaml") } : {},
     var.fluentbit_metrics_target != null ? { OTELCOL_CONFIG_SCRAPE_FLB = file("${local.dir}/gateway-scrape-fluentbit.yaml") } : {},
+    var.otlp_logs == "forward" ? { OTELCOL_CONFIG_LOGS_FORWARD = file("${local.dir}/gateway-logs-forward.yaml") } : {},
   )
   order = concat(["OTELCOL_CONFIG_BASE"], sort([for k in keys(local.configs) : k if k != "OTELCOL_CONFIG_BASE"]))
   args  = concat(var.distribution == "ddot" ? ["run"] : [], [for k in local.order : "--config=env:${k}"])

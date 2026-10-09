@@ -81,7 +81,7 @@ def run_container(
             time.sleep(1.0)
         yield container
     finally:
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+        subprocess.run(["docker", "rm", "-f", "-v", name], capture_output=True)
 
 
 SB_EMULATOR_IMAGE = "mcr.microsoft.com/azure-messaging/servicebus-emulator:latest"

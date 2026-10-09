@@ -63,6 +63,13 @@
         "internal_only": {
           "const": true,
           "description": "receivers are never exposed publicly"
+        },
+        "logs_policy": {
+          "enum": [
+            "drop",
+            "forward"
+          ],
+          "description": "what the OTel gateway does with OTLP logs (drop = accepted and discarded; application logs arrive via Fluent Bit only)"
         }
       }
     },

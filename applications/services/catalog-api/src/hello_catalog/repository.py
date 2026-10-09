@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 from hello_common.faults import check_fault
 
-from .models import Product, ProductIn
+from .models import Product, ProductIn, with_price
 from .settings import PgSettings
 
 log = logging.getLogger("hello_catalog.repository")
@@ -49,8 +49,8 @@ RETURNING {_COLUMNS}
 
 def _row_to_product(row: tuple[Any, ...]) -> Product:
     sku, name, description, unit_price, currency, category, active, updated_at = row
-    return Product(sku=sku, name=name, description=description, unit_price=float(unit_price), currency=currency.strip(),
-                   category=category, active=active, updated_at=updated_at)
+    return with_price(Product(sku=sku, name=name, description=description, unit_price=float(unit_price), currency=currency.strip(),
+                              category=category, active=active, updated_at=updated_at))
 
 
 class ProductRepository(Protocol):
@@ -97,6 +97,7 @@ class InMemoryRepository:
         check_fault("db_error")
         stored = Product(**product.model_dump(), updated_at=datetime.now(UTC))
         stored.unit_price = float(product.unit_price)
+        with_price(stored)
         self._items[product.sku] = stored
         return stored
 

@@ -1,0 +1,9 @@
+# Overlay (opt-in, NOT for workloads whose app logs already flow through Fluent Bit): forward OTLP logs
+# to Datadog instead of dropping them. Only use it for sources that have no Fluent Bit route; enabling it
+# for the Functions host duplicates FunctionAppLogs (README-transport.md, duplicate-prevention rules).
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, resource/unified_tags, batch]
+      exporters: [datadog]

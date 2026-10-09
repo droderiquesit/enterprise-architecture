@@ -120,6 +120,10 @@ run "default_create_everything_internal" {
     error_message = "Upstream gateway by default, scraping Fluent Bit self-metrics."
   }
   assert {
+    condition     = !contains(azapi_resource.gateway[0].body.properties.template.containers[0].args, "--config=env:OTELCOL_CONFIG_LOGS_FORWARD")
+    error_message = "OTLP logs (e.g. Functions host) are dropped by default."
+  }
+  assert {
     condition     = length(azurerm_role_assignment.kv_secrets_user) == 1 && length(azurerm_private_endpoint.eventhub) == 1
     error_message = "KV role + Event Hubs private endpoint expected."
   }

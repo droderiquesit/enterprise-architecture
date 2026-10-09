@@ -33,3 +33,8 @@ output "diagnostic_settings" {
     unsupported   = module.diagnostics[0].unsupported_resources
   } : null
 }
+
+output "dbm" {
+  description = "DBM configuration per database (no secrets) incl. the setup SQL the DBA must run."
+  value       = var.dbm.enabled ? module.dbm[0].configured : null
+}

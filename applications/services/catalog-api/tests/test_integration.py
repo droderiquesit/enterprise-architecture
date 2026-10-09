@@ -60,7 +60,7 @@ def test_end_to_end_with_postgres_and_redis(stack, monkeypatch):
         r1 = c.get("/products/SKU-0007")
         r2 = c.get("/products/SKU-0007")
         assert (r1.headers["X-Cache"], r2.headers["X-Cache"]) == ("MISS", "HIT")
-        assert r1.json()["unit_price"] == r2.json()["unit_price"] == 56.45
+        assert r1.json()["unit_price"] == r2.json()["unit_price"] == r2.json()["price"] == 56.45
         ttl = rd.exec("redis-cli", "ttl", "catalog:product:SKU-0007").stdout.strip()
         assert 0 < int(ttl) <= 60
         up = c.post("/products", json={"sku": "SKU-0007", "name": "Changed", "unit_price": "1.00"})

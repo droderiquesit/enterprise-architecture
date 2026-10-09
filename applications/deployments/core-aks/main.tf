@@ -33,11 +33,12 @@ locals {
       var.settings.inventory_api_url == null ? {} : { INVENTORY_API_URL = var.settings.inventory_api_url },
     )
     "hello-orders-api" = {
-      SQL_CONNECTION_STRING = "Server=tcp:${var.platform_db_sql.server.fqdn},${var.platform_db_sql.server.port};Database=${var.platform_db_sql.databases["orders"].name};Authentication=Active Directory Managed Identity;User Id=${local.wi["hello-orders-api"].client_id};Encrypt=True"
-      CATALOG_API_URL       = local.svc_url["hello-catalog-api"]
-      MESSAGING_MODE        = "servicebus"
-      SERVICEBUS_FQDN       = var.platform_messaging.fqdn
-      SERVICEBUS_TOPIC      = var.platform_messaging.topic.name
+      SQL_CONNECTION_STRING    = "Server=tcp:${var.platform_db_sql.server.fqdn},${var.platform_db_sql.server.port};Database=${var.platform_db_sql.databases["orders"].name};Encrypt=True"
+      SQL_USE_AZURE_CREDENTIAL = "true" # token from AzureCredentialFactory (workload/managed identity); no password
+      CATALOG_API_URL          = local.svc_url["hello-catalog-api"]
+      MESSAGING_MODE           = "servicebus"
+      SERVICEBUS_FQDN          = var.platform_messaging.fqdn
+      SERVICEBUS_TOPIC         = var.platform_messaging.topic.name
     }
     "hello-catalog-api" = merge(
       {
@@ -188,9 +189,8 @@ resource "kubernetes_deployment_v1" "app" {
         automount_service_account_token  = true # projected token for workload identity
         termination_grace_period_seconds = 30
         security_context {
+          # Images run as a numeric non-root user (.NET chiseled: 1654); no fixed uid imposed here.
           run_as_non_root = true
-          run_as_user     = 10001
-          fs_group        = 10001
           seccomp_profile {
             type = "RuntimeDefault"
           }

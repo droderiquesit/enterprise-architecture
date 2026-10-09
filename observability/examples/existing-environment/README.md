@@ -9,6 +9,8 @@ Standalone consumer root. It needs nothing from the source repository except the
 | PostgreSQL flexible server `psql-orders-prod` | is_db_alive, CPU (threshold 85 via params), failed connections, storage |
 | Telemetry pipeline | canary logs, Fluent Bit and OTel collector health |
 | Datadog Azure integration (`modules/azure-integration`, existing Entra app, secretless) | platform metrics for all `azure.*` monitors |
+| Datadog Agent + Cluster Agent + Fluent Bit DaemonSet on the existing AKS cluster (`modules/kubernetes`, namespaces `datadog`, `fluent-bit`) | traces/metrics via Agent OTLP, container logs via Fluent Bit |
+| Database Monitoring for `psql-orders-prod` (`modules/dbm`, cluster checks on the existing Cluster Agent) | query metrics/samples; DBA runs the package SQL for the `datadog` user |
 | Diagnostic settings (`modules/diagnostic-settings`) on the three resources -> existing Event Hubs | App Service app logs (eventhub route) + platform logs (AKS audit, PostgreSQL logs) |
 
 No sample applications, no networks, platforms or databases are created. Fault injection is disabled and validated.

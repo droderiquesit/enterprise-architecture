@@ -102,6 +102,8 @@ MOCKS = (
     '  }\n'
     '}\n'
     'mock_provider "azapi" {}\n'
+    'mock_provider "helm" {}\n'
+    'mock_provider "kubernetes" {}\n'
 )
 
 

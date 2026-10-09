@@ -23,7 +23,13 @@ class Product(BaseModel):
     name: str
     description: str
     unit_price: float
+    price: float | None = None  # alias of unit_price; hello-orders-api reads `price`
     currency: str
     category: str
     active: bool
     updated_at: datetime | None = None
+
+
+def with_price(product: Product) -> Product:
+    product.price = product.unit_price
+    return product

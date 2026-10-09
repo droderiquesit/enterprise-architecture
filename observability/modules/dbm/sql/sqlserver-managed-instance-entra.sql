@@ -1,0 +1,10 @@
+-- Datadog DBM with a managed identity on Azure SQL Managed Instance.
+-- Source: https://docs.datadoghq.com/database_monitoring/guide/managed_authentication/
+USE [master];
+IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = '<MANAGED_IDENTITY_NAME>')
+    CREATE LOGIN [<MANAGED_IDENTITY_NAME>] FROM EXTERNAL PROVIDER;
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '<MANAGED_IDENTITY_NAME>')
+    CREATE USER [<MANAGED_IDENTITY_NAME>] FOR LOGIN [<MANAGED_IDENTITY_NAME>];
+GRANT CONNECT ANY DATABASE TO [<MANAGED_IDENTITY_NAME>];
+GRANT VIEW SERVER STATE TO [<MANAGED_IDENTITY_NAME>];
+GRANT VIEW ANY DEFINITION TO [<MANAGED_IDENTITY_NAME>];

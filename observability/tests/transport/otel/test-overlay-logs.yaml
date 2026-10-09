@@ -1,0 +1,5 @@
+# Test-only: point the Datadog exporter's logs endpoint at the mock intake (used with gateway-logs-forward.yaml).
+exporters:
+  datadog:
+    logs:
+      endpoint: http://intake:8080

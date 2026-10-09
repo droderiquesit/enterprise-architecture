@@ -36,6 +36,7 @@ def test_cache_aside_miss_then_hit():
         assert r1.status_code == 200 and r1.headers["X-Cache"] == "MISS"
         r2 = c.get("/products/SKU-0003")
         assert r2.headers["X-Cache"] == "HIT" and r2.json()["sku"] == "SKU-0003"
+        assert r1.json()["price"] == r1.json()["unit_price"] == r2.json()["price"]
         assert repo.reads == 1
         assert redis.ttl["catalog:product:SKU-0003"] == 60
 

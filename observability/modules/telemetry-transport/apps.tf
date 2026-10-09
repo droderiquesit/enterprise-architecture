@@ -14,6 +14,7 @@ module "gateway_config" {
   distribution             = var.gateway.distribution
   sampling                 = var.gateway.sampling
   sampling_percentage      = var.gateway.sampling_percentage
+  otlp_logs                = var.gateway.otlp_logs
   bearer_auth              = var.gateway.auth != null
   fluentbit_metrics_target = local.agg_enabled ? "${local.agg_name}:2020" : null
   datadog_site             = var.datadog.site

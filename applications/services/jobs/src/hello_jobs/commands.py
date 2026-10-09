@@ -251,7 +251,7 @@ def daily_aggregate(env: dict[str, str] | None = None, client_factory=create_cli
         raise JobFailed("ORDERS_API_URL is required")
     day = date.fromisoformat(env["AGGREGATE_DATE"]) if env.get("AGGREGATE_DATE") else (datetime.now(UTC).date() - timedelta(days=1))
     with client_factory(timeout=30.0, retries=3) as client:
-        r = client.get(base.rstrip("/") + "/orders", params={"since": f"{day.isoformat()}T00:00:00Z", "limit": env.get("ORDERS_PAGE_LIMIT", "1000")})
+        r = client.get(base.rstrip("/") + "/orders", params={"since": f"{day.isoformat()}T00:00:00Z", "limit": env.get("ORDERS_PAGE_LIMIT", "100")})
     if r.status_code >= 400:
         raise JobFailed(f"orders-api returned HTTP {r.status_code}")
     data = r.json()

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Sourced by the nginx image entrypoint before template substitution.
+# Derives the Datadog browser intake origin for the CSP from DD_SITE, e.g.
+#   datadoghq.com -> https://browser-intake-datadoghq.com ; us3.datadoghq.com -> https://browser-intake-us3-datadoghq.com
+#   datadoghq.eu  -> https://browser-intake-datadoghq.eu  ; ap1.datadoghq.com -> https://browser-intake-ap1-datadoghq.com
+# and optionally materialises APP_CONFIG_JSON (when no config file is mounted).
+site="${DD_SITE:-datadoghq.com}"
+case "$site" in
+  datadoghq.com|us3.datadoghq.com|us5.datadoghq.com|datadoghq.eu|ap1.datadoghq.com|ap2.datadoghq.com|ddog-gov.com) ;;
+  *) echo "15-hello-env: unsupported DD_SITE '$site'" >&2; exit 1 ;;
+esac
+tld="${site##*.}"
+rest="${site%.*}"
+DD_INTAKE_ORIGIN="https://browser-intake-$(echo "$rest" | tr '.' '-').${tld}"
+export DD_INTAKE_ORIGIN
+if [ -n "${APP_CONFIG_JSON:-}" ] && [ ! -f "${CONFIG_PATH:-/config/config.json}" ]; then
+  printf '%s' "$APP_CONFIG_JSON" > /tmp/config.json
+  CONFIG_PATH=/tmp/config.json
+  export CONFIG_PATH
+fi
+echo "15-hello-env: DD_INTAKE_ORIGIN=$DD_INTAKE_ORIGIN API_ORIGIN=${API_ORIGIN:-} CONFIG_PATH=${CONFIG_PATH:-/config/config.json}"

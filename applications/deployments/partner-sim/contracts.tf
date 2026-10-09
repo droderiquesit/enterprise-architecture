@@ -9,6 +9,10 @@ variable "foundation_network" {
     location             = string
     internal_dns_zone    = optional(string)
     internal_dns_zone_id = optional(string)
+    private_dns_zones = optional(map(object({
+      id   = string
+      name = string
+    })), {})
     subnets = map(object({
       id             = string
       name           = string
