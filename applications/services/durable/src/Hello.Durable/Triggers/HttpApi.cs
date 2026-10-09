@@ -49,6 +49,33 @@ public sealed class HttpApi(HelloServiceInfo info, DurableSettings settings, Tim
     public IActionResult Healthz([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "healthz")] HttpRequest req) =>
         new OkObjectResult(new { status = "ok", service = info.Service });
 
+    /// <summary>
+    /// Readiness: the Durable task hub backend (runtime storage) answers a point lookup within 2s.
+    /// Business-database reachability is reported by the activities themselves, not gated here.
+    /// </summary>
+    [Function("Readyz")]
+    public async Task<IActionResult> Readyz(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "readyz")] HttpRequest req,
+        [DurableClient] DurableTaskClient client)
+    {
+        ArgumentNullException.ThrowIfNull(req);
+        ArgumentNullException.ThrowIfNull(client);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(req.HttpContext.RequestAborted);
+        cts.CancelAfter(TimeSpan.FromSeconds(2));
+        try
+        {
+            await client.GetInstanceAsync("readyz-probe", getInputsAndOutputs: false, cts.Token).ConfigureAwait(false);
+            return new OkObjectResult(new { status = "ready", service = info.Service, checks = new { durable_backend = "ok" } });
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException or IOException or Azure.RequestFailedException)
+        {
+            return new ObjectResult(new { status = "not-ready", service = info.Service, checks = new { durable_backend = ex.GetType().Name } })
+            {
+                StatusCode = StatusCodes.Status503ServiceUnavailable,
+            };
+        }
+    }
+
     [Function("Version")]
     public IActionResult Version([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "version")] HttpRequest req) =>
         new OkObjectResult(new { service = info.Service, version = info.Version, commit = info.Commit, build_time = info.BuildTime, runtime = info.Runtime });

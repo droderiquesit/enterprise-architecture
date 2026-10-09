@@ -46,7 +46,10 @@ public static class HelloWebApplicationExtensions
         var urls = builder.Configuration["ASPNETCORE_URLS"] ?? builder.Configuration["urls"];
         var httpPorts = builder.Configuration["ASPNETCORE_HTTP_PORTS"] ?? builder.Configuration["http_ports"];
         var port = builder.Configuration["PORT"];
-        if (!string.IsNullOrWhiteSpace(port) || (string.IsNullOrWhiteSpace(urls) && string.IsNullOrWhiteSpace(httpPorts)))
+        // Behind IIS / App Service Windows the ASP.NET Core Module owns the port (ASPNETCORE_PORT, in- or out-of-process).
+        var behindIis = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_PORT"))
+            || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_IIS_HTTPAUTH"));
+        if (!behindIis && (!string.IsNullOrWhiteSpace(port) || (string.IsNullOrWhiteSpace(urls) && string.IsNullOrWhiteSpace(httpPorts))))
         {
             builder.WebHost.UseUrls($"http://+:{(string.IsNullOrWhiteSpace(port) ? "8080" : port.Trim())}");
         }
