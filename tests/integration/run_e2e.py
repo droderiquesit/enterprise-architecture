@@ -555,7 +555,11 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     pg_products = [s for s in spans if PT and s["trace_id"] == PT and ("psycopg" in s["scope"])]
     redis_t = [s for s in tspans if "redis" in s["scope"]]
     need = {"hello-bff", "hello-orders-api", "hello-catalog-api"}
-    ok = bool(T) and need <= set(services_in_t) and bool(sql_spans) and parent_ok
+    orders_sql = [s for s in sql_spans if s["service"] == "hello-orders-api"]
+    catalog_pg = [s for s in pg_spans_t if s["service"] == "hello-catalog-api"]
+    # required: hello-orders-api's own SQL Server client span in the browser trace; PostgreSQL is reported (the
+    # catalog price lookup is cache-aside, so a warm Redis entry legitimately skips PostgreSQL for that trace)
+    ok = bool(T) and need <= set(services_in_t) and bool(orders_sql) and parent_ok
     tr_ev = write("trace-journey.json", {
         "browser_traceparent": tp, "trace_id": T, "services_in_trace": services_in_t,
         "bff_server_parent_is_browser_span": parent_ok,
@@ -564,7 +568,8 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     })
     res.set("trace_correlation", "pass" if ok else "fail", {
         "trace_id": T, "services_in_trace": services_in_t, "bff_server_parent_is_browser_span": parent_ok,
-        "sql_server_client_spans_in_trace": len(sql_spans), "postgresql_client_spans_in_trace": len(pg_spans_t),
+        "sql_server_client_spans_in_trace": len(sql_spans), "orders_api_sql_spans": sorted({x["name"] for x in orders_sql}),
+        "postgresql_client_spans_in_trace": len(pg_spans_t), "catalog_postgresql_spans": sorted({x["name"] for x in catalog_pg}),
         "redis_spans_in_trace": len(redis_t), "postgresql_client_spans_in_products_list_trace": len(pg_products),
         "span_count": len(tspans)}, tr_ev)
 

@@ -1,0 +1,35 @@
+{
+  "marker_counts": {
+    "hello-orders-api": 1,
+    "hello-catalog-api": 1,
+    "hello-inventory-api": 1,
+    "hello-partner-sim": 1,
+    "hello-worker": 1,
+    "hello-durable": 1,
+    "hello-bff": 1,
+    "hello-dbadapter-postgresql": 1
+  },
+  "marker_definitions": {
+    "hello-orders-api": "message startswith 'Order ec944a1c-1e1e-463a-9219-c7f825940bb9 created'",
+    "hello-catalog-api": "'product upserted' sku=E2E-MARKER-FA9AC331 (direct POST /products)",
+    "hello-inventory-api": "'Reservation ... order ec944a1c-1e1e-463a-9219-c7f825940bb9'",
+    "hello-partner-sim": "'payment processed' order_id=ec944a1c-1e1e-463a-9219-c7f825940bb9",
+    "hello-worker": "'notification recorded' order_id=ec944a1c-1e1e-463a-9219-c7f825940bb9",
+    "hello-durable": "'OrderProcessing for ec944a1c-1e1e-463a-9219-c7f825940bb9 completed'",
+    "hello-bff": "retry attempt 2 log of the single fault-window request trace f6f93ec8f15a4050a6e5f2f7f1807ff5",
+    "hello-dbadapter-postgresql": "'POST /roundtrip 200' of the browser roundtrip trace 0000000000000000e8097e2a2550d585"
+  },
+  "identical_events_total": 20,
+  "identical_structured_app_events": 0,
+  "identical_events_examples": [
+    "info: Microsoft.Azure.WebJobs.Hosting.OptionsLoggingService[0]\n      ScriptJobHostOptions\n      {\n        \"FileWatchingEnabled\": true,\n        \"FileLoggingMode\"",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "      \n",
+    "info: Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener[0]\n      Message processing error (Action=Receive, EntityPath=order-events/Subscriptions/f"
+  ],
+  "identical_plaintext_events_more_often_at_intake_than_in_source_file": {},
+  "duplicate_span_ids": 0,
+  "spans_total": 955,
+  "log_events_total": 939
+}
