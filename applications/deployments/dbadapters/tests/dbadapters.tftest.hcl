@@ -369,6 +369,35 @@ variables {
       }
     }
   }
+  platform_db_sqlmi = {
+    enabled = true
+    server = {
+      fqdn = "eh-sqlmi-data-dev-sec.abc123.database.windows.net"
+      port = 1433
+    }
+    databases = {
+      adapter = {
+        name = "adapter"
+      }
+    }
+  }
+  platform_db_sqlvm = {
+    vm = {
+      id                 = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sqlvm/providers/Microsoft.Compute/virtualMachines/eh-vm-sqlvm-dev-sec"
+      private_ip_address = "10.41.0.10"
+    }
+    server = {
+      fqdn = "10.41.0.10"
+      port = 1433
+    }
+    databases = {
+      adapter = {
+        name               = "adapter"
+        login              = "dbadapter"
+        password_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/sqlvm-dbadapter-password"
+      }
+    }
+  }
   platform_db_postgresql = {
     server = {
       fqdn = "eh-psql-data-dev-sec.postgres.database.azure.com"
@@ -385,6 +414,17 @@ variables {
       }
     }
     elastic_cluster = null
+  }
+  platform_db_mysql = {
+    server = {
+      fqdn = "eh-mysql-data-dev-sec.mysql.database.azure.com"
+      port = 3306
+    }
+    databases = {
+      adapter = {
+        name = "adapter"
+      }
+    }
   }
   platform_db_cosmos_nosql = {
     account = {
@@ -415,6 +455,55 @@ variables {
       }
     }
   }
+  platform_db_cosmos_mongo = {
+    account = {
+      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cosmos/providers/Microsoft.DocumentDB/databaseAccounts/eh-cosmos-mongo-dev-abcde"
+      name     = "eh-cosmos-mongo-dev-abcde"
+      endpoint = "https://eh-cosmos-mongo-dev-abcde.mongo.cosmos.azure.com:443/"
+    }
+    auth_mode     = "key"
+    key_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/cosmos-mongo-connection-string"
+    databases = {
+      adapter = {
+        name = "adapter"
+        containers = {
+          records = {
+            name          = "records"
+            partition_key = "_id"
+          }
+        }
+      }
+    }
+  }
+  platform_db_documentdb = {
+    cluster = {
+      id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-docdb/providers/Microsoft.DocumentDB/mongoClusters/eh-docdb-data-dev-sec"
+      name = "eh-docdb-data-dev-sec"
+      host = "eh-docdb-data-dev-sec.global.mongocluster.cosmos.azure.com"
+      port = 10260
+    }
+    databases = {
+      adapter = {
+        name = "adapter"
+      }
+    }
+  }
+  platform_db_cassandra_mi = {
+    enabled = true
+    cluster = {
+      id                     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cass/providers/Microsoft.DocumentDB/cassandraClusters/eh-mi-cass-dev-sec"
+      datacenter             = "dc1"
+      seed_node_ip_addresses = ["10.41.10.4", "10.41.10.5", "10.41.10.6"]
+      port                   = 9042
+    }
+    databases = {
+      adapter = {
+        name               = "adapter"
+        login              = "dbadapter"
+        password_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/cassandra-mi-dbadapter-password"
+      }
+    }
+  }
   platform_db_redis = {
     cache = {
       id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-redis/providers/Microsoft.Cache/redisEnterprise/eh-amr-data-dev-sec"
@@ -436,6 +525,32 @@ variables {
         name = "adapterrecords"
       }
     }
+  }
+  platform_db_ledger = {
+    ledger = {
+      id                        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ledger/providers/Microsoft.ConfidentialLedger/ledgers/eh-ledger-dev"
+      name                      = "eh-ledger-dev"
+      ledger_endpoint           = "https://eh-ledger-dev.confidential-ledger.azure.com"
+      identity_service_endpoint = "https://identity.confidential-ledger.core.azure.com/ledgerIdentity/eh-ledger-dev"
+    }
+    databases = {
+      "order-audit" = {
+        name = "order-audit"
+      }
+      adapter = {
+        name = "adapter"
+      }
+    }
+  }
+  platform_data_analytics = {
+    blob = {
+      id        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-da/providers/Microsoft.Storage/storageAccounts/ehstblobdevabcde"
+      endpoint  = "https://ehstblobdevabcde.blob.core.windows.net/"
+      container = "adapter"
+    }
+    adls          = null
+    data_explorer = null
+    search        = null
   }
 }
 # END FIXTURE
