@@ -132,16 +132,6 @@ architectures:
     runtime_config: azurerm_automation_job_schedule on the platform schedule with probe_urls
     rollback: re-apply the previous commit
     source: applications/deployments/specialized/README.md
-conflicts:
-  - architecture: container-apps-job-manual / -scheduled / -event
-    issue: >-
-      catalog/telemetry-capabilities.yaml says job logs go through a Fluent Bit sidecar and ContainerAppConsoleLogs are not
-      exported; deploy-jobs deliberately runs jobs WITHOUT a sidecar (it would keep executions running) and relies on the
-      environment's ContainerAppConsoleLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator.
-    source: applications/deployments/jobs/README.md
-  - architecture: batch
-    issue: >-
-      telemetry-capabilities.yaml (and ADR-0001 amendment 2026-10-09) describe a pool start task that sets up Fluent Bit
-      from the instrumentation contract; the start task in platform/compute/batch/main.tf only installs Python 3.13,
-      so Batch task logs are not collected by the lab today.
-    source: platform/compute/batch/main.tf
+# Catalog-vs-code conflicts found by the reconciliation pass are fixed at the source (ACA job log path and Batch
+# job-preparation log setup reconciled 2026-10-09); list new ones here when found.
+conflicts: []

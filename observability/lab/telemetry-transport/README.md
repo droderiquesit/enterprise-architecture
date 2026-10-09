@@ -53,7 +53,7 @@ retention, lost) and the apps. The Key Vault secret `eventhub-fluentbit-listen` 
 * SAS (Listen) for the Kafka input on ACA. See the module README.
 * AzAPI is used for the Container Apps (azurerm gap).
 * The Container Apps sidecar `sub_path` secret mounts are unverified on Azure.
-* The pipeline identity needs Key Vault Secrets Officer to write the listen secret (foundation request).
+* The apply identity needs Key Vault Secrets Officer to write the listen secret: add its principal id to `components.foundation-identity.secret_officer_principal_ids`.
 
 ## Docs
 - `observability/modules/README-transport.md`

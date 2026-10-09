@@ -601,7 +601,7 @@ services:
     azapi: []
     component: platform-db-postgresql
     implemented: true
-    notes: azurerm_postgresql_flexible_server cluster { size, default_database_name } block (azurerm 5.9.0)
+    notes: azurerm_postgresql_flexible_server cluster { size, default_database_name } block (azurerm 5.9.0); off by default (platform-db-postgresql settings.elastic_cluster.enabled = false)
   workload:
     exercised_by:
     - hello-dbadapter-postgresql-elastic
@@ -638,12 +638,9 @@ services:
     teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
     data_retention: as flexible server
   status:
-    implementation: implemented
+    implementation: disabled
     live_validation: not-run
-    default_profiles:
-    - enterprise
-    - full
-    - minimal
+    default_profiles: []
   references:
   - https://learn.microsoft.com/en-us/azure/postgresql/elastic-clusters/concepts-elastic-clusters
   - https://learn.microsoft.com/en-us/azure/postgresql/elastic-clusters/concepts-elastic-clusters-limitations
@@ -1635,6 +1632,7 @@ services:
       reason: no azurerm resource in 5.9.0
     component: platform-db-horizondb
     implemented: true
+    notes: 'implemented (azapi) but off by default (settings.enabled = false). Prerequisites to enable: preview access, Microsoft.HorizonDb registered, preview region, entra_admin, preview_access_confirmed = true'
   workload:
     exercised_by:
     - hello-dbadapter-horizondb
@@ -1671,10 +1669,9 @@ services:
     teardown: terraform destroy of the owning platform root; server/account deletion is immediate (no soft delete) - export data first if needed
     data_retention: backups 7 days (fixed in preview)
   status:
-    implementation: implemented
+    implementation: disabled
     live_validation: not-run
-    default_profiles:
-    - specialized
+    default_profiles: []
   references:
   - https://learn.microsoft.com/en-us/azure/horizondb/overview
   - https://learn.microsoft.com/en-us/azure/horizondb/configure-maintain/quickstart-create-cluster

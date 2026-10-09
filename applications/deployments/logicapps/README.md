@@ -24,7 +24,7 @@ the platform `logicapps_storage` account (sensitive, in state). Request: platfor
 secret id for that connection string.
 
 - **Consumed contracts**: platform-appservice (`plans.logicapps`, `logicapps_storage`), platform-messaging,
-  obs-telemetry-transport, foundation-identity; optional foundation-network (**not in components.yaml**).
+  obs-telemetry-transport, foundation-identity, foundation-network (all registered in catalog/components.yaml).
 - **Produced contract**: `deploy-logicapps`: `workflows.{consumption,standard}`, `apps`, `deploy_steps[logicapp-zip]`.
 
 ## Rollback / cost

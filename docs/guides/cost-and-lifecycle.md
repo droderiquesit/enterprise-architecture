@@ -71,8 +71,10 @@ has been deployed.
 | State storage | versioning + 30-day blob/container soft delete + 90-day change feed | `bootstrap` |
 | Key Vault | 7-day soft delete, purge protection on | `foundation-identity` |
 
-The profile `features.trace_sample_rate` / `rum_session_sample_rate` values are **not** wired to any root; change the
-root settings above instead ([known limitations](../known-limitations.md#configuration)).
+The profile `features.trace_sample_rate` (-> `trace_sample_ratio` of every deploy root), `rum_session_sample_rate` and
+`session_replay` (-> `obs-prereqs` RUM sample rates) set these defaults per profile (`minimal` 1.0 / 100, `enterprise`,
+`full`, `specialized` 0.5 / 50); environment `components.<id>` settings still win
+([profiles README](../../environments/profiles/README.md#feature-mapping)).
 
 ## 5. Teardown order and data deletion
 

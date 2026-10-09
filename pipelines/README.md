@@ -143,7 +143,11 @@ so the smoke runner finds them.
    component from running twice. A second run that waited reads records written by the first, plans
    against the new state and applies nothing when there is nothing left to do.
 4. **Variable groups**: `lab-<env>-datadog` linked to the environment's Key Vault, secrets
-   `datadog-api-key`, `datadog-app-key` (names from `environment.yaml datadog.*_secret_name`).
+   `datadog-api-key`, `datadog-app-key` (names from `environment.yaml datadog.*_secret_name`). The plan/apply
+   templates link it only for `obs-prereqs`, `obs-azure-integration`, `obs-monitoring` (step env `DD_API_KEY` /
+   `DD_APP_KEY` for the Datadog provider) and `obs-kubernetes` (step env `TF_VAR_datadog_api_key`, an ephemeral
+   variable); no other root sees the keys, and they are never written to disk. Grant the pipeline's plan and apply
+   service connections "Use" on the group.
    They reach scripts only through `env:` and are never echoed (lint rule PL009).
 5. **Branch policies** (Azure Repos ignores YAML `pr:` triggers): Repos → Branches → `main` →
    Branch policies → *Build validation* → this pipeline, *Required*, trigger *Automatic*, expiry

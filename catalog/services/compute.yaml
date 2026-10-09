@@ -80,7 +80,7 @@ services:
   cost:
     profile: low
     approx_monthly_usd_default: 35
-    assumptions: Standard_B2s PAYG + 30 GB Standard SSD
+    assumptions: Standard_B2s_v2 Linux PAYG 24x7 (~35; less with the 19:00 UTC auto-shutdown) + Standard SSD OS disk (~3)
     teardown: terraform destroy deletes VM, NIC, OS disk
     data_retention: OS disk deleted with VM
   status:
@@ -152,8 +152,8 @@ services:
   - Fluent Bit on Windows runs as a service; file tailing of LOG_FILE_PATH only
   cost:
     profile: medium
-    approx_monthly_usd_default: 150
-    assumptions: Standard_D2s_v5 Windows PAYG + 128 GB Standard SSD
+    approx_monthly_usd_default: 75
+    assumptions: Standard_B2s_v2 Windows PAYG 24x7 (~65; less with the 19:00 UTC auto-shutdown) + 128 GB Standard SSD OS disk (~10)
     teardown: terraform destroy
     data_retention: OS disk deleted with VM
   status:
@@ -222,8 +222,8 @@ services:
   - Instance-level metrics via azure.compute_virtualmachinescalesets_virtualmachines; Agent extension on the scale set model owned by obs-hosts
   cost:
     profile: low
-    approx_monthly_usd_default: 70
-    assumptions: 2 x Standard_B2s + disks
+    approx_monthly_usd_default: 38
+    assumptions: 1 x Standard_B2s_v2 Linux instance (autoscale 1-3) + Standard SSD disk
     teardown: terraform destroy
     data_retention: instance disks deleted
   status:
@@ -292,8 +292,8 @@ services:
   - Instance-level metrics via azure.compute_virtualmachinescalesets_virtualmachines; Agent extension on the scale set model owned by obs-hosts
   cost:
     profile: low
-    approx_monthly_usd_default: 70
-    assumptions: 2 x Standard_B2s + disks
+    approx_monthly_usd_default: 38
+    assumptions: 1 x Standard_B2s_v2 Linux instance (autoscale 1-2) + Standard SSD disk
     teardown: terraform destroy
     data_retention: instance disks deleted
   status:
@@ -373,8 +373,8 @@ services:
   - Agent container log collection must stay disabled while Fluent Bit ships /var/log/containers
   cost:
     profile: medium
-    approx_monthly_usd_default: 230
-    assumptions: Standard tier (~USD 73) + 2 x Standard_D2s_v5 nodes
+    approx_monthly_usd_default: 110
+    assumptions: Free tier control plane (sku_tier default; Standard ~USD 73 for the uptime SLA) + 1 x Standard_D2s_v5 system node (~70, autoscale to 2) + OS disk (~20) + Standard LB (~18)
     teardown: terraform destroy deletes cluster and node RG (MC_*)
     data_retention: PV disks with Delete reclaim policy removed
   status:
@@ -694,8 +694,8 @@ services:
   - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
   cost:
     profile: low
-    approx_monthly_usd_default: 13
-    assumptions: B1 plan (Linux ~USD 13; Windows ~USD 55)
+    approx_monthly_usd_default: 60
+    assumptions: P0v3 Linux plan, 1 worker (platform-appservice linux_plan default)
     teardown: terraform destroy
     data_retention: none (stateless); /home content deleted
   status:
@@ -770,8 +770,8 @@ services:
   - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
   cost:
     profile: medium
-    approx_monthly_usd_default: 55
-    assumptions: B1 plan (Linux ~USD 13; Windows ~USD 55)
+    approx_monthly_usd_default: 90
+    assumptions: P0v3 Windows plan, 1 worker (platform-appservice windows_plan default)
     teardown: terraform destroy
     data_retention: none (stateless); /home content deleted
   status:
@@ -912,8 +912,8 @@ services:
   - Azure resource detection in the OTel Collector only supports VMs; set cloud.provider/cloud.platform/cloud.resource_id resource attributes manually (Datadog serverless OTLP guide)
   cost:
     profile: low
-    approx_monthly_usd_default: 13
-    assumptions: shares the Linux plan
+    approx_monthly_usd_default: 0
+    assumptions: shares the P0v3 Linux plan (no extra plan cost)
     teardown: terraform destroy
     data_retention: none
   status:
@@ -982,8 +982,8 @@ services:
   - Datadog Windows code instrumentation (site extension) supports Java/Node/.NET only; not used by default
   cost:
     profile: medium
-    approx_monthly_usd_default: 55
-    assumptions: B1 Windows plan
+    approx_monthly_usd_default: 0
+    assumptions: shares the P0v3 Windows plan (no extra plan cost)
     teardown: terraform destroy
     data_retention: none
   status:
@@ -1232,7 +1232,7 @@ services:
     azapi: []
     component: platform-aro
     implemented: true
-    notes: requires a service principal (or managed identities where supported) + ARO RP role assignments
+    notes: 'implemented in platform-aro but off by default (settings.enabled = false). Prerequisites to enable: 44 vCPU DSv5 quota, Microsoft.RedHatOpenShift registered, empty aro-master/aro-worker subnets, ARO RP service principal object id, version from az aro get-versions, Red Hat pull secret in Key Vault'
   workload:
     exercised_by:
     - hello-catalog-api
@@ -1262,10 +1262,9 @@ services:
     teardown: terraform destroy (cluster RG removed)
     data_retention: none
   status:
-    implementation: implemented
+    implementation: disabled
     live_validation: not-run
-    default_profiles:
-    - specialized
+    default_profiles: []
   references:
   - https://learn.microsoft.com/en-us/azure/openshift/intro-openshift
   - https://docs.datadoghq.com/containers/kubernetes/distributions/#openshift

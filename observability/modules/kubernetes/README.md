@@ -7,7 +7,7 @@ datadog 3.253.2, datadog-operator 2.28.0; `https://fluent.github.io/helm-charts/
 with app version 5.1.3).
 
 Only `helm` and `kubernetes` resources are used. **The caller configures the providers** (host, CA, kubelogin
-exec plugin; see `lab/kubernetes`).
+exec plugin; the repository's lab Kubernetes root is one example).
 
 ## Datadog values (rendered locally with `helm template` against the real chart)
 * `datadog.logs.enabled=false`, `containerCollectAll=false`. Fluent Bit owns container logs.

@@ -12,8 +12,10 @@
 
 - Service Bus namespace (`Standard` default), **`local_auth_enabled = false`** (no SAS), TLS 1.2 minimum.
 - Topic `order-events` (duplicate detection 10 min — publishers set `MessageId` = order id) with subscriptions
-  `fulfillment` (hello-durable, lock 2 min), `notifications` (hello-worker), `audit` (hello-functions):
-  max delivery 10, dead-letter on expiry and on filter errors, TTL 14 days.
+  (`settings.subscriptions`, default all four) `fulfillment` (hello-durable, lock 2 min), `notifications`
+  (hello-worker), `audit` (hello-functions), `archive` (hello-logicapps Standard audit-archive workflow):
+  max delivery 10, dead-letter on expiry and on filter errors, TTL 14 days. The `minimal` profile
+  (`component_settings`) creates only `fulfillment`, because no other consumer is deployed there.
 - Queue `batch-items` (hello-jobs; max delivery 5, lock 5 min, DLQ on expiry, duplicate detection).
 - Data-plane RBAC at entity scope (least privilege):
 
@@ -21,11 +23,11 @@
 |---|---|---|
 | hello-orders-api, hello-durable | Azure Service Bus Data Sender | topic `order-events` |
 | hello-durable, `logic_app_identities` (default `hello-logicapps`) | Data Sender | queue `batch-items` |
-| hello-durable / hello-worker / hello-functions | Data Receiver | subscriptions fulfillment / notifications / audit |
+| hello-durable / hello-worker / hello-functions / hello-logicapps | Data Receiver | subscriptions fulfillment / notifications / audit / archive (only the subscriptions that exist) |
 | hello-jobs | Data Receiver + **Data Owner** | queue `batch-items` (KEDA `azure-servicebus` scaler needs Manage rights to read counts) |
 
 Grants whose identity is absent from the identity contract are skipped and reported in `skipped_grants`
-(e.g. `hello-logicapps` until foundation-identity publishes it).
+(foundation-identity publishes every catalogue identity, including `hello-logicapps`).
 
 ## SKU / networking decision
 

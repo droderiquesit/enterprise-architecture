@@ -2,7 +2,7 @@ variable "settings" {
   description = "obs-dbm settings."
   type = object({
     hosting             = optional(string, "aci") # aci | cluster_checks (render for obs-kubernetes settings.dbm_cluster_checks) | none
-    subnet_key          = optional(string, "observability")
+    subnet_key          = optional(string, "aci") # ACI needs a Microsoft.ContainerInstance/containerGroups-delegated subnet (foundation-network `aci`)
     identity_key        = optional(string, "obs-dbm")
     api_key_secret_name = optional(string, "datadog-api-key")
     cpu                 = optional(number, 1)

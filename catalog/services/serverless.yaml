@@ -224,8 +224,8 @@ services:
   - Datadog native Functions tracing requires the serverless compatibility layer + language tracer; Flex Consumption needs DD_AZURE_RESOURCE_GROUP
   cost:
     profile: low
-    approx_monthly_usd_default: 13
-    assumptions: shares B1 Linux App Service plan (always_on true)
+    approx_monthly_usd_default: 0
+    assumptions: shares the P0v3 Linux App Service plan (always_on true; no extra plan cost)
     teardown: terraform destroy
     data_retention: none
   status:
@@ -775,8 +775,8 @@ services:
   - CSP/connect-src must allow the Datadog RUM intake for the configured DD_SITE
   cost:
     profile: low
-    approx_monthly_usd_default: 9
-    assumptions: Standard plan
+    approx_monthly_usd_default: 0
+    assumptions: Free plan (deploy-frontend sku default; Standard ~USD 9 for private endpoint / custom auth / SLA)
     teardown: terraform destroy
     data_retention: deployed content removed
   status:
@@ -892,7 +892,7 @@ services:
     azapi: []
     component: platform-appservice
     implemented: true
-    notes: workflow definitions deployed by deploy-logicapps (zip)
+    notes: workflow definitions deployed by deploy-logicapps (zip); the WS1 plan is off by default (platform-appservice settings.logicapps_plan.enabled = false)
   workload:
     exercised_by:
     - order-events audit-archive workflow
@@ -927,11 +927,9 @@ services:
     teardown: terraform destroy
     data_retention: run history in storage account
   status:
-    implementation: implemented
+    implementation: disabled
     live_validation: not-run
-    default_profiles:
-    - enterprise
-    - full
+    default_profiles: []
   references:
   - https://learn.microsoft.com/en-us/azure/logic-apps/single-tenant-overview-compare
   - https://docs.datadoghq.com/integrations/azure_logic_app/

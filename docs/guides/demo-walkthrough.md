@@ -12,11 +12,11 @@ telemetry diagram: [04-telemetry](../diagrams/svg/04-telemetry.svg).
 
 ## Before you start
 
-* `deploy-durable` gets `ORDERS_API_URL` and `INVENTORY_API_URL` **only from settings**
-  (`components.deploy-durable.orders_api_url` / `inventory_api_url`); it does not read them from the
-  `deploy-core-*` contracts. Without `orders_api_url` the orchestration skips `UpdateOrderStatus` and the order stays
-  `Pending` in the UI; without `inventory_api_url` the reservation is simulated. Set both after the first core deployment
-  (`minimal` has no inventory API - leave it unset there). `PARTNER_API_URL` comes from the `deploy-partner-sim` contract.
+* `deploy-durable` derives `ORDERS_API_URL` from the `deploy-core-aca` (or `deploy-core-aks`, unless the URL is
+  Kubernetes-internal) contract, `INVENTORY_API_URL` from `deploy-appservice` (else the core contracts) and
+  `PARTNER_API_URL` from `deploy-partner-sim`; `components.deploy-durable.*_api_url` override them. In `minimal` there is
+  no inventory API, so the reservation is simulated. `deploy-jobs` gets `DURABLE_API_URL` from the `deploy-durable`
+  contract the same way.
 * `CORS_ALLOWED_ORIGINS` of the BFF must contain the SWA origin (two-pass, `deploy-core-aca` README).
 * RUM needs `obs-prereqs` applied before `deploy-frontend` (client token + application id in `config.json`).
 

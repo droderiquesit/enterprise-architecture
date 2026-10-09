@@ -8,8 +8,8 @@
 - **Slots**: `staging` slot when the SKU supports slots (Standard/Premium/Isolated — P0v3 is Premium v3 and supports
   slots); deploy goes to staging, then swap.
 - **Consumed contracts**: platform-appservice, platform-shared, obs-telemetry-transport, foundation-identity; optional
-  platform-db-cosmos-nosql (inventory db; absent ⇒ `STORAGE_MODE=memory`), platform-db-postgresql, platform-db-redis,
-  foundation-network (private endpoints; **not in components.yaml**).
+  platform-db-cosmos-nosql (inventory db; absent ⇒ `STORAGE_MODE=memory`), platform-db-postgresql, platform-db-redis;
+  foundation-network (private endpoints) is a required consumed contract in catalog/components.yaml.
 - **Produced contract**: `deploy-appservice`: `apps.hello-inventory-api.{id,url,staging_slot,...}`, `endpoints`, `deploy_steps[webapp-zip]`.
 
 ## App settings

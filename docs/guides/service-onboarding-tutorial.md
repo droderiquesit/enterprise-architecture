@@ -20,7 +20,7 @@ metadata:
   service: invoices-api            # becomes DD_SERVICE / service tag
   team: orders                     # required
   owner: orders@example.com        # required
-  runbook_url: https://runbooks.example.com/billing/invoices-api   # required; monitors link <url>#<section>
+  runbook_url: https://runbooks.example.com/billing/invoices-api   # optional; default = archetype runbook_base_url; monitors link <url>#<section>
   env: dev                         # required (string or list)
   tier: high                       # critical | high | medium | low
   domain: billing

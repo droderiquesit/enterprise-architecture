@@ -10,7 +10,7 @@ variable "settings" {
     cors_allowed_origins = optional(list(string), [])
     auth_mode            = optional(string, "none") # BFF AUTH_MODE: none | entra
     entra_audience       = optional(string)
-    inventory_api_url    = optional(string) # e.g. deploy-appservice hello-inventory-api URL (not a consumed contract)
+    inventory_api_url    = optional(string) # e.g. deploy-appservice hello-inventory-api URL (deploy-appservice is not consumed by core-aca: it runs in parallel)
     adapters = optional(list(object({       # ADAPTERS_JSON for /api/adapters (deploy-dbadapters URLs)
       family = string
       url    = string

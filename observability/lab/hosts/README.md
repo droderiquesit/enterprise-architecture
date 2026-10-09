@@ -21,7 +21,7 @@
 
 ## Secrets
 * Fluent Bit reads `datadog-api-key` from Key Vault at run time with the host's user-assigned identity, so
-  nothing lands in state. **The VM and VMSS identities need Key Vault Secrets User** (foundation request).
+  nothing lands in state. The VM and VMSS identities (`hello-worker`, `hello-inventory-api`, `hello-dbadapter`) get Key Vault Secrets User for `datadog-api-key` from foundation-identity.
 * For the Agent extension, without `agent_protected_settings_secret_url` the key is read by a data source and
   passed as a protected setting. That is stored, encrypted, in state: a documented exception.
 

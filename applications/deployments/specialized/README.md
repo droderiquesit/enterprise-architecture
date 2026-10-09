@@ -11,9 +11,8 @@
 - **Confidential VM** — `hello-worker` via managed run command (`install-hello-worker-cvm`, same `vm-script` as vm-workloads).
 - **Automation** — `azurerm_automation_runbook` `hello-health-probe` (`Python3`, stdlib-only script in `templates/health-probe.py`)
   + `azurerm_automation_job_schedule` on the platform schedule with `probe_urls`.
-- **Consumed contracts**: obs-telemetry-transport; optional platform-servicefabric, platform-aro, platform-specialized-compute;
-  also optional foundation-identity, platform-messaging, platform-db-table-storage (**not in components.yaml — requested**;
-  without foundation-identity the CVM worker is `blocked`).
+- **Consumed contracts** (catalog/components.yaml): obs-telemetry-transport, foundation-identity; optional
+  platform-servicefabric, platform-aro, platform-specialized-compute, platform-messaging, platform-db-table-storage.
 - **Produced contract**: `deploy-specialized`: `service_fabric`, `aro`, `apps`, `status`.
 
 ## Rollback

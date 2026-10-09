@@ -276,8 +276,8 @@ services:
   datadog_limitations: []
   cost:
     profile: low
-    approx_monthly_usd_default: 50
-    assumptions: Premium (required for private endpoint)
+    approx_monthly_usd_default: 20
+    assumptions: Standard (platform-shared acr_sku default, public endpoint with Entra-only auth); enterprise/full/specialized profiles set Premium (~USD 50 + private endpoint ~7)
     teardown: terraform destroy of the owning root (prevent_destroy recommended)
     data_retention: images deleted with registry
   status:

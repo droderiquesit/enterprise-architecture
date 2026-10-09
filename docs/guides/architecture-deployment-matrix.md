@@ -55,13 +55,6 @@ Nothing in this table has been deployed: the smoke and rollback procedures are i
 | `vm-confidential` | hello-worker | `deploy-specialized` | zip-package (svc-worker) via managed run command install-hello-worker-cvm &dagger; | as vm-linux &dagger; | table-storage (table notifications) | Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE) | OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver | not specified | previous package &dagger; ([src](../../applications/deployments/specialized/README.md)) |
 | `automation` | health-probe runbook | `deploy-specialized` | Python3 runbook from templates/health-probe.py (Terraform-managed) &dagger; | azurerm_automation_job_schedule on the platform schedule with probe_urls &dagger; | none | JobLogs/JobStreams diagnostic setting -> Event Hubs -> Fluent Bit aggregator | no OTel in runbooks | not specified | re-apply the previous commit &dagger; ([src](../../applications/deployments/specialized/README.md)) |
 
-## Open inconsistencies between catalog and deployment code
-
-These rows are rendered from the catalog as-is; the deployment code differs as described (reported to the owners).
-
-* `container-apps-job-manual / -scheduled / -event` - catalog/telemetry-capabilities.yaml says job logs go through a Fluent Bit sidecar and ContainerAppConsoleLogs are not exported; deploy-jobs deliberately runs jobs WITHOUT a sidecar (it would keep executions running) and relies on the environment's ContainerAppConsoleLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator. (source: [applications/deployments/jobs/README.md](../../applications/deployments/jobs/README.md))
-* `batch` - telemetry-capabilities.yaml (and ADR-0001 amendment 2026-10-09) describe a pool start task that sets up Fluent Bit from the instrumentation contract; the start task in platform/compute/batch/main.tf only installs Python 3.13, so Batch task logs are not collected by the lab today. (source: [platform/compute/batch/main.tf](../../platform/compute/batch/main.tf))
-
 ## Databases (owner service and data boundary)
 
 | Database catalog entry | Owner | Boundary | Also used by | Default |

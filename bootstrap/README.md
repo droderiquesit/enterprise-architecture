@@ -2,9 +2,9 @@
 
 - **Owner:** platform-engineering · **Component id:** `bootstrap` · **Pipeline:** `manual` (never applied by the universal pipeline)
 - **Purpose:** the things every other root depends on and that cannot depend on anything: Terraform state storage
-  (`tfstate`, `contracts`, `plans`, `deployments`, `evidence` containers), the pipeline identities (`plan`, `apply`,
-  `validate`) with workload identity federation for Azure DevOps, and (optional) the Entra app registration for the
-  Datadog Azure integration.
+  (`tfstate`, `contracts`, `plans`, `deployments`, `packages`, `evidence` containers), the pipeline identities (`plan`,
+  `apply`, `build`, `validate`) with workload identity federation for Azure DevOps, and (optional) the Entra app
+  registration for the Datadog Azure integration.
 - **Consumes:** nothing (phase-2 private endpoint values are copied by hand from the `foundation-network` contract).
 - **Produces:** `bootstrap` v1 ([schema](../catalog/contracts/bootstrap.v1.schema.json)) + output `backend_config`.
 - **Status:** implemented (validate + mock tests + checkov). Not deployed.
@@ -15,17 +15,18 @@
 |---|---|
 | Resource group | `<prefix>-rg-tfstate-<env>-<region>` |
 | Storage account | `module.naming.unique.storage` (e.g. `ehsttfstatedev<5hex>`), StorageV2 Standard **ZRS** (`replication_type`), TLS 1.2, HTTPS only, `shared_access_key_enabled = false`, `default_to_oauth_authentication = true`, infrastructure (double) encryption, no public blobs, no local users/SFTP, no cross-tenant replication; blob **versioning**, **change feed** (90 d), blob soft delete 30 d, container soft delete 30 d; firewall default **Deny**, bypass AzureServices/Logging/Metrics, `operator_ip_ranges`, `agent_subnet_ids`; `lifecycle.prevent_destroy`; management lock **CanNotDelete** |
-| Containers | `tfstate`, `contracts`, `plans`, `deployments`, `evidence` (private, `prevent_destroy`) |
+| Containers | `tfstate`, `contracts`, `plans`, `deployments`, `packages` (immutable zip/static packages by sha256), `evidence` (private, `prevent_destroy`) |
 | Private endpoint (phase 2) | `blob` PE in `private-endpoints` + `privatelink.blob.core.windows.net` (via `foundation/modules/private-endpoint`) |
-| Identities | user-assigned `…-id-pipeline-{plan,apply,validate}-…` + federated credentials |
+| Identities | user-assigned `…-id-pipeline-{plan,apply,build,validate}-…` + federated credentials |
 | Datadog app (optional) | `azuread_application` + service principal + federated credential (Secretless Auth) + Monitoring Reader |
 
 ## Pipeline identities and least privilege
 
 | Identity | Azure RBAC | Data plane (containers) | Used by |
 |---|---|---|---|
-| `plan` | **Reader** (subscription) (+ `plan_extra_role_names`) | `tfstate` Blob Data **Contributor** (blob lease = state lock; Reader cannot lock), `contracts` Reader, `deployments` Reader, `plans` Contributor (writes the plan file) | plan stages |
-| `apply` | **Contributor** + **Role Based Access Control Administrator with ABAC condition** + Resource Policy Contributor | Blob Data Contributor on all five containers | apply stages |
+| `plan` | **Reader** (subscription) (+ `plan_extra_role_names`) | `tfstate` Blob Data **Contributor** (blob lease = state lock; Reader cannot lock), `contracts` Reader, `deployments` **Contributor** (no-change plans write their own deployment record), `plans` Contributor (writes the plan file), `evidence` Contributor (evidence stage upload) | plan, select and evidence stages |
+| `apply` | **Contributor** + **Role Based Access Control Administrator with ABAC condition** + Resource Policy Contributor | Blob Data Contributor on all six containers | apply stages |
+| `build` | none at subscription scope (AcrPush is granted by platform-shared on the registry) | `packages` Contributor (uploads zip/static packages by sha256), `deployments` Reader (artifact reuse lookups) | build stage |
 | `validate` | **none** | none | nothing in Azure — see below |
 | operators (`operator_principal_ids`) | (their own) | `tfstate` + `contracts` Contributor | first-run migration, break-glass |
 
@@ -61,8 +62,8 @@ Verified on Microsoft Learn 2026-10-09 ([troubleshooting table](https://learn.mi
 
 Create the service connection as *Azure Resource Manager → App registration or Managed identity (manual) → Workload
 identity federation*, "Keep as draft", copy **Issuer** and **Subject identifier** into `settings.federated_credentials`
-(`identity = plan|apply`), apply bootstrap, then "Verify and save". Use one service connection per identity
-(e.g. `sc-eh-dev-plan`, `sc-eh-dev-apply`), authorize pipelines individually (never "grant access to all pipelines"), and
+(`identity = plan|apply|build`), apply bootstrap, then "Verify and save". Use one service connection per identity
+(e.g. `sc-eh-dev-plan`, `sc-eh-dev-apply`, `sc-eh-dev-build`), authorize pipelines individually (never "grant access to all pipelines"), and
 protect the apply connection with an environment approval. `azure_devops_legacy` generates the deprecated-issuer form
 only for connections not yet converted.
 

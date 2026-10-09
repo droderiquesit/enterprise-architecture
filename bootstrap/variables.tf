@@ -98,8 +98,8 @@ variable "settings" {
     error_message = "Disabling public network access requires settings.private_endpoint (otherwise nothing can reach the state)."
   }
   validation {
-    condition     = alltrue([for f in var.settings.federated_credentials : contains(["plan", "apply", "validate"], f.identity) && can(regex("^https://", f.issuer)) && length(f.subject) > 0])
-    error_message = "federated_credentials entries need identity in plan|apply|validate, an https issuer and a subject."
+    condition     = alltrue([for f in var.settings.federated_credentials : contains(["plan", "apply", "build", "validate"], f.identity) && can(regex("^https://", f.issuer)) && length(f.subject) > 0])
+    error_message = "federated_credentials entries need identity in plan|apply|build|validate, an https issuer and a subject."
   }
   validation {
     condition     = contains(["constrained", "allowlist"], var.settings.apply_rbac_mode)

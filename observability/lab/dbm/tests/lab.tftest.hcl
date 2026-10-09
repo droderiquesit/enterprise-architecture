@@ -25,6 +25,7 @@ variables {
   foundation_network = {
     subnets = {
       observability = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet/subnets/observability", name = "observability" }
+      aci           = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet/subnets/aci", name = "aci" }
     }
   }
   foundation_identity = {
@@ -58,8 +59,8 @@ run "lab_dbm_from_contracts" {
     error_message = "One instance per Azure SQL database; VM deployment type mapped."
   }
   assert {
-    condition     = output.agent_container_group_id != null
-    error_message = "ACI Agent in the observability subnet."
+    condition     = output.agent_container_group_id != null && var.settings.subnet_key == "aci"
+    error_message = "ACI Agent in the ContainerInstance-delegated aci subnet."
   }
 }
 

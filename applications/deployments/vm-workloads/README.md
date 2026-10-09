@@ -12,7 +12,7 @@
   switch atomically, health-check (`/healthz`) and roll back automatically on failure. Secrets (inventory `FAULT_TOKEN`)
   are fetched from Key Vault on the host with an IMDS token for `https://vault.azure.net` — never in Terraform state.
 - **Consumed contracts**: platform-messaging, obs-telemetry-transport, foundation-identity; optional platform-vm, platform-vmss,
-  platform-db-table-storage (worker `TABLE_MODE=table`), platform-db-cosmos-nosql (**not in components.yaml**; inventory Cosmos).
+  platform-db-table-storage (worker `TABLE_MODE=table`), platform-db-cosmos-nosql (inventory Cosmos) — all registered in catalog/components.yaml.
 - **Produced contract**: `deploy-vm-workloads`: `apps.{worker-vm,inventory-vm,worker-vmss}`, `deploy_steps`.
 
 ## Settings / env

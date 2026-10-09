@@ -5,12 +5,15 @@
 # Replace every placeholder before the first run (pipelines/README.md "ADO setup").
 variables:
   # Workload identity federation service connections (Azure Resource Manager, WIF):
+  #   (granted by bootstrap/identities.tf; see bootstrap/README.md "Pipeline identities and least privilege")
   #   plan  identity: Reader on the lab subscription + Storage Blob Data Contributor on the
-  #                   tfstate container (blob-lease locking), Data Reader on contracts/packages,
-  #                   Data Contributor on deployments and plans (write-once naming)
-  #   apply identity: Contributor + User Access Administrator (constrained) on lab resource groups,
-  #                   Storage Blob Data Contributor on tfstate/contracts/plans/deployments/evidence
-  #   build identity: AcrPush on the lab registry, Data Contributor on packages
+  #                   tfstate container (blob-lease locking), Data Reader on contracts,
+  #                   Data Contributor on deployments, plans and evidence
+  #   apply identity: Contributor + Role Based Access Control Administrator (ABAC-constrained: cannot assign
+  #                   Owner / User Access Administrator / RBAC Administrator) + Resource Policy Contributor on
+  #                   the lab subscription, Storage Blob Data Contributor on all six bootstrap containers
+  #   build identity: AcrPush on the lab registry (platform-shared), Data Contributor on packages,
+  #                   Data Reader on deployments
   planServiceConnection: sc-lab-dev-plan
   planServiceConnectionId: "00000000-0000-0000-0000-000000000001"
   applyServiceConnection: sc-lab-dev-apply

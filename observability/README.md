@@ -221,3 +221,8 @@ Monitor messages link to `<runbook_url>#<section>`: `error-rate`, `http-5xx`, `l
 `eventhub-throttled`, `redis-load`, `redis-memory`, `pipeline-canary`, `fluentbit-errors`, `fluentbit-dropped`,
 `fluentbit-not-reporting`, `otel-export`, `otel-refused`, `otel-not-reporting`, `slo-burn-rate`, `slo-<name>`,
 `synthetics`. Provide these anchors in each service runbook.
+
+`metadata.runbook_url` is optional: when a manifest omits it, the archetype default `runbook_base_url`
+(`archetypes/global-defaults.yaml`, placeholders `[[service]]`, `[[env]]`, `[[team]]`, `[[repository]]`) is used. The
+shipped default is `[[repository]]?path=/docs/runbooks/alerts/[[service]].md` (Azure Repos file URL built from
+`metadata.repository`); override it in your vendored global defaults (e.g. a wiki or a GitHub `blob/main/...` URL).

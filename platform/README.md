@@ -13,7 +13,7 @@ Database roots (`platform/data/**`) are documented separately by their owner.
 | Root | Component / contract | Default state | Main resources |
 |---|---|---|---|
 | `shared/` | `platform-shared` | on (all profiles) | ACR (Standard, Entra-only; Premium + PE optional), AcrPull/AcrPush grants, platform Log Analytics workspace |
-| `messaging/` | `platform-messaging` | on | Service Bus (Standard; Premium + PE optional), topic `order-events` + 3 subscriptions, queue `batch-items`, sender/receiver RBAC |
+| `messaging/` | `platform-messaging` | on | Service Bus (Standard; Premium + PE optional), topic `order-events` + 4 subscriptions (`fulfillment`, `notifications`, `audit`, `archive`; per-profile via `settings.subscriptions` — `minimal` creates only `fulfillment`), queue `batch-items`, sender/receiver RBAC |
 | `compute/aks/` | `platform-aks` | enterprise | private AKS 1.36, Entra + Azure RBAC, no local accounts, workload identity + federated credentials, CNI overlay/Cilium |
 | `compute/containerapps/` | `platform-containerapps` | minimal+ | workload-profiles environment (Consumption + `dedicated-d4`), `ingress_mode` external (minimal) / internal (enterprise) |
 | `compute/appservice/` | `platform-appservice` | enterprise | Linux P0v3, Windows P0v3, Windows-container P1v3 (off), Logic Apps WS1 (off) |
@@ -61,7 +61,8 @@ Nothing here has been deployed (no Azure credentials in the build sandbox): stat
 
 ## Cross-layer requirements (owned elsewhere)
 
-- foundation-network: publish private DNS zone key **`batch`** (`privatelink.batch.azure.com`) for Batch
-  private endpoints; associate the NAT gateway with `aks-nodes` before AKS creation (outbound
+- foundation-network: private DNS zone keys **`batch`** (`privatelink.batch.azure.com`) and **`servicebus`** are
+  published (foundation/network/dns.tf); associate the NAT gateway with `aks-nodes` before AKS creation (outbound
   `userAssignedNATGateway`) or a 0.0.0.0/0 UDR to the firewall; `aro-master`/`aro-worker` subnets when ARO is used.
-- foundation-identity: identity **`hello-logicapps`** (Logic Apps Service Bus sender) — grants are skipped until it exists.
+- foundation-identity: identity **`hello-logicapps`** (Logic Apps Service Bus sender) exists in the identity catalogue;
+  grants for identities absent from an older contract are skipped and reported.

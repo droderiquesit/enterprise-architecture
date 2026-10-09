@@ -26,7 +26,9 @@
   Optional user pool (`user_pool.enabled`); with it, the system pool is tainted `CriticalAddonsOnly`.
 - Secrets Store CSI driver (Key Vault provider, rotation every 2 min) for app secret references.
 - Azure RBAC grants for `deploy-agent` (+ `cluster_admin_principals`): *AKS RBAC Cluster Admin* and *AKS
-  Cluster User Role* (Entra kubeconfig only).
+  Cluster User Role* (Entra kubeconfig only), at cluster scope. Put the pipeline **apply** and **plan** identities'
+  principal ids (bootstrap contract `identities.<id>.principal_id`) into `cluster_admin_principals`: deploy-core-aks
+  and obs-kubernetes manage Kubernetes objects through the Entra-authenticated API (local accounts are disabled).
 - **Federated identity credentials** binding foundation identities to this cluster's issuer:
   `hello/hello-bff`, `hello/hello-orders-api`, `hello/hello-catalog-api`, `hello/hello-worker`,
   `datadog/datadog-agent` (obs-collector). They live here because the issuer belongs to this cluster:

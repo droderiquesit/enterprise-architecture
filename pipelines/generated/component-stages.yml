@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT.
-# Source: catalog/components.yaml (sha256 prefix c066dc2bbc4ef730)
+# Source: catalog/components.yaml (sha256 prefix 78f3395c06c62ca0)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -1811,45 +1811,6 @@ stages:
           environment: ${{ parameters.environment }}
           dryRun: ${{ parameters.dryRun }}
           settings: ${{ parameters.settings }}
-  - stage: C_obs_hosts
-    displayName: obs-hosts
-    dependsOn:
-      - Select
-      - Validate
-      - Security
-      - C_foundation_identity
-      - C_foundation_network
-      - C_obs_telemetry_transport
-      - C_platform_containerapps
-      - C_platform_db_sqlvm
-      - C_platform_shared
-      - C_platform_vm
-      - C_platform_vmss
-    lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_hosts'], 'true'), or(in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), or(in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), or(in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), or(in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_containerapps.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_containerapps'], 'true'))), or(in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_db_sqlvm.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlvm'], 'true'))), or(in(dependencies.C_platform_shared.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_shared.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_shared'], 'true'))), or(in(dependencies.C_platform_vm.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_vm.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_vm'], 'true'))), or(in(dependencies.C_platform_vmss.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_vmss.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_vmss'], 'true'))))
-    pool:
-      name: ${{ parameters.settings.deployPool }}
-    variables:
-      componentId: obs-hosts
-    jobs:
-      - template: ../templates/terraform-plan.yml
-        parameters:
-          component: obs-hosts
-          componentPath: observability/lab/hosts
-          artifacts: []
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          dryRun: ${{ parameters.dryRun }}
-          settings: ${{ parameters.settings }}
-      - template: ../templates/terraform-apply.yml
-        parameters:
-          component: obs-hosts
-          componentPath: observability/lab/hosts
-          artifacts: []
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          dryRun: ${{ parameters.dryRun }}
-          settings: ${{ parameters.settings }}
   - stage: C_obs_kubernetes
     displayName: obs-kubernetes
     dependsOn:
@@ -1934,6 +1895,49 @@ stages:
             - svc-orders-api
             - svc-catalog-api
             - svc-worker
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          dryRun: ${{ parameters.dryRun }}
+          settings: ${{ parameters.settings }}
+  - stage: C_obs_hosts
+    displayName: obs-hosts
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - C_deploy_vm_workloads
+      - C_foundation_identity
+      - C_foundation_network
+      - C_obs_telemetry_transport
+      - C_platform_containerapps
+      - C_platform_db_cosmos_nosql
+      - C_platform_db_sqlvm
+      - C_platform_db_table_storage
+      - C_platform_messaging
+      - C_platform_shared
+      - C_platform_vm
+      - C_platform_vmss
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_hosts'], 'true'), or(in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_deploy_vm_workloads.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'))), or(in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), or(in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), or(in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), or(in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_containerapps.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_containerapps'], 'true'))), or(in(dependencies.C_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_db_cosmos_nosql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_cosmos_nosql'], 'true'))), or(in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_db_sqlvm.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlvm'], 'true'))), or(in(dependencies.C_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_db_table_storage.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_table_storage'], 'true'))), or(in(dependencies.C_platform_messaging.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_messaging.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_messaging'], 'true'))), or(in(dependencies.C_platform_shared.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_shared.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_shared'], 'true'))), or(in(dependencies.C_platform_vm.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_vm.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_vm'], 'true'))), or(in(dependencies.C_platform_vmss.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.C_platform_vmss.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_vmss'], 'true'))))
+    pool:
+      name: ${{ parameters.settings.deployPool }}
+    variables:
+      componentId: obs-hosts
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: obs-hosts
+          componentPath: observability/lab/hosts
+          artifacts: []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          dryRun: ${{ parameters.dryRun }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: obs-hosts
+          componentPath: observability/lab/hosts
+          artifacts: []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           dryRun: ${{ parameters.dryRun }}
@@ -2304,15 +2308,15 @@ stages:
         - C_deploy_specialized
         - C_deploy_vm_workloads
         - C_obs_dbm
-        - C_obs_hosts
         - C_obs_kubernetes
         - C_deploy_core_aks
+        - C_obs_hosts
         - C_deploy_durable
         - C_deploy_frontend
         - C_deploy_jobs
         - C_obs_diagnostics
         - C_obs_monitoring
-      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.C_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_hosts.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.C_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_hosts.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
       environment: ${{ parameters.environment }}
       dryRun: ${{ parameters.dryRun }}
       settings: ${{ parameters.settings }}
@@ -2367,9 +2371,9 @@ stages:
       - C_deploy_specialized
       - C_deploy_vm_workloads
       - C_obs_dbm
-      - C_obs_hosts
       - C_obs_kubernetes
       - C_deploy_core_aks
+      - C_obs_hosts
       - C_deploy_durable
       - C_deploy_frontend
       - C_deploy_jobs
@@ -2449,9 +2453,9 @@ stages:
       - C_deploy_specialized
       - C_deploy_vm_workloads
       - C_obs_dbm
-      - C_obs_hosts
       - C_obs_kubernetes
       - C_deploy_core_aks
+      - C_obs_hosts
       - C_deploy_durable
       - C_deploy_frontend
       - C_deploy_jobs

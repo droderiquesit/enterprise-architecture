@@ -49,19 +49,19 @@ application deployment root applies that hook.
 * Metrics are never exported through diagnostic settings, because the Azure integration already collects
   them.
 
-[diagnostics.tftest `routes_and_categories`, `daemonset_route_excludes_app_logs`; lab/diagnostics discovery.tftest]
+[diagnostics.tftest `routes_and_categories`, `daemonset_route_excludes_app_logs`; the lab diagnostics root discovery.tftest]
 
 ### 2.3 Container Apps environments carry both routes
 An environment exports `ContainerAppConsoleLogs` for **all** of its apps. In practice:
 
 * The environment's setting includes `ContainerAppConsoleLogs` **only if** at least one app or job in that
   environment declares `app_log_route = eventhub` (normally only jobs, which have no sidecar).
-  [lab/diagnostics `jobs_route_environment_console_logs_to_app_hub`, `sidecar_only_environment_exports_no_console_logs`]
+  [lab diagnostics root `jobs_route_environment_console_logs_to_app_hub`, `sidecar_only_environment_exports_no_console_logs`]
 * The aggregator keeps console records only for allow-listed apps and jobs (`FLB_ACA_CONSOLE_ALLOW`, contract
   `fluentbit.aca_console_allow`; the lab default is `<prefix>-caj-*`). It drops the stdout of sidecar-collected
   apps and the Fluent Bit sidecar's own output.
   [`test_fluentbit.py::test_aggregator_forward_and_eventhub_kafka`: evt-0103 is delivered; evt-0104 and evt-0105 are dropped]
-* `lab/diagnostics` raises a `check` when an Event Hub route app is missing from the allow-list.
+* The lab diagnostics root raises a `check` when an Event Hub route app is missing from the allow-list.
   [`allow_list_mismatch_is_flagged`]
 
 ### 2.4 OTLP logs at the gateway: accepted and dropped

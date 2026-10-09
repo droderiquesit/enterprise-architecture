@@ -287,7 +287,9 @@ components:
     kind: terraform
     path: observability/lab/hosts
     consumes: [obs-telemetry-transport, platform-vm, platform-vmss]
-    optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm]
+    # deploy-vm-workloads: ordering only (its run commands create the app log directories the Fluent Bit installer
+    # tails, and two managed run commands on one VM should not race); the root declares no variable for it.
+    optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm, deploy-vm-workloads]
   - id: obs-kubernetes
     layer: observability
     kind: terraform

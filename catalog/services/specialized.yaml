@@ -564,8 +564,8 @@ services:
     - azurerm_dev_center_project
     azapi: []
     component: foundation-deploy-agents
-    implemented: false
-    notes: foundation-deploy-agents may use self-hosted VMSS agents instead - reconcile
+    implemented: true
+    notes: foundation-deploy-agents settings.mode = managed-devops-pool (default vmss = Azure DevOps VMSS agents); requires foundation-network deploy_agents_mode = managed-devops-pool (subnet delegation Microsoft.DevOpsInfrastructure/pools), organization_url and the DevOpsInfrastructure principal id
   workload:
     exercised_by:
     - pipelines
@@ -598,7 +598,7 @@ services:
     teardown: terraform destroy of the owning root
     data_retention: n/a
   status:
-    implementation: cataloged
+    implementation: disabled
     live_validation: not-run
     default_profiles: []
   references:

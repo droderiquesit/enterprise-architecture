@@ -30,17 +30,32 @@ jobs:
       timeoutInMinutes: ${{ parameters.timeoutMinutes }}
       cancelTimeoutInMinutes: 15
       variables:
-        LAB_ENV: ${{ parameters.environment }}
-        PLAN_ARTIFACT: $[ dependencies.Plan.outputs['plan.artifact'] ]
-        BINDING_FILE: $(Agent.TempDirectory)/binding.json
-        MANIFEST_FILE: $(Pipeline.Workspace)/plan/manifest.json
-        APPLIED_MARKER: $(Agent.TempDirectory)/applied
-        SELECTION_FILE: $(Pipeline.Workspace)/selection/selection.json
-        ARTIFACT_METADATA_DIR: $(Pipeline.Workspace)/artifact-metadata
-        STATE_STORAGE_ACCOUNT: ${{ parameters.settings.stateStorageAccount }}
-        CONTRACTS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts
-        PLANS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/plans
-        RECORDS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
+        - name: LAB_ENV
+          value: ${{ parameters.environment }}
+        - name: PLAN_ARTIFACT
+          value: $[ dependencies.Plan.outputs['plan.artifact'] ]
+        - name: BINDING_FILE
+          value: $(Agent.TempDirectory)/binding.json
+        - name: MANIFEST_FILE
+          value: $(Pipeline.Workspace)/plan/manifest.json
+        - name: APPLIED_MARKER
+          value: $(Agent.TempDirectory)/applied
+        - name: SELECTION_FILE
+          value: $(Pipeline.Workspace)/selection/selection.json
+        - name: ARTIFACT_METADATA_DIR
+          value: $(Pipeline.Workspace)/artifact-metadata
+        - name: STATE_STORAGE_ACCOUNT
+          value: ${{ parameters.settings.stateStorageAccount }}
+        - name: CONTRACTS_URL
+          value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts
+        - name: PLANS_URL
+          value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/plans
+        - name: RECORDS_URL
+          value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
+        # Datadog keys (Key Vault-linked variable group) only for the roots that need them; mapped into
+        # the plan/apply step env below (never written to disk, never passed as tfvars).
+        - ${{ if in(parameters.component, 'obs-prereqs', 'obs-azure-integration', 'obs-monitoring', 'obs-kubernetes') }}:
+          - group: ${{ parameters.settings.datadogVariableGroup }}
       strategy:
         runOnce:
           deploy:
@@ -119,6 +134,13 @@ jobs:
                   ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.applyServiceConnectionId }}
                   SYSTEM_ACCESSTOKEN: $(System.AccessToken)
                   SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
+                  # Datadog provider credentials (obs-prereqs / obs-azure-integration / obs-monitoring)
+                  ${{ if in(parameters.component, 'obs-prereqs', 'obs-azure-integration', 'obs-monitoring') }}:
+                    DD_API_KEY: $(datadog-api-key)
+                    DD_APP_KEY: $(datadog-app-key)
+                  # obs-kubernetes: ephemeral input variable (Terraform never persists it in state or plan)
+                  ${{ if eq(parameters.component, 'obs-kubernetes') }}:
+                    TF_VAR_datadog_api_key: $(datadog-api-key)
               - task: AzureCLI@2
                 displayName: Record failed / partial / canceled deployment
                 condition: not(succeeded())

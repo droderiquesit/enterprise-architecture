@@ -24,19 +24,22 @@ The `evidence` container is written by the plan identity (bootstrap grants it St
 
 ## Recording evidence in the repository
 
-The pipeline does not commit anything. To make a status claim in documentation, copy the run's files into this directory
-in a reviewed change:
-
-```
-docs/evidence/<env>/<build id>/evidence.json
-docs/evidence/<env>/<build id>/deployment-report.md
-docs/evidence/<env>/<build id>/telemetry-results.json      (optional, from the run artifacts)
-```
+The pipeline does not commit anything. To make a status claim in documentation, copy the run's files from the
+`evidence` container into this directory with [`tools/report/pull_evidence.py`](../../tools/report/pull_evidence.py)
+and commit them in a reviewed change:
 
 ```bash
-az storage blob download-batch --auth-mode login --account-name <state account> --source evidence \
-  --pattern "<env>/runs/<build id>/*" --destination /tmp/evidence
+az login   # identity with Storage Blob Data Reader on the `evidence` container (private endpoint: run from the VNet)
+python3 tools/report/pull_evidence.py --store https://<state account>.blob.core.windows.net/evidence \
+  --env <env> --run-id <build id>
+# -> docs/evidence/<env>/<build id>/{evidence.json, deployment-report.md, SOURCE.json}
 ```
+
+The tool copies every object under `<env>/runs/<build id>/`, checks that `evidence.json` names the requested
+environment and run, refuses JSON files with secret-looking keys, and records the source and sha256 of each file in
+`SOURCE.json`. `--store` also accepts a local directory (e.g. a downloaded `evidence-<attempt>` pipeline artifact laid
+out as `<env>/runs/<build id>/`), which is how it is tested offline (`tests/tools/test_pull_evidence.py`). Optional extra
+files (e.g. `telemetry-results.json` from the run artifacts) can be added to the same folder by hand.
 
 Only then may [IMPLEMENTATION_CHECKLIST.md](../IMPLEMENTATION_CHECKLIST.md) or a README move an item to `deployed` /
 `verified`, linking the file. Evidence files contain no secrets by construction (no attribute values, no keys), but

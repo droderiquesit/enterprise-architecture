@@ -17,13 +17,16 @@
   (the AKS Entra server application).
 * The pipeline runs it after `azure/login` with OIDC (`azurecli`). A private cluster needs the self-hosted deploy
   agents in the VNet.
-* The pipeline identity needs **Azure Kubernetes Service RBAC Cluster Admin** (or a namespace-scoped writer
-  role) on the cluster: platform-aks request.
+* The pipeline identities need **Azure Kubernetes Service RBAC Cluster Admin** (+ Cluster User Role) on the
+  cluster. platform-aks grants both to every object id in `components.platform-aks.cluster_admin_principals`
+  (and the foundation identities in `cluster_admin_identities`, default `deploy-agent`): add the **apply** and
+  **plan** pipeline identities' principal ids (bootstrap contract `identities.{apply,plan}.principal_id`).
 
 ## API key
-`TF_VAR_datadog_api_key` is an **ephemeral** variable. The pipeline exports it from Key Vault in the same step
-that sets `DD_API_KEY` for the Datadog provider. It is written with `kubernetes_secret_v1.data_wo` and never
-stored.
+`TF_VAR_datadog_api_key` is an **ephemeral** variable. `pipelines/templates/terraform-plan.yml` and
+`terraform-apply.yml` link the Key Vault-backed variable group (`datadogVariableGroup`) only for this component (and
+the Datadog-provider roots) and map `$(datadog-api-key)` into the env of the plan / apply step - never into a file or
+tfvars. It is written with `kubernetes_secret_v1.data_wo` and never stored in state or the saved plan.
 
 ## Settings
 * `kubelogin_mode`, `kubelet_tls_mode` (aks_rotation)

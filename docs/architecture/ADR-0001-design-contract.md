@@ -232,7 +232,11 @@ Common service contract (all HTTP services):
 | `disabled` | implemented but off by default (cost/preview/retired) |
 | `blocked` | cannot be implemented/deployed; exact prerequisite recorded |
 
-Nothing may be reported `deployed` or `verified` without an evidence file produced by the pipeline or tools.
+Nothing may be reported `deployed` or `verified` without an evidence file produced by the pipeline or tools. The
+pipeline's evidence stage writes `evidence.json` + `deployment-report.md` to the `evidence` container
+(`<env>/runs/<run id>/`, see §4) and the run artifacts; a claim in this repository links the copy under
+`docs/evidence/<env>/<run id>/`, made with `tools/report/pull_evidence.py` in a reviewed change (the pipeline never
+commits).
 
 ## 12. Terraform root layout
 
