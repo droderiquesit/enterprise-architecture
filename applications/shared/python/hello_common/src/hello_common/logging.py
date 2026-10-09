@@ -144,8 +144,11 @@ class JsonFormatter(logging.Formatter):
 _CONFIGURED_HANDLERS: list[logging.Handler] = []
 
 
-def configure_logging(info: ServiceInfo, level: str | None = None, log_file_path: str | None = None) -> logging.Logger:
-    """Install the JSON formatter on the root logger (stdout + optional rotating file)."""
+def configure_logging(info: ServiceInfo, level: str | None = None, log_file_path: str | None = None, *, keep_existing_handlers: bool = False) -> logging.Logger:
+    """Install the JSON formatter on the root logger (stdout + optional rotating file).
+
+    ``keep_existing_handlers`` leaves foreign root handlers in place (Azure Functions: the Python worker's
+    handler streams records to the host / FunctionAppLogs and must not be removed)."""
     level_name = (level or os.environ.get("LOG_LEVEL") or "INFO").upper()
     log_file_path = log_file_path if log_file_path is not None else os.environ.get("LOG_FILE_PATH") or None
     root = logging.getLogger()
@@ -166,8 +169,9 @@ def configure_logging(info: ServiceInfo, level: str | None = None, log_file_path
         file_handler.setFormatter(formatter)
         _CONFIGURED_HANDLERS.append(file_handler)
     # Replace any pre-existing handlers (e.g. basicConfig) so every line has the same shape.
-    for handler in list(root.handlers):
-        root.removeHandler(handler)
+    if not keep_existing_handlers:
+        for handler in list(root.handlers):
+            root.removeHandler(handler)
     for handler in _CONFIGURED_HANDLERS:
         root.addHandler(handler)
     root.setLevel(getattr(logging, level_name, logging.INFO))
