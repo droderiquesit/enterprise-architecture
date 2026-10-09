@@ -64,6 +64,41 @@ output "aci_sidecar" {
 }
 
 output "datadog_tags" {
-  description = "Comma separated unified tags (DD_TAGS format)."
+  description = "Comma separated k:v list of every policy tag (Fluent Bit ddtags format)."
   value       = local.dd_tags
+}
+
+output "tags" {
+  description = "Rendered Datadog tag set of this workload (modules/tagging: key -> normalised value)."
+  value       = module.tags.tags
+}
+
+output "unified_tags" {
+  description = "{env, service, version} after the tag policy (value_map + Datadog normalisation)."
+  value       = module.tags.unified
+}
+
+output "otel_resource_attributes" {
+  description = "OTEL_RESOURCE_ATTRIBUTES as a map (policy attributes + cloud.provider/cloud.platform + extra_resource_attributes)."
+  value       = local.resource_attributes
+}
+
+output "k8s_labels" {
+  description = "Pod/workload labels (tags.datadoghq.com/* + label-safe policy tags + logs.datadoghq.com/source)."
+  value       = local.k8s_labels
+}
+
+output "k8s_annotations" {
+  description = "Pod annotations (ad.datadoghq.com/tags = every non-unified policy tag)."
+  value       = local.k8s_annotations
+}
+
+output "azure_tags" {
+  description = "Azure resource tags for the workload's app resource (the Datadog Azure integration imports them onto its metrics)."
+  value       = module.tags.azure_tags
+}
+
+output "rum_global_context" {
+  description = "Browser RUM: global context properties (non-unified policy tags); env/service/version go to datadogRum.init."
+  value       = module.tags.rum_global_context
 }

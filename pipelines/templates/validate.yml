@@ -16,6 +16,9 @@ parameters:
   - name: maxParallel          # bounded parallelism of the matrix (pipelines/variables/<env>.yml validateMaxParallel)
     type: string
     default: '8'
+  - name: testShards           # tooling test shards (pipelines/variables/tools.yml testShards)
+    type: string
+    default: '2'
 
 jobs:
   - job: matrix
@@ -50,12 +53,53 @@ jobs:
     strategy:
       matrix: $[ dependencies.matrix.outputs['emit.json'] ]
       maxParallel: ${{ parameters.maxParallel }}
+    variables:                   # dependency caches keyed by lock files (Cache@2; a miss only costs time)
+      TF_PLUGIN_CACHE_DIR: $(Pipeline.Workspace)/.cache/terraform-plugins
+      NUGET_PACKAGES: $(Pipeline.Workspace)/.cache/nuget
+      npm_config_cache: $(Pipeline.Workspace)/.cache/npm
+      PIP_CACHE_DIR: $(Pipeline.Workspace)/.cache/pip
     steps:
       - checkout: self
         fetchDepth: 1
       - template: steps-setup.yml
         parameters:
           tools: terraform
+      - task: Cache@2
+        displayName: Terraform provider cache (.terraform.lock.hcl)
+        condition: and(succeeded(), eq(variables['kind'], 'terraform'))
+        continueOnError: true
+        inputs:
+          key: 'tf-plugins | "$(Agent.OS)" | $(componentPath)/.terraform.lock.hcl'
+          restoreKeys: |
+            tf-plugins | "$(Agent.OS)"
+          path: $(TF_PLUGIN_CACHE_DIR)
+      - task: Cache@2
+        displayName: NuGet cache (Directory.Packages.props / packages.lock.json)
+        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
+        continueOnError: true
+        inputs:
+          key: 'nuget | "$(Agent.OS)" | applications/**/Directory.Packages.props'
+          restoreKeys: |
+            nuget | "$(Agent.OS)"
+          path: $(NUGET_PACKAGES)
+      - task: Cache@2
+        displayName: npm cache (package-lock.json)
+        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
+        continueOnError: true
+        inputs:
+          key: 'npm | "$(Agent.OS)" | applications/**/package-lock.json'
+          restoreKeys: |
+            npm | "$(Agent.OS)"
+          path: $(npm_config_cache)
+      - task: Cache@2
+        displayName: pip cache (requirements)
+        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
+        continueOnError: true
+        inputs:
+          key: 'pip | "$(Agent.OS)" | applications/**/requirements*.txt'
+          restoreKeys: |
+            pip | "$(Agent.OS)"
+          path: $(PIP_CACHE_DIR)
       - task: UseDotNet@2
         displayName: Use .NET 10 SDK
         retryCountOnTaskFailure: 2
@@ -74,6 +118,8 @@ jobs:
 
   - job: tooling
     displayName: Pipeline tooling tests + static checks
+    strategy:
+      parallel: ${{ parameters.testShards }}      # deterministic test sharding (tools/pipeline/shard.py)
     pool:
       vmImage: ${{ parameters.hostedImage }}
     timeoutInMinutes: 30
@@ -97,9 +143,14 @@ jobs:
           python3 tools/config/promotion.py list
           python3 tools/validate/ownership.py
           python3 tools/validate/versions.py
-        displayName: Registry, generated stages, pipeline lint, ownership, provider pins
+          python3 tools/ado/codeowners.py --check
+          python3 tools/config/branching.py kind --ref "$(Build.SourceBranch)"
+        displayName: Registry, generated stages, pipeline lint, ownership, provider pins, CODEOWNERS
+        condition: and(succeeded(), eq(variables['System.JobPositionInPhase'], '1'))   # static checks: first shard only
       - script: python3 -m pytest -q tests/changeset tests/pipeline tests/tools --junitxml="$(Build.ArtifactStagingDirectory)/tooling-tests.xml"
-        displayName: Tooling unit tests
+        displayName: Tooling unit tests (shard $(System.JobPositionInPhase)/$(System.TotalJobsInPhase))
+        env:
+          TEST_SHARD: $(System.JobPositionInPhase)/$(System.TotalJobsInPhase)   # tools/pipeline/shard.py
       - task: PublishTestResults@2
         condition: not(canceled())
         inputs:

@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: applications pipeline.
-# Source: catalog/components.yaml (sha256 prefix c2c9dc9c719bd896)
+# Source: catalog/components.yaml (sha256 prefix c3926a242fcedd02)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -197,7 +197,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_appservice'], 'true'), eq(dependencies.Build.outputs['B_svc_inventory_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_catalog_api.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -218,7 +218,7 @@ stages:
       - Select
       - P_deploy_appservice
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_appservice.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_appservice'], 'true'))
     pool: *id001
     jobs:
@@ -239,7 +239,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'), eq(dependencies.Build.outputs['B_svc_bff.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_orders_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_catalog_api.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -263,7 +263,7 @@ stages:
       - Select
       - P_deploy_core_aca
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_core_aca.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_core_aca'], 'true'))
     pool: *id001
     jobs:
@@ -285,7 +285,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_dbadapters'], 'true'), eq(dependencies.Build.outputs['B_svc_dbadapter.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -307,7 +307,7 @@ stages:
       - Select
       - P_deploy_dbadapters
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_dbadapters.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_dbadapters'], 'true'))
     pool: *id001
     jobs:
@@ -329,7 +329,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_functions'], 'true'), eq(dependencies.Build.outputs['B_svc_functions.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -349,7 +349,7 @@ stages:
       - Select
       - P_deploy_functions
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_functions.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_functions'], 'true'))
     pool: *id001
     jobs:
@@ -370,7 +370,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_logicapps'], 'true'), eq(dependencies.Build.outputs['B_svc_logicapps.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -390,7 +390,7 @@ stages:
       - Select
       - P_deploy_logicapps
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_logicapps.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_logicapps'], 'true'))
     pool: *id001
     jobs:
@@ -411,7 +411,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_partner_sim'], 'true'), eq(dependencies.Build.outputs['B_svc_partner_sim.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -433,7 +433,7 @@ stages:
       - Select
       - P_deploy_partner_sim
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_partner_sim.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_partner_sim'], 'true'))
     pool: *id001
     jobs:
@@ -455,7 +455,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_specialized'], 'true'), eq(dependencies.Build.outputs['B_svc_catalog_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_inventory_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_jobs.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -477,7 +477,7 @@ stages:
       - Select
       - P_deploy_specialized
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_specialized.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_specialized'], 'true'))
     pool: *id001
     jobs:
@@ -498,7 +498,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'), eq(dependencies.Build.outputs['B_svc_worker.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_inventory_api.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -519,7 +519,7 @@ stages:
       - Select
       - P_deploy_vm_workloads
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_vm_workloads.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_vm_workloads'], 'true'))
     pool: *id001
     jobs:
@@ -540,7 +540,7 @@ stages:
       - Validate
       - Security
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'), eq(dependencies.Build.outputs['B_svc_bff.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_orders_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_catalog_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_worker.ready.ready'], 'true'))
     pool: *id001
     jobs:
@@ -563,7 +563,7 @@ stages:
       - Select
       - P_deploy_core_aks
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_core_aks.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_core_aks'], 'true'))
     pool: *id001
     jobs:
@@ -585,7 +585,7 @@ stages:
       - Security
       - P_deploy_vm_workloads
       - C_deploy_vm_workloads
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_hosts'], 'true'), and(or(in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_vm_workloads.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'))), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
@@ -603,7 +603,7 @@ stages:
     dependsOn:
       - Select
       - P_obs_hosts
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_hosts.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_hosts.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_hosts'], 'true'))
     pool: *id001
     jobs:
@@ -632,7 +632,7 @@ stages:
       - C_deploy_core_aks
       - P_deploy_partner_sim
       - C_deploy_partner_sim
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_durable'], 'true'), eq(dependencies.Build.outputs['B_svc_durable.ready.ready'], 'true'), and(or(in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_appservice.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_appservice'], 'true'))), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_partner_sim.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_partner_sim'], 'true'))), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
@@ -652,7 +652,7 @@ stages:
       - Select
       - P_deploy_durable
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_durable.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_durable'], 'true'))
     pool: *id001
     jobs:
@@ -677,7 +677,7 @@ stages:
       - C_deploy_core_aca
       - P_deploy_core_aks
       - C_deploy_core_aks
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_frontend'], 'true'), eq(dependencies.Build.outputs['B_svc_frontend.ready.ready'], 'true'), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
@@ -697,7 +697,7 @@ stages:
       - Select
       - P_deploy_frontend
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_frontend.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_frontend'], 'true'))
     pool: *id001
     jobs:
@@ -726,7 +726,7 @@ stages:
       - C_deploy_durable
       - P_deploy_frontend
       - C_deploy_frontend
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_jobs'], 'true'), eq(dependencies.Build.outputs['B_svc_jobs.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_traffic.ready.ready'], 'true'), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_durable.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_durable'], 'true'))), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_frontend.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_frontend'], 'true'))), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
@@ -749,7 +749,7 @@ stages:
       - Select
       - P_deploy_jobs
       - Build
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_jobs.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_jobs'], 'true'))
     pool: *id001
     jobs:
@@ -794,7 +794,7 @@ stages:
       - C_deploy_specialized
       - P_deploy_vm_workloads
       - C_deploy_vm_workloads
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_diagnostics'], 'true'), and(or(in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_appservice.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_appservice'], 'true'))), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_dbadapters.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_dbadapters'], 'true'))), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_durable.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_durable'], 'true'))), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_frontend.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_frontend'], 'true'))), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_functions.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_functions'], 'true'))), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_jobs.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_jobs'], 'true'))), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_logicapps.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_logicapps'], 'true'))), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_partner_sim.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_partner_sim'], 'true'))), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_specialized.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_specialized'], 'true'))), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_vm_workloads.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'))), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
@@ -812,7 +812,7 @@ stages:
     dependsOn:
       - Select
       - P_obs_diagnostics
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_diagnostics.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_diagnostics'], 'true'))
     pool: *id001
     jobs:
@@ -856,7 +856,7 @@ stages:
       - C_deploy_specialized
       - P_deploy_vm_workloads
       - C_deploy_vm_workloads
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_monitoring'], 'true'), and(or(in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_appservice.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_appservice'], 'true'))), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_dbadapters.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_dbadapters'], 'true'))), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_durable.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_durable'], 'true'))), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_frontend.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_frontend'], 'true'))), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_functions.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_functions'], 'true'))), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_jobs.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_jobs'], 'true'))), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_logicapps.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_logicapps'], 'true'))), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_partner_sim.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_partner_sim'], 'true'))), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_specialized.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_specialized'], 'true'))), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_vm_workloads.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'))), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
@@ -874,7 +874,7 @@ stages:
     dependsOn:
       - Select
       - P_obs_monitoring
-    lockBehavior: sequential
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_monitoring.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_monitoring'], 'true'))
     pool: *id001
     jobs:

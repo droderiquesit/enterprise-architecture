@@ -10,7 +10,8 @@ Rules
   PL003  every component/retire stage checks the result of every stage it depends on
          (dependencies.<stage>.result) - a failed upstream blocks; for Build it checks the readiness
          outputs of exactly its own artifacts (dependencies.Build.outputs['B_<artifact>.ready.ready'])
-  PL004  component stages use lockBehavior: sequential; the pipeline sets lockBehavior: sequential
+  PL004  component stages use lockBehavior: sequential or settings.stageLockBehavior (variables: runLatest only for the
+         CI environment); the pipeline sets lockBehavior: sequential
          (exclusive lock checks on lab-<env> environments queue runs instead of cancelling them)
   PL005  every deployment job targets an environment named lab-<env>[-retire]
   PL006  pipelines/generated/{platform,applications}-stages.yml are up to date with the registry
@@ -91,6 +92,19 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
             continue
         if root.get("lockBehavior") != "sequential":
             errors.append(f"PL004 {entry}: pipeline-level lockBehavior must be 'sequential'")
+    # stage locks: runLatest only for the first environment of the promotion chain (CI-deployed dev); test/prod
+    # promotions are never superseded silently
+    for vf in sorted((repo / "pipelines/variables").glob("*.yml")):
+        if vf.name == "tools.yml":
+            continue
+        vdoc = yaml.safe_load(vf.read_text()) or {}
+        vals = {v.get("name"): v.get("value") for v in vdoc.get("variables", []) if isinstance(v, dict)} \
+            if isinstance(vdoc.get("variables"), list) else dict(vdoc.get("variables") or {})
+        lb = vals.get("stageLockBehavior")
+        if lb not in ("sequential", "runLatest"):
+            errors.append(f"PL004 pipelines/variables/{vf.name}: stageLockBehavior must be sequential or runLatest (got {lb!r})")
+        elif lb == "runLatest" and vals.get("promoteFrom"):
+            errors.append(f"PL004 pipelines/variables/{vf.name}: runLatest is only allowed for the CI environment (no promoteFrom)")
         for sch in root.get("schedules") or []:
             if sch.get("always") is not True:
                 errors.append(f"PL011 {entry}: schedule '{sch.get('cron')}' must set always: true")
@@ -140,8 +154,9 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
                             errors.append(f"PL003 {rel}: stage {name}: must depend on and check {plan} (result + has_changes)")
                         if "variables['DRY_RUN']" not in text:
                             errors.append(f"PL003 {rel}: stage {name}: must be skipped on dry runs (variables['DRY_RUN'])")
-                    if str(name).startswith(("P_", "C_")) and node.get("lockBehavior") != "sequential":
-                        errors.append(f"PL004 {rel}: stage {name}: lockBehavior must be sequential")
+                    if str(name).startswith(("P_", "C_")) and node.get("lockBehavior") not in (
+                            "sequential", "${{ parameters.settings.stageLockBehavior }}"):
+                        errors.append(f"PL004 {rel}: stage {name}: lockBehavior must be sequential or settings.stageLockBehavior")
             if kind == "deployment":
                 env = node.get("environment")
                 env_name = env.get("name") if isinstance(env, dict) else env

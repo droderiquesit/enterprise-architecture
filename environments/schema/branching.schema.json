@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "branching.schema.json",
+  "title": "Branching model (environments/branching.yaml)",
+  "type": "object",
+  "required": ["schema_version", "trunk", "short_lived", "release", "policies", "owners_by_layer"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "trunk": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "short_lived": {"type": "array", "items": {"type": "string", "pattern": "^[a-z]+/\\*$"}, "minItems": 1},
+    "release": {
+      "type": "object", "required": ["pattern", "name_regex", "modes", "environments"], "additionalProperties": false,
+      "properties": {
+        "pattern": {"type": "string"},
+        "name_regex": {"type": "string"},
+        "modes": {"type": "array", "items": {"enum": ["hotfix", "promote", "drift", "heal", "retire"]}},
+        "environments": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "tags": {"type": "object", "additionalProperties": {"type": "string"}},
+    "dry_run_elsewhere": {"type": "boolean"},
+    "policies": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "minimum_reviewers": {"type": "integer", "minimum": 1, "maximum": 10},
+        "reset_on_push": {"type": "boolean"},
+        "creator_vote_counts": {"type": "boolean"},
+        "work_item_linking": {"type": "boolean"},
+        "comment_resolution": {"type": "boolean"},
+        "squash_only": {"type": "boolean"},
+        "build_validation": {"type": "array", "items": {"type": "object", "required": ["pipeline"],
+                             "properties": {"pipeline": {"type": "string"}, "definition_id": {"type": "integer"}}}},
+        "release_minimum_reviewers": {"type": "integer", "minimum": 1}
+      }
+    },
+    "owners_by_layer": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
+    "global_owners": {"type": "array", "items": {"type": "object", "required": ["paths", "owners"]}},
+    "github_org": {"type": "string"},
+    "identities": {"type": "object", "additionalProperties": {"type": "string"}}
+  }
+}

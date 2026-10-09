@@ -16,3 +16,7 @@ variables:
   hostedImage: ubuntu-24.04
   # Azure Artifacts feed (project/feed or feed) receiving the observability package as a Universal Package.
   observabilityFeed: lab/observability
+  # PR builds at high commit rates: tooling tests run in N deterministic shards (tools/pipeline/shard.py) and every
+  # PR gets a time-budget report (tools/report/pr_budget.py) against prTimeBudgetMinutes.
+  testShards: '2'
+  prTimeBudgetMinutes: '20'

@@ -177,6 +177,12 @@ def cmd_finalize(args) -> int:
             "tag": tag, "reused": False, "commit": os.environ.get("BUILD_SOURCEVERSION", "unknown"),
             "build_time": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "build_run": os.environ.get("BUILD_BUILDID", "local")}
+    try:  # human version <semver>+<build>.<sha7> (tools/deploy/versioning.py); metadata only, deploys use the digest
+        from tools.deploy.versioning import for_component
+
+        meta["version"] = for_component(args.component)
+    except Exception as exc:  # noqa: BLE001 - a bad VERSION file must not lose a built artifact
+        print(f"##vso[task.logissue type=warning]{args.component}: no version ({exc})")
     img = build / "container-image.json"
     if img.exists():
         meta.update({k: v for k, v in json.loads(img.read_text()).items() if k != "format"})

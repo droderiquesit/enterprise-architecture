@@ -120,10 +120,10 @@ def run_select(args, mode: str, repo: Path) -> dict:
     if mode == "deploy":
         return select_deploy(repo, args.env, store, artifact_digests=_load_digests(args.artifact_digests),
                              contracts_store=contracts, **common)
-    if mode == "promote":
+    if mode in ("promote", "hotfix"):
         return select_promote(repo, args.env, store, args.source_env or "auto",
                               open_store(args.source_records_url or args.source_records_dir),
-                              contracts_store=contracts, **common)
+                              contracts_store=contracts, hotfix=(mode == "hotfix"), **common)
     if mode == "manual":
         return select_manual(repo, args.env, _split(args.components), with_consumers=args.with_consumers,
                              store=store, **common)

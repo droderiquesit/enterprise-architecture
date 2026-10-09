@@ -4,6 +4,10 @@
 # attestation; syft (when installable) also writes an SPDX SBOM file next to the build metadata.
 # Agents without Docker: set settings.useAcrBuild to 'true' (az acr build; with public network access
 # disabled on the registry, ACR Tasks need a dedicated agent pool - see pipelines/README.md).
+# Tags: src-<fp24> (immutable reuse key) + <semver>-<build>.<sha7> (tools/deploy/versioning.py); deployed by digest.
+# BuildKit layer cache: registry cache ref <repo>:buildcache (--cache-from/--cache-to type=registry, mode=max), so
+# builds of the same service on other branches/agents reuse layers. Build stage never runs for PRs (PRs validate
+# with unit tests only; no image is built for untrusted code).
 parameters:
   - name: component
     type: string
@@ -33,8 +37,11 @@ steps:
         repo="${CONTAINER_REGISTRY}.azurecr.io/${{ parameters.artifactName }}"
         dockerfile="${{ parameters.componentPath }}/Dockerfile"
         build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        version="$(python3 tools/deploy/versioning.py version --component '${{ parameters.component }}')"
+        vtag="$(python3 tools/deploy/versioning.py docker-tag --component '${{ parameters.component }}')"
         if [[ "${USE_ACR_BUILD,,}" == "true" ]]; then
           az acr build --registry "$CONTAINER_REGISTRY" --image "${{ parameters.artifactName }}:${tag}" \
+            --image "${{ parameters.artifactName }}:${vtag}" \
             --file "$dockerfile" --build-arg "GIT_COMMIT=$(Build.SourceVersion)" \
             --build-arg "VERSION=${tag}" --build-arg "BUILD_TIME=${build_time}" applications
           digest="$(az acr manifest show-metadata --registry "$CONTAINER_REGISTRY" --name "${{ parameters.artifactName }}:${tag}" --query digest -o tsv)"
@@ -44,8 +51,11 @@ steps:
           docker buildx build --file "$dockerfile" \
             --build-arg "GIT_COMMIT=$(Build.SourceVersion)" --build-arg "VERSION=${tag}" --build-arg "BUILD_TIME=${build_time}" \
             --label "org.opencontainers.image.revision=$(Build.SourceVersion)" \
+            --label "org.opencontainers.image.version=${version}" \
+            --cache-from "type=registry,ref=${repo}:buildcache" \
+            --cache-to "type=registry,ref=${repo}:buildcache,mode=max,ignore-error=true" \
             --provenance=mode=max --sbom=true --metadata-file "$BUILD_OUT/buildx-metadata.json" \
-            --tag "${repo}:${tag}" --push applications
+            --tag "${repo}:${tag}" --tag "${repo}:${vtag}" --push applications
           digest="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['containerimage.digest'])" "$BUILD_OUT/buildx-metadata.json")"
         fi
         if command -v syft >/dev/null; then

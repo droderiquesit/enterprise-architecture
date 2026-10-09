@@ -1,0 +1,47 @@
+# Branching model (trunk-based development). Enforced by tools/config/branching.py (Select stage) and at compile
+# time by pipelines/templates/universal.yml (runs from other branches compile without apply jobs); branch policies
+# and CODEOWNERS are generated from it by tools/ado/branch_policies.py and tools/ado/codeowners.py.
+# Guide: docs/guides/branching-and-development.md. Schema: environments/schema/branching.schema.json.
+schema_version: 1
+trunk: main                       # the only long-lived branch; PRs are the only way in; main deploys dev continuously
+short_lived:                      # topic branches: PR validation only, never apply (any mode, any environment)
+  - feature/*
+  - fix/*
+  - chore/*
+  - docs/*
+release:
+  pattern: release/*              # prod hotfix backports only, cut from the commit prod runs
+  name_regex: '^release/\d{4}\.\d{2}$'
+  modes: [hotfix, promote, drift] # same gates as main; hotfix = promote of cherry-picked fixes (select_hotfix)
+  environments: [test, prod]
+tags:
+  package: observability-v*       # portable observability package release (platform pipeline release stage)
+# Non-PR runs per branch kind (anything else is refused): trunk -> every mode its environment allows
+# (environments/promotion.yaml); release -> `release.modes` to `release.environments`; short-lived/other -> only
+# `dryRun: true` plan runs in the first environment.
+dry_run_elsewhere: true
+policies:                         # tools/ado/branch_policies.py (Azure Repos branch policies on the trunk)
+  minimum_reviewers: 2
+  reset_on_push: true
+  creator_vote_counts: false
+  work_item_linking: true
+  comment_resolution: true
+  squash_only: true
+  build_validation:               # both pipelines; expire immediately when main moves (merge-queue substitute)
+    - pipeline: lab-platform
+    - pipeline: lab-applications
+  release_minimum_reviewers: 2
+owners_by_layer:                  # default `owners` of a registry component (catalog/components.yaml `owners`)
+  bootstrap: [platform-team]
+  foundation: [platform-team]
+  platform: [platform-team]
+  observability: [observability-team]
+  applications: [app-team]
+  docs: [docs-team]
+global_owners:                    # paths outside any component (pipelines, tools, registry)
+  - paths: [/azure-pipelines.yml, /azure-pipelines.applications.yml, /pipelines/, /tools/, /catalog/components.yaml,
+            /environments/, /.github/CODEOWNERS]
+    owners: [platform-team]
+identities: {}                    # group name -> Azure DevOps identity id (required reviewers); unresolved groups block
+                                  # `branch_policies.py apply` with a clear message instead of creating an empty policy
+github_org: lab                   # CODEOWNERS entries are @<github_org>/<group>

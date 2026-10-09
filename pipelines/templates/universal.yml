@@ -25,7 +25,7 @@ parameters:
   - name: mode
     type: string
     default: auto
-    values: [auto, manual, reconcile, drift, retire, promote, heal]
+    values: [auto, manual, reconcile, drift, retire, promote, heal, hotfix]
   - name: sourceEnvironment          # promote mode: 'auto' = promote_from of environments/promotion.yaml
     type: string
     default: auto
@@ -42,8 +42,11 @@ parameters:
 variables:
   - template: ../variables/tools.yml
   - template: ../variables/${{ parameters.environment }}.yml
+  # Branching model (environments/branching.yaml): only main and release/* may apply. Runs of any other branch are
+  # compiled as dry runs - no apply job, no environment, no approval request - whatever `dryRun` says (defence in
+  # depth; the Select stage also refuses them with tools/config/branching.py).
   - name: DRY_RUN                      # read by generated stage conditions (variables['DRY_RUN'])
-    value: ${{ lower(parameters.dryRun) }}
+    value: ${{ lower(or(parameters.dryRun, not(or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/'))))) }}
   - name: LAB_ENV
     value: ${{ parameters.environment }}
 
@@ -63,4 +66,4 @@ stages:
         sourceEnvironment: ${{ parameters.sourceEnvironment }}
         components: ${{ parameters.components }}
         withConsumers: ${{ parameters.withConsumers }}
-        dryRun: ${{ parameters.dryRun }}
+        dryRun: ${{ or(parameters.dryRun, not(or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/')))) }}

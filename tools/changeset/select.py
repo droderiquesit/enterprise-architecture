@@ -16,6 +16,9 @@ Modes
   heal       scheduled self-healing: only components whose last record is failed / partial / canceled
              or whose post-deployment verification failed (smoke / telemetry); quarantined and rolled_back
              components are skipped (they need a new commit or a manual run). Normal approvals apply.
+  hotfix     promote from a release/<yyyy.mm> branch (cherry-picked fixes): every component must either be
+             unchanged against THIS environment's record or run identical code successfully in the source
+             environment (the fix landed on main and was deployed there first); select_promote(hotfix=True)
   promote    deploy-mode selection for a later environment of a promotion chain, refused unless the
              source environment successfully deployed the same code (select_promote).
 Held records (status rolled_back | quarantined, tools/deploy/record.py HELD) are never auto-selected again
@@ -44,7 +47,7 @@ from .registry import SCOPES, Registry, RegistryError, load_registry, scope_erro
 from .store import Store
 from .trees import GitTree, Tree, WorkTree
 
-MODES = ("pr", "deploy", "manual", "reconcile", "drift", "retire", "promote", "heal")
+MODES = ("pr", "deploy", "manual", "reconcile", "drift", "retire", "promote", "heal", "hotfix")
 HELD = ("rolled_back", "quarantined")          # == tools/deploy/record.py HELD
 FAILED = ("failed", "partial", "canceled")
 MODULE_DIR_RE = re.compile(r"^((?:[^/]+/)*modules/[^/]+)/")
@@ -711,7 +714,7 @@ PROMOTION_PARTS = ("source", "tools", "registry", "artifacts")
 
 def select_promote(repo: Path, env: str, store: Optional[Store], source_env: str, source_store: Optional[Store],
                    head: str = "HEAD", worktree: bool = False, scope: Optional[str] = None,
-                   contracts_store: Optional[Store] = None) -> dict:
+                   contracts_store: Optional[Store] = None, hotfix: bool = False) -> dict:
     """Promotion = deploy-mode selection for `env`, gated on `source_env` having successfully deployed the
     SAME code: for every enabled component of this scope that the source environment also enables, the
     source record must be `succeeded` with identical fingerprint parts source/tools/registry/artifacts
@@ -740,20 +743,27 @@ def select_promote(repo: Path, env: str, store: Optional[Store], source_env: str
         if c.id not in src_enabled:
             warnings.append(f"{c.id}: not enabled in '{source_env}', so it was not proven there")
             continue
+        mine = ctx.fp.parts(c.id)
+        if hotfix and store is not None:
+            here = store.get_json(f"{env}/{c.id}.json") or {}
+            if all((here.get("fp_parts") or {}).get(k) == mine.get(k) for k in PROMOTION_PARTS if k in mine):
+                continue  # unchanged on the release branch: what this environment already runs
         rec = source_store.get_json(f"{source_env}/{c.id}.json")
         if not rec or rec.get("status") != SUCCEEDED:
-            problems.append(f"{c.id}: no successful deployment in '{source_env}'")
+            problems.append(f"{c.id}: no successful deployment in '{source_env}'"
+                            + (" (land the fix on main and deploy it there first)" if hotfix else ""))
             continue
-        mine = ctx.fp.parts(c.id)
         theirs = rec.get("fp_parts") or {}
         diff = [k for k in PROMOTION_PARTS if k in mine and theirs.get(k) != mine.get(k)]
         if diff:
-            problems.append(f"{c.id}: '{source_env}' runs different {'/'.join(diff)} (deploy this commit there first)")
+            problems.append(f"{c.id}: '{source_env}' runs different {'/'.join(diff)} " + (
+                "(land the fix on main and deploy it there first)" if hotfix else "(deploy this commit there first)"))
     if problems:
-        raise SelectionError(f"cannot promote to '{env}': '{source_env}' has not successfully deployed this commit:\n  "
+        raise SelectionError(f"cannot {'hotfix' if hotfix else 'promote'} to '{env}': '{source_env}' has not successfully "
+                             f"deployed {'the changed components' if hotfix else 'this commit'}:\n  "
                              + "\n  ".join(problems))
-    doc = _deploy(ctx, store, contracts_store, mode="promote")
-    doc["promotion"] = {"source": source_env, "warnings": warnings}
+    doc = _deploy(ctx, store, contracts_store, mode="hotfix" if hotfix else "promote")
+    doc["promotion"] = {"source": source_env, "warnings": warnings, "hotfix": hotfix}
     doc["notes"].extend(warnings)
     return doc
 

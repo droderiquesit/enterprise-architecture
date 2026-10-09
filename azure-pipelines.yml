@@ -58,6 +58,7 @@ parameters:
       - retire        # only scheduled retirements (environments/<env>/retirements.yaml)
       - promote       # test/prod: deploy what the source environment already runs (same code, same digests)
       - heal          # re-run only failed / partial / canceled components and failed verifications (never held ones)
+      - hotfix        # release/<yyyy.mm> only: promote cherry-picked fixes to test/prod (changed components proven upstream)
   - name: sourceEnvironment
     displayName: Promote from (auto = environments/promotion.yaml)
     type: string

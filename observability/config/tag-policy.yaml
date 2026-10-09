@@ -1,0 +1,93 @@
+# Default Datadog tag policy of the observability package (schema: schemas/tag-policy.v1.schema.json).
+#
+# The package does not create monitors, SLOs or dashboards. Its job is to CONNECT Azure resources and workloads
+# to Datadog and to put the SAME tags on every signal so the monitors / SLOs / dashboards that already exist in
+# your Datadog organisation match. This file is the single contract for those tags. modules/tagging renders it
+# for every collection path (Azure resource tags, DD_* / DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, Kubernetes labels and
+# annotations, Agent `tags`, Fluent Bit `ddtags`, OTel gateway defaults, DBM check `tags`, RUM global context,
+# Azure platform logs); tools/tags/*.py read it too.
+#
+# Adapting it to an existing organisation (see docs/guides/datadog-tagging.md in the source repository):
+#   1. run tools/tags/derive_from_monitors.py against the org (read-only) -> which keys/values monitors use
+#   2. copy this file, then per key: `key` (rename, not for env/service/version), `aliases` (emit the value under
+#      additional keys, e.g. `environment`), `value_map` (e.g. development -> dev), `azure_tag_keys` (which Azure
+#      resource tag carries the value), `required`
+#   3. add organisation-wide or per-environment static tags (`static_tags`, `environments.<env>.static_tags`)
+#   4. run tools/tags/check_coverage.py --policy <your file> until it reports no required gap
+apiVersion: observability/tag-policy/v1
+kind: TagPolicy
+metadata:
+  name: package-default
+  description: ADR-0001 section 7 unified tags (env, service, version + team, owner, application, domain, tier, region, managed_by).
+
+# datadog: values are normalised exactly like Datadog normalises tags (lowercase; characters other than letters,
+# digits, '_', '-', ':', '.', '/' become '_'; repeated '_' collapsed; leading/trailing '_' removed; 200 chars max),
+# so the value you emit is the value a monitor scope sees. none: values are emitted verbatim.
+normalize: datadog
+# true: a required key without a value fails `terraform plan` (modules/tagging output precondition) and
+# tools/tags/check_coverage.py exits non-zero.
+enforce_required: true
+
+keys:
+  env:
+    required: true
+    source: deployment environment name (manifest metadata.env / environment.yaml name)
+    otel_attributes: [deployment.environment.name, deployment.environment]
+    azure_tag_keys: [env, environment, Environment]
+    value_map: {development: dev, production: prod}
+  service:
+    required: true
+    source: manifest metadata.service (DD_SERVICE); infrastructure resources use the default
+    default: platform
+    otel_attributes: [service.name]
+    azure_tag_keys: [service]
+  version:
+    required: true
+    source: deployed artifact version (DD_VERSION); infrastructure resources use the default
+    default: n/a
+    otel_attributes: [service.version]
+    azure_tag_keys: [version]
+  team:
+    required: true
+    source: manifest metadata.team (owning team)
+    azure_tag_keys: [team, Team]
+  owner:
+    required: true
+    source: manifest metadata.owner (contact; e-mail addresses normalise to e.g. orders_example.com in Datadog tags)
+    azure_tag_keys: [owner, Owner]
+  application:
+    required: true
+    source: manifest metadata.application (business application, OTel service.namespace)
+    otel_attributes: [application, service.namespace]
+    azure_tag_keys: [application, Application]
+  domain:
+    required: true
+    source: manifest metadata.domain (business domain)
+    azure_tag_keys: [domain]
+  tier:
+    required: true
+    source: manifest metadata.tier (criticality - critical | high | medium | low | infrastructure)
+    azure_tag_keys: [tier]
+  region:
+    required: true
+    source: Azure location of the workload / resource (e.g. swedencentral)
+    azure_tag_keys: [region]
+  managed_by:
+    required: true
+    source: tool that manages the object
+    default: terraform
+    azure_tag_keys: [managed_by]
+  cost_center:
+    required: false
+    source: environment.yaml cost_center / manifest metadata.cost_center
+    azure_tag_keys: [cost_center, CostCenter]
+  component:
+    required: false
+    source: registry component id (lab) or deployment unit
+    azure_tag_keys: [component]
+
+# Added to every signal of every environment (Datadog key -> value).
+static_tags: {}
+
+# Per environment: static tags added to every signal of that environment (e.g. business_unit, datacenter).
+environments: {}

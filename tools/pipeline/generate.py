@@ -56,6 +56,10 @@ from tools.changeset.trees import WorkTree  # noqa: E402
 OUTPUTS = {"platform": "pipelines/generated/platform-stages.yml",
            "applications": "pipelines/generated/applications-stages.yml"}
 GATE_STAGES = ("Select", "Validate", "Security")
+# per-component stage locks: sequential (test/prod) or runLatest (dev, pipelines/variables/dev.yml stageLockBehavior):
+# a newer run of the same branch supersedes queued older ones - safe because selection compares fingerprints with
+# deployment records, so the newest run is a superset of what the canceled ones would have applied.
+STAGE_LOCK = "${{ parameters.settings.stageLockBehavior }}"
 OK = "'Succeeded', 'SucceededWithIssues'"
 LANGUAGE_HINTS = {"svc-traffic": "python", "svc-logicapps": "workflow"}
 # Secrets: components with `secret_env` (catalog/components.yaml) run their Terraform step through
@@ -193,7 +197,7 @@ def build(reg: Registry, scope: str) -> dict:
             "displayName": f"plan {c.id}",
             "dependsOn": list(GATE_STAGES) + (["Build"] if here else [])
                          + [s for u in ups for s in (plan_stage(u.id), apply_stage(u.id))],
-            "lockBehavior": "sequential",
+            "lockBehavior": STAGE_LOCK,
             "condition": plan_condition(c, ups, here),
             "pool": pool,
             "jobs": [{"template": "../templates/terraform-plan.yml", "parameters": dict(common)}],
@@ -202,7 +206,7 @@ def build(reg: Registry, scope: str) -> dict:
             "stage": apply_stage(c.id),
             "displayName": f"apply {c.id}",
             "dependsOn": ["Select", plan_stage(c.id)] + (["Build"] if here else []),
-            "lockBehavior": "sequential",
+            "lockBehavior": STAGE_LOCK,
             "condition": apply_condition(c),
             "pool": pool,
             "jobs": [{"template": "../templates/terraform-apply.yml", "parameters": dict(common, dryRun=dry)}],

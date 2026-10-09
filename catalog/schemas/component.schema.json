@@ -159,6 +159,12 @@
               "max_minutes": {"type": "integer", "minimum": 1, "maximum": 120}
             }
           },
+          "owners": {
+            "description": "Review groups owning this component (path-filtered required reviewers, .github/CODEOWNERS). Default: environments/branching.yaml owners_by_layer.",
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"}
+          },
           "drift": {
             "description": "Drift handling. auto_remediate: plan+apply additive-only drift (no destroy/replace) when the environment's self_healing.drift_auto_remediate allows it (never prod unless it opts in).",
             "type": "object",

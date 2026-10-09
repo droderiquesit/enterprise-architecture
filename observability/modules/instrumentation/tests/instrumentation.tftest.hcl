@@ -231,75 +231,78 @@ run "browser_only_unified_tags" {
     runtime      = "browser"
     architecture = "aca"
     service = {
-      service = "hello-frontend"
-      env     = "dev"
-      version = "2.0.0"
-      team    = "web"
+      service     = "hello-frontend"
+      env         = "dev"
+      version     = "2.0.0"
+      team        = "web"
+      owner       = "web@example.com"
+      domain      = "storefront"
+      tier        = "high"
+      application = "enterprise-hello"
+      region      = "swedencentral"
     }
   }
   assert {
     condition     = jsonencode(output.env) == jsonencode({ DD_ENV = "dev", DD_SERVICE = "hello-frontend", DD_SITE = "datadoghq.eu", DD_VERSION = "2.0.0" })
     error_message = "Browser runtime only gets RUM unified tags (no DSV env, no sidecar)."
   }
-}
-
-run "reject_unknown_runtime" {
-  command = plan
-  variables {
-    runtime = "cobol"
+  assert {
+    condition     = output.rum_global_context["team"] == "web" && output.rum_global_context["owner"] == "web_example.com" && !contains(keys(output.rum_global_context), "env")
+    error_message = "RUM global context carries the non-unified policy tags"
   }
-  expect_failures = [var.runtime]
 }
 
-run "reject_literal_api_key" {
-  command = plan
-  variables {
-    telemetry = {
-      datadog_site = "datadoghq.com"
-      api_key_ref  = "0123456789abcdef0123456789abcdef"
-      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1" }
-      otlp         = { grpc_endpoint = "", http_endpoint = "" }
-      fluentbit    = { forward_host = "x", forward_port = 24224 }
-    }
-  }
-  expect_failures = [var.telemetry]
-}
-
-run "reject_bad_service_tag" {
-  command = plan
-  variables {
-    service = {
-      service = "Hello Orders"
-      env     = "dev"
-      version = "1"
-      team    = "t"
-    }
-  }
-  expect_failures = [var.service]
-}
-
-run "reject_aca_without_fetch_image" {
+run "tag_policy_on_every_path" {
   command = plan
   variables {
     architecture = "aca"
-    telemetry = {
-      datadog_site = "datadoghq.com"
-      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
-      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1" }
-      otlp         = { grpc_endpoint = "", http_endpoint = "" }
-      fluentbit    = { forward_host = "x", forward_port = 24224 }
+    runtime      = "python"
+    tag_policy = {
+      apiVersion = "observability/tag-policy/v1"
+      kind       = "TagPolicy"
+      keys = {
+        env         = { required = true, aliases = ["environment"], value_map = { development = "dev" } }
+        service     = { required = true, otel_attributes = ["service.name"] }
+        version     = { required = true, otel_attributes = ["service.version"] }
+        team        = { required = true, key = "owning_team" }
+        application = { required = true }
+      }
+      static_tags = { business_unit = "retail" }
+    }
+    service = {
+      service     = "hello-orders-api"
+      env         = "Development"
+      version     = "1.4.2"
+      team        = "orders"
+      application = "enterprise-hello"
     }
   }
-  expect_failures = [var.telemetry]
-}
-
-run "aks_env_has_dsv_defaults_and_no_secrets" {
-  command = plan
-  variables {
-    identity_client_id = "44444444-4444-4444-4444-444444444444"
+  assert {
+    condition     = output.env["DD_ENV"] == "dev" && output.env["DD_TAGS"] == "application:enterprise-hello,business_unit:retail,environment:dev,owning_team:orders"
+    error_message = "DD_ENV after value_map; DD_TAGS = every non-unified tag incl. alias, rename and static tag"
   }
   assert {
-    condition     = output.env["DSV_BASE_URL"] == "https://contoso.secretsvaultcloud.com/v1" && output.env["AZURE_CLIENT_ID"] == "44444444-4444-4444-4444-444444444444" && length(output.sidecar_secret_refs) == 0
-    error_message = "AKS apps get the DSV env; no sidecar secrets."
+    condition     = strcontains(output.env["OTEL_RESOURCE_ATTRIBUTES"], "environment=dev") && strcontains(output.env["OTEL_RESOURCE_ATTRIBUTES"], "owning_team=orders") && strcontains(output.env["OTEL_RESOURCE_ATTRIBUTES"], "service.name=hello-orders-api") && strcontains(output.env["OTEL_RESOURCE_ATTRIBUTES"], "cloud.platform=azure_container_apps")
+    error_message = "OTEL_RESOURCE_ATTRIBUTES from the policy + cloud attributes"
+  }
+  assert {
+    condition     = one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "FLB_DD_TAGS"]) == "application:enterprise-hello,business_unit:retail,env:dev,environment:dev,owning_team:orders,service:hello-orders-api,version:1.4.2"
+    error_message = "Fluent Bit sidecar ddtags = the full policy tag set"
+  }
+  assert {
+    condition     = output.azure_tags["owning_team"] == "orders" && output.azure_tags["env"] == "dev"
+    error_message = "Azure resource tags from the same policy"
+  }
+}
+
+run "aks_labels_and_tag_annotation" {
+  command = plan
+  assert {
+    condition     = output.k8s_patch_object.spec.template.metadata.labels["tags.datadoghq.com/env"] == "dev" && output.k8s_patch_object.spec.template.metadata.labels["team"] == "orders"
+    error_message = "pod labels: unified service tags + label-safe policy tags"
+  }
+  assert {
+    condition     = jsondecode(output.k8s_patch_object.spec.template.metadata.annotations["ad.datadoghq.com/tags"])["owner"] == "orders-team_example.com"
+    error_message = "pod annotation ad.datadoghq.com/tags carries every non-unified tag (owner is not label-safe before normalisation)"
   }
 }

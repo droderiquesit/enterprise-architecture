@@ -5,8 +5,27 @@
 # (apps: hello_common / Hello.Common resolve env values starting with dsv://) or, for third-party containers
 # (Fluent Bit sidecar), by the dsv-fetch helper writing an env-yaml file into a shared ephemeral volume.
 # No resources, no providers, no Key Vault.
+module "tags" {
+  source = "../tagging"
+  policy = var.tag_policy
+  identity = merge(var.service.extra, {
+    env         = var.service.env
+    service     = var.service.service
+    version     = var.service.version
+    team        = var.service.team
+    owner       = var.service.owner
+    domain      = var.service.domain
+    tier        = var.service.tier
+    application = var.service.application
+    region      = var.service.region
+    managed_by  = var.service.managed_by
+    cost_center = var.service.cost_center
+    component   = var.service.component
+  })
+  extra_tags = var.extra_tags
+}
+
 locals {
-  s         = var.service
   container = coalesce(var.container_name, var.service.service)
 
   log_route = {
@@ -43,29 +62,21 @@ locals {
     vmss       = "azure_vm"
   }[var.architecture]
 
+  # One tag contract for every path (modules/tagging): DD_* / DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, Fluent Bit
+  # ddtags, Kubernetes labels + ad.datadoghq.com/tags, RUM global context and Azure resource tags all carry the
+  # same normalised values.
   resource_attributes = merge(
+    module.tags.otel_resource_attributes,
     {
-      "deployment.environment.name" = local.s.env
-      "deployment.environment"      = local.s.env
-      "service.version"             = local.s.version
-      "service.namespace"           = local.s.application
-      "team"                        = local.s.team
-      "domain"                      = local.s.domain
-      "tier"                        = local.s.tier
-      "application"                 = local.s.application
-      "owner"                       = local.s.owner
-      "region"                      = local.s.region
-      "cloud.provider"              = "azure"
-      "cloud.platform"              = local.cloud_platform
+      "cloud.provider" = "azure"
+      "cloud.platform" = local.cloud_platform
     },
     var.extra_resource_attributes,
   )
-  otel_resource_attributes = join(",", [for k in sort(keys(local.resource_attributes)) : "${k}=${local.resource_attributes[k]}"])
+  otel_resource_attributes = join(",", [for k in sort(keys(local.resource_attributes)) : "${k}=${replace(replace(local.resource_attributes[k], ",", "%2C"), "=", "%3D")}"])
 
-  dd_tags = join(",", [
-    "env:${local.s.env}", "service:${local.s.service}", "version:${local.s.version}", "team:${local.s.team}",
-    "domain:${local.s.domain}", "tier:${local.s.tier}", "application:${local.s.application}", "region:${local.s.region}",
-  ])
+  dd_tags = module.tags.dd_tags
+  u       = module.tags.unified
 
   runtime_env = {
     dotnet = {
@@ -90,14 +101,16 @@ locals {
 
   base_env = var.runtime == "browser" ? {
     DD_SITE    = var.telemetry.datadog_site
-    DD_ENV     = local.s.env
-    DD_SERVICE = local.s.service
-    DD_VERSION = local.s.version
+    DD_ENV     = local.u.env
+    DD_SERVICE = local.u.service
+    DD_VERSION = local.u.version
     } : merge(local.contract_env, local.runtime_env[var.runtime], {
-      DD_ENV                      = local.s.env
-      DD_SERVICE                  = local.s.service
-      DD_VERSION                  = local.s.version
-      OTEL_SERVICE_NAME           = local.s.service
+      DD_ENV     = local.u.env
+      DD_SERVICE = local.u.service
+      DD_VERSION = local.u.version
+      # extra policy tags for Datadog-native tracers/SDKs (OTel SDKs read OTEL_RESOURCE_ATTRIBUTES)
+      DD_TAGS                     = module.tags.dd_tags_extra
+      OTEL_SERVICE_NAME           = local.u.service
       OTEL_RESOURCE_ATTRIBUTES    = local.otel_resource_attributes
       OTEL_EXPORTER_OTLP_ENDPOINT = local.otlp_endpoint
       OTEL_EXPORTER_OTLP_PROTOCOL = local.protocol
@@ -151,7 +164,7 @@ locals {
     {
       LOG_FILE_PATH  = var.log_file_path
       FLB_STATE_DIR  = "${local.log_dir}/.flb"
-      FLB_DD_SERVICE = local.s.service
+      FLB_DD_SERVICE = local.u.service
       FLB_DD_SOURCE  = local.dd_source
       FLB_DD_TAGS    = local.dd_tags
     },
@@ -301,15 +314,8 @@ locals {
   } : null
 
   # Kubernetes Deployment strategic-merge patch (AKS: Fluent Bit DaemonSet collects stdout; OTLP to node agent)
-  k8s_labels = {
-    "tags.datadoghq.com/env"     = local.s.env
-    "tags.datadoghq.com/service" = local.s.service
-    "tags.datadoghq.com/version" = local.s.version
-    "team"                       = local.s.team
-    "domain"                     = local.s.domain
-    "tier"                       = local.s.tier
-    "logs.datadoghq.com/source"  = local.dd_source
-  }
+  k8s_labels      = merge(module.tags.k8s_labels, { "logs.datadoghq.com/source" = local.dd_source })
+  k8s_annotations = module.tags.k8s_annotations
   k8s_env = concat(
     var.architecture == "aks" ? [{ name = "DD_AGENT_HOST", valueFrom = { fieldRef = { fieldPath = "status.hostIP" } } }] : [],
     [for k in sort(keys(local.env)) : { name = k, value = local.env[k] }],
@@ -318,7 +324,7 @@ locals {
     metadata = { labels = local.k8s_labels }
     spec = {
       template = {
-        metadata = { labels = local.k8s_labels }
+        metadata = { labels = local.k8s_labels, annotations = local.k8s_annotations }
         spec = {
           containers = [{
             name = local.container

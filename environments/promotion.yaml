@@ -23,13 +23,13 @@ chains:
         ado_environment: lab-test                # approvals required
         retire_environment: lab-test-retire
         ci_trigger: false                        # queued manually: mode promote (both pipelines)
-        allowed_modes: [promote, drift, retire, heal]  # never deploys code dev has not successfully run (heal: same code only)
+        allowed_modes: [promote, drift, retire, heal, hotfix]  # never deploys code dev has not successfully run (heal: same code only)
         allow_dry_run: true
       - name: prod
         promote_from: test
         ado_environment: lab-prod                # approvals required (2 approvers, not the requester) + exclusive lock
         retire_environment: lab-prod-retire
         ci_trigger: false
-        allowed_modes: [promote, drift, retire, heal]
+        allowed_modes: [promote, drift, retire, heal, hotfix]
         allow_dry_run: true
         require_apply_approval: true             # operator checklist item: the lab-prod approval check must exist

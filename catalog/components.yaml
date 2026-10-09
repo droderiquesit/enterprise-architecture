@@ -18,6 +18,8 @@
 # dsv_state_output: Terraform output holding the desired DSV state (tools/secrets/dsv_apply.py plan/apply).
 # secret_outputs:   sensitive Terraform output {name: value} published to DSV after apply (tools/secrets/publish.py).
 # retry:       {attempts, max_minutes} bounded auto-retry of transient failures (tools/deploy/retry.py)
+# owners:      review groups (path-filtered required reviewers + .github/CODEOWNERS, tools/ado); default by layer
+#              from environments/branching.yaml owners_by_layer
 # drift:       {auto_remediate: bool} re-apply additive-only drift on drift runs where the environment allows it
 # inputs:      extra repo globs that change this component (shared modules are discovered
 #              automatically by tools/changeset from module "source" paths)
@@ -40,11 +42,13 @@ components:
   - id: foundation-identity
     layer: foundation
     kind: terraform
+    owners: [platform-team, security-team]   # identities / secrets need a security reviewer
     path: foundation/identity
     produces: [foundation-identity]
   - id: foundation-secrets
     layer: foundation
     kind: terraform
+    owners: [platform-team, security-team]   # identities / secrets need a security reviewer
     path: foundation/secrets
     consumes: [foundation-identity]
     inputs: [foundation/identity/secrets.yaml]   # secret catalogue (source/publisher metadata)

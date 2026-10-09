@@ -40,3 +40,4 @@ variables:
   promoteFromContainerRegistry: ehacrtest00000
   # Bounded parallelism of the Validate matrix (component stages are bounded by the deployPool agent count).
   validateMaxParallel: 8
+  stageLockBehavior: sequential   # per-component P_/C_ stage locks; promotions are never superseded

@@ -1,0 +1,9 @@
+# eh-pr-reviewer direct dependencies (exact pins; verified current stable on 2026-10-09).
+# hello_common provides dsv:// resolution (Delinea DSV), JSON logs and OTel; tools/review needs PyYAML + jsonschema.
+-r ../../shared/python/hello_common/requirements.in
+azure-functions==2.3.0
+azure-storage-queue==12.18.0
+azure-storage-blob==12.31.0
+anthropic==1.13.0
+PyYAML==6.0.3
+jsonschema==4.26.0

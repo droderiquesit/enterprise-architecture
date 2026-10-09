@@ -97,7 +97,7 @@ def check(repo: Path, env: str, mode: str, dry_run: bool) -> List[str]:
     errors = []
     if mode not in spec.allowed_modes:
         errors.append(f"mode '{mode}' is not allowed for environment '{env}' (allowed: {', '.join(spec.allowed_modes)})")
-    if mode == "promote" and not spec.promote_from:
+    if mode in ("promote", "hotfix") and not spec.promote_from:
         errors.append(f"environment '{env}' builds from source and cannot be promoted into (first of its chain)")
     if dry_run and not spec.allow_dry_run:
         errors.append(f"dryRun is not allowed for environment '{env}'")

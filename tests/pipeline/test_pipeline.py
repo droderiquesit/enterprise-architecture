@@ -52,7 +52,7 @@ def test_every_component_has_exactly_one_plan_and_apply_stage_in_its_scope(reg, 
         for c in reg:
             if c.deployable and c.scope == scope:
                 p, a = stages[f"P_{c.var_id}"], stages[f"C_{c.var_id}"]
-                assert p["lockBehavior"] == a["lockBehavior"] == "sequential"
+                assert p["lockBehavior"] == a["lockBehavior"] == "${{ parameters.settings.stageLockBehavior }}"
                 assert {"Select", "Validate", "Security"} <= set(p["dependsOn"])
                 assert ("Build" in p["dependsOn"]) == bool(c.artifacts)
                 assert f"P_{c.var_id}" in a["dependsOn"]

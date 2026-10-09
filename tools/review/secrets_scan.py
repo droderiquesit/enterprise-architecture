@@ -30,13 +30,17 @@ DEFINITE = [
 ]
 ASSIGNMENT = re.compile(
     r"""(?ix)(?P<key>[a-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|client[_-]?secret|access[_-]?key|connection[_-]?string)[a-z0-9_.-]*)
-        ["']?\s*[:=]\s*["']?(?P<value>[^\s"'#,;]{8,})""")
+        ["']?\s*[:=]\s*(?:"(?P<dq>[^"]{8,200})"|'(?P<sq>[^']{8,200})'|(?P<bare>[^\s"'#,;]{8,}))""")
 TOKEN = re.compile(r"[A-Za-z0-9+/=_-]{20,}")
 PLACEHOLDER = re.compile(r"^(?:\$\{.*\}|\[\[.*\]\]|<.*>|\{\{.*\}\}|%\(.*\)s|\$\(.*\)|dsv://.*|ENC\[.*\]|var\..*|local\..*|each\..*|module\..*|data\..*)$")
 EXAMPLE_WORDS = ("example", "changeme", "placeholder", "dummy", "redacted", "xxxxxxxx", "your-", "fake", "sample", "test-fixture",
                  "not-a-secret", "localdev", "password123")
 HEX = re.compile(r"^[0-9a-fA-F]+$")
 UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+def _value_group(m: re.Match) -> str:
+    return next(g for g in ("dq", "sq", "bare") if m.group(g) is not None)
 
 
 def shannon(s: str) -> float:
@@ -72,8 +76,9 @@ def redact(text: str) -> str:
     def line_redact(line: str) -> str:
         spans = [m.span() for _, rx in DEFINITE for m in rx.finditer(line)]
         for m in ASSIGNMENT.finditer(line):
-            if not _benign(m.group("value")):
-                spans.append(m.span("value"))
+            g = _value_group(m)
+            if not _benign(m.group(g)):
+                spans.append(m.span(g))
         for m in TOKEN.finditer(line):
             tok = m.group(0)
             if len(tok) >= 32 and not _benign(tok) and shannon(tok) > (3.0 if HEX.match(tok) else 4.0):
@@ -115,7 +120,8 @@ def scan(path: str, added: List[Tuple[int, str]], cfg: dict) -> List[Finding]:
         if hit:
             continue
         for m in ASSIGNMENT.finditer(line):
-            value = m.group("value")
+            g = _value_group(m)
+            value = m.group(g)
             if _benign(value) or len(value) < 12 or shannon(value) < 3.0:
                 continue
             hit = True
@@ -124,7 +130,7 @@ def scan(path: str, added: List[Tuple[int, str]], cfg: dict) -> List[Finding]:
                 message=f"`{m.group('key')}` is assigned a literal value that looks like a credential.",
                 file=path, line=lineno,
                 suggestion="Use a dsv:// reference (resolved at runtime by hello_common / Hello.Common / dsv-fetch) instead of a literal.",
-                evidence=f"assignment:{_masked(line, [m.span('value')])}"))
+                evidence=f"assignment:{_masked(line, [m.span(g)])}"))
             break
         if hit:
             continue

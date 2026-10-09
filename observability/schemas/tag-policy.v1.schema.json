@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tag-policy.v1.schema.json",
+  "title": "Datadog tag policy v1 (observability package)",
+  "description": "The single tag contract of the observability package: which Datadog tag keys every signal carries, where their values come from, how keys are renamed / aliased for an existing organisation's monitors, and which static tags are added per environment. Rendered by modules/tagging (Terraform) and tools/tags/tag_policy.py (Python) with identical semantics.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "keys"],
+  "additionalProperties": false,
+  "$defs": {
+    "tag_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_./-]{0,99}$",
+      "description": "Datadog tag key: starts with a letter, lowercase (Datadog lowercases metric and span tag keys)."
+    },
+    "tag_map": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/tag_key"},
+      "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "key_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {"type": "boolean", "default": false, "description": "A missing value is a gap (plan precondition when enforce_required, check_coverage exit 1)."},
+        "source": {"type": "string", "description": "Documentation: where the value comes from."},
+        "key": {"$ref": "#/$defs/tag_key", "description": "Datadog key emitted for this canonical key (rename). env, service and version cannot be renamed (Datadog unified service tagging); use aliases."},
+        "aliases": {"type": "array", "items": {"$ref": "#/$defs/tag_key"}, "uniqueItems": true, "description": "Additional Datadog keys that carry the same value (e.g. environment for env)."},
+        "default": {"type": "string", "minLength": 1, "description": "Value used when the caller supplies none."},
+        "value_map": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}, "description": "Value normalisation before Datadog normalisation; keys compared lowercase (e.g. development -> dev)."},
+        "allowed_values": {"type": "array", "items": {"type": "string"}, "description": "When set, other (normalised) values are gaps."},
+        "otel_attributes": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_.]*$"}, "minItems": 1, "description": "OTel resource attribute names carrying the value (default: [<Datadog key>])."},
+        "azure_tag_keys": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 512}, "minItems": 1, "description": "Azure resource tag names that carry the value. The first is written on resources managed by the package; all are mapped to the Datadog key when Azure platform logs carry resource tags."},
+        "k8s_label": {"type": "boolean", "default": true, "description": "Also emit as a pod label (label-safe values only) mapped with podLabelsAsTags; every value is always in the ad.datadoghq.com/tags annotation."}
+      }
+    }
+  },
+  "properties": {
+    "apiVersion": {"const": "observability/tag-policy/v1"},
+    "kind": {"const": "TagPolicy"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "description": {"type": "string"}
+      }
+    },
+    "normalize": {"enum": ["datadog", "none"], "default": "datadog"},
+    "enforce_required": {"type": "boolean", "default": true},
+    "keys": {
+      "type": "object",
+      "required": ["env", "service", "version"],
+      "propertyNames": {"$ref": "#/$defs/tag_key"},
+      "additionalProperties": {"$ref": "#/$defs/key_spec"},
+      "properties": {
+        "env": {"$ref": "#/$defs/key_spec", "properties": {"key": {"const": "env"}}},
+        "service": {"$ref": "#/$defs/key_spec", "properties": {"key": {"const": "service"}}},
+        "version": {"$ref": "#/$defs/key_spec", "properties": {"key": {"const": "version"}}}
+      }
+    },
+    "static_tags": {"$ref": "#/$defs/tag_map"},
+    "environments": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "static_tags": {"$ref": "#/$defs/tag_map"}
+        }
+      }
+    }
+  }
+}

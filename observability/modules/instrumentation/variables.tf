@@ -5,15 +5,20 @@ variable "service" {
     env         = string
     version     = string
     team        = string
-    domain      = optional(string, "unknown")
-    tier        = optional(string, "unknown")
-    application = optional(string, "unknown")
-    owner       = optional(string, "unknown")
-    region      = optional(string, "unknown")
+    domain      = optional(string)
+    tier        = optional(string)
+    application = optional(string)
+    owner       = optional(string)
+    region      = optional(string)
+    managed_by  = optional(string)
+    cost_center = optional(string)
+    component   = optional(string)
+    # any further canonical key of your tag policy (e.g. business_unit) -> value
+    extra = optional(map(string), {})
   })
   validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9._-]{0,99}$", var.service.service)) && can(regex("^[a-z0-9][a-z0-9._-]{0,63}$", var.service.env))
-    error_message = "service.service and service.env must be lowercase Datadog tag values ([a-z0-9._-], starting alphanumeric)."
+    condition     = can(regex("^[a-z0-9][a-z0-9._-]{0,99}$", var.service.service)) && length(trimspace(var.service.env)) > 0
+    error_message = "service.service must be a lowercase Datadog tag value ([a-z0-9._-], starting alphanumeric); service.env must be set (the tag policy value_map / normalisation applies to it)."
   }
   validation {
     condition     = length(var.service.version) > 0 && !can(regex("[,= ]", var.service.version))
@@ -172,4 +177,16 @@ variable "fetch_resources" {
     refresh_s = optional(number, 3600)
   })
   default = {}
+}
+
+variable "tag_policy" {
+  description = "Decoded tag policy (schemas/tag-policy.v1.schema.json); null = the package default config/tag-policy.yaml. Use the same policy in every module of a root."
+  type        = any
+  default     = null
+}
+
+variable "extra_tags" {
+  description = "Additional Datadog tags for this workload (key -> value), merged over the policy's static tags (canonical keys win)."
+  type        = map(string)
+  default     = {}
 }

@@ -14,7 +14,7 @@ parameters:
     type: string
   - name: mode
     type: string
-    values: [auto, manual, reconcile, drift, retire, promote, heal]
+    values: [auto, manual, reconcile, drift, retire, promote, heal, hotfix]
   - name: sourceEnvironment
     type: string
   - name: components
@@ -51,6 +51,8 @@ stages:
               python3 -m tools.changeset graph
               python3 tools/config/resolve.py --env "${{ parameters.environment }}"
               python3 tools/config/promotion.py check --env "${{ parameters.environment }}" --mode "${{ parameters.mode }}" --dry-run "${{ lower(parameters.dryRun) }}"
+              python3 tools/config/branching.py check --ref "$(Build.SourceBranch)" --reason "$(Build.Reason)" \
+                --env "${{ parameters.environment }}" --mode "${{ parameters.mode }}" --dry-run "${{ lower(parameters.dryRun) }}"
               echo "##vso[build.addbuildtag]env-${{ parameters.environment }}"
               echo "##vso[build.addbuildtag]scope-${{ parameters.scope }}"
             displayName: Validate registry, environment and promotion policy
@@ -76,7 +78,7 @@ stages:
                   set -euo pipefail
                   blob="https://${{ variables.stateStorageAccount }}.blob.core.windows.net"
                   extra=()
-                  if [[ "${{ parameters.mode }}" == "promote" ]]; then
+                  if [[ "${{ parameters.mode }}" == "promote" || "${{ parameters.mode }}" == "hotfix" ]]; then
                     extra+=(--source-env "${{ parameters.sourceEnvironment }}"
                             --source-records-url "https://${{ variables.promoteFromStateStorageAccount }}.blob.core.windows.net/deployments")
                   fi
@@ -121,6 +123,7 @@ stages:
           environment: ${{ parameters.environment }}
           hostedImage: ${{ variables.hostedImage }}
           maxParallel: ${{ variables.validateMaxParallel }}
+          testShards: ${{ variables.testShards }}
       - ${{ if eq(parameters.scope, 'applications') }}:
         - template: helm-charts.yml
           parameters:
@@ -136,6 +139,39 @@ stages:
       - template: security-scan.yml
         parameters:
           hostedImage: ${{ variables.hostedImage }}
+
+  # ---------------------------------------------------------- PR time budget
+  - ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+    - stage: Budget
+      displayName: PR time budget report
+      dependsOn: [Select, Validate, Security]
+      condition: and(not(canceled()), ne(dependencies.Select.result, 'Skipped'))   # also after failed validation
+      jobs:
+        - job: budget
+          displayName: Time budget (evidence)
+          timeoutInMinutes: 5
+          cancelTimeoutInMinutes: 2
+          pool:
+            vmImage: ${{ variables.hostedImage }}
+          steps:
+            - checkout: self
+              fetchDepth: 1
+            - script: |
+                set -euo pipefail
+                out="$(Build.ArtifactStagingDirectory)/budget"; mkdir -p "$out"
+                python3 tools/report/pr_budget.py --budget-minutes "${{ variables.prTimeBudgetMinutes }}" \
+                  --out "$out/pr-budget.json" --markdown "$out/pr-budget.md"
+                if [[ -f "$out/pr-budget.md" ]]; then echo "##vso[task.uploadsummary]$out/pr-budget.md"; fi
+              displayName: PR time budget
+              env:
+                SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+            - task: PublishPipelineArtifact@1
+              displayName: Publish PR budget evidence
+              condition: not(canceled())
+              continueOnError: true
+              inputs:
+                targetPath: $(Build.ArtifactStagingDirectory)/budget
+                artifact: pr-budget-$(System.JobAttempt)
 
   # --------------- [Build], plan, apply, retire, [verify], drift, evidence (generated per scope)
   - ${{ if ne(variables['Build.Reason'], 'PullRequest') }}:
@@ -159,3 +195,4 @@ stages:
           promoteFromContainerRegistry: ${{ variables.promoteFromContainerRegistry }}
           useAcrBuild: 'false'
           scope: ${{ parameters.scope }}
+          stageLockBehavior: ${{ variables.stageLockBehavior }}
