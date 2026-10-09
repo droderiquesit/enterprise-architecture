@@ -141,6 +141,16 @@ def make_handler(state: State):
             self.wfile.write(raw)
 
         def _body(self) -> dict:
+            if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+                raw = b""
+                while True:
+                    size = int(self.rfile.readline().split(b";")[0].strip() or b"0", 16)
+                    if size == 0:
+                        self.rfile.readline()  # trailing CRLF after the last chunk
+                        break
+                    raw += self.rfile.read(size)
+                    self.rfile.readline()
+                return json.loads(raw or b"{}")
             n = int(self.headers.get("Content-Length") or 0)
             return json.loads(self.rfile.read(n) or b"{}")
 

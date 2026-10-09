@@ -32,3 +32,16 @@ def test_azure_grant_and_policy():
         assert _req(f"{base}/token", "POST", {"grant_type": "azure", "jwt": fake_entra_token("/other")})[0] == 401
     finally:
         httpd.shutdown()
+
+
+def test_chunked_request_body():
+    import http.client
+
+    httpd, _ = serve({"users": {MIRID: {"read": ["eh/dev/*"]}}, "secrets": {}})
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1])
+        body = json.dumps({"grant_type": "azure", "jwt": fake_entra_token(MIRID)}).encode()
+        conn.request("POST", "/v1/token", body=iter([body[:10], body[10:]]), headers={"Content-Type": "application/json"}, encode_chunked=True)
+        assert conn.getresponse().status == 200
+    finally:
+        httpd.shutdown()
