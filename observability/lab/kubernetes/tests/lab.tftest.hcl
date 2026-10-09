@@ -34,7 +34,9 @@ variables {
     tags            = {}
   }
   obs_telemetry_transport = { datadog_site = "datadoghq.com" }
-  foundation_identity     = { key_vault_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.KeyVault/vaults/eh-kv-ident-dev-abcde" }
+  datadog_api_key         = "mock-not-a-real-key"
+  # mock providers cannot serve ephemeral resources; the Key Vault read is exercised only in real plans
+  api_key_override = "mock-not-a-real-key"
   platform_aks = {
     resource_group_name = "eh-rg-aks-dev-sec"
     cluster_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-aks-dev-sec/providers/Microsoft.ContainerService/managedClusters/eh-aks-dev-sec"

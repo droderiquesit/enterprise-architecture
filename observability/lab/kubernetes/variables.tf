@@ -1,7 +1,6 @@
 variable "settings" {
   description = "obs-kubernetes settings."
   type = object({
-    api_key_secret_name = optional(string, "datadog-api-key")
     # kubelogin login mode for the helm/kubernetes providers: azurecli (pipeline after azure/login with
     # OIDC) | workloadidentity (federated token file) | msi (self-hosted agent identity)
     kubelogin_mode           = optional(string, "azurecli")
@@ -27,13 +26,6 @@ variable "obs_telemetry_transport" {
   })
 }
 
-variable "foundation_identity" {
-  description = "foundation-identity contract (fields used)."
-  type = object({
-    key_vault_id = string
-  })
-}
-
 variable "platform_aks" {
   description = "platform-aks contract (fields used)."
   type = object({
@@ -45,4 +37,11 @@ variable "platform_aks" {
       entra_server_app_id = optional(string)
     })
   })
+}
+
+variable "datadog_api_key" {
+  description = "Datadog API key (EPHEMERAL: set TF_VAR_datadog_api_key from Key Vault secret datadog-api-key in the pipeline). Never stored."
+  type        = string
+  ephemeral   = true
+  sensitive   = true
 }

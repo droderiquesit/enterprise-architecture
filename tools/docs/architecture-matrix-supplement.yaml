@@ -1,0 +1,134 @@
+# Values for columns that catalog/architecture-matrix.yaml leaves empty, taken from the deployment-root READMEs
+# (each entry names its source). Consumed only by tools/docs/generate.py; catalog values always win.
+# When the catalog gains a value for a column, delete it here.
+architectures:
+  aks:
+    source: applications/deployments/core-aks/README.md
+  container-apps-consumption:
+    source: applications/deployments/core-aca/README.md
+  container-apps-dedicated:
+    artifact: container-image
+    source: applications/deployments/dbadapters/README.md
+  container-apps-job-manual:
+    artifact: container-image (svc-jobs)
+    runtime_config: azurerm_container_app_job env + user-assigned identity hello-jobs, ACR pull by identity; stdout logs (no sidecar)
+    source: applications/deployments/jobs/README.md
+  container-apps-job-scheduled:
+    artifact: container-image (svc-jobs, svc-traffic)
+    runtime_config: job env, cron settings.reconcile_cron / settings.traffic_cron; traffic bounded by TRAFFIC_DURATION_SECONDS <= 600
+    source: applications/deployments/jobs/README.md
+  container-apps-job-event:
+    artifact: container-image (svc-jobs)
+    runtime_config: KEDA azure-servicebus scaler on queue batch-items authenticated with the user-assigned identity (rules.identity_id), no connection string
+    source: applications/deployments/jobs/README.md
+  container-instances:
+    runtime_config: container group env; FAULT_TOKEN and sidecar DD_API_KEY read from Key Vault at plan time into secure_environment_variables (ACI has no Key Vault references)
+    source: applications/deployments/partner-sim/README.md
+  app-service-linux-code:
+    runtime_config: app settings (MYSQL_HOST/PORT/DATABASE/USER, MYSQL_AUTH=entra) + Key Vault references, VNet integration on appsvc-integration
+    smoke: scripts/smoke.sh on the contract health/readiness/version paths
+    source: applications/deployments/dbadapters/README.md
+  app-service-linux-container:
+    runtime_config: app settings PG_*, REDIS_*, WEBSITES_PORT=8080, Key Vault references
+    smoke: scripts/smoke.sh on the contract health/readiness/version paths
+    source: applications/deployments/appservice/README.md
+  app-service-windows-code:
+    runtime_config: app settings STORAGE_MODE, COSMOS_ENDPOINT/DATABASE/CONTAINER, FAULT_TOKEN as @Microsoft.KeyVault reference; PORT not set (ANCM)
+    smoke: deploy-zip.sh probes /healthz on the staging slot before swap; scripts/smoke.sh afterwards
+    source: applications/deployments/appservice/README.md
+  app-service-windows-container:
+    artifact: container-image
+    runtime_config: same app settings as the Windows code app (settings.inventory.container_enabled)
+    smoke: scripts/smoke.sh on the contract health/readiness/version paths
+    rollback: previous image digest
+    source: applications/deployments/appservice/README.md
+  functions-flex-consumption:
+    runtime_config: app settings AzureWebJobsStorage__* (identity), DURABLE_TASK_HUB, RECONCILE_SCHEDULE, ServiceBusConnection__*, SQL_CONNECTION_STRING (no password), OTEL_* to the gateway
+    smoke: /api/healthz and /api/version via scripts/smoke.sh (hello-durable has no /readyz)
+    source: applications/deployments/durable/README.md
+  functions-premium:
+    runtime_config: identity-based host storage, WEBSITE_RUN_FROM_PACKAGE=<package URL> + WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID, ServiceBusConnection__*, AUDIT_STORE
+    rollback: re-apply with the previous svc-functions package
+    source: applications/deployments/functions/README.md
+  functions-dedicated:
+    artifact: zip-package (svc-functions) on the platform-appservice Linux plan
+    runtime_config: same as Premium; only cache_warmer enabled (AzureWebJobs.<name>.Disabled for the others)
+    rollback: re-apply with the previous svc-functions package
+    source: applications/deployments/functions/README.md
+  functions-consumption-windows:
+    artifact: zip-package (svc-durable), WEBSITE_RUN_FROM_PACKAGE + WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID
+    runtime_config: Reconciliation only; task hub <hub>rec; no VNet integration (deny-by-default IP restrictions)
+    rollback: re-apply with the previous artifact
+    source: applications/deployments/durable/README.md
+  functions-on-container-apps:
+    artifact: container-image (svc-functions)
+    runtime_config: azapi Microsoft.App/containerApps kind=functionapp; env + Key Vault secret refs + Fluent Bit sidecar
+    rollback: previous image digest
+    source: applications/deployments/functions/README.md
+  durable-functions:
+    artifact: zip-package (svc-durable)
+    runtime_config: see functions-flex-consumption
+    rollback: redeploy previous package (no slots on Flex)
+    source: applications/deployments/durable/README.md
+  static-web-apps:
+    runtime_config: config.json / staticwebapp.config.json rendered by deploy-frontend and written into the bundle by deploy-swa.sh
+    smoke: /healthz, /readyz, /version rewritten to static JSON (staticwebapp.config.json)
+    source: applications/deployments/frontend/README.md
+  logic-apps-consumption:
+    artifact: workflow definition in Terraform (workflows/consumption-batch-request.actions.json)
+    runtime_config: managed Service Bus API connection authenticated with the hello-logicapps identity (azapi Microsoft.Web/connections)
+    rollback: re-apply the previous commit
+    source: applications/deployments/logicapps/README.md
+  logic-apps-standard:
+    artifact: zip-package (svc-logicapps, connections.json)
+    runtime_config: app settings serviceBus_fullyQualifiedNamespace, serviceBus_clientId, ARCHIVE_SUBSCRIPTION, AzureBlob_blobStorageEndpoint, ARCHIVE_CONTAINER
+    rollback: redeploy previous zip
+    source: applications/deployments/logicapps/README.md
+  vm-linux:
+    runtime_config: env file written by the package's deploy/install.sh; secrets fetched on the host with an IMDS token (never in state)
+    smoke: install.sh health check (/healthz) with automatic rollback, then scripts/smoke.sh
+    source: applications/deployments/vm-workloads/README.md
+  vm-windows:
+    artifact: zip-package (svc-inventory-api) via VM run command (install-windows-service.ps1.tftpl)
+    runtime_config: Windows service environment; FAULT_TOKEN fetched from Key Vault on the host
+    smoke: installer health check (/healthz)
+    rollback: re-apply with the previous package (installers keep 3 releases)
+    source: applications/deployments/vm-workloads/README.md
+  vmss-flexible:
+    artifact: zip-package (svc-worker) via CustomScript extension on the model + run-command rollout (vmss-flex-rollout)
+    runtime_config: as vm-linux
+    smoke: install.sh health check per instance
+    source: applications/deployments/vm-workloads/README.md
+  vmss-uniform:
+    artifact: zip-package (svc-dbadapter) via CustomScript extension
+    runtime_config: SQL_AUTH=password, SQL_PASSWORD fetched from Key Vault on the host, SQL_TRUST_SERVER_CERTIFICATE=yes
+    smoke: none from the pipeline (no load balancer, contract url = null)
+    source: applications/deployments/dbadapters/README.md
+  batch:
+    artifact: zip-package (svc-jobs) as task resource file fetched with the pool identity (identityReference, no SAS)
+    runtime_config: task `run.sh daily-aggregate`, job hello-jobs-daily-aggregate, idempotent task id daily-aggregate-<date>
+    smoke: scripts/submit-batch-job.sh waits (bounded) for task completion
+    rollback: re-submit with the previous package
+    source: applications/deployments/jobs/README.md
+  service-fabric-managed:
+    artifact: zip-package (svc-inventory-api) as guest executable
+    runtime_config: ApplicationManifest.xml / ServiceManifest.xml rendered into the contract, deployed by scripts/deploy-sf.sh (sfctl)
+    smoke: HTTP probe /healthz on the load balancer rule 8080 (platform-servicefabric)
+    rollback: sfctl application upgrade to the previous type version (monitored upgrade, FailureAction=Rollback)
+    source: applications/deployments/specialized/README.md
+  aro:
+    artifact: container-image (svc-catalog-api)
+    runtime_config: Deployment/Service/Route manifests rendered into the contract (settings.aro_catalog_env), applied by scripts/deploy-aro.sh
+    smoke: rollout status in deploy-aro.sh
+    rollback: oc rollout undo or re-apply previous digest
+    source: applications/deployments/specialized/README.md
+  vm-confidential:
+    artifact: zip-package (svc-worker) via managed run command install-hello-worker-cvm
+    runtime_config: as vm-linux
+    rollback: previous package
+    source: applications/deployments/specialized/README.md
+  automation:
+    artifact: Python3 runbook from templates/health-probe.py (Terraform-managed)
+    runtime_config: azurerm_automation_job_schedule on the platform schedule with probe_urls
+    rollback: re-apply the previous commit
+    source: applications/deployments/specialized/README.md

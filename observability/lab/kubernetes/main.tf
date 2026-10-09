@@ -1,10 +1,7 @@
-# The Datadog API key is read EPHEMERALLY from Key Vault and written write-only into the Kubernetes
-# Secret: it is never stored in plan or state.
-ephemeral "azurerm_key_vault_secret" "api_key" {
-  name         = var.settings.api_key_secret_name
-  key_vault_id = var.foundation_identity.key_vault_id
-}
-
+# The Datadog API key arrives as an EPHEMERAL input variable (pipeline: Key Vault -> TF_VAR_datadog_api_key,
+# the same step that exports DD_API_KEY for the Datadog provider) and is written write-only into the
+# Kubernetes Secret: it is never stored in plan or state. (An `ephemeral "azurerm_key_vault_secret"` block
+# would also work but cannot be exercised by mock-provider tests.)
 module "kubernetes" {
   source       = "../../modules/kubernetes"
   cluster_name = var.platform_aks.cluster_name
@@ -14,7 +11,7 @@ module "kubernetes" {
     extra_tags = { team = var.environment.team, application = "enterprise-hello", region = var.environment.location }
   }
   api_key    = { mode = "write_only" }
-  api_key_wo = ephemeral.azurerm_key_vault_secret.api_key.value
+  api_key_wo = var.datadog_api_key
   charts = {
     datadog_version    = var.settings.datadog_chart_version
     fluent_bit_version = var.settings.fluent_bit_chart_version
