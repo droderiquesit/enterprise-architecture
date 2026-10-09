@@ -1,4 +1,4 @@
-# Compile-time settings of environment "dev" (template variables file).
+# Compile-time settings of environment "test" (template variables file).
 # Service connection NAMES must be known when the pipeline is compiled (they cannot come from a
 # variable group), so they live here. Nothing in this file is secret: service connection ids,
 # storage account names and pool names are identifiers, not credentials.
@@ -14,25 +14,25 @@ variables:
   #                   the lab subscription, Storage Blob Data Contributor on all six bootstrap containers
   #   build identity: AcrPush on the lab registry (platform-shared), Data Contributor on packages,
   #                   Data Reader on deployments
-  planServiceConnection: sc-lab-dev-plan
-  planServiceConnectionId: "00000000-0000-0000-0000-000000000001"
-  applyServiceConnection: sc-lab-dev-apply
-  applyServiceConnectionId: "00000000-0000-0000-0000-000000000002"
-  buildServiceConnection: sc-lab-dev-build
+  planServiceConnection: sc-lab-test-plan
+  planServiceConnectionId: "00000000-0000-0000-0001-000000000001"
+  applyServiceConnection: sc-lab-test-apply
+  applyServiceConnectionId: "00000000-0000-0000-0001-000000000002"
+  buildServiceConnection: sc-lab-test-build
   # bootstrap outputs (state storage account with containers tfstate, contracts, plans, deployments, evidence, packages)
-  stateStorageAccount: ehstdevtfstate00000
-  containerRegistry: ehacrdev00000
+  stateStorageAccount: ehsttesttfstate00000
+  containerRegistry: ehacrtest00000
   # agent pool on the deploy-agents subnet (foundation-deploy-agents) reaching private endpoints
   deployPool: foundation-deploy-agents
   # Key Vault-linked variable group holding the Datadog keys (secrets: datadog-api-key, datadog-app-key)
-  datadogVariableGroup: lab-dev-datadog
+  datadogVariableGroup: lab-test-datadog
   datadogSite: datadoghq.com
   # Promotion (environments/promotion.yaml): '' = this environment builds artifacts from source.
   # Otherwise the Build stage promotes the exact digests recorded by `promoteFrom` (never rebuilds); the
   # build identity of THIS environment needs AcrPull on promoteFromContainerRegistry and Storage Blob Data
   # Reader on promoteFromStateStorageAccount containers `deployments` and `packages`.
-  promoteFrom: ''
-  promoteFromStateStorageAccount: ''
-  promoteFromContainerRegistry: ''
+  promoteFrom: dev
+  promoteFromStateStorageAccount: ehstdevtfstate00000
+  promoteFromContainerRegistry: ehacrdev00000
   # Bounded parallelism of the Validate matrix (component stages are bounded by the deployPool agent count).
   validateMaxParallel: 8

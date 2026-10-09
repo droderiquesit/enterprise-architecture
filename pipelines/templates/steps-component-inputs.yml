@@ -1,0 +1,39 @@
+# Inputs of a Plan/Apply job (steps template): shallow checkout, selection document, plan summary
+# (Apply only), build metadata of the component's artifacts (attempt-aware names mapped from the
+# Build stage output `ready.artifact` into ARTIFACT_<id>), tool requirements and pinned Terraform.
+# Only downloads and installs are retried (idempotent network steps).
+parameters:
+  - name: artifacts
+    type: object
+    default: []
+  - name: planArtifact
+    type: string
+    default: ''
+
+steps:
+  - checkout: self
+    fetchDepth: 1
+    clean: true
+  - task: DownloadPipelineArtifact@2
+    displayName: Download selection
+    retryCountOnTaskFailure: 2
+    inputs:
+      artifact: selection
+      path: $(Pipeline.Workspace)/selection
+  - ${{ if ne(parameters.planArtifact, '') }}:
+    - task: DownloadPipelineArtifact@2
+      displayName: Download plan summary + manifest
+      retryCountOnTaskFailure: 2
+      inputs:
+        artifact: ${{ parameters.planArtifact }}
+        path: $(Pipeline.Workspace)/plan
+  - ${{ each artifact in parameters.artifacts }}:
+    - task: DownloadPipelineArtifact@2
+      displayName: Download build metadata of ${{ artifact }}
+      retryCountOnTaskFailure: 2
+      inputs:
+        artifact: $(ARTIFACT_${{ replace(artifact, '-', '_') }})
+        path: $(Pipeline.Workspace)/artifact-metadata/${{ artifact }}
+  - template: steps-setup.yml
+    parameters:
+      tools: terraform

@@ -8,6 +8,8 @@
   stage/zip   deterministic packaging helpers (sorted entries, fixed timestamps => reproducible sha256)
   finalize    upload packages, write build-metadata.json (source commit, digests, sha256, SBOM refs)
               and the artifact's record (<env>/<component>.json, kind artifact)
+  promote     (environments after the first of a promotion chain) copy the image digest / package sha256 the
+              `promote_from` environment recorded for the SAME source fingerprint; never builds; fails if missing
   tfvars      for a deploy root: write <root>/artifacts.auto.tfvars.json with
               artifacts = {<artifact component id> = {name, image, digest, package_url, package_sha256,
               source_fp, tag}} when the root declares `variable "artifacts"`; print the sha256
@@ -148,6 +150,7 @@ def _write_record(args, meta: dict, sel: dict) -> None:
         "run_id": os.environ.get("BUILD_BUILDID", "local"),
         "finished_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "artifact_digests": {args.component: meta.get("digest") or meta.get("package_sha256")},
+        "artifact_metadata": {k: v for k, v in meta.items() if k not in ("reused",)},
         "path": entry.get("path"),
     }
     open_store(args.records_url).put_json(f"{args.env}/{args.component}.json", record)
@@ -191,6 +194,89 @@ def cmd_finalize(args) -> int:
     existing.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
     _write_record(args, meta, sel)
     print(json.dumps(meta, indent=2, sort_keys=True))
+    return 0
+
+
+# ------------------------------------------------------------------- promotion
+class PromotionError(Exception):
+    pass
+
+
+def _acr_digest(registry: str, ref: str) -> str:
+    proc = _run(["az", "acr", "manifest", "show-metadata", "--registry", registry, "--name", ref,
+                 "--query", "digest", "-o", "tsv", "--only-show-errors"])
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def _acr_import(target: str, source_image: str, target_ref: str) -> None:
+    proc = _run(["az", "acr", "import", "--name", target, "--source", source_image, "--image", target_ref,
+                 "--force", "--only-show-errors"])
+    if proc.returncode != 0:
+        raise PromotionError(f"az acr import {source_image} -> {target}/{target_ref} failed: {proc.stderr.strip()[:400]}")
+
+
+def promote(component: str, selection: dict, env: str, source_env: str, source_records, source_packages,
+            target_packages, target_registry: str, source_registry: str, packages_url: str) -> dict:
+    """Copy exactly what `source_env` recorded for this artifact (same source fingerprint) into this env.
+
+    Never builds. Fails when the source environment has no successful record for the same source fingerprint.
+    Container images keep their digest (az acr import copies the manifest unchanged; verified afterwards);
+    packages are copied and their sha256 verified."""
+    fp = selection["components"][component]["deploy_fp"]
+    rec = source_records.get_json(f"{source_env}/{component}.json")
+    if not rec or rec.get("status") != "succeeded":
+        raise PromotionError(f"{component}: no successful artifact record in '{source_env}' - deploy/promote "
+                             f"'{source_env}' first (build once, promote)")
+    meta = dict(rec.get("artifact_metadata") or {})
+    if not meta:
+        raise PromotionError(f"{component}: the '{source_env}' record has no artifact_metadata (re-run its Build stage)")
+    if meta.get("source_fp") != fp or rec.get("deploy_fp") != fp:
+        raise PromotionError(f"{component}: '{source_env}' recorded source fingerprint {str(meta.get('source_fp'))[:12]} but "
+                             f"this commit needs {fp[:12]} - promote the same commit through '{source_env}' first")
+    tag = meta.get("tag") or ("src-" + fp[:24])
+    out = {k: v for k, v in meta.items() if k not in ("reused", "attachments")}
+    if meta.get("digest"):
+        digest = meta["digest"]
+        name = meta.get("name") or component
+        if _acr_digest(target_registry, f"{name}:{tag}") != digest:
+            _acr_import(target_registry, f"{source_registry}.azurecr.io/{name}@{digest}", f"{name}:{tag}")
+            got = _acr_digest(target_registry, f"{name}:{tag}")
+            if got != digest:
+                raise PromotionError(f"{component}: digest after import {got!r} != promoted digest {digest}")
+        repo = f"{target_registry}.azurecr.io/{name}"
+        out.update({"image": f"{repo}@{digest}", "repository": repo, "digest": digest})
+    if meta.get("package_sha256"):
+        name = meta.get("name") or component
+        key = f"{name}/{tag}.zip"
+        data = source_packages.get_bytes(key)
+        if data is None:
+            raise PromotionError(f"{component}: package {key} missing in '{source_env}' packages container")
+        if hashlib.sha256(data).hexdigest() != meta["package_sha256"]:
+            raise PromotionError(f"{component}: package {key} sha256 differs from the '{source_env}' record")
+        target_packages.put_bytes(key, data, "application/zip")
+        url = f"{packages_url.rstrip('/')}/{key}"
+        target_packages.put_json(f"{name}/{tag}.json", {"package_url": url, "package_sha256": meta["package_sha256"],
+                                                         "commit": meta.get("commit"), "promoted_from": source_env})
+        out.update({"package_url": url})
+    out.update({"promoted_from": source_env, "reused": True, "tag": tag})
+    return out
+
+
+def cmd_promote(args) -> int:
+    sel = _selection(args.selection)
+    try:
+        meta = promote(args.component, sel, args.env, args.source_env, open_store(args.source_records_url),
+                       open_store(args.source_packages_url), open_store(args.packages_url),
+                       args.registry, args.source_registry, args.packages_url)
+    except PromotionError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        print(f"##vso[task.logissue type=error]{exc}")
+        return 1
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "build-metadata.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    print(f"promoted {args.component} from {args.source_env}: digest={meta.get('digest')} sha256={meta.get('package_sha256')}")
+    print("##vso[task.setvariable variable=ARTIFACT_EXISTS]true")
     return 0
 
 
@@ -251,6 +337,11 @@ def main(argv=None) -> int:
         f.add_argument(a, required=True)
     f.add_argument("--records-url")
     f.set_defaults(func=cmd_finalize)
+    pr = sub.add_parser("promote", help="copy the artifact recorded by the source environment (never builds)")
+    for a in ("--component", "--selection", "--env", "--source-env", "--source-records-url", "--source-packages-url",
+              "--registry", "--source-registry", "--packages-url", "--out"):
+        pr.add_argument(a, required=True)
+    pr.set_defaults(func=cmd_promote)
     v = sub.add_parser("tfvars")
     v.add_argument("--component", required=True)
     v.add_argument("--metadata-dir", required=True)

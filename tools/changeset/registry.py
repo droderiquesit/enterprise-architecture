@@ -13,6 +13,20 @@ from .trees import Tree
 REGISTRY_PATH = "catalog/components.yaml"
 REGISTRY_SCHEMA = "catalog/schemas/component.schema.json"
 DEFAULT_TIMEOUT_MINUTES = 60
+SCOPES = ("platform", "applications")
+
+
+def derive_scope(raw: dict) -> str:
+    """Owning pipeline: explicit `scope`, else by layer (observability components that read application
+    contracts - after_deployments / discovers_resources - belong to the applications pipeline)."""
+    if raw.get("scope"):
+        return raw["scope"]
+    layer = raw.get("layer")
+    if layer == "applications":
+        return "applications"
+    if layer == "observability" and (raw.get("after_deployments") or raw.get("discovers_resources")):
+        return "applications"
+    return "platform"
 
 
 class RegistryError(Exception):
@@ -38,6 +52,7 @@ class Component:
     discovers_resources: bool = False
     after_deployments: bool = False
     timeout_minutes: int = DEFAULT_TIMEOUT_MINUTES
+    scope: str = "platform"
     raw: dict = field(default_factory=dict)
 
     @property
@@ -150,6 +165,7 @@ def load_registry(tree: Tree, path: str = REGISTRY_PATH) -> Registry:
             discovers_resources=bool(raw.get("discovers_resources", False)),
             after_deployments=bool(raw.get("after_deployments", False)),
             timeout_minutes=int(raw.get("timeout_minutes", DEFAULT_TIMEOUT_MINUTES)),
+            scope=derive_scope(raw),
             raw=raw,
         )
         if c.id in components:
@@ -179,6 +195,13 @@ def load_registry(tree: Tree, path: str = REGISTRY_PATH) -> Registry:
                 errors.append(f"{c.id}: artifacts entry '{art}' is not an artifact component")
         if c.artifacts and c.kind != "terraform":
             errors.append(f"{c.id}: only terraform components can declare artifacts")
+        if c.scope == "platform":
+            # the platform pipeline runs first; it must never wait for the applications pipeline
+            ups = list(c.depends_on) + list(c.artifacts) + [reg.producer_of(e) for e in c.consumes + c.optional_consumes]
+            for up in ups:
+                if up in components and components[up].scope == "applications":
+                    errors.append(f"{c.id} (scope platform) depends on {up} (scope applications): "
+                                  "set `scope: applications` on {c.id} or remove the dependency".replace("{c.id}", c.id))
     if errors:
         raise RegistryError("invalid component registry:\n  " + "\n  ".join(errors))
     return reg

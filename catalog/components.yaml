@@ -8,6 +8,10 @@
 # depends_on:  hard ordering (upstream must be applied first when both are selected)
 # consumes:    contracts read as inputs (implies depends_on on the producer)
 # artifacts:   artifact components whose digests are inputs of this deployment root
+# scope:       which pipeline owns it: platform (azure-pipelines.yml) or applications
+#              (azure-pipelines.applications.yml). Default: bootstrap/foundation/platform/docs -> platform,
+#              applications -> applications, observability -> platform unless it reads application
+#              contracts (after_deployments / discovers_resources) -> applications.
 # inputs:      extra repo globs that change this component (shared modules are discovered
 #              automatically by tools/changeset from module "source" paths)
 schema_version: 1
@@ -280,6 +284,7 @@ components:
     layer: observability
     kind: terraform
     path: observability/lab/diagnostics
+    scope: applications         # reads application deployment contracts (resource ids)
     consumes: [obs-telemetry-transport]
     discovers_resources: true   # reads every enabled platform/deployment contract (resource ids)
   - id: obs-hosts
@@ -306,6 +311,7 @@ components:
     layer: observability
     kind: terraform
     path: observability/lab/monitoring
+    scope: applications         # needs application endpoints/contracts
     consumes: [obs-prereqs]
     optional_consumes: [deploy-core-aks, deploy-core-aca, deploy-frontend, deploy-durable, deploy-functions, deploy-partner-sim, deploy-dbadapters, deploy-appservice, deploy-jobs, deploy-vm-workloads, deploy-logicapps, deploy-specialized, obs-telemetry-transport]
     after_deployments: true     # runs after every selected applications deployment (needs endpoints)

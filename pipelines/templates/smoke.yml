@@ -10,6 +10,9 @@ jobs:
   - job: Smoke
     displayName: Smoke tests (contracts -> /healthz /readyz /version)
     timeoutInMinutes: 30
+    cancelTimeoutInMinutes: 5
+    workspace:
+      clean: all
     variables:
       LAB_ENV: ${{ parameters.environment }}
       CONTRACTS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts

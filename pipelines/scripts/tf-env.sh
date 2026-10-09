@@ -12,6 +12,7 @@ set +x
 : "${ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID:?service connection id not mapped}"
 : "${SYSTEM_ACCESSTOKEN:?map SYSTEM_ACCESSTOKEN: \$(System.AccessToken)}"
 : "${LAB_ENV:?LAB_ENV not set}"
+source pipelines/scripts/pipeline-env.sh
 export ARM_CLIENT_ID="$servicePrincipalId"
 export ARM_TENANT_ID="$tenantId"
 export ARM_USE_OIDC=true

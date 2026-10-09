@@ -1,10 +1,11 @@
 """Simulate a pipeline run over the generated stages using the condition evaluator.
 
 Inputs: the generated stages document, the Select stage output variables (tools.changeset.ado),
-plan exit codes per component (0 no changes, 1 error, 2 changes), optional apply failures, Build
-readiness per artifact and results of the gate stages. Output: per-stage result and the set of
-components that applied. Used by tests to prove end-to-end behaviour of the generated conditions
-(skipped upstream, failed upstream, plan-without-changes, artifact readiness).
+plan exit codes per component (0 no changes, 1 error, 2 changes), apply failures / rejections,
+Build readiness per artifact, gate stage results, dry run and run cancellation. Output: per-stage
+result and the components that applied. Used by tests to prove the end-to-end behaviour of the
+generated conditions (skipped upstream, failed / canceled / rejected upstream, empty plans, dry runs,
+artifact readiness, retire/verify/evidence gating).
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from tools.changeset.registry import var_id
 from .conditions import EvalContext, evaluate
 
 
-def _stage_list(doc: dict) -> list[dict]:
+def _stage_list(doc: dict) -> list:
     stages = []
     for s in doc["stages"]:
         if "stage" in s:
@@ -29,17 +30,19 @@ def _stage_list(doc: dict) -> list[dict]:
 
 def simulate(doc: dict, select_outputs: Dict[str, str], plan_exit: Dict[str, int],
              apply_fail: Iterable[str] = (), build_ready: Optional[Set[str]] = None,
-             gate_results: Optional[Dict[str, str]] = None, run_canceled: bool = False) -> dict:
+             gate_results: Optional[Dict[str, str]] = None, run_canceled: bool = False,
+             dry_run: bool = False, apply_rejected: Iterable[str] = ()) -> dict:
+    """apply_fail: applies that fail (stage Failed); apply_rejected: approvals rejected (stage Failed too,
+    ADO reports a rejected check as a failed stage)."""
     gate_results = {"Select": "Succeeded", "Validate": "Succeeded", "Security": "Succeeded", **(gate_results or {})}
     results: Dict[str, str] = dict(gate_results)
-    outputs: Dict[str, Dict[str, str]] = {
-        "Select": {f"select.detect.{k}": v for k, v in select_outputs.items()},
-        "Validate": {}, "Security": {},
-    }
+    outputs: Dict[str, Dict[str, str]] = {"Select": {f"select.detect.{k}": v for k, v in select_outputs.items()}}
     applied, planned = [], []
-    apply_fail = set(apply_fail)
+    failing = set(apply_fail) | set(apply_rejected)
+    ids = {var_id(c): c for c in plan_exit}
     pending = _stage_list(doc)
     done = set(results)
+    variables = {"DRY_RUN": "true" if dry_run else "false"}
     while pending:
         progressed = False
         for st in list(pending):
@@ -48,7 +51,7 @@ def simulate(doc: dict, select_outputs: Dict[str, str], plan_exit: Dict[str, int
             if not all(d in done for d in deps):
                 continue
             ctx = EvalContext(dependencies={d: {"result": results[d], "outputs": outputs.get(d, {})} for d in deps},
-                              run_canceled=run_canceled)
+                              variables=variables, run_canceled=run_canceled)
             name = st["stage"]
             if not evaluate(st["condition"], ctx):
                 results[name] = "Skipped"
@@ -58,21 +61,19 @@ def simulate(doc: dict, select_outputs: Dict[str, str], plan_exit: Dict[str, int
                     ready = {k[len("build_"):] for k, v in select_outputs.items() if k.startswith("build_") and v == "true"}
                 outputs["Build"] = {f"B_{a}.ready.ready": "true" for a in ready}
                 results[name] = "Succeeded"
+            elif name.startswith("P_"):
+                cid = ids.get(name[2:], name[2:])
+                code = plan_exit.get(cid, 0)
+                planned.append(cid)
+                results[name] = "Failed" if code == 1 else "Succeeded"
+                outputs[name] = {"Plan.plan.has_changes": "true" if code == 2 else "false"}
             elif name.startswith("C_"):
-                cid_var = name[2:]
-                cid = next((c for c in plan_exit if var_id(c) == cid_var), None)
-                code = plan_exit.get(cid, 0) if cid else 0
-                planned.append(cid or cid_var)
-                if code == 1:
+                cid = ids.get(name[2:], name[2:])
+                if cid in failing:
                     results[name] = "Failed"
-                elif code == 2 and select_outputs.get(f"apply_{cid_var}") == "true":
-                    if cid in apply_fail:
-                        results[name] = "Failed"
-                    else:
-                        results[name] = "Succeeded"
-                        applied.append(cid)
                 else:
                     results[name] = "Succeeded"
+                    applied.append(cid)
             else:
                 results[name] = "Succeeded"
             done.add(name)
@@ -80,4 +81,4 @@ def simulate(doc: dict, select_outputs: Dict[str, str], plan_exit: Dict[str, int
             progressed = True
         if not progressed:
             raise RuntimeError("stage graph cannot progress: " + ", ".join(s["stage"] for s in pending))
-    return {"results": results, "applied": sorted(applied), "planned": sorted(p for p in planned if p)}
+    return {"results": results, "applied": sorted(applied), "planned": sorted(planned)}

@@ -1,7 +1,11 @@
-# One build job per artifact component (generated into the Build stage).
-# "Built once per source fingerprint": the resolve step looks for an existing image tag / package
-# named after the artifact's deploy fingerprint and skips the build when it exists. Output variable
-# `ready.ready` = 'true' tells dependent component stages the artifact metadata is published.
+# One job per artifact component (generated into the Build stage). "Build once, promote":
+#   first environment of a promotion chain (settings.promoteFrom == ''): resolve the image/package
+#     tagged with the artifact's source fingerprint; build + push by digest only when it does not exist
+#   later environments: `artifacts.py promote` copies exactly the digest / package sha256 that the
+#     promoteFrom environment recorded for the same source fingerprint; build steps are not even compiled
+# Outputs (step `ready`): ready='true', artifact=<attempt-aware pipeline artifact name with the build
+# metadata>; plan/apply jobs map it via stageDependencies, so re-running this job never collides with
+# an artifact name published by an earlier attempt.
 parameters:
   - name: component
     type: string
@@ -25,20 +29,31 @@ parameters:
 
 jobs:
   - job: ${{ parameters.jobName }}
-    displayName: Build ${{ parameters.component }}
+    displayName: Artifact ${{ parameters.component }}
     timeoutInMinutes: ${{ parameters.timeoutMinutes }}
+    cancelTimeoutInMinutes: 5
+    workspace:
+      clean: all
     condition: and(succeeded(), eq(stageDependencies.Select.select.outputs['detect.build_${{ replace(parameters.component, '-', '_') }}'], 'true'))
     variables:
-      LAB_ENV: ${{ parameters.environment }}
-      BUILD_OUT: $(Build.ArtifactStagingDirectory)/build
-      META_OUT: $(Build.ArtifactStagingDirectory)/artifact
-      SELECTION_FILE: $(Pipeline.Workspace)/selection/selection.json
-      CONTAINER_REGISTRY: ${{ parameters.settings.containerRegistry }}
-      PACKAGES_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/packages
-      RECORDS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
+      - name: LAB_ENV
+        value: ${{ parameters.environment }}
+      - name: BUILD_OUT
+        value: $(Build.ArtifactStagingDirectory)/build
+      - name: META_OUT
+        value: $(Build.ArtifactStagingDirectory)/artifact
+      - name: SELECTION_FILE
+        value: $(Pipeline.Workspace)/selection/selection.json
+      - name: CONTAINER_REGISTRY
+        value: ${{ parameters.settings.containerRegistry }}
+      - name: PACKAGES_URL
+        value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/packages
+      - name: RECORDS_URL
+        value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
     steps:
       - checkout: self
         fetchDepth: 1
+        clean: true
       - task: DownloadPipelineArtifact@2
         displayName: Download selection
         retryCountOnTaskFailure: 2
@@ -46,44 +61,63 @@ jobs:
           artifact: selection
           path: $(Pipeline.Workspace)/selection
       - template: steps-setup.yml
-      - task: AzureCLI@2
-        name: resolve
-        displayName: Resolve existing artifact for this source fingerprint
-        retryCountOnTaskFailure: 2
-        inputs:
-          azureSubscription: ${{ parameters.settings.buildServiceConnection }}
-          scriptType: bash
-          scriptLocation: inlineScript
-          inlineScript: |
-            set -euo pipefail
-            python3 tools/deploy/artifacts.py resolve --component "${{ parameters.component }}" \
-              --selection "$SELECTION_FILE" --registry "$CONTAINER_REGISTRY" --packages-url "$PACKAGES_URL" \
-              --name "${{ parameters.artifactName }}" --formats "${{ join(',', parameters.formats) }}" --out "$META_OUT"
-      - ${{ each format in parameters.formats }}:
-        - ${{ if eq(format, 'container-image') }}:
-          - template: container-image.yml
-            parameters:
-              component: ${{ parameters.component }}
-              componentPath: ${{ parameters.componentPath }}
-              artifactName: ${{ parameters.artifactName }}
-              settings: ${{ parameters.settings }}
-        - ${{ if eq(format, 'zip-package') }}:
-          - ${{ if eq(parameters.language, 'dotnet') }}:
-            - template: build-dotnet.yml
+      - ${{ if eq(parameters.settings.promoteFrom, '') }}:
+        - task: AzureCLI@2
+          name: resolve
+          displayName: Resolve existing artifact for this source fingerprint
+          retryCountOnTaskFailure: 2
+          inputs:
+            azureSubscription: ${{ parameters.settings.buildServiceConnection }}
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              set -euo pipefail
+              python3 tools/deploy/artifacts.py resolve --component "${{ parameters.component }}" \
+                --selection "$SELECTION_FILE" --registry "$CONTAINER_REGISTRY" --packages-url "$PACKAGES_URL" \
+                --name "${{ parameters.artifactName }}" --formats "${{ join(',', parameters.formats) }}" --out "$META_OUT"
+        - ${{ each format in parameters.formats }}:
+          - ${{ if eq(format, 'container-image') }}:
+            - template: container-image.yml
+              parameters:
+                component: ${{ parameters.component }}
+                componentPath: ${{ parameters.componentPath }}
+                artifactName: ${{ parameters.artifactName }}
+                settings: ${{ parameters.settings }}
+          - ${{ if eq(format, 'zip-package') }}:
+            - ${{ if eq(parameters.language, 'dotnet') }}:
+              - template: build-dotnet.yml
+                parameters:
+                  componentPath: ${{ parameters.componentPath }}
+            - ${{ if eq(parameters.language, 'python') }}:
+              - template: build-python.yml
+                parameters:
+                  componentPath: ${{ parameters.componentPath }}
+            - ${{ if in(parameters.language, 'workflow', 'generic') }}:
+              - script: |
+                  set -euo pipefail
+                  python3 tools/deploy/artifacts.py zip --src "${{ parameters.componentPath }}" --out "$(BUILD_OUT)/package.zip"
+                displayName: Package ${{ parameters.componentPath }} as zip
+                condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))
+          - ${{ if eq(format, 'static-bundle') }}:
+            - template: build-frontend.yml
               parameters:
                 componentPath: ${{ parameters.componentPath }}
-          - ${{ if eq(parameters.language, 'python') }}:
-            - template: build-python.yml
-              parameters:
-                componentPath: ${{ parameters.componentPath }}
-          - ${{ if in(parameters.language, 'workflow', 'generic') }}:
-            - script: python3 tools/deploy/artifacts.py zip --src "${{ parameters.componentPath }}" --out "$(BUILD_OUT)/package.zip"
-              displayName: Package ${{ parameters.componentPath }} as zip
-              condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))
-        - ${{ if eq(format, 'static-bundle') }}:
-          - template: build-frontend.yml
-            parameters:
-              componentPath: ${{ parameters.componentPath }}
+      - ${{ else }}:
+        - task: AzureCLI@2
+          name: promote
+          displayName: Promote ${{ parameters.component }} from ${{ parameters.settings.promoteFrom }} (same digest, never rebuilt)
+          inputs:
+            azureSubscription: ${{ parameters.settings.buildServiceConnection }}
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              set -euo pipefail
+              python3 tools/deploy/artifacts.py promote --component "${{ parameters.component }}" \
+                --selection "$SELECTION_FILE" --env "$LAB_ENV" --source-env "${{ parameters.settings.promoteFrom }}" \
+                --source-records-url "https://${{ parameters.settings.promoteFromStateStorageAccount }}.blob.core.windows.net/deployments" \
+                --source-packages-url "https://${{ parameters.settings.promoteFromStateStorageAccount }}.blob.core.windows.net/packages" \
+                --registry "$CONTAINER_REGISTRY" --source-registry "${{ parameters.settings.promoteFromContainerRegistry }}" \
+                --packages-url "$PACKAGES_URL" --out "$META_OUT"
       - task: AzureCLI@2
         name: finalize
         displayName: Upload packages, write build metadata + artifact record
@@ -100,7 +134,10 @@ jobs:
         displayName: Publish artifact metadata (digests, SBOM, provenance)
         inputs:
           targetPath: $(Build.ArtifactStagingDirectory)/artifact
-          artifact: artifact-${{ parameters.component }}
-      - script: echo "##vso[task.setvariable variable=ready;isOutput=true]true"
+          artifact: artifact-${{ parameters.component }}-$(System.JobAttempt)
+      - script: |
+          set -euo pipefail
+          echo "##vso[task.setvariable variable=ready;isOutput=true]true"
+          echo "##vso[task.setvariable variable=artifact;isOutput=true]artifact-${{ parameters.component }}-$(System.JobAttempt)"
         name: ready
         displayName: Mark artifact ready

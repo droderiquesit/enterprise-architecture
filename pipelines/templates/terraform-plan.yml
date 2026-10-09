@@ -1,7 +1,7 @@
-# Plan job of a component stage. Runs with the read-mostly PLAN identity.
-# Produces: output has_changes/plan_exit (step `plan`), the plan file in the protected `plans` blob
-# container (never a pipeline artifact) and pipeline artifact plan-<component> containing only the
-# human-readable summary + binding manifest.
+# Plan job of a component stage (PLAN identity: read-mostly).
+# Output (step `plan`): has_changes, plan_exit, artifact (attempt-aware name of the summary artifact).
+# The plan file goes to the protected `plans` blob container, never to a pipeline artifact; only the
+# human-readable summary + binding manifest are published.
 parameters:
   - name: component
     type: string
@@ -15,9 +15,9 @@ parameters:
     default: 60
   - name: environment
     type: string
-  - name: dryRun
-    type: boolean
-    default: false
+  - name: datadog
+    type: string
+    default: none
   - name: settings
     type: object
 
@@ -26,108 +26,35 @@ jobs:
     displayName: Plan ${{ parameters.component }}
     timeoutInMinutes: ${{ parameters.timeoutMinutes }}
     cancelTimeoutInMinutes: 10
+    workspace:
+      clean: all
     variables:
       - name: LAB_ENV
         value: ${{ parameters.environment }}
+      - name: STATE_STORAGE_ACCOUNT          # store URLs and work paths derive from it (pipeline-env.sh)
+        value: ${{ parameters.settings.stateStorageAccount }}
       - name: APPLY_CANDIDATE
         value: $[ stageDependencies.Select.select.outputs['detect.apply_${{ replace(parameters.component, '-', '_') }}'] ]
-      - name: BINDING_FILE
-        value: $(Agent.TempDirectory)/binding.json
-      - name: SELECTION_FILE
-        value: $(Pipeline.Workspace)/selection/selection.json
-      - name: ARTIFACT_METADATA_DIR
-        value: $(Pipeline.Workspace)/artifact-metadata
-      - name: OUT_DIR
-        value: $(Build.ArtifactStagingDirectory)/plan
-      - name: STATE_STORAGE_ACCOUNT
-        value: ${{ parameters.settings.stateStorageAccount }}
-      - name: CONTRACTS_URL
-        value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts
-      - name: PLANS_URL
-        value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/plans
-      - name: RECORDS_URL
-        value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
-      - name: DRY_RUN
-        value: ${{ parameters.dryRun }}
-      # Datadog keys (Key Vault-linked variable group) only for the roots that need them; mapped into
-      # the plan/apply step env below (never written to disk, never passed as tfvars).
-      - ${{ if in(parameters.component, 'obs-prereqs', 'obs-azure-integration', 'obs-monitoring', 'obs-kubernetes') }}:
+      - ${{ each artifact in parameters.artifacts }}:
+        - name: ARTIFACT_${{ replace(artifact, '-', '_') }}
+          value: $[ stageDependencies.Build.B_${{ replace(artifact, '-', '_') }}.outputs['ready.artifact'] ]
+      - ${{ if ne(parameters.datadog, 'none') }}:
         - group: ${{ parameters.settings.datadogVariableGroup }}
     steps:
-      - checkout: self
-        fetchDepth: 1
-      - task: DownloadPipelineArtifact@2
-        displayName: Download selection
-        retryCountOnTaskFailure: 2
-        inputs:
-          artifact: selection
-          path: $(Pipeline.Workspace)/selection
-      - ${{ each artifact in parameters.artifacts }}:
-        - task: DownloadPipelineArtifact@2
-          displayName: Download metadata of ${{ artifact }}
-          retryCountOnTaskFailure: 2
-          inputs:
-            artifact: artifact-${{ artifact }}
-            path: $(Pipeline.Workspace)/artifact-metadata/${{ artifact }}
-      - template: steps-setup.yml
+      - template: steps-component-inputs.yml
         parameters:
-          tools: terraform
-      - task: AzureCLI@2
-        name: prepare
-        displayName: Render config, contracts and artifact digests
-        inputs:
-          azureSubscription: ${{ parameters.settings.planServiceConnection }}
-          scriptType: bash
-          scriptLocation: inlineScript
-          addSpnToEnvironment: true
-          inlineScript: |
-            set -euo pipefail
-            source pipelines/scripts/tf-env.sh
+          artifacts: ${{ parameters.artifacts }}
+      - template: steps-terraform.yml
+        parameters:
+          name: plan
+          displayName: Render, contracts, init, plan, policy, binding manifest
+          serviceConnection: ${{ parameters.settings.planServiceConnection }}
+          serviceConnectionId: ${{ parameters.settings.planServiceConnectionId }}
+          datadog: ${{ parameters.datadog }}
+          script: |
             bash pipelines/scripts/tf-prepare.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
-        env:
-          ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.planServiceConnectionId }}
-          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-          SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
-      - task: AzureCLI@2
-        name: init
-        displayName: terraform init (remote state)
-        retryCountOnTaskFailure: 2
-        inputs:
-          azureSubscription: ${{ parameters.settings.planServiceConnection }}
-          scriptType: bash
-          scriptLocation: inlineScript
-          addSpnToEnvironment: true
-          inlineScript: |
-            set -euo pipefail
-            source pipelines/scripts/tf-env.sh
             bash pipelines/scripts/tf-init.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
-        env:
-          ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.planServiceConnectionId }}
-          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-          SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
-      - task: AzureCLI@2
-        name: plan
-        displayName: terraform plan + policy + binding manifest
-        inputs:
-          azureSubscription: ${{ parameters.settings.planServiceConnection }}
-          scriptType: bash
-          scriptLocation: inlineScript
-          addSpnToEnvironment: true
-          inlineScript: |
-            set -euo pipefail
-            source pipelines/scripts/tf-env.sh
             bash pipelines/scripts/tf-plan.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
-        env:
-          ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.planServiceConnectionId }}
-          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-          SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
-          # Datadog provider credentials (obs-prereqs / obs-azure-integration / obs-monitoring)
-          ${{ if in(parameters.component, 'obs-prereqs', 'obs-azure-integration', 'obs-monitoring') }}:
-            DD_API_KEY: $(datadog-api-key)
-            DD_APP_KEY: $(datadog-app-key)
-          # obs-kubernetes: ephemeral input variable (Terraform never persists it in state or plan)
-          ${{ if eq(parameters.component, 'obs-kubernetes') }}:
-            TF_VAR_datadog_api_key: $(datadog-api-key)
       - task: PublishPipelineArtifact@1
         displayName: Publish plan summary + manifest (no plan file)
         condition: not(canceled())

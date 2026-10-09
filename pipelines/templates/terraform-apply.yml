@@ -1,6 +1,9 @@
-# Apply deployment job of a component stage. Runs with the APPLY identity, behind the approvals and
-# checks of environment lab-<env>. Omitted entirely when dryRun is true.
-# Runs only when the plan reported changes and the component is an apply candidate.
+# Apply deployment job of the apply stage C_<x> (APPLY identity) behind the approvals/checks of
+# environment lab-<env>. Checks are evaluated when C_<x> starts, i.e. AFTER P_<x> published the plan
+# summary, so approvers review a real plan. Not compiled when dryRun is true (C_<x> is then skipped by
+# its condition). The stage runs only when the plan reported changes and the component is an apply
+# candidate. Writes a succeeded record only after apply,
+# code deploy, smoke and contract publication succeeded; any failure writes failed/partial/canceled.
 parameters:
   - name: component
     type: string
@@ -17,6 +20,9 @@ parameters:
   - name: dryRun
     type: boolean
     default: false
+  - name: datadog
+    type: string
+    default: none
   - name: settings
     type: object
 
@@ -24,123 +30,44 @@ jobs:
   - ${{ if eq(parameters.dryRun, false) }}:
     - deployment: Apply
       displayName: Apply ${{ parameters.component }}
-      dependsOn: Plan
-      condition: and(succeeded(), eq(dependencies.Plan.outputs['plan.has_changes'], 'true'), eq(stageDependencies.Select.select.outputs['detect.apply_${{ replace(parameters.component, '-', '_') }}'], 'true'))
+      # gated by the stage condition (plan stage succeeded with changes, apply candidate, not a dry run)
       environment: lab-${{ parameters.environment }}
       timeoutInMinutes: ${{ parameters.timeoutMinutes }}
       cancelTimeoutInMinutes: 15
+      workspace:
+        clean: all
       variables:
         - name: LAB_ENV
           value: ${{ parameters.environment }}
-        - name: PLAN_ARTIFACT
-          value: $[ dependencies.Plan.outputs['plan.artifact'] ]
-        - name: BINDING_FILE
-          value: $(Agent.TempDirectory)/binding.json
-        - name: MANIFEST_FILE
-          value: $(Pipeline.Workspace)/plan/manifest.json
-        - name: APPLIED_MARKER
-          value: $(Agent.TempDirectory)/applied
-        - name: SELECTION_FILE
-          value: $(Pipeline.Workspace)/selection/selection.json
-        - name: ARTIFACT_METADATA_DIR
-          value: $(Pipeline.Workspace)/artifact-metadata
-        - name: STATE_STORAGE_ACCOUNT
+        - name: STATE_STORAGE_ACCOUNT        # store URLs and work paths derive from it (pipeline-env.sh)
           value: ${{ parameters.settings.stateStorageAccount }}
-        - name: CONTRACTS_URL
-          value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts
-        - name: PLANS_URL
-          value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/plans
-        - name: RECORDS_URL
-          value: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
-        # Datadog keys (Key Vault-linked variable group) only for the roots that need them; mapped into
-        # the plan/apply step env below (never written to disk, never passed as tfvars).
-        - ${{ if in(parameters.component, 'obs-prereqs', 'obs-azure-integration', 'obs-monitoring', 'obs-kubernetes') }}:
+        - name: PLAN_ARTIFACT
+          value: $[ stageDependencies.P_${{ replace(parameters.component, '-', '_') }}.Plan.outputs['plan.artifact'] ]
+        - ${{ each artifact in parameters.artifacts }}:
+          - name: ARTIFACT_${{ replace(artifact, '-', '_') }}
+            value: $[ stageDependencies.Build.B_${{ replace(artifact, '-', '_') }}.outputs['ready.artifact'] ]
+        - ${{ if ne(parameters.datadog, 'none') }}:
           - group: ${{ parameters.settings.datadogVariableGroup }}
       strategy:
         runOnce:
           deploy:
             steps:
               - download: none            # deployment jobs auto-download every artifact otherwise
-              - checkout: self
-                fetchDepth: 1
-              - task: DownloadPipelineArtifact@2
-                displayName: Download plan summary + manifest
-                retryCountOnTaskFailure: 2
-                inputs:
-                  artifact: $(PLAN_ARTIFACT)
-                  path: $(Pipeline.Workspace)/plan
-              - task: DownloadPipelineArtifact@2
-                displayName: Download selection
-                retryCountOnTaskFailure: 2
-                inputs:
-                  artifact: selection
-                  path: $(Pipeline.Workspace)/selection
-              - ${{ each artifact in parameters.artifacts }}:
-                - task: DownloadPipelineArtifact@2
-                  displayName: Download metadata of ${{ artifact }}
-                  retryCountOnTaskFailure: 2
-                  inputs:
-                    artifact: artifact-${{ artifact }}
-                    path: $(Pipeline.Workspace)/artifact-metadata/${{ artifact }}
-              - template: steps-setup.yml
+              - template: steps-component-inputs.yml
                 parameters:
-                  tools: terraform
-              - task: AzureCLI@2
-                name: prepare
-                displayName: Re-render config, contracts and artifact digests (binding check inputs)
-                inputs:
-                  azureSubscription: ${{ parameters.settings.applyServiceConnection }}
-                  scriptType: bash
-                  scriptLocation: inlineScript
-                  addSpnToEnvironment: true
-                  inlineScript: |
-                    set -euo pipefail
-                    source pipelines/scripts/tf-env.sh
+                  artifacts: ${{ parameters.artifacts }}
+                  planArtifact: $(PLAN_ARTIFACT)
+              - template: steps-terraform.yml
+                parameters:
+                  name: apply
+                  displayName: Re-render, verify plan binding, apply, deploy code, publish contract, record
+                  serviceConnection: ${{ parameters.settings.applyServiceConnection }}
+                  serviceConnectionId: ${{ parameters.settings.applyServiceConnectionId }}
+                  datadog: ${{ parameters.datadog }}
+                  script: |
                     bash pipelines/scripts/tf-prepare.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
-                env:
-                  ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.applyServiceConnectionId }}
-                  SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-                  SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
-              - task: AzureCLI@2
-                name: init
-                displayName: terraform init (remote state)
-                retryCountOnTaskFailure: 2
-                inputs:
-                  azureSubscription: ${{ parameters.settings.applyServiceConnection }}
-                  scriptType: bash
-                  scriptLocation: inlineScript
-                  addSpnToEnvironment: true
-                  inlineScript: |
-                    set -euo pipefail
-                    source pipelines/scripts/tf-env.sh
                     bash pipelines/scripts/tf-init.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
-                env:
-                  ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.applyServiceConnectionId }}
-                  SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-                  SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
-              - task: AzureCLI@2
-                name: apply
-                displayName: Verify binding, apply, publish contract, record
-                inputs:
-                  azureSubscription: ${{ parameters.settings.applyServiceConnection }}
-                  scriptType: bash
-                  scriptLocation: inlineScript
-                  addSpnToEnvironment: true
-                  inlineScript: |
-                    set -euo pipefail
-                    source pipelines/scripts/tf-env.sh
                     bash pipelines/scripts/tf-apply.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
-                env:
-                  ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.settings.applyServiceConnectionId }}
-                  SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-                  SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
-                  # Datadog provider credentials (obs-prereqs / obs-azure-integration / obs-monitoring)
-                  ${{ if in(parameters.component, 'obs-prereqs', 'obs-azure-integration', 'obs-monitoring') }}:
-                    DD_API_KEY: $(datadog-api-key)
-                    DD_APP_KEY: $(datadog-app-key)
-                  # obs-kubernetes: ephemeral input variable (Terraform never persists it in state or plan)
-                  ${{ if eq(parameters.component, 'obs-kubernetes') }}:
-                    TF_VAR_datadog_api_key: $(datadog-api-key)
               - task: AzureCLI@2
                 displayName: Record failed / partial / canceled deployment
                 condition: not(succeeded())
@@ -148,11 +75,15 @@ jobs:
                   azureSubscription: ${{ parameters.settings.applyServiceConnection }}
                   scriptType: bash
                   scriptLocation: inlineScript
-                  inlineScript: |
-                    set -euo pipefail
-                    status=failed
-                    [[ "$(Agent.JobStatus)" == "Canceled" ]] && status=canceled
-                    [[ -f "$APPLIED_MARKER" ]] && status=partial
-                    python3 tools/deploy/record.py write --env "$LAB_ENV" --component "${{ parameters.component }}" \
-                      --status "$status" --selection "$SELECTION_FILE" --store "$RECORDS_URL" \
-                      --note "Agent.JobStatus=$(Agent.JobStatus)"
+                  inlineScript: bash pipelines/scripts/tf-record-failure.sh "${{ parameters.component }}" "$(Agent.JobStatus)"
+  - ${{ else }}:
+    # dry run: the stage still needs a job to compile; its condition (DRY_RUN) keeps it skipped, so no
+    # environment, approval or credential is ever requested.
+    - job: ApplyDryRun
+      displayName: Dry run - no apply
+      pool: server
+      timeoutInMinutes: 1
+      steps:
+        - task: Delay@1
+          inputs:
+            delayForMinutes: '0'

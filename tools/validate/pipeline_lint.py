@@ -19,6 +19,11 @@ Rules
   PL009  scripts never enable xtrace (set -x) or echo secret variables; secrets reach steps via env only
   PL010  every job declares timeoutInMinutes (templates may take it from a parameter)
   PL011  scheduled triggers use always: true (drift detection runs even without code changes)
+  PL012  every agent job declares cancelTimeoutInMinutes (cleanup / failure records get time to run)
+  PL013  every job on a self-hosted pool declares `workspace: clean: all` (no state leaks between runs)
+  PL014  entry pipelines (azure-pipelines.yml, pipelines/promote.yml) only `extends:` the universal template
+  (PL003 per stage kind: P_<x> checks every dependency's result (Build: its artifacts' readiness outputs);
+   C_<x> depends on and checks P_<x> result + has_changes and is skipped on dry runs)
 """
 
 from __future__ import annotations
@@ -37,12 +42,12 @@ from tools.pipeline.conditions import ExpressionError, functions_used, parse, to
 
 RETRY_OK_TASKS = ("DownloadPipelineArtifact@", "UseDotNet@", "NodeTool@", "UsePythonVersion@")
 RETRY_OK_NAMES = {"init", "resolve"}
-RETRY_OK_SCRIPT = re.compile(r"(pip install|install-tools\.sh|npm ci)")
+RETRY_OK_SCRIPT = re.compile(r"(pip install|install-tools\.sh|setup-agent\.sh|npm ci)")
 SECRET_ECHO = re.compile(r"echo[^\n]*\$\((datadog-[a-z-]+|[A-Za-z_.]*[Ss]ecret[A-Za-z_.]*)\)")
 
 
 def files(repo: Path) -> list[Path]:
-    out = [repo / "azure-pipelines.yml"]
+    out = [repo / "azure-pipelines.yml", repo / "pipelines/promote.yml", repo / "pipelines/observability-release.yml"]
     out += sorted((repo / "pipelines/templates").glob("*.yml"))
     out += sorted((repo / "pipelines/generated").glob("*.yml"))
     return [p for p in out if p.exists()]
@@ -77,12 +82,19 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
             docs[rel] = yaml.safe_load(p.read_text())
         except yaml.YAMLError as exc:
             errors.append(f"{rel}: YAML parse error: {exc}")
-    root = docs.get("azure-pipelines.yml") or {}
-    if root.get("lockBehavior") != "sequential":
-        errors.append("PL004 azure-pipelines.yml: pipeline-level lockBehavior must be 'sequential'")
-    for sch in root.get("schedules") or []:
-        if sch.get("always") is not True:
-            errors.append(f"PL011 azure-pipelines.yml: schedule '{sch.get('cron')}' must set always: true")
+    for entry in ("azure-pipelines.yml", "pipelines/promote.yml"):
+        root = docs.get(entry)
+        if root is None:
+            continue
+        if root.get("lockBehavior") != "sequential":
+            errors.append(f"PL004 {entry}: pipeline-level lockBehavior must be 'sequential'")
+        for sch in root.get("schedules") or []:
+            if sch.get("always") is not True:
+                errors.append(f"PL011 {entry}: schedule '{sch.get('cron')}' must set always: true")
+        if "extends" not in root or "stages" in root or "jobs" in root:
+            errors.append(f"PL014 {entry}: entry pipelines must only `extends:` pipelines/templates/universal.yml")
+        elif not str(root["extends"].get("template", "")).endswith("templates/universal.yml"):
+            errors.append(f"PL014 {entry}: must extend pipelines/templates/universal.yml (Required template check)")
 
     for rel, doc in docs.items():
         def visit(node, _ctx, rel=rel):
@@ -108,8 +120,7 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
                         errors.append(f"PL002 {rel}: stage {name}: not(canceled()) must be a top-level conjunct")
                     deps = node.get("dependsOn") or []
                     deps = [deps] if isinstance(deps, str) else deps
-                    is_component = str(name).startswith("C_")
-                    if is_component:
+                    if str(name).startswith("P_"):
                         for d in deps:
                             if d == "Build":
                                 # per-artifact readiness instead of the whole Build stage result: an unrelated
@@ -119,8 +130,15 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
                                 continue
                             if f"dependencies.{d}.result" not in text:
                                 errors.append(f"PL003 {rel}: stage {name}: does not check dependencies.{d}.result")
-                        if node.get("lockBehavior") != "sequential":
-                            errors.append(f"PL004 {rel}: stage {name}: lockBehavior must be sequential")
+                    if str(name).startswith("C_"):
+                        plan = "P_" + str(name)[2:]
+                        if plan not in deps or f"dependencies.{plan}.result" not in text \
+                                or f"dependencies.{plan}.outputs['Plan.plan.has_changes']" not in text:
+                            errors.append(f"PL003 {rel}: stage {name}: must depend on and check {plan} (result + has_changes)")
+                        if "variables['DRY_RUN']" not in text:
+                            errors.append(f"PL003 {rel}: stage {name}: must be skipped on dry runs (variables['DRY_RUN'])")
+                    if str(name).startswith(("P_", "C_")) and node.get("lockBehavior") != "sequential":
+                        errors.append(f"PL004 {rel}: stage {name}: lockBehavior must be sequential")
             if kind == "deployment":
                 env = node.get("environment")
                 env_name = env.get("name") if isinstance(env, dict) else env
@@ -128,6 +146,13 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
                     errors.append(f"PL005 {rel}: deployment {name}: environment must be lab-<env> (got {env_name!r})")
             if kind in ("job", "deployment") and "timeoutInMinutes" not in node:
                 errors.append(f"PL010 {rel}: {kind} {name}: missing timeoutInMinutes")
+            pool = node.get("pool")
+            server = pool == "server"
+            hosted = isinstance(pool, dict) and "vmImage" in pool
+            if kind in ("job", "deployment") and not server and "cancelTimeoutInMinutes" not in node:
+                errors.append(f"PL012 {rel}: {kind} {name}: missing cancelTimeoutInMinutes")
+            if kind in ("job", "deployment") and not server and not hosted and not _has_clean_workspace(node):
+                errors.append(f"PL013 {rel}: {kind} {name}: self-hosted job without `workspace: clean: all`")
             if "retryCountOnTaskFailure" in node:
                 task = str(node.get("task", ""))
                 script = str(node.get("script", "") or node.get("bash", ""))
@@ -163,6 +188,20 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
         if proc.returncode != 0:
             errors.append("PL006 pipelines/generated/component-stages.yml is stale: run python3 tools/pipeline/generate.py")
     return errors
+
+
+def _has_clean_workspace(node) -> bool:
+    if isinstance(node, dict):
+        ws = node.get("workspace")
+        if isinstance(ws, dict) and ws.get("clean") == "all":
+            return True
+        pool = node.get("pool")
+        if isinstance(pool, dict) and "vmImage" in pool:
+            return True
+        return any(_has_clean_workspace(v) for k, v in node.items() if str(k).startswith("${{"))
+    if isinstance(node, list):
+        return any(_has_clean_workspace(v) for v in node)
+    return False
 
 
 def _scan_script(rel: str, body: str, errors: list[str]) -> None:

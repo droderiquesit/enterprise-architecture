@@ -31,6 +31,9 @@ stages:
         - job: RetireDryRun
           displayName: Retirement plan only (dry run)
           timeoutInMinutes: 10
+          cancelTimeoutInMinutes: 5
+          workspace:
+            clean: all
           steps:
             - checkout: self
               fetchDepth: 1
@@ -47,6 +50,8 @@ stages:
           environment: lab-${{ parameters.environment }}-retire
           timeoutInMinutes: 180
           cancelTimeoutInMinutes: 15
+          workspace:
+            clean: all
           variables:
             LAB_ENV: ${{ parameters.environment }}
             SELECTION_FILE: $(Pipeline.Workspace)/selection/selection.json

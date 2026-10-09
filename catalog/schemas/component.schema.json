@@ -149,6 +149,13 @@
             "type": "integer",
             "minimum": 5,
             "maximum": 360
+          },
+          "scope": {
+            "enum": [
+              "platform",
+              "applications"
+            ],
+            "description": "Owning pipeline (default derived from layer; see catalog/components.yaml header)."
           }
         }
       }

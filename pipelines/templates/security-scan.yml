@@ -19,6 +19,7 @@ jobs:
     pool:
       vmImage: ${{ parameters.hostedImage }}
     timeoutInMinutes: 45
+    cancelTimeoutInMinutes: 5
     steps:
       - checkout: self
         fetchDepth: 0

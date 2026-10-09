@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "promotion.schema.json",
+  "title": "Promotion chains (environments/promotion.yaml)",
+  "type": "object",
+  "required": ["schema_version", "chains"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "chains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "environments"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,30}$"},
+          "environments": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name", "ado_environment", "retire_environment", "allowed_modes"],
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string", "pattern": "^[a-z][a-z0-9]{1,7}$"},
+                "promote_from": {"type": "string", "pattern": "^[a-z][a-z0-9]{1,7}$"},
+                "ado_environment": {"type": "string", "pattern": "^lab-[a-z][a-z0-9]{1,7}$"},
+                "retire_environment": {"type": "string", "pattern": "^lab-[a-z][a-z0-9]{1,7}-retire$"},
+                "ci_trigger": {"type": "boolean", "default": false},
+                "allowed_modes": {
+                  "type": "array", "minItems": 1, "uniqueItems": true,
+                  "items": {"enum": ["auto", "manual", "reconcile", "drift", "retire"]}
+                },
+                "allow_dry_run": {"type": "boolean", "default": true},
+                "require_apply_approval": {"type": "boolean", "default": false}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

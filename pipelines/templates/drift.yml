@@ -11,6 +11,9 @@ jobs:
   - job: DriftReport
     displayName: Drift report
     timeoutInMinutes: 20
+    cancelTimeoutInMinutes: 5
+    workspace:
+      clean: all
     steps:
       - checkout: self
         fetchDepth: 1

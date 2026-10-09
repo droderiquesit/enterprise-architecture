@@ -1,0 +1,43 @@
+# One AzureCLI@2 step that runs Terraform with workload identity federation (steps template).
+# The service connection is a compile-time value (ADO: "Service connections cannot be specified by
+# variable"). Secrets reach the step only through `env:`; tf-env.sh disables xtrace.
+# datadog: none | provider (DD_API_KEY/DD_APP_KEY for the Datadog provider) | tfvar (TF_VAR_datadog_api_key,
+# an ephemeral Terraform variable). The Key Vault-linked group itself is linked by the calling job.
+parameters:
+  - name: name
+    type: string
+  - name: displayName
+    type: string
+  - name: serviceConnection
+    type: string
+  - name: serviceConnectionId
+    type: string
+  - name: script
+    type: string
+  - name: datadog
+    type: string
+    default: none
+    values: [none, provider, tfvar]
+
+steps:
+  - task: AzureCLI@2
+    name: ${{ parameters.name }}
+    displayName: ${{ parameters.displayName }}
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      addSpnToEnvironment: true
+      inlineScript: |
+        set -euo pipefail
+        source pipelines/scripts/tf-env.sh
+        ${{ parameters.script }}
+    env:
+      ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID: ${{ parameters.serviceConnectionId }}
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      SYSTEM_OIDCREQUESTURI: $(System.OidcRequestUri)
+      ${{ if eq(parameters.datadog, 'provider') }}:
+        DD_API_KEY: $(datadog-api-key)
+        DD_APP_KEY: $(datadog-app-key)
+      ${{ if eq(parameters.datadog, 'tfvar') }}:
+        TF_VAR_datadog_api_key: $(datadog-api-key)
