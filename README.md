@@ -11,6 +11,8 @@ Azure DevOps pipeline that deploys only the components that changed (plus what t
 > and no evidence file exists under [`docs/evidence/`](docs/evidence/README.md). Status words follow
 > [ADR-0001 section 11](docs/architecture/ADR-0001-design-contract.md#11-testing-levels-and-evidence-vocabulary).
 
+- Validation summary: [docs/evidence/validation-results.md](docs/evidence/validation-results.md)
+
 ## What is in it
 
 | Layer | Directory | What it owns |

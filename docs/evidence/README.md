@@ -44,3 +44,5 @@ files (e.g. `telemetry-results.json` from the run artifacts) can be added to the
 Only then may [IMPLEMENTATION_CHECKLIST.md](../IMPLEMENTATION_CHECKLIST.md) or a README move an item to `deployed` /
 `verified`, linking the file. Evidence files contain no secrets by construction (no attribute values, no keys), but
 review them before committing (endpoint host names and resource IDs are included).
+
+See [validation-results.md](validation-results.md) for the current static / local / live validation summary.
