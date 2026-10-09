@@ -22,3 +22,8 @@ output "otlp_endpoint" {
 output "scripts_sha256" {
   value = { for k, s in local.scripts : k => sha256(s) }
 }
+
+output "installer_scripts" {
+  description = "Rendered installers (no secrets: the API key is fetched at run time). Useful for image baking."
+  value       = local.scripts
+}

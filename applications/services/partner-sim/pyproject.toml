@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hello-partner-sim"
+version = "1.0.0"
+description = "Enterprise Hello simulated external payment partner"
+requires-python = ">=3.13,<3.14"
+dependencies = ["hello-common"]
+
+[project.scripts]
+hello-partner-sim = "hello_partner_sim.__main__:main"
+
+[tool.uv.sources]
+hello-common = { path = "../../shared/python/hello_common", editable = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: needs docker"]
+addopts = "-m 'not integration'"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]

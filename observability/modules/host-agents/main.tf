@@ -32,8 +32,8 @@ locals {
       "${path.module}/scripts/${h.os_type == "linux" ? "linux-install.sh.tftpl" : "windows-install.ps1.tftpl"}",
       {
         fb_version         = var.fluent_bit_version
-        api_key_secret_id  = coalesce(var.datadog.api_key_secret_id, "")
-        identity_client_id = coalesce(h.identity_client_id, "")
+        api_key_secret_id  = var.datadog.api_key_secret_id == null ? "" : var.datadog.api_key_secret_id
+        identity_client_id = h.identity_client_id == null ? "" : h.identity_client_id
         configure_agent    = tostring(h.install_agent)
         process_collection = tostring(var.datadog.process_collection)
         agent_tags         = join(" ", [for t in sort(keys(h.service_tags)) : "${t}:${h.service_tags[t]}" if t != "source"])
@@ -130,7 +130,15 @@ resource "azurerm_virtual_machine_scale_set_extension" "datadog" {
 
 locals {
   windows_cse_command = {
-    for k, h in local.vmsss : k => "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${textencodebase64(local.scripts[k], "UTF-16LE")}"
+    # gzip+base64 payload decompressed by a one-line stub (an -EncodedCommand of the full script would
+    # exceed the 32K command-line limit)
+    for k, h in local.vmsss : k => join("", [
+      "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"",
+      "$b='${base64gzip(local.scripts[k])}';",
+      "$i=New-Object IO.MemoryStream(,[Convert]::FromBase64String($b));",
+      "$g=New-Object IO.Compression.GZipStream($i,[IO.Compression.CompressionMode]::Decompress);",
+      "$r=New-Object IO.StreamReader($g);Invoke-Expression $r.ReadToEnd()\"",
+    ])
     if h.os_type == "windows"
   }
 }

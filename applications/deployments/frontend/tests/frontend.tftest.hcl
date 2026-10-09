@@ -1,8 +1,9 @@
 mock_provider "azurerm" {
   override_during = plan
-  mock_resource "azurerm_container_app" {
+  mock_resource "azurerm_static_web_app" {
     defaults = {
-      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-core-aca-dev-sec/providers/Microsoft.App/containerApps/eh-ca-app-dev"
+      id                = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-frontend-dev-sec/providers/Microsoft.Web/staticSites/eh-stapp-frontend-dev-sec"
+      default_host_name = "gentle-sky-0123456.azurestaticapps.net"
     }
   }
 }
@@ -106,127 +107,20 @@ variables {
       package_sha256 = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
     }
   }
-  platform_containerapps = {
-    resource_group_name    = "rg-aca"
-    location               = "swedencentral"
-    environment_id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aca/providers/Microsoft.App/managedEnvironments/eh-cae-aca-dev-sec"
-    default_domain         = "kindstone-12345678.swedencentral.azurecontainerapps.io"
-    ingress_mode           = "external"
-    workload_profiles      = ["Consumption", "dedicated-d4"]
-    dedicated_profile_name = "dedicated-d4"
-  }
-  platform_shared = {
-    acr_id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-shared/providers/Microsoft.ContainerRegistry/registries/ehcrshareddevabcde"
-    acr_login_server = "ehcrshareddevabcde.azurecr.io"
-  }
-  platform_messaging = {
-    namespace_id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-msg/providers/Microsoft.ServiceBus/namespaces/eh-sbns-msg-dev-sec"
-    namespace_name = "eh-sbns-msg-dev-sec"
-    fqdn           = "eh-sbns-msg-dev-sec.servicebus.windows.net"
-    topic = {
-      name = "order-events"
-      id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-msg/providers/Microsoft.ServiceBus/namespaces/eh-sbns-msg-dev-sec/topics/order-events"
-    }
-    subscriptions = {
-      fulfillment = {
-        name = "fulfillment"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-msg/providers/Microsoft.ServiceBus/namespaces/eh-sbns-msg-dev-sec/topics/order-events/subscriptions/fulfillment"
-      }
-      notifications = {
-        name = "notifications"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-msg/providers/Microsoft.ServiceBus/namespaces/eh-sbns-msg-dev-sec/topics/order-events/subscriptions/notifications"
-      }
-      audit = {
-        name = "audit"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-msg/providers/Microsoft.ServiceBus/namespaces/eh-sbns-msg-dev-sec/topics/order-events/subscriptions/audit"
-      }
-    }
-    queues = {
-      "batch-items" = {
-        name = "batch-items"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-msg/providers/Microsoft.ServiceBus/namespaces/eh-sbns-msg-dev-sec/queues/batch-items"
-      }
-    }
-  }
-  platform_db_sql = {
-    server = {
-      fqdn = "eh-sql-data-dev-sec.database.windows.net"
-      port = 1433
-    }
-    databases = {
-      orders = {
-        name = "orders"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sql/providers/Microsoft.Sql/servers/eh-sql-data-dev-sec/databases/orders"
-      }
-      fulfillment = {
-        name = "fulfillment"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sql/providers/Microsoft.Sql/servers/eh-sql-data-dev-sec/databases/fulfillment"
-      }
-      adapter = {
-        name = "adapter"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sql/providers/Microsoft.Sql/servers/eh-sql-data-dev-sec/databases/adapter"
-      }
-    }
-  }
-  platform_db_postgresql = {
-    server = {
-      fqdn = "eh-psql-data-dev-sec.postgres.database.azure.com"
-      port = 5432
-    }
-    databases = {
-      catalog = {
-        name = "catalog"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-pg/providers/Microsoft.DBforPostgreSQL/flexibleServers/eh-psql-data-dev-sec/databases/catalog"
-      }
-      adapter = {
-        name = "adapter"
-        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-pg/providers/Microsoft.DBforPostgreSQL/flexibleServers/eh-psql-data-dev-sec/databases/adapter"
-      }
-    }
-    elastic_cluster = null
-  }
-  obs_telemetry_transport = {
-    datadog_site      = "datadoghq.com"
-    api_key_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
-    otlp = {
-      grpc_endpoint     = "http://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:4317"
-      http_endpoint     = "https://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
-      headers_secret_id = null
-      default_protocol  = "http/protobuf"
-    }
-    fluentbit = {
-      forward_host           = "eh-ca-flbagg.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
-      forward_port           = 24224
-      sidecar_image          = "fluent/fluent-bit:5.1.3"
-      sidecar_config         = <<-EOT
-        service:
-          flush: 1
-        pipeline:
-          inputs: []
-      EOT
-      sidecar_forward_config = <<-EOT
-        service:
-          flush: 1
-      EOT
-      sidecar_parsers        = <<-EOT
-        parsers: []
-      EOT
-      sidecar_lua            = <<-EOT
-        -- lua
-      EOT
-      sidecar_mode           = "datadog"
-      logs_intake_host       = "http-intake.logs.datadoghq.com"
-    }
-    env = {
-      common = {
-        DD_SITE                    = "datadoghq.com"
-        OTEL_EXPORTER_OTLP_TIMEOUT = "10000"
-      }
-      dotnet = {
-        OTEL_DOTNET_AUTO_LOGS_ENABLED = "false"
-      }
-      python = {
-        OTEL_PYTHON_LOG_CORRELATION = "true"
+  obs_prereqs = {
+    datadog_site = "datadoghq.com"
+    rum = {
+      applications = {
+        "hello-frontend" = {
+          application_id             = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+          client_token               = "pub0123456789abcdef0123456789abcdef"
+          site                       = "datadoghq.com"
+          service                    = "hello-frontend"
+          session_sample_rate        = 100
+          session_replay_sample_rate = 0
+          default_privacy_level      = "mask-user-input"
+          track_user_interactions    = true
+        }
       }
     }
   }
@@ -350,113 +244,60 @@ variables {
       "datadog-client-token" = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-client-token"
     }
   }
-  platform_db_redis = {
-    cache = {
-      id       = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-redis/providers/Microsoft.Cache/redisEnterprise/eh-amr-data-dev-sec"
-      hostname = "eh-amr-data-dev-sec.swedencentral.redis.azure.net"
-      port     = 10000
-    }
-  }
 }
 # END FIXTURE
 
-
-run "defaults" {
+run "aca_api" {
   command = plan
   variables {
-    platform_db_redis = null
-  }
-
-  assert {
-    condition     = length(module.app) == 3 && module.app["hello-bff"].name == "eh-ca-bff-dev"
-    error_message = "bff, orders-api and catalog-api must be deployed with deterministic names."
+    deploy_core_aca = { public_api = { origin = "https://eh-ca-bff-dev.kindstone-12345678.swedencentral.azurecontainerapps.io", base_path = "/api" } }
   }
   assert {
-    condition     = alltrue([for k, e in module.env : e.env["FAULTS_ENABLED"] == "false"])
-    error_message = "FAULTS_ENABLED must default to false."
+    condition     = azurerm_static_web_app.this.location == "westeurope" && azurerm_static_web_app.this.sku_tier == "Free"
+    error_message = "SWA in westeurope (not offered in swedencentral), Free by default."
   }
   assert {
-    condition     = alltrue([for k, a in module.app : a.secret_refs["fault-token"] == "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token"])
-    error_message = "FAULT_TOKEN must come from a Key Vault secret reference."
+    condition     = jsondecode(output.contract.runtime_files["config.json"]).apiBaseUrl == "https://eh-ca-bff-dev.kindstone-12345678.swedencentral.azurecontainerapps.io"
+    error_message = "apiBaseUrl comes from deploy-core-aca."
   }
   assert {
-    condition     = alltrue([for k, e in module.env : !contains(keys(e.env), "FAULT_TOKEN") && !contains(keys(e.env), "DD_API_KEY")])
-    error_message = "Secrets must never be plain env values."
+    condition     = jsondecode(output.contract.runtime_files["config.json"]).rum.allowedTracingUrls == ["https://eh-ca-bff-dev.kindstone-12345678.swedencentral.azurecontainerapps.io"] && jsondecode(output.contract.runtime_files["config.json"]).rum.sessionReplaySampleRate == 0
+    error_message = "RUM traces only first-party API origins; session replay off."
   }
   assert {
-    condition     = alltrue(flatten([for k, a in module.app : [for n, v in a.plain_env : !can(regex("(?i)(password|pwd|accountkey|sharedaccesskey|client_secret)\\s*=", v))]]))
-    error_message = "No plain env value may contain a password/key."
+    condition     = strcontains(jsondecode(output.contract.runtime_files["staticwebapp.config.json"]).globalHeaders["Content-Security-Policy"], "connect-src 'self' https://eh-ca-bff-dev.kindstone-12345678.swedencentral.azurecontainerapps.io https://browser-intake-datadoghq.com")
+    error_message = "CSP connect-src must allow the API origin and the Datadog browser intake."
   }
   assert {
-    condition     = alltrue([for k, a in module.app : a.container_names == [k, "fluent-bit"] && a.has_sidecar])
-    error_message = "Every Container App needs the Fluent Bit sidecar (ADR-0001 §10)."
+    condition     = output.contract.url == "https://gentle-sky-0123456.azurestaticapps.net" && !strcontains(jsonencode(output.contract), "deployment_token")
+    error_message = "Contract has the site URL and never a deployment token."
   }
   assert {
-    condition     = alltrue([for k, e in module.env : e.env["LOG_FILE_PATH"] == "/var/log/app/app.log" && e.log_route == "sidecar"])
-    error_message = "ACA apps write the shared log file tailed by the sidecar."
-  }
-  assert {
-    condition     = module.env["hello-bff"].env["DD_SERVICE"] == "hello-bff" && module.env["hello-bff"].env["DD_VERSION"] == "src-222222222222222222222222" && module.env["hello-orders-api"].env["DD_VERSION"] == "1.4.2"
-    error_message = "DD_SERVICE/DD_VERSION must come from the service and its artifact."
-  }
-  assert {
-    condition     = module.env["hello-catalog-api"].env["OTEL_EXPORTER_OTLP_ENDPOINT"] == var.obs_telemetry_transport.otlp.http_endpoint
-    error_message = "ACA apps send OTLP to the observability gateway."
-  }
-  assert {
-    condition     = module.env["hello-orders-api"].env["AZURE_CLIENT_ID"] == var.foundation_identity.identities["hello-orders-api"].client_id
-    error_message = "AZURE_CLIENT_ID must be the workload identity client id."
-  }
-  assert {
-    condition     = !contains(keys(module.env["hello-catalog-api"].env), "REDIS_HOST") && module.env["hello-catalog-api"].env["REDIS_AUTH"] == "none"
-    error_message = "Without platform-db-redis the catalog cache is bypassed."
-  }
-  assert {
-    condition     = output.contract.apps["hello-bff"].scale_to_zero && output.contract.idle_behavior["hello-orders-api"].scale_to_zero
-    error_message = "Lab default is scale-to-zero, reported in the contract."
-  }
-  assert {
-    condition     = output.contract.apps["hello-bff"].app_log_route == "sidecar" && output.contract.apps["hello-bff"].type == "Microsoft.App/containerApps"
-    error_message = "Contract must expose type and log route per app."
+    condition     = output.contract.deploy_steps[0].kind == "swa" && output.contract.deploy_steps[0].package_sha256 != null
+    error_message = "Content upload is a pipeline step with the svc-frontend package."
   }
 }
 
-run "redis_and_rollback" {
+run "aks_api_eu_site" {
   command = plan
   variables {
-    platform_db_redis = {
-      cache = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-redis/providers/Microsoft.Cache/redisEnterprise/amr", hostname = "amr.swedencentral.redis.azure.net", port = 10000 }
-    }
-    settings = {
-      faults_enabled       = true
-      cors_allowed_origins = ["https://hello.example.com"]
-      traffic              = { "hello-bff" = { latest_weight = 0, previous_revision_suffix = "r0123abcd" } }
+    deploy_core_aks = { public_api = { origin = "https://api.hello.example.com" } }
+    obs_prereqs = {
+      datadog_site = "us3.datadoghq.com"
+      rum          = { applications = { "hello-frontend" = { application_id = "app", client_token = "pubtoken", site = "us3.datadoghq.com", session_sample_rate = 50, session_replay_sample_rate = 0 } } }
     }
   }
   assert {
-    condition     = module.env["hello-catalog-api"].env["REDIS_HOST"] == "amr.swedencentral.redis.azure.net" && module.env["hello-catalog-api"].env["REDIS_AUTH"] == "entra"
-    error_message = "Managed Redis wiring (Entra) when platform-db-redis is present."
+    condition     = jsondecode(output.contract.runtime_files["config.json"]).apiBaseUrl == "https://api.hello.example.com" && strcontains(jsondecode(output.contract.runtime_files["staticwebapp.config.json"]).globalHeaders["Content-Security-Policy"], "https://browser-intake-us3-datadoghq.com")
+    error_message = "AKS origin used when ACA is absent; intake host follows the Datadog site."
   }
+}
+
+run "no_api_contract" {
+  command = plan
   assert {
-    condition     = module.env["hello-bff"].env["FAULTS_ENABLED"] == "true" && module.env["hello-bff"].env["CORS_ALLOWED_ORIGINS"] == "https://hello.example.com"
-    error_message = "faults_enabled / CORS settings must flow into env."
+    condition     = jsondecode(output.contract.runtime_files["config.json"]).apiBaseUrl == "https://api.invalid"
+    error_message = "Optional producers absent => placeholder origin and a failing check (warning)."
   }
-}
-
-run "rejects_mutable_tags" {
-  command = plan
-  variables {
-    artifacts = {
-      "svc-bff" = { image = "ehcrshareddevabcde.azurecr.io/hello-bff:latest" }
-    }
-  }
-  expect_failures = [var.artifacts]
-}
-
-run "traffic_split_requires_previous_revision" {
-  command = plan
-  variables {
-    settings = { traffic = { "hello-bff" = { latest_weight = 50 } } }
-  }
-  expect_failures = [var.settings]
+  expect_failures = [check.api_origin_known]
 }

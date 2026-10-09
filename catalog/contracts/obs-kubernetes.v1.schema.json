@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "obs-kubernetes contract v1 (Datadog Agent + Fluent Bit DaemonSet on a Kubernetes cluster; no secrets)",
+  "type": "object",
+  "required": ["cluster_name", "namespace", "agent", "fluent_bit", "log_route"],
+  "properties": {
+    "cluster_name": {"type": "string"},
+    "cluster_id": {"type": ["string", "null"], "pattern": "^/subscriptions/[^/]+/"},
+    "namespace": {"type": "string", "description": "namespace of the Datadog Agent release"},
+    "agent": {
+      "type": "object",
+      "required": ["otlp_grpc_port", "otlp_http_port", "host_ip_env", "local_service", "logs_enabled"],
+      "properties": {
+        "daemonset": {"type": "string"},
+        "local_service": {"type": "string", "description": "internalTrafficPolicy=Local service of the node agents"},
+        "host_ip_env": {"type": "string", "description": "env var apps set from status.hostIP (downward API)"},
+        "otlp_grpc_port": {"type": "integer"},
+        "otlp_http_port": {"type": "integer"},
+        "apm_port": {"type": "integer"},
+        "dogstatsd_port": {"type": "integer"},
+        "otlp_endpoint_grpc": {"type": "string"},
+        "otlp_endpoint_http": {"type": "string"},
+        "cluster_agent_service": {"type": "string"},
+        "logs_enabled": {"const": false, "description": "the Agent never collects container logs (Fluent Bit does)"},
+        "cluster_checks": {"type": "boolean"}
+      }
+    },
+    "fluent_bit": {
+      "type": "object",
+      "required": ["namespace", "daemonset"],
+      "properties": {
+        "namespace": {"type": "string"},
+        "daemonset": {"type": "string"},
+        "excluded_namespaces": {"type": "array", "items": {"type": "string"}},
+        "opt_out_annotation": {"type": "string"}
+      }
+    },
+    "log_route": {"const": "daemonset"},
+    "charts": {
+      "type": "object",
+      "properties": {
+        "datadog": {"type": "string"},
+        "fluent_bit": {"type": "string"},
+        "agent_tag": {"type": "string"}
+      }
+    },
+    "api_key_secret_name": {"type": "string", "description": "name of the Kubernetes Secret (key api-key); the value is never in the contract"}
+  }
+}

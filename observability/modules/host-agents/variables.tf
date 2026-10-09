@@ -59,6 +59,10 @@ variable "datadog" {
     }))
   })
   validation {
+    condition     = var.datadog.api_key_key_vault == null || can(regex("^https://[^/]+/secrets/[^/]+/[0-9a-fA-F]{32}$", try(var.datadog.api_key_key_vault.secret_url, "")))
+    error_message = "datadog.api_key_key_vault.secret_url must be a VERSIONED Key Vault secret URL (the compute extension API requires a version)."
+  }
+  validation {
     condition     = can(regex("^7\\.[0-9]+\\.[0-9]+$", var.datadog.agent_version))
     error_message = "datadog.agent_version must be a pinned 7.x.y version (no 'latest')."
   }

@@ -1,10 +1,21 @@
 mock_provider "azurerm" {
   override_during = plan
-  mock_resource "azurerm_container_app" {
+  mock_data "azurerm_kubernetes_cluster" {
     defaults = {
-      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-core-aca-dev-sec/providers/Microsoft.App/containerApps/eh-ca-app-dev"
+      kube_config = [{
+        host                   = "https://eh-aks-aks-dev-sec-abc.privatelink.swedencentral.azmk8s.io:443"
+        cluster_ca_certificate = "Y2E="
+        client_certificate     = ""
+        client_key             = ""
+        password               = ""
+        username               = "clusterUser"
+      }]
     }
   }
+}
+
+mock_provider "kubernetes" {
+  override_during = plan
 }
 
 # BEGIN FIXTURE (generated): upstream contract shapes with valid Azure IDs.
@@ -106,14 +117,43 @@ variables {
       package_sha256 = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
     }
   }
-  platform_containerapps = {
-    resource_group_name    = "rg-aca"
-    location               = "swedencentral"
-    environment_id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aca/providers/Microsoft.App/managedEnvironments/eh-cae-aca-dev-sec"
-    default_domain         = "kindstone-12345678.swedencentral.azurecontainerapps.io"
-    ingress_mode           = "external"
-    workload_profiles      = ["Consumption", "dedicated-d4"]
-    dedicated_profile_name = "dedicated-d4"
+  platform_aks = {
+    resource_group_name = "rg-aks"
+    cluster_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.ContainerService/managedClusters/eh-aks-aks-dev-sec"
+    cluster_name        = "eh-aks-aks-dev-sec"
+    oidc_issuer_url     = "https://swedencentral.oic.prod-aks.azure.com/tenant/guid/"
+    access = {
+      private_cluster     = true
+      fqdn                = null
+      private_fqdn        = "eh-aks-aks-dev-sec-abc.privatelink.swedencentral.azmk8s.io"
+      entra_server_app_id = "6dae42f8-4368-4678-94ff-3960e28e3630"
+    }
+    workload_identities = {
+      "hello-bff" = {
+        namespace       = "hello"
+        service_account = "hello-bff"
+        client_id       = "33333333-3333-3333-3333-000000000000"
+      }
+      "hello-orders-api" = {
+        namespace       = "hello"
+        service_account = "hello-orders-api"
+        client_id       = "33333333-3333-3333-3333-000000000001"
+      }
+      "hello-catalog-api" = {
+        namespace       = "hello"
+        service_account = "hello-catalog-api"
+        client_id       = "33333333-3333-3333-3333-000000000002"
+      }
+      "hello-worker" = {
+        namespace       = "hello"
+        service_account = "hello-worker"
+        client_id       = "33333333-3333-3333-3333-000000000003"
+      }
+    }
+    key_vault_secrets_provider = {
+      client_id    = "44444444-4444-4444-4444-444444444444"
+      principal_id = "55555555-5555-5555-5555-555555555555"
+    }
   }
   platform_shared = {
     acr_id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-shared/providers/Microsoft.ContainerRegistry/registries/ehcrshareddevabcde"
@@ -360,7 +400,6 @@ variables {
 }
 # END FIXTURE
 
-
 run "defaults" {
   command = plan
   variables {
@@ -368,95 +407,90 @@ run "defaults" {
   }
 
   assert {
-    condition     = length(module.app) == 3 && module.app["hello-bff"].name == "eh-ca-bff-dev"
-    error_message = "bff, orders-api and catalog-api must be deployed with deterministic names."
+    condition     = length(kubernetes_deployment_v1.app) == 4 && kubernetes_namespace_v1.hello.metadata[0].name == "hello"
+    error_message = "bff, orders-api, catalog-api and worker Deployments in namespace hello."
   }
   assert {
-    condition     = alltrue([for k, e in module.env : e.env["FAULTS_ENABLED"] == "false"])
-    error_message = "FAULTS_ENABLED must default to false."
+    condition     = alltrue([for k, sa in kubernetes_service_account_v1.app : sa.metadata[0].annotations["azure.workload.identity/client-id"] == var.platform_aks.workload_identities[k].client_id])
+    error_message = "ServiceAccounts must carry the workload identity client id."
   }
   assert {
-    condition     = alltrue([for k, a in module.app : a.secret_refs["fault-token"] == "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token"])
-    error_message = "FAULT_TOKEN must come from a Key Vault secret reference."
+    condition     = alltrue([for k, d in kubernetes_deployment_v1.app : d.spec[0].template[0].metadata[0].labels["azure.workload.identity/use"] == "true"])
+    error_message = "Pods must opt into workload identity."
   }
   assert {
-    condition     = alltrue([for k, e in module.env : !contains(keys(e.env), "FAULT_TOKEN") && !contains(keys(e.env), "DD_API_KEY")])
-    error_message = "Secrets must never be plain env values."
+    condition     = alltrue([for k, d in kubernetes_deployment_v1.app : length(d.spec[0].template[0].spec[0].container) == 1])
+    error_message = "No sidecars on AKS: logs go through the Fluent Bit DaemonSet."
   }
   assert {
-    condition     = alltrue(flatten([for k, a in module.app : [for n, v in a.plain_env : !can(regex("(?i)(password|pwd|accountkey|sharedaccesskey|client_secret)\\s*=", v))]]))
-    error_message = "No plain env value may contain a password/key."
+    condition     = alltrue([for k, d in kubernetes_deployment_v1.app : d.spec[0].template[0].spec[0].container[0].env[0].name == "DD_AGENT_HOST" && d.spec[0].template[0].spec[0].container[0].env[0].value_from[0].field_ref[0].field_path == "status.hostIP"])
+    error_message = "DD_AGENT_HOST (status.hostIP) must be the first env var."
   }
   assert {
-    condition     = alltrue([for k, a in module.app : a.container_names == [k, "fluent-bit"] && a.has_sidecar])
-    error_message = "Every Container App needs the Fluent Bit sidecar (ADR-0001 §10)."
+    condition     = module.env["hello-bff"].env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://$(DD_AGENT_HOST):4317" && module.env["hello-bff"].env["OTEL_EXPORTER_OTLP_PROTOCOL"] == "grpc"
+    error_message = "AKS OTLP goes to the node-local agent over gRPC."
   }
   assert {
-    condition     = alltrue([for k, e in module.env : e.env["LOG_FILE_PATH"] == "/var/log/app/app.log" && e.log_route == "sidecar"])
-    error_message = "ACA apps write the shared log file tailed by the sidecar."
+    condition     = alltrue([for k, e in module.env : e.env["FAULTS_ENABLED"] == "false" && !contains(keys(e.env), "FAULT_TOKEN") && !contains(keys(e.env), "LOG_FILE_PATH")])
+    error_message = "FAULTS_ENABLED false by default, FAULT_TOKEN never plain, stdout logging only."
   }
   assert {
-    condition     = module.env["hello-bff"].env["DD_SERVICE"] == "hello-bff" && module.env["hello-bff"].env["DD_VERSION"] == "src-222222222222222222222222" && module.env["hello-orders-api"].env["DD_VERSION"] == "1.4.2"
-    error_message = "DD_SERVICE/DD_VERSION must come from the service and its artifact."
+    condition     = length(keys(kubernetes_manifest.secret_provider)) == 3 && local.kv_name == "eh-kv-ident-dev-abcde" && !contains(keys(kubernetes_manifest.secret_provider), "hello-worker")
+    error_message = "SecretProviderClass per app reading fault-token (worker has no fault token)."
   }
   assert {
-    condition     = module.env["hello-catalog-api"].env["OTEL_EXPORTER_OTLP_ENDPOINT"] == var.obs_telemetry_transport.otlp.http_endpoint
-    error_message = "ACA apps send OTLP to the observability gateway."
+    condition     = kubernetes_service_v1.app["hello-bff"].spec[0].type == "LoadBalancer" && kubernetes_service_v1.app["hello-bff"].metadata[0].annotations["service.beta.kubernetes.io/azure-load-balancer-internal"] == "true" && length(kubernetes_ingress_v1.bff) == 0
+    error_message = "Without the app routing add-on the BFF is exposed on an internal load balancer."
   }
   assert {
-    condition     = module.env["hello-orders-api"].env["AZURE_CLIENT_ID"] == var.foundation_identity.identities["hello-orders-api"].client_id
-    error_message = "AZURE_CLIENT_ID must be the workload identity client id."
+    condition     = alltrue([for k, h in kubernetes_horizontal_pod_autoscaler_v2.app : h.spec[0].max_replicas <= var.settings.replica_ceiling || h.spec[0].max_replicas <= 6]) && length(kubernetes_pod_disruption_budget_v1.app) == 4
+    error_message = "HPA ceilings and PDBs for every Deployment."
   }
   assert {
-    condition     = !contains(keys(module.env["hello-catalog-api"].env), "REDIS_HOST") && module.env["hello-catalog-api"].env["REDIS_AUTH"] == "none"
-    error_message = "Without platform-db-redis the catalog cache is bypassed."
+    condition     = alltrue([for k, d in kubernetes_deployment_v1.app : can(regex("@sha256:[a-f0-9]{64}$", d.spec[0].template[0].spec[0].container[0].image))])
+    error_message = "Images must be digest-pinned."
   }
   assert {
-    condition     = output.contract.apps["hello-bff"].scale_to_zero && output.contract.idle_behavior["hello-orders-api"].scale_to_zero
-    error_message = "Lab default is scale-to-zero, reported in the contract."
-  }
-  assert {
-    condition     = output.contract.apps["hello-bff"].app_log_route == "sidecar" && output.contract.apps["hello-bff"].type == "Microsoft.App/containerApps"
-    error_message = "Contract must expose type and log route per app."
+    condition     = output.contract.apps["hello-worker"].app_log_route == "daemonset" && !output.contract.apps["hello-worker"].scale_to_zero && output.contract.apps["hello-bff"].type == "Kubernetes/Deployment"
+    error_message = "Contract per app: log route daemonset, no scale-to-zero."
   }
 }
 
-run "redis_and_rollback" {
+run "app_routing_and_no_csi" {
   command = plan
   variables {
-    platform_db_redis = {
-      cache = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-redis/providers/Microsoft.Cache/redisEnterprise/amr", hostname = "amr.swedencentral.redis.azure.net", port = 10000 }
+    platform_aks = {
+      resource_group_name = "rg-aks"
+      cluster_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.ContainerService/managedClusters/aks"
+      cluster_name        = "aks"
+      oidc_issuer_url     = "https://oidc.example/"
+      access              = { private_cluster = true, private_fqdn = "aks.privatelink.swedencentral.azmk8s.io" }
+      workload_identities = {
+        "hello-bff"         = { namespace = "hello", service_account = "hello-bff", client_id = "c1" }
+        "hello-orders-api"  = { namespace = "hello", service_account = "hello-orders-api", client_id = "c2" }
+        "hello-catalog-api" = { namespace = "hello", service_account = "hello-catalog-api", client_id = "c3" }
+        "hello-worker"      = { namespace = "hello", service_account = "hello-worker", client_id = "c4" }
+      }
+      key_vault_secrets_provider = null
     }
     settings = {
-      faults_enabled       = true
-      cors_allowed_origins = ["https://hello.example.com"]
-      traffic              = { "hello-bff" = { latest_weight = 0, previous_revision_suffix = "r0123abcd" } }
+      exposure = { mode = "app-routing", host = "api.hello.example.com", tls_cert_keyvault_id = "https://kv.vault.azure.net/certificates/hello-api" }
     }
   }
   assert {
-    condition     = module.env["hello-catalog-api"].env["REDIS_HOST"] == "amr.swedencentral.redis.azure.net" && module.env["hello-catalog-api"].env["REDIS_AUTH"] == "entra"
-    error_message = "Managed Redis wiring (Entra) when platform-db-redis is present."
+    condition     = length(kubernetes_ingress_v1.bff) == 1 && kubernetes_service_v1.app["hello-bff"].spec[0].type == "ClusterIP"
+    error_message = "app-routing mode uses the managed NGINX ingress with TLS."
   }
   assert {
-    condition     = module.env["hello-bff"].env["FAULTS_ENABLED"] == "true" && module.env["hello-bff"].env["CORS_ALLOWED_ORIGINS"] == "https://hello.example.com"
-    error_message = "faults_enabled / CORS settings must flow into env."
+    condition     = length(kubernetes_manifest.secret_provider) == 0 && output.contract.public_api.origin == "https://api.hello.example.com"
+    error_message = "No CSI driver => no SecretProviderClass; public origin from the ingress host."
   }
 }
 
 run "rejects_mutable_tags" {
   command = plan
   variables {
-    artifacts = {
-      "svc-bff" = { image = "ehcrshareddevabcde.azurecr.io/hello-bff:latest" }
-    }
+    artifacts = { "svc-bff" = { image = "ehcrshareddevabcde.azurecr.io/hello-bff:1.0" } }
   }
   expect_failures = [var.artifacts]
-}
-
-run "traffic_split_requires_previous_revision" {
-  command = plan
-  variables {
-    settings = { traffic = { "hello-bff" = { latest_weight = 50 } } }
-  }
-  expect_failures = [var.settings]
 }

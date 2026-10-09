@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 
@@ -25,7 +26,8 @@ def main() -> int:
 
     schema = json.load(open(args.schema))
     validator = jsonschema.Draft202012Validator(schema)
-    proc = subprocess.run(["terraform", "test", "-verbose", "-json"], cwd=args.tfdir, capture_output=True, text=True)
+    tf = os.environ.get("TERRAFORM_BIN", "terraform")
+    proc = subprocess.run([tf, "test", "-verbose", "-json"], cwd=args.tfdir, capture_output=True, text=True)
     checked, errors = 0, []
     for line in proc.stdout.splitlines():
         try:

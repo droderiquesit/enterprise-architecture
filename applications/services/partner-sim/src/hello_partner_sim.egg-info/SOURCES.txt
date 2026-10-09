@@ -1,0 +1,11 @@
+pyproject.toml
+src/hello_partner_sim/__init__.py
+src/hello_partner_sim/__main__.py
+src/hello_partner_sim/main.py
+src/hello_partner_sim.egg-info/PKG-INFO
+src/hello_partner_sim.egg-info/SOURCES.txt
+src/hello_partner_sim.egg-info/dependency_links.txt
+src/hello_partner_sim.egg-info/entry_points.txt
+src/hello_partner_sim.egg-info/requires.txt
+src/hello_partner_sim.egg-info/top_level.txt
+tests/test_partner.py

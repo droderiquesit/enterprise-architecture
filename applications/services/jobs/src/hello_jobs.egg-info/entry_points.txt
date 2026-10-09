@@ -1,0 +1,2 @@
+[console_scripts]
+hello-jobs = hello_jobs.__main__:main
