@@ -16,6 +16,7 @@ producer that has published. Prints the sha256 of the written JSON (plan binding
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -41,6 +42,24 @@ def materialize(repo: Path, env: str, component: str, store, write: bool = True)
     reg = load_registry(tree)
     graph = Graph(reg)
     enabled, _env_doc, _profile, _ = resolve_for_env(tree, reg, graph, env)
+    values, notes = contract_values(tree, reg, enabled, env, component, store)
+    c = reg.get(component)
+    digest = values_digest(values)
+    if write:
+        digest = write_json(repo / c.path / "contracts.auto.tfvars.json", values)
+    return values, digest, notes
+
+
+def values_digest(values: dict) -> str:
+    """Same digest as the written contracts.auto.tfvars.json (tools/contracts/lib.write_json)."""
+    import hashlib
+
+    text = json.dumps(values, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def contract_values(tree, reg, enabled, env: str, component: str, store):
+    """Variables for one root from the published envelopes (no file written). Raises ContractError."""
     c = reg.get(component)
     declared = declared_variables(tree, c.path)
     optional = set(c.optional_consumes)
@@ -79,10 +98,7 @@ def materialize(repo: Path, env: str, component: str, store, write: bool = True)
         values["discovered_contracts"] = discovered
     if errors:
         raise ContractError("cannot materialize contracts for " + component + ":\n  " + "\n  ".join(errors))
-    digest = None
-    if write:
-        digest = write_json(repo / c.path / "contracts.auto.tfvars.json", values)
-    return values, digest, notes
+    return values, notes
 
 
 def main(argv=None) -> int:

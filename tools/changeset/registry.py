@@ -136,6 +136,20 @@ def _validate_schema(tree: Tree, doc: dict) -> None:
         raise RegistryError("component registry does not match schema:\n  " + "\n  ".join(msgs))
 
 
+def scope_errors(reg: "Registry") -> List[str]:
+    """The platform pipeline runs first and must never wait for the applications pipeline."""
+    errors = []
+    for c in reg:
+        if c.scope != "platform":
+            continue
+        ups = list(c.depends_on) + list(c.artifacts) + [reg.producer_of(e) for e in c.consumes + c.optional_consumes]
+        for up in ups:
+            if up in reg.components and reg.components[up].scope == "applications":
+                errors.append(f"{c.id} (scope platform) depends on {up} (scope applications): "
+                              f"set `scope: applications` on {c.id} or remove the dependency")
+    return errors
+
+
 def load_registry(tree: Tree, path: str = REGISTRY_PATH) -> Registry:
     text = tree.read_text(path)
     if text is None:
@@ -195,13 +209,6 @@ def load_registry(tree: Tree, path: str = REGISTRY_PATH) -> Registry:
                 errors.append(f"{c.id}: artifacts entry '{art}' is not an artifact component")
         if c.artifacts and c.kind != "terraform":
             errors.append(f"{c.id}: only terraform components can declare artifacts")
-        if c.scope == "platform":
-            # the platform pipeline runs first; it must never wait for the applications pipeline
-            ups = list(c.depends_on) + list(c.artifacts) + [reg.producer_of(e) for e in c.consumes + c.optional_consumes]
-            for up in ups:
-                if up in components and components[up].scope == "applications":
-                    errors.append(f"{c.id} (scope platform) depends on {up} (scope applications): "
-                                  "set `scope: applications` on {c.id} or remove the dependency".replace("{c.id}", c.id))
     if errors:
         raise RegistryError("invalid component registry:\n  " + "\n  ".join(errors))
     return reg

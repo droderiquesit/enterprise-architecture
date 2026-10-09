@@ -1,6 +1,11 @@
-# The universal lab pipeline (extends template). Entry points are thin and only pass typed parameters:
-#   azure-pipelines.yml   CI on main, nightly drift, manual runs (environment default: dev)
-#   pipelines/promote.yml manual promotion runs for later environments of a promotion chain
+# The universal lab pipeline (extends template). Exactly two thin entry points pass typed parameters:
+#   azure-pipelines.yml                scope: platform     IaC platform: foundation, platform, observability
+#                                                          infrastructure; observability package release on
+#                                                          tags observability-v*; nightly drift
+#   azure-pipelines.applications.yml   scope: applications artifacts, Helm charts, deploy-* roots and the
+#                                                          observability roots that read app contracts;
+#                                                          triggered by its own CI and by successful platform runs
+# Promotion (dev -> test -> prod) is `mode: promote` of either pipeline (environments/promotion.yaml).
 # Protected resources (service connections, environments, deploy agent pool, variable groups) carry a
 # "Required template" check pointing at THIS file, so only pipelines that extend it can use them
 # (pipelines/README.md, "One-time Azure DevOps setup").
@@ -12,12 +17,18 @@
 # agents with no service connection, variable group or self-hosted pool: untrusted PR code never runs
 # with credentials.
 parameters:
+  - name: scope
+    type: string
+    values: [platform, applications]
   - name: environment
     type: string
   - name: mode
     type: string
     default: auto
-    values: [auto, manual, reconcile, drift, retire]
+    values: [auto, manual, reconcile, drift, retire, promote]
+  - name: sourceEnvironment          # promote mode: 'auto' = promote_from of environments/promotion.yaml
+    type: string
+    default: auto
   - name: components
     type: string
     default: ' '
@@ -27,10 +38,6 @@ parameters:
   - name: dryRun
     type: boolean
     default: false
-  - name: entry
-    type: string
-    default: universal
-    values: [universal, promote]
 
 variables:
   - template: ../variables/tools.yml
@@ -41,106 +48,19 @@ variables:
     value: ${{ parameters.environment }}
 
 stages:
-  # ------------------------------------------------------------------ Select
-  - stage: Select
-    displayName: Select changed components (${{ parameters.environment }})
-    jobs:
-      - job: select
-        displayName: Detect changes
-        timeoutInMinutes: 20
-        cancelTimeoutInMinutes: 5
-        ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-          pool:
-            vmImage: ${{ variables.hostedImage }}
-        ${{ else }}:
-          pool:
-            name: ${{ variables.deployPool }}
-          workspace:
-            clean: all
-        steps:
-          - checkout: self
-            fetchDepth: 0               # merge-base / fingerprints need history
-            clean: true
-          - template: steps-setup.yml
-          - script: |
-              set -euo pipefail
-              python3 -m tools.changeset graph
-              python3 tools/config/resolve.py --env "${{ parameters.environment }}"
-              python3 tools/config/promotion.py check --env "${{ parameters.environment }}" --mode "${{ parameters.mode }}" --dry-run "${{ lower(parameters.dryRun) }}"
-            displayName: Validate registry, graph, environment and promotion policy
-          - ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-            - script: |
-                set -euo pipefail
-                target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
-                git fetch --no-tags origin "+refs/heads/${target}:refs/remotes/origin/${target}"
-                mkdir -p "$(Build.ArtifactStagingDirectory)/selection"
-                python3 -m tools.changeset select --mode pr --env "${{ parameters.environment }}" --target "$target" \
-                  --out "$(Build.ArtifactStagingDirectory)/selection/selection.json" --ado
-              name: detect
-              displayName: Select (PR, merge-base diff, no credentials)
-          - ${{ else }}:
-            - task: AzureCLI@2
-              name: detect
-              displayName: Select (fingerprints vs deployment records)
-              inputs:
-                azureSubscription: ${{ variables.planServiceConnection }}
-                scriptType: bash
-                scriptLocation: inlineScript
-                inlineScript: |
-                  set -euo pipefail
-                  mkdir -p "$(Build.ArtifactStagingDirectory)/selection"
-                  python3 -m tools.changeset select --mode "${{ parameters.mode }}" --env "${{ parameters.environment }}" \
-                    --components "${{ parameters.components }}" ${{ iif(parameters.withConsumers, '--with-consumers', '') }} \
-                    --records-url "https://${{ variables.stateStorageAccount }}.blob.core.windows.net/deployments" \
-                    --build-reason "$(Build.Reason)" \
-                    --out "$(Build.ArtifactStagingDirectory)/selection/selection.json" --ado
-          - task: PublishPipelineArtifact@1
-            displayName: Publish selection document
-            inputs:
-              targetPath: $(Build.ArtifactStagingDirectory)/selection
-              artifact: selection
-
-  # ---------------------------------------------------------------- Validate
-  - stage: Validate
-    displayName: Validate (no credentials)
-    dependsOn: Select
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'))
-    jobs:
-      - template: validate.yml
-        parameters:
-          environment: ${{ parameters.environment }}
-          hostedImage: ${{ variables.hostedImage }}
-          maxParallel: ${{ variables.validateMaxParallel }}
-
-  # ---------------------------------------------------------------- Security
-  - stage: Security
-    displayName: Security scans (no credentials)
-    dependsOn: Select
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'))
-    jobs:
-      - template: security-scan.yml
-        parameters:
-          hostedImage: ${{ variables.hostedImage }}
-
-  # ------------------------- Build/promote, plan, apply, retire, verify, evidence
-  - ${{ if ne(variables['Build.Reason'], 'PullRequest') }}:
-    - template: ../generated/component-stages.yml
+  # observability package release: tag builds of the platform pipeline do nothing else
+  - ${{ if and(eq(parameters.scope, 'platform'), startsWith(variables['Build.SourceBranch'], 'refs/tags/observability-v')) }}:
+    - template: observability-release.yml
       parameters:
+        hostedImage: ${{ variables.hostedImage }}
+        feed: ${{ variables.observabilityFeed }}
+  - ${{ else }}:
+    - template: universal-stages.yml
+      parameters:
+        scope: ${{ parameters.scope }}
         environment: ${{ parameters.environment }}
+        mode: ${{ parameters.mode }}
+        sourceEnvironment: ${{ parameters.sourceEnvironment }}
+        components: ${{ parameters.components }}
+        withConsumers: ${{ parameters.withConsumers }}
         dryRun: ${{ parameters.dryRun }}
-        settings:
-          deployPool: ${{ variables.deployPool }}
-          hostedImage: ${{ variables.hostedImage }}
-          planServiceConnection: ${{ variables.planServiceConnection }}
-          planServiceConnectionId: ${{ variables.planServiceConnectionId }}
-          applyServiceConnection: ${{ variables.applyServiceConnection }}
-          applyServiceConnectionId: ${{ variables.applyServiceConnectionId }}
-          buildServiceConnection: ${{ variables.buildServiceConnection }}
-          stateStorageAccount: ${{ variables.stateStorageAccount }}
-          containerRegistry: ${{ variables.containerRegistry }}
-          datadogVariableGroup: ${{ variables.datadogVariableGroup }}
-          datadogSite: ${{ variables.datadogSite }}
-          promoteFrom: ${{ variables.promoteFrom }}
-          promoteFromStateStorageAccount: ${{ variables.promoteFromStateStorageAccount }}
-          promoteFromContainerRegistry: ${{ variables.promoteFromContainerRegistry }}
-          useAcrBuild: 'false'

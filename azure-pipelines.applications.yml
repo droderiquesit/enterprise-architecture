@@ -1,0 +1,88 @@
+# APPLICATIONS pipeline of azure-enterprise-observability-lab - thin entry point.
+#   scope applications: artifact builds (svc-*), Helm charts, deploy-* roots and the observability roots that
+#   read application contracts (obs-hosts, obs-diagnostics, obs-monitoring).
+# Runs on its own CI and automatically after every successful platform run on main for dev (pipeline resource
+# trigger), so consumers of changed platform contracts are re-planned/applied right after the platform change.
+# Everything runs in pipelines/templates/universal.yml (Required template of every protected resource).
+# Operator guide: pipelines/README.md.
+
+name: applications-$(Date:yyyyMMdd)$(Rev:.r)
+
+# CI on main deploys the first environment of the promotion chain (dev). Paths are NOT used to decide what
+# deploys: tools/changeset compares fingerprints with deployment records (a docs-only push selects nothing).
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+
+resources:
+  pipelines:
+    - pipeline: platform
+      source: lab-platform        # ADO name of the pipeline definition created from azure-pipelines.yml
+      trigger:
+        branches:
+          include:
+            - main
+        tags:
+          - env-dev               # only platform runs that deployed dev (tag added by its Select stage)
+
+# Azure Repos ignores YAML `pr:` triggers: PR validation = branch policy "Build validation" on main (both pipelines).
+
+schedules:
+  - cron: "47 2 * * *"          # 02:47 UTC nightly (after the platform drift run): drift of the applications scope
+    displayName: Nightly applications drift detection (dev)
+    branches:
+      include:
+        - main
+    always: true                # drift is about the cloud, not the code
+
+lockBehavior: sequential        # queue (do not cancel) runs waiting for exclusive locks
+
+parameters:
+  - name: environment
+    displayName: Environment
+    type: string
+    default: dev
+    values:              # every environment of environments/promotion.yaml (lint: pipeline_templates.py)
+      - dev
+      - test
+      - prod
+  - name: mode
+    displayName: Mode
+    type: string
+    default: auto
+    values:
+      - auto          # PR -> pr, schedule -> drift, otherwise deploy (fingerprints vs records)
+      - manual        # only `components` (+ upstream planned without apply)
+      - reconcile     # plan every enabled component, apply where the plan has changes
+      - drift         # plan every enabled component, apply nothing, report drift
+      - retire        # only scheduled retirements (environments/<env>/retirements.yaml)
+      - promote       # test/prod: deploy what the source environment already runs (same code, same digests)
+  - name: sourceEnvironment
+    displayName: Promote from (auto = environments/promotion.yaml)
+    type: string
+    default: auto
+  - name: components
+    displayName: Components (manual mode, comma separated)
+    type: string
+    default: ' '
+  - name: withConsumers
+    displayName: Manual mode - also plan/apply consumers
+    type: boolean
+    default: false
+  - name: dryRun
+    displayName: Dry run (plan only, no apply / destroy / records)
+    type: boolean
+    default: false
+
+extends:
+  template: pipelines/templates/universal.yml
+  parameters:
+    scope: applications
+    environment: ${{ parameters.environment }}
+    mode: ${{ parameters.mode }}
+    sourceEnvironment: ${{ parameters.sourceEnvironment }}
+    components: ${{ parameters.components }}
+    withConsumers: ${{ parameters.withConsumers }}
+    dryRun: ${{ parameters.dryRun }}

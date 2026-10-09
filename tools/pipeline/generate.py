@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
-"""Generate pipelines/generated/component-stages.yml from catalog/components.yaml.
+"""Generate pipelines/generated/{platform,applications}-stages.yml from catalog/components.yaml.
 
     python3 tools/pipeline/generate.py            # (re)write the file
-    python3 tools/pipeline/generate.py --check    # exit 1 when the checked-in file is stale
+    python3 tools/pipeline/generate.py --check    # exit 1 when a checked-in file is stale
 
-The file is checked in; the Validate stage fails when regeneration differs.
+The files are checked in; the Validate stage fails when regeneration differs.
 
+Two files, one per pipeline scope (registry field `scope`, tools/changeset/registry.py derive_scope):
+  pipelines/generated/platform-stages.yml       azure-pipelines.yml
+  pipelines/generated/applications-stages.yml   azure-pipelines.applications.yml
 Generated stages (after Select/Validate/Security, which live in pipelines/templates/universal.yml):
-  Build      one job per artifact component: resolve the image/package for the source fingerprint
+  Build      (applications only) one job per artifact component + the Helm chart job: resolve the image/package for the source fingerprint
              (first environment of a promotion chain: build if missing) or promote it from the
              previous environment (later environments: never build)
   P_<x>      Plan stage per Terraform component (pipeline: manual components excluded); PLAN identity,
              no environment, so no approval is requested before the plan exists
   C_<x>      Apply stage per component: deployment job on environment lab-<env> (approvals, exclusive
              lock, required template). Approvers see the published plan summary of P_<x> first.
-  Retire, Verify, Drift, Evidence
+  Retire, Verify (applications only), Drift, Evidence
 
 Conditions (evaluated in tests with tools/pipeline/conditions.py):
   P_x: and(not(canceled()), <Select/Validate/Security succeeded>, eq(sel_x,'true'),
@@ -47,7 +50,8 @@ from tools.changeset.graph import Graph  # noqa: E402
 from tools.changeset.registry import Component, Registry, load_registry, var_id  # noqa: E402
 from tools.changeset.trees import WorkTree  # noqa: E402
 
-OUTPUT = "pipelines/generated/component-stages.yml"
+OUTPUTS = {"platform": "pipelines/generated/platform-stages.yml",
+           "applications": "pipelines/generated/applications-stages.yml"}
 GATE_STAGES = ("Select", "Validate", "Security")
 OK = "'Succeeded', 'SucceededWithIssues'"
 LANGUAGE_HINTS = {"svc-traffic": "python", "svc-logicapps": "workflow"}
@@ -122,42 +126,45 @@ def direct_upstream(graph: Graph, reg: Registry, c: Component) -> List[Component
     return [reg.get(u) for u in sorted(graph.upstream(c.id)) if reg.get(u).deployable]
 
 
-def build(reg: Registry, layers: List[str] | None = None) -> dict:
-    """`layers` (scaling strategy, README "Scaling"): emit only components of these layers, e.g. one
-    generated file per pipeline when a single run would exceed the ADO template limits. Upstream
-    components of other layers are then deployed by an earlier pipeline (pipeline resource trigger) and
-    are not referenced by conditions."""
+def build(reg: Registry, scope: str) -> dict:
+    """Stages of one pipeline scope (platform | applications). Upstream components of the other scope
+    are not stages here: the applications Select stage waits for / re-plans after platform changes
+    (tools/changeset/select.py: cross-scope gating + contract hash comparison)."""
     graph = Graph(reg)
     graph.check_acyclic()
     order = [cid for layer in graph.layers() for cid in layer]
-    deployables = sorted((c for c in reg if c.deployable and (not layers or c.layer in layers)),
+    deployables = sorted((c for c in reg if c.deployable and c.scope == scope),
                          key=lambda c: (order.index(c.id), c.id))
     in_scope = {c.id for c in deployables}
-    needed = {a for c in deployables for a in c.artifacts}
-    artifacts = sorted((c for c in reg if c.is_artifact and (not layers or c.id in needed)), key=lambda c: c.id)
+    artifacts = sorted((c for c in reg if c.is_artifact and c.scope == scope), key=lambda c: c.id)
     settings = "${{ parameters.settings }}"
     env = "${{ parameters.environment }}"
     dry = "${{ parameters.dryRun }}"
     pool = {"name": "${{ parameters.settings.deployPool }}"}
     stages: List[dict] = []
 
-    stages.append({
-        "stage": "Build",
-        "displayName": "Artifacts (build once per source fingerprint / promote)",
-        "dependsOn": list(GATE_STAGES),
-        "condition": "and(" + ", ".join(["not(canceled())", *gate_terms(),
-                                          "eq(dependencies.Select.outputs['select.detect.any_build'], 'true')"]) + ")",
-        "pool": pool,
-        "jobs": [{
-            "template": "../templates/build-artifact.yml",
-            "parameters": {
-                "component": a.id, "jobName": f"B_{a.var_id}", "componentPath": a.path,
-                "artifactName": a.artifact["name"], "formats": [a.artifact["type"], *a.artifact.get("also", [])],
-                "language": language_of(a), "timeoutMinutes": a.timeout_minutes, "environment": env,
-                "settings": settings,
-            },
-        } for a in artifacts],
-    })
+    apps = scope == "applications"
+    if apps:
+        stages.append({
+            "stage": "Build",
+            "displayName": "Artifacts + charts (build once per source fingerprint / promote)",
+            "dependsOn": list(GATE_STAGES),
+            "condition": "and(" + ", ".join(["not(canceled())", *gate_terms(),
+                                              "eq(dependencies.Select.outputs['select.detect.any_build'], 'true')"]) + ")",
+            "pool": pool,
+            "jobs": [{
+                "template": "../templates/build-artifact.yml",
+                "parameters": {
+                    "component": a.id, "jobName": f"B_{a.var_id}", "componentPath": a.path,
+                    "artifactName": a.artifact["name"], "formats": [a.artifact["type"], *a.artifact.get("also", [])],
+                    "language": language_of(a), "timeoutMinutes": a.timeout_minutes, "environment": env,
+                    "settings": settings,
+                },
+            } for a in artifacts] + [{
+                "template": "../templates/helm-charts.yml",
+                "parameters": {"publish": True, "environment": env, "settings": settings},
+            }],
+        })
 
     for c in deployables:
         ups = [u for u in direct_upstream(graph, reg, c) if u.id in in_scope]
@@ -197,20 +204,21 @@ def build(reg: Registry, layers: List[str] | None = None) -> dict:
             "environment": env, "dryRun": dry, "settings": settings,
         },
     })
-    stages.append({
-        "stage": "Verify",
-        "displayName": "Smoke + telemetry verification",
-        "dependsOn": ["Select", *applies],
-        "condition": "and(" + ", ".join(select_ok + [
-            "eq(dependencies.Select.outputs['select.detect.any_deploy'], 'true')",
-            "ne(dependencies.Select.outputs['select.detect.mode'], 'drift')",
-            "ne(variables['DRY_RUN'], 'true')"]) + ")",
-        "pool": pool,
-        "jobs": [
-            {"template": "../templates/smoke.yml", "parameters": {"environment": env, "settings": settings}},
-            {"template": "../templates/telemetry-verify.yml", "parameters": {"environment": env, "settings": settings}},
-        ],
-    })
+    if apps:
+        stages.append({
+            "stage": "Verify",
+            "displayName": "Smoke + telemetry verification",
+            "dependsOn": ["Select", *applies],
+            "condition": "and(" + ", ".join(select_ok + [
+                "eq(dependencies.Select.outputs['select.detect.any_deploy'], 'true')",
+                "ne(dependencies.Select.outputs['select.detect.mode'], 'drift')",
+                "ne(variables['DRY_RUN'], 'true')"]) + ")",
+            "pool": pool,
+            "jobs": [
+                {"template": "../templates/smoke.yml", "parameters": {"environment": env, "settings": settings}},
+                {"template": "../templates/telemetry-verify.yml", "parameters": {"environment": env, "settings": settings}},
+            ],
+        })
     stages.append({
         "stage": "Drift",
         "displayName": "Drift report",
@@ -222,7 +230,8 @@ def build(reg: Registry, layers: List[str] | None = None) -> dict:
     stages.append({
         "stage": "Evidence",
         "displayName": "Report, evidence and deployment markers",
-        "dependsOn": ["Select", "Build", *plans, *applies, "Retire", "Verify", "Drift"],
+        "dependsOn": ["Select", *(["Build"] if apps else []), *plans, *applies, "Retire",
+                      *(["Verify"] if apps else []), "Drift"],
         "condition": "and(" + ", ".join(select_ok + [
             "or(eq(dependencies.Select.outputs['select.detect.any_deploy'], 'true'), "
             "eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'))"]) + ")",
@@ -245,11 +254,11 @@ class _Dumper(yaml.SafeDumper):
         return super().increase_indent(flow, False)
 
 
-def render(reg: Registry, registry_text: str, layers: List[str] | None = None) -> str:
-    body = yaml.dump(build(reg, layers), Dumper=_Dumper, sort_keys=False, width=100000, default_flow_style=False)
+def render(reg: Registry, registry_text: str, scope: str) -> str:
+    body = yaml.dump(build(reg, scope), Dumper=_Dumper, sort_keys=False, width=100000, default_flow_style=False)
     digest = hashlib.sha256(registry_text.encode()).hexdigest()[:16]
     header = (
-        "# GENERATED FILE - DO NOT EDIT.\n"
+        f"# GENERATED FILE - DO NOT EDIT. Scope: {scope} pipeline.\n"
         "# Source: catalog/components.yaml (sha256 prefix " + digest + ")\n"
         "# Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)\n"
         "# Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by\n"
@@ -261,31 +270,39 @@ def render(reg: Registry, registry_text: str, layers: List[str] | None = None) -
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".")
-    ap.add_argument("--output", default=OUTPUT)
     ap.add_argument("--check", action="store_true")
-    ap.add_argument("--layers", help="comma separated layers (split strategy; default: all)")
     args = ap.parse_args(argv)
-    layers = [x for x in (args.layers or "").split(",") if x] or None
     repo = Path(args.repo).resolve()
     tree = WorkTree(repo)
     reg = load_registry(tree)
-    text = render(reg, tree.read_text("catalog/components.yaml") or "", layers)
-    target = repo / args.output
-    n = sum(1 for c in reg if c.deployable)
-    if args.check:
-        current = target.read_text() if target.exists() else ""
-        if current != text:
-            diff = difflib.unified_diff(current.splitlines(), text.splitlines(), "checked-in", "regenerated", lineterm="", n=1)
-            print("\n".join(list(diff)[:60]))
-            print(f"ERROR: {args.output} is stale; run: python3 tools/pipeline/generate.py", file=sys.stderr)
-            return 1
-        print(f"{args.output} is up to date ({n} components: {2 * n} plan/apply stages)")
-        return 0
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(text)
-    print(f"wrote {args.output}: {n} components ({2 * n} plan/apply stages), "
-          f"{sum(1 for c in reg if c.is_artifact)} build jobs")
-    return 0
+    registry_text = tree.read_text("catalog/components.yaml") or ""
+    rc = 0
+    for scope, out in OUTPUTS.items():
+        text = render(reg, registry_text, scope)
+        target = repo / out
+        n = sum(1 for c in reg if c.deployable and c.scope == scope)
+        b = sum(1 for c in reg if c.is_artifact and c.scope == scope)
+        if args.check:
+            current = target.read_text() if target.exists() else ""
+            if current != text:
+                diff = difflib.unified_diff(current.splitlines(), text.splitlines(), "checked-in", "regenerated", lineterm="", n=1)
+                print("\n".join(list(diff)[:40]))
+                print(f"ERROR: {out} is stale; run: python3 tools/pipeline/generate.py", file=sys.stderr)
+                rc = 1
+            else:
+                print(f"{out} is up to date ({n} components: {2 * n} plan/apply stages, {b} artifact jobs)")
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+        print(f"wrote {out}: {n} components ({2 * n} plan/apply stages), {b} artifact jobs")
+    stale = repo / "pipelines/generated/component-stages.yml"
+    if stale.exists():
+        if args.check:
+            print("ERROR: pipelines/generated/component-stages.yml is obsolete (split into platform/applications)", file=sys.stderr)
+            rc = 1
+        else:
+            stale.unlink()
+    return rc
 
 
 def stage_map(doc: dict) -> Dict[str, dict]:

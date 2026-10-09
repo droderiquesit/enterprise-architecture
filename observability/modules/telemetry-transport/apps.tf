@@ -68,7 +68,8 @@ locals {
     ],
     local.eh_enabled ? [
       { name = "EVENTHUB_BROKERS", value = "${local.eh_fqdn}:9093" },
-      { name = "EVENTHUB_TOPICS", value = "${var.event_hub.app_logs_hub},${var.event_hub.platform_logs_hub}" },
+      { name = "EVENTHUB_TOPICS", value = local.eventhub_topics },
+      { name = "FLB_EVENTHUB_APP_TOPIC", value = var.event_hub.app_logs_hub },
       { name = "EVENTHUB_CONSUMER_GROUP", value = var.event_hub.consumer_group },
       { name = "KAFKA_SECURITY_PROTOCOL", value = "SASL_SSL" },
       { name = "EVENTHUB_CONNECTION_STRING", secretRef = "eventhub-conn" },

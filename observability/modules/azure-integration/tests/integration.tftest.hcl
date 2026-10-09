@@ -136,3 +136,70 @@ run "reject_bad_subscription" {
   }
   expect_failures = [var.subscription_ids]
 }
+
+# ------------------------------------------------------------------ native vs Event Hubs log forwarding
+run "native_log_forwarding_alternative" {
+  command = plan
+  variables {
+    mode             = "native"
+    subscription_ids = ["aaaaaaaa-0000-0000-0000-000000000000"]
+    native = {
+      existing_monitor_id    = "/subscriptions/aaaaaaaa-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Datadog/monitors/existing"
+      send_subscription_logs = true
+      send_resource_logs     = true
+      send_aad_logs          = true
+      log_tag_filters        = [{ name = "datadog-logs", value = "true" }]
+    }
+    # the Event Hubs path covers ANOTHER subscription only -> no overlap
+    eventhub_log_forwarding = { activity_log_subscription_ids = ["bbbbbbbb-0000-0000-0000-000000000000"] }
+  }
+  assert {
+    condition     = azurerm_datadog_monitor_tag_rule.this[0].log[0].subscription_log_enabled && azurerm_datadog_monitor_tag_rule.this[0].log[0].resource_log_enabled && azurerm_datadog_monitor_tag_rule.this[0].log[0].aad_log_enabled && length(azurerm_datadog_monitor_tag_rule.this[0].log[0].filter) == 1
+    error_message = "Native tag rule log block: subscription / resource / Entra logs + tag filters."
+  }
+  assert {
+    condition     = output.native_log_forwarding.aad_logs && jsonencode(output.native_log_forwarding.subscription_log_subscription_ids) == jsonencode(["aaaaaaaa-0000-0000-0000-000000000000"])
+    error_message = "native_log_forwarding summary feeds modules/azure-logs."
+  }
+}
+
+run "reject_native_and_eventhub_activity_log_same_subscription" {
+  command = plan
+  variables {
+    mode                    = "native"
+    native                  = { existing_monitor_id = "/subscriptions/aaaaaaaa-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Datadog/monitors/existing" }
+    eventhub_log_forwarding = { activity_log_subscription_ids = ["AAAAAAAA-0000-0000-0000-000000000000"] }
+  }
+  expect_failures = [var.eventhub_log_forwarding]
+}
+
+run "reject_native_resource_logs_with_diagnostic_settings" {
+  command = plan
+  variables {
+    mode                    = "native"
+    native                  = { existing_monitor_id = "/subscriptions/aaaaaaaa-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Datadog/monitors/existing", send_subscription_logs = false, send_resource_logs = true }
+    eventhub_log_forwarding = { resource_log_subscription_ids = ["bbbbbbbb-0000-0000-0000-000000000000"] }
+  }
+  expect_failures = [var.eventhub_log_forwarding]
+}
+
+run "reject_native_and_eventhub_entra" {
+  command = plan
+  variables {
+    mode                    = "native"
+    native                  = { existing_monitor_id = "/subscriptions/aaaaaaaa-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Datadog/monitors/existing", send_subscription_logs = false, send_aad_logs = true }
+    eventhub_log_forwarding = { entra_enabled = true }
+  }
+  expect_failures = [var.eventhub_log_forwarding]
+}
+
+run "app_registration_ignores_eventhub_paths" {
+  command = plan
+  variables {
+    eventhub_log_forwarding = { activity_log_subscription_ids = ["aaaaaaaa-0000-0000-0000-000000000000"], entra_enabled = true }
+  }
+  assert {
+    condition     = length(datadog_integration_azure.this) == 1 && length(output.native_log_forwarding.subscription_log_subscription_ids) == 0
+    error_message = "app_registration mode forwards no logs, so the Event Hubs path is the only one."
+  }
+}

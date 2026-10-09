@@ -6,7 +6,7 @@
     python3 tools/deploy/record.py show --env dev --component foundation-network --store <store>
 
 Record: {component, env, kind, path, status, deploy_fp, fp_parts, commit, run_id, finished_at,
-artifact_digests, contract_versions, upstream, produces, plan_sha256, note, last_succeeded?}
+artifact_digests, contract_versions, contracts_sha, scope, upstream, produces, plan_sha256, note, last_succeeded?}
 status: succeeded | failed | partial | canceled | retired.
 A non-succeeded record keeps the previous succeeded record under `last_succeeded`; the change
 detector re-selects any component whose status is not `succeeded`, which makes re-runs resumable.
@@ -67,6 +67,9 @@ def make_record(env: str, component: str, status: str, selection: dict, previous
         "upstream": entry.get("upstream", []),
         "produces": entry.get("produces", []),
         "plan_sha256": (manifest or {}).get("plan_sha256"),
+        # contracts this deployment was planned with: a later difference re-selects the component
+        "contracts_sha": (manifest or {}).get("contracts_sha"),
+        "scope": entry.get("scope"),
         "mode": selection.get("mode"),
         "note": note,
     }

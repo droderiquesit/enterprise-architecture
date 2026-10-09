@@ -58,14 +58,20 @@ resource mode of `observability/modules/azure-integration`), and the `Microsoft.
 
 ## 2. Azure DevOps prerequisites
 
-From [`pipelines/README.md`](../../pipelines/README.md#azure-devops-setup-not-expressible-in-yaml):
+From [`pipelines/README.md`](../../pipelines/README.md#one-time-azure-devops-setup-checklist):
 
-* Project + Azure Repos repository with this code; branch policy *Build validation* on `main` (Azure Repos ignores YAML `pr:`).
+* Project + Azure Repos repository with this code and **two pipelines**: `lab-platform` (`azure-pipelines.yml`, IaC
+  platform + observability package release) and `lab-applications` (`azure-pipelines.applications.yml`, artifacts,
+  Helm charts, application deployments; triggered by successful platform runs). Branch policy *Build validation* on
+  `main` for **both** (Azure Repos ignores YAML `pr:`).
 * Three ARM service connections with **workload identity federation**, one per bootstrap identity:
   `sc-lab-<env>-plan`, `sc-lab-<env>-apply`, `sc-lab-<env>-build`; names and ids in `pipelines/variables/<env>.yml`.
   Create them as *draft*, copy issuer (`https://login.microsoftonline.com/<tenant>/v2.0`) and subject into
   `components.bootstrap.federated_credentials`, re-run bootstrap, then *Verify and save*.
-* Environments `lab-<env>` (approvals + exclusive lock) and `lab-<env>-retire` (approvals by a different group).
+* Environments `lab-<env>` (approvals + exclusive lock) and `lab-<env>-retire` (approvals by a different group), for
+  every environment of `environments/promotion.yaml` (dev, test, prod).
+* *Required template* check (`pipelines/templates/universal.yml`) on the service connections, environments, deploy
+  agent pool and variable groups.
 * Variable group `lab-<env>-datadog` linked to the environment's Key Vault (`datadog-api-key`, `datadog-app-key`).
 * Agent pool `foundation-deploy-agents` (created in Azure DevOps after `foundation-deploy-agents` applies; VMSS mode:
   *Agent pools -> Add pool -> Azure virtual machine scale set*).

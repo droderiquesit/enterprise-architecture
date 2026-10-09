@@ -191,7 +191,7 @@ def test_sidecar_direct_to_datadog(stack, tmp_path):
     assert "fluentbit_output_proc_records_total" in metrics and "fluentbit_output_errors_total" in metrics
 
 
-def _kafka(stack: Stack, conn_str: str, workdir: Path) -> str:
+def _kafka(stack: Stack, conn_str: str, workdir: Path, topics: tuple[str, ...] = ("app-logs", "platform-logs")) -> str:
     jaas = workdir / "kafka_server_jaas.conf"
     jaas.write_text(
         "KafkaServer {\n  org.apache.kafka.common.security.plain.PlainLoginModule required\n"
@@ -225,7 +225,7 @@ def _kafka(stack: Stack, conn_str: str, workdir: Path) -> str:
     subprocess.run(["docker", "exec", "-i", k, "sh", "-c", "cat > /tmp/client.properties"], input=props, text=True, check=True)
 
     def topics_ready():
-        for t in ("app-logs", "platform-logs"):
+        for t in topics:
             subprocess.run(
                 ["docker", "exec", k, "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:9092",
                  "--command-config", "/tmp/client.properties", "--create", "--if-not-exists", "--topic", t,
@@ -369,3 +369,131 @@ def test_linux_host_config_with_canary(stack, tmp_path):
     pts = wait_for(_metrics, 60, what="fluent-bit OTLP self-metrics")
     assert all(p.get("env") == "test" for p in pts["fluentbit_output_errors_total"]), pts["fluentbit_output_errors_total"][:2]
     assert "fluentbit_input_records_total" in pts
+
+
+# ------------------------------------------------------------------------------------------------------------------
+# Azure platform / control-plane logs (Activity Log, Entra ID, Key Vault, AKS audit, Storage) through the aggregator
+TENANT = "aaaaaaaa-0000-0000-0000-000000000000"
+SUB = "00000000-0000-0000-0000-000000000000"
+
+
+def _azure_id(ev: dict) -> str | None:
+    text = json.dumps(ev)
+    for i in (301, 302, 401, 501, 502, 503, 504, 505):
+        if f"evt-{i:04d}" in text:
+            return f"evt-{i:04d}"
+    return None
+
+
+def _tags(ev: dict) -> list[str]:
+    return ev.get("ddtags", "").split(",")
+
+
+def test_aggregator_azure_platform_and_control_plane_logs(stack, tmp_path):
+    _, base = start_mock_intake(stack)
+    conn = "Endpoint=sb://ehns-test.servicebus.windows.net/;SharedAccessKeyName=fluent-bit-listen;SharedAccessKey=dGVzdA=="
+    kdir = tmp_path / "kafka"
+    kdir.mkdir()
+    kdir.chmod(0o755)
+    kafka = _kafka(stack, conn, kdir, topics=("app-logs", "platform-logs", "activity-logs"))
+    agg = stack.run(
+        "aggregator", FLUENT_BIT_IMAGE,
+        env=fluent_bit_env(
+            EVENTHUB_BROKERS="kafka:9092",
+            EVENTHUB_TOPICS="app-logs,platform-logs,activity-logs",
+            EVENTHUB_CONSUMER_GROUP="fluent-bit",
+            KAFKA_SECURITY_PROTOCOL="SASL_PLAINTEXT",
+            EVENTHUB_CONNECTION_STRING=conn,
+            FLB_DD_TAGS="env:test,collector:aggregator",
+            FLB_ACA_CONSOLE_ALLOW="eh-caj-*",
+            FLB_EVENTHUB_APP_TOPIC="app-logs",
+            FLB_AZURE_ENV_BY_SUBSCRIPTION=f"{SUB}=lab",
+            FLB_AZURE_MAX_RECORD_BYTES="20000",  # production default 900000 (Datadog: 1 MB per log)
+        ),
+        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro"],
+        cmd=["-c", "/fluent-bit/etc/eh/aggregator.yaml"],
+    )
+    _produce(kafka, "activity-logs", SAMPLES / "eventhub-activity-logs.jsonl")
+    _produce(kafka, "activity-logs", SAMPLES / "eventhub-entra-logs.jsonl")
+    _produce(kafka, "platform-logs", SAMPLES / "eventhub-azure-platform-logs.jsonl")
+    # Event Hubs is at-least-once: the same batch delivered again (consumer rebalance) must not duplicate events
+    _produce(kafka, "activity-logs", SAMPLES / "eventhub-activity-logs.jsonl")
+    _produce(kafka, "activity-logs", SAMPLES / "eventhub-entra-logs.jsonl")
+
+    expected = {"evt-0301", "evt-0302", "evt-0401", "evt-0501", "evt-0502", "evt-0503", "evt-0504"}
+    try:
+        wait_for(lambda: expected <= {_azure_id(e) for e in received(base)["events"]}, 120, interval=2, what="azure events")
+    finally:
+        print(stack.logs(agg)[-3000:])
+    time.sleep(6)  # catch late duplicates
+    got = received(base)
+    events = [e for e in got["events"] if not _is_canary(e)]
+    print(json.dumps(events, indent=1)[:12000])
+    _requests_ok(got["requests"])
+    ids: dict[str, list[dict]] = collections.defaultdict(list)
+    for e in events:
+        ids[_azure_id(e)].append(e)
+    # split one record per entry, each exactly once (dedup of the redelivered batches), wrong-hub app category dropped
+    for eid in expected:
+        assert len(ids[eid]) == 1, f"{eid}: {len(ids[eid])} copies"
+    assert "evt-0505" not in ids, "an application category on the platform hub must be dropped (duplicate of app-logs)"
+    assert None not in ids, ids.get(None)
+    for e in events:
+        assert e["ddsourcecategory"] == "azure" and PIPELINE_TAG in _tags(e) and "forwarder:fluent-bit-aggregator" in _tags(e)
+
+    # Activity Log (Administrative): Datadog forwarder conventions; every Azure field verbatim
+    a = ids["evt-0301"][0]
+    assert a["ddsource"] == "azure.authorization" and a["service"] == "azure"
+    assert a["operationName"] == "MICROSOFT.AUTHORIZATION/ROLEASSIGNMENTS/DELETE" and a["resultType"] == "Success"
+    assert a["category"] == "Administrative" and a["level"] == "Information" and a["callerIpAddress"] == "203.0.113.10"
+    assert a["identity"]["authorization"]["evidence"]["role"] == "Owner"
+    assert a["identity"]["claims"]["pwd_exp"] == "1209600"  # claim metadata is not a secret
+    assert a["identity"]["claims"]["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn"] == "lab-admin@example.com"
+    assert a["properties"]["eventCategory"] == "Administrative"
+    t = _tags(a)
+    for want in (f"subscription_id:{SUB}", "resource_group:eh-rg-apps-dev", "category:Administrative", "azure_log_type:activity",
+                 "eventhub:activity-logs", "resource_type:microsoft.authorization/roleassignments", "env:lab"):
+        assert want in t, (want, t)
+    assert "env:test" not in t, "the subscription env mapping replaces the static env tag (no conflicting env tags)"
+    assert not [x for x in t if x.startswith("region:")], "Activity Log location is the processing location, not a region"
+    # Service Health: subscription-scoped resource id -> azure.subscription
+    h = ids["evt-0302"][0]
+    assert h["ddsource"] == "azure.subscription" and h["properties"]["region"] == "Sweden Central" and h["properties"]["incidentType"] == "Incident"
+
+    # Entra ID sign-in: azure.activedirectory + tenant tag; token metadata and key/value labels are NOT redacted
+    s = ids["evt-0401"][0]
+    assert s["ddsource"] == "azure.activedirectory" and s["service"] == "azure"
+    assert f"tenant:{TENANT}" in _tags(s) and "azure_log_type:entra" in _tags(s) and "category:SignInLogs" in _tags(s)
+    p = s["properties"]
+    assert p["tokenIssuerType"] == "AzureAD" and p["incomingTokenType"] == "none" and p["uniqueTokenIdentifier"] == "aBcDeFgHiJkLmNoPqRsTuV"
+    assert p["signInTokenProtectionStatus"] == "none" and p["status"]["errorCode"] == 50126
+    assert p["authenticationProcessingDetails"][0] == {"key": "Legacy TLS (TLS 1.0, 1.1, 3DES)", "value": "False"}
+    assert s["resultType"] == "50126" and s["callerIpAddress"] == "198.51.100.7"
+
+    # Key Vault AuditEvent (403)
+    k = ids["evt-0501"][0]
+    assert k["ddsource"] == "azure.keyvault" and k["operationName"] == "SecretGet" and k["resultSignature"] == "Forbidden"
+    assert k["properties"]["httpStatusCode"] == 403 and k["properties"]["requestUri"].startswith("https://eh-kv-dev.vault.azure.net/secrets/db-password/")
+    for want in ("resource_type:microsoft.keyvault/vaults", "resource_name:eh-kv-dev", "region:swedencentral", "category:AuditEvent", "azure_log_type:resource", "eventhub:platform-logs"):
+        assert want in _tags(k), (want, _tags(k))
+
+    # AKS kube-audit-admin: properties.log stays the original JSON string (no lifting); bounded fields added
+    raw = json.loads((SAMPLES / "eventhub-azure-platform-logs.jsonl").read_text())["records"][1]["properties"]["log"]
+    x = ids["evt-0502"][0]
+    assert x["ddsource"] == "azure.containerservice" and x["properties"]["log"] == raw
+    assert "verb" not in x and "kind" not in x and "auditID" not in x and "message" not in x, "audit fields must not be lifted to the top level"
+    assert x["aks_audit"]["verb"] == "create" and x["aks_audit"]["objectRef"]["subresource"] == "exec"
+    assert x["aks_audit"]["objectRef"]["namespace"] == "hello" and x["aks_audit"]["responseStatus"]["code"] == 101
+    assert x["aks_audit"]["user"]["username"] == "lab-admin@example.com"
+
+    # Storage read
+    r = ids["evt-0503"][0]
+    assert r["ddsource"] == "azure.storage" and r["category"] == "StorageRead" and r["statusCode"] == 200
+    assert "resource_type:microsoft.storage/storageaccounts/blobservices" in _tags(r) and "resource_name:default" in _tags(r)
+    assert r["identity"]["tokenHash"] == "sha256:ABCDEF"
+
+    # size guard: oversized record is truncated (never dropped) and flagged
+    b = ids["evt-0504"][0]
+    assert b["truncated"] is True and "truncated:true" in _tags(b) and "properties.CsUriQuery" in b["truncated_fields"]
+    assert len(json.dumps(b)) < 20000 + 2000 and b["properties"]["CsUriQuery"].endswith("[TRUNCATED by fluent-bit: Datadog 1MB log limit]")
+    assert b["properties"]["CsUriStem"] == "/api/inventory/evt-0504" and b["ddsource"] == "azure.web" and b["service"] == "azure"

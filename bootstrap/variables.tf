@@ -36,6 +36,10 @@ variable "settings" {
     # Contributor on tfstate + contracts: needed for `terraform init -migrate-state` with Entra auth (Owner has no
     # data-plane rights) and for state restore. Use a group; scripts/bootstrap.sh checks you are covered.
     operator_principal_ids = optional(list(string), [])
+    # Promotion (environments/promotion.yaml): principal ids of DOWNSTREAM environments' pipeline identities
+    # (e.g. test/prod build + apply) that read this environment's deployment records and packages to promote
+    # the exact artifacts. The registry side is granted by platform-shared settings.acr_pull_principal_ids.
+    promotion_reader_principal_ids = optional(list(string), [])
 
     # ---------------------------------------------------------------- pipeline identities
     create_validate_identity = optional(bool, true)

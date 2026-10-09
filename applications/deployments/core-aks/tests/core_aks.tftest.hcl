@@ -18,6 +18,10 @@ mock_provider "kubernetes" {
   override_during = plan
 }
 
+mock_provider "helm" {
+  override_during = plan
+}
+
 # BEGIN FIXTURE (generated): upstream contract shapes with valid Azure IDs.
 variables {
   environment = {
@@ -400,52 +404,68 @@ run "defaults" {
   }
 
   assert {
-    condition     = length(kubernetes_deployment_v1.app) == 4 && kubernetes_namespace_v1.hello.metadata[0].name == "hello"
-    error_message = "bff, orders-api, catalog-api and worker Deployments in namespace hello."
+    condition     = length(helm_release.app) == 4 && kubernetes_namespace_v1.hello.metadata[0].name == "hello" && alltrue([for k, r in helm_release.app : r.name == k && r.namespace == "hello" && !r.create_namespace])
+    error_message = "One Helm release per workload (bff, orders-api, catalog-api, worker) in namespace hello (namespace owned by this root)."
   }
   assert {
-    condition     = alltrue([for k, sa in kubernetes_service_account_v1.app : sa.metadata[0].annotations["azure.workload.identity/client-id"] == var.platform_aks.workload_identities[k].client_id])
-    error_message = "ServiceAccounts must carry the workload identity client id."
+    condition     = alltrue([for k, r in helm_release.app : r.atomic && r.wait && r.cleanup_on_fail && r.timeout == 600 && r.max_history == 10 && r.lint && !r.take_ownership])
+    error_message = "Releases are atomic, wait for readiness, clean up on failure, keep bounded history for rollback and lint at plan."
   }
   assert {
-    condition     = alltrue([for k, d in kubernetes_deployment_v1.app : d.spec[0].template[0].metadata[0].labels["azure.workload.identity/use"] == "true"])
-    error_message = "Pods must opt into workload identity."
+    condition     = alltrue([for k, r in helm_release.app : endswith(r.chart, "applications/charts/hello-service") && r.repository == null]) && local.chart.version == null
+    error_message = "Default chart source is the repository chart applications/charts/hello-service."
   }
   assert {
-    condition     = alltrue([for k, d in kubernetes_deployment_v1.app : length(d.spec[0].template[0].spec[0].container) == 1])
-    error_message = "No sidecars on AKS: logs go through the Fluent Bit DaemonSet."
+    condition     = alltrue([for k, r in helm_release.app : yamldecode(r.values[0]).identity.clientId == var.platform_aks.workload_identities[k].client_id && yamldecode(r.values[0]).identity.workloadIdentity && yamldecode(r.values[0]).serviceAccount.name == var.platform_aks.workload_identities[k].service_account])
+    error_message = "Workload identity: ServiceAccount name and client id from the platform-aks contract."
   }
   assert {
-    condition     = alltrue([for k, d in kubernetes_deployment_v1.app : d.spec[0].template[0].spec[0].container[0].env[0].name == "DD_AGENT_HOST" && d.spec[0].template[0].spec[0].container[0].env[0].value_from[0].field_ref[0].field_path == "status.hostIP"])
-    error_message = "DD_AGENT_HOST (status.hostIP) must be the first env var."
+    condition     = alltrue([for k, r in helm_release.app : can(regex("^sha256:[a-f0-9]{64}$", yamldecode(r.values[0]).image.digest)) && !can(yamldecode(r.values[0]).image.tag) && "${yamldecode(r.values[0]).image.repository}@${yamldecode(r.values[0]).image.digest}" == var.artifacts[local.meta[k].artifact].image])
+    error_message = "Images must be digest-pinned (repository + sha256 digest, no tag)."
   }
   assert {
-    condition     = module.env["hello-bff"].env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://$(DD_AGENT_HOST):4317" && module.env["hello-bff"].env["OTEL_EXPORTER_OTLP_PROTOCOL"] == "grpc"
+    condition     = alltrue([for k, r in helm_release.app : yamldecode(r.values[0]).telemetry.agentHostFromHostIP && yamldecode(r.values[0]).telemetry.disableAgentLogCollection && !yamldecode(r.values[0]).logFile.enabled && !contains(keys(yamldecode(r.values[0]).env), "DD_AGENT_HOST")])
+    error_message = "DD_AGENT_HOST from status.hostIP is rendered by the chart (first env var); no file logging/sidecar on AKS (Fluent Bit DaemonSet)."
+  }
+  assert {
+    condition     = yamldecode(helm_release.app["hello-bff"].values[0]).env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://$(DD_AGENT_HOST):4317" && yamldecode(helm_release.app["hello-bff"].values[0]).env["OTEL_EXPORTER_OTLP_PROTOCOL"] == "grpc"
     error_message = "AKS OTLP goes to the node-local agent over gRPC."
   }
   assert {
-    condition     = alltrue([for k, e in module.env : e.env["FAULTS_ENABLED"] == "false" && !contains(keys(e.env), "FAULT_TOKEN") && !contains(keys(e.env), "LOG_FILE_PATH")])
-    error_message = "FAULTS_ENABLED false by default, FAULT_TOKEN never plain, stdout logging only."
+    condition     = alltrue([for k, r in helm_release.app : !yamldecode(r.values[0]).faults.enabled && length(setintersection(keys(yamldecode(r.values[0]).env), ["FAULTS_ENABLED", "FAULT_TOKEN", "LOG_FILE_PATH", "DD_ENV", "DD_SERVICE", "DD_VERSION", "AZURE_CLIENT_ID", "PORT"])) == 0]) && alltrue([for k, e in module.env : e.env["FAULTS_ENABLED"] == "false"])
+    error_message = "Faults disabled by default; chart-owned env (FAULTS_ENABLED, DD_*, AZURE_CLIENT_ID, PORT) and FAULT_TOKEN never in plain env."
   }
   assert {
-    condition     = length(keys(kubernetes_manifest.secret_provider)) == 3 && local.kv_name == "eh-kv-ident-dev-abcde" && !contains(keys(kubernetes_manifest.secret_provider), "hello-worker")
-    error_message = "SecretProviderClass per app reading fault-token (worker has no fault token)."
+    condition     = alltrue([for k, r in helm_release.app : alltrue([for n, v in yamldecode(r.values[0]).env : !can(regex("(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY)$", n))]) && alltrue([for n, id in yamldecode(r.values[0]).secretEnv : can(regex("^https://[^/]+/secrets/[A-Za-z0-9-]+$", id))])])
+    error_message = "No plaintext secrets: secret env carries versionless Key Vault ids only."
   }
   assert {
-    condition     = kubernetes_service_v1.app["hello-bff"].spec[0].type == "LoadBalancer" && kubernetes_service_v1.app["hello-bff"].metadata[0].annotations["service.beta.kubernetes.io/azure-load-balancer-internal"] == "true" && length(kubernetes_ingress_v1.bff) == 0
+    condition     = length([for k, r in helm_release.app : k if yamldecode(r.values[0]).keyVault.enabled]) == 3 && local.kv_name == "eh-kv-ident-dev-abcde" && !yamldecode(helm_release.app["hello-worker"].values[0]).keyVault.enabled && yamldecode(helm_release.app["hello-bff"].values[0]).secretEnv["FAULT_TOKEN"] == var.foundation_identity.secret_ids["fault-token"]
+    error_message = "SecretProviderClass (chart keyVault.enabled) per HTTP app reading fault-token (worker has no fault token)."
+  }
+  assert {
+    condition     = yamldecode(helm_release.app["hello-bff"].values[0]).k8sService.type == "LoadBalancer" && yamldecode(helm_release.app["hello-bff"].values[0]).k8sService.internalLoadBalancer && !yamldecode(helm_release.app["hello-bff"].values[0]).ingress.enabled && length(data.kubernetes_service_v1.bff) == 1 && yamldecode(helm_release.app["hello-orders-api"].values[0]).k8sService.type == "ClusterIP"
     error_message = "Without the app routing add-on the BFF is exposed on an internal load balancer."
   }
   assert {
-    condition     = alltrue([for k, h in kubernetes_horizontal_pod_autoscaler_v2.app : h.spec[0].max_replicas <= var.settings.replica_ceiling || h.spec[0].max_replicas <= 6]) && length(kubernetes_pod_disruption_budget_v1.app) == 4
+    condition     = alltrue([for k, r in helm_release.app : yamldecode(r.values[0]).autoscaling.maxReplicas <= var.settings.replica_ceiling || yamldecode(r.values[0]).autoscaling.maxReplicas <= 6]) && alltrue([for k, r in helm_release.app : yamldecode(r.values[0]).podDisruptionBudget.enabled])
     error_message = "HPA ceilings and PDBs for every Deployment."
   }
   assert {
-    condition     = alltrue([for k, d in kubernetes_deployment_v1.app : can(regex("@sha256:[a-f0-9]{64}$", d.spec[0].template[0].spec[0].container[0].image))])
-    error_message = "Images must be digest-pinned."
+    condition     = yamldecode(helm_release.app["hello-worker"].values[0]).kind == "worker" && yamldecode(helm_release.app["hello-worker"].values[0]).port == 8081 && yamldecode(helm_release.app["hello-bff"].values[0]).kind == "deployment"
+    error_message = "Worker uses the worker kind (health port 8081, no Service); HTTP services the deployment kind."
   }
   assert {
-    condition     = output.contract.apps["hello-worker"].app_log_route == "daemonset" && !output.contract.apps["hello-worker"].scale_to_zero && output.contract.apps["hello-bff"].type == "Kubernetes/Deployment"
-    error_message = "Contract per app: log route daemonset, no scale-to-zero."
+    condition     = alltrue([for k, r in helm_release.app : yamldecode(r.values[0]).service.name == k && yamldecode(r.values[0]).service.env == "dev" && yamldecode(r.values[0]).service.version == local.artifact_version[local.meta[k].artifact]]) && yamldecode(helm_release.app["hello-orders-api"].values[0]).service.version == "1.4.2" && yamldecode(helm_release.app["hello-catalog-api"].values[0]).service.logsSource == "python"
+    error_message = "Unified service tagging values (env/service/version) for the chart labels and DD_* env."
+  }
+  assert {
+    condition     = output.contract.apps["hello-worker"].app_log_route == "daemonset" && !output.contract.apps["hello-worker"].scale_to_zero && output.contract.apps["hello-bff"].type == "Kubernetes/Deployment" && !output.contract.apps["hello-bff"].sidecar && output.contract.apps["hello-bff"].id == "${var.platform_aks.cluster_id}/namespaces/hello/deployments/hello-bff"
+    error_message = "Contract per app unchanged: log route daemonset, no sidecar, no scale-to-zero, Deployment id."
+  }
+  assert {
+    condition     = output.contract.helm.chart == "hello-service" && length(output.contract.helm.releases) == 4
+    error_message = "Contract lists the Helm releases."
   }
 }
 
@@ -467,17 +487,46 @@ run "app_routing_and_no_csi" {
       key_vault_secrets_provider = null
     }
     settings = {
-      exposure = { mode = "app-routing", host = "api.hello.example.com", tls_cert_keyvault_id = "https://kv.vault.azure.net/certificates/hello-api" }
+      faults_enabled = true
+      exposure       = { mode = "app-routing", host = "api.hello.example.com", tls_cert_keyvault_id = "https://kv.vault.azure.net/certificates/hello-api" }
     }
   }
   assert {
-    condition     = length(kubernetes_ingress_v1.bff) == 1 && kubernetes_service_v1.app["hello-bff"].spec[0].type == "ClusterIP"
-    error_message = "app-routing mode uses the managed NGINX ingress with TLS."
+    condition     = yamldecode(helm_release.app["hello-bff"].values[0]).ingress.enabled && yamldecode(helm_release.app["hello-bff"].values[0]).ingress.host == "api.hello.example.com" && yamldecode(helm_release.app["hello-bff"].values[0]).ingress.tls.keyVaultCertificateUri == "https://kv.vault.azure.net/certificates/hello-api" && yamldecode(helm_release.app["hello-bff"].values[0]).k8sService.type == "ClusterIP" && length(data.kubernetes_service_v1.bff) == 0
+    error_message = "app-routing mode uses the managed NGINX ingress with TLS from Key Vault."
   }
   assert {
-    condition     = length(kubernetes_manifest.secret_provider) == 0 && output.contract.public_api.origin == "https://api.hello.example.com"
-    error_message = "No CSI driver => no SecretProviderClass; public origin from the ingress host."
+    condition     = alltrue([for k, r in helm_release.app : !yamldecode(r.values[0]).keyVault.enabled && length(yamldecode(r.values[0]).secretEnv) == 0 && !yamldecode(r.values[0]).faults.enabled]) && output.contract.public_api.origin == "https://api.hello.example.com"
+    error_message = "No CSI driver => no SecretProviderClass and no FAULT_TOKEN, so faults stay disabled; public origin from the ingress host."
   }
+}
+
+run "oci_chart_and_network_policy" {
+  command = plan
+  variables {
+    settings = {
+      helm                       = { chart_repository = "oci://ehcrshareddevabcde.azurecr.io/helm", chart_version = "1.0.0", take_ownership = true }
+      network_policy_enabled     = true
+      network_policy_allow_cidrs = ["10.20.0.0/16"]
+      apps                       = { "hello-bff" = { max_replicas = 4 }, "hello-orders-api" = {}, "hello-catalog-api" = {}, "hello-worker" = { enabled = false } }
+    }
+  }
+  assert {
+    condition     = length(helm_release.app) == 3 && !contains(keys(helm_release.app), "hello-worker") && alltrue([for k, r in helm_release.app : r.chart == "hello-service" && r.repository == "oci://ehcrshareddevabcde.azurecr.io/helm" && r.version == "1.0.0" && r.take_ownership])
+    error_message = "OCI chart from ACR (published by the applications pipeline) with an explicit chart version; only enabled apps get releases."
+  }
+  assert {
+    condition     = yamldecode(helm_release.app["hello-bff"].values[0]).networkPolicy.enabled && yamldecode(helm_release.app["hello-bff"].values[0]).networkPolicy.allowFromCIDRs == ["10.20.0.0/16"] && yamldecode(helm_release.app["hello-catalog-api"].values[0]).networkPolicy.allowFromCIDRs == [] && yamldecode(helm_release.app["hello-bff"].values[0]).autoscaling.maxReplicas == 4
+    error_message = "NetworkPolicy values (LB client CIDRs only for the BFF) and per-app HPA ceiling."
+  }
+}
+
+run "rejects_oci_without_version" {
+  command = plan
+  variables {
+    settings = { helm = { chart_repository = "oci://ehcrshareddevabcde.azurecr.io/helm" } }
+  }
+  expect_failures = [var.settings]
 }
 
 run "rejects_mutable_tags" {

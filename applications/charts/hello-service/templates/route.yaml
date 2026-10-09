@@ -1,0 +1,24 @@
+{{- if and .Values.openshift.route.enabled (eq .Values.kind "deployment") }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "hello-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-service.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.openshift.route.host }}
+  host: {{ . | quote }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "hello-service.fullname" . }}
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: {{ .Values.openshift.route.tls.termination }}
+    {{- if eq .Values.openshift.route.tls.termination "edge" }}
+    insecureEdgeTerminationPolicy: {{ .Values.openshift.route.tls.insecureEdgeTerminationPolicy }}
+    {{- end }}
+{{- end }}

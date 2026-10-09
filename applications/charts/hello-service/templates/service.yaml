@@ -1,0 +1,27 @@
+{{- if eq .Values.kind "deployment" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hello-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-service.labels" . | nindent 4 }}
+  {{- if or .Values.k8sService.internalLoadBalancer .Values.k8sService.annotations }}
+  annotations:
+    {{- if .Values.k8sService.internalLoadBalancer }}
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    {{- end }}
+    {{- with .Values.k8sService.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: {{ .Values.k8sService.type }}
+  selector:
+    {{- include "hello-service.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.k8sService.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

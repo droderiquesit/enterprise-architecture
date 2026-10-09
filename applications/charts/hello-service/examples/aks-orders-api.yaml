@@ -1,0 +1,95 @@
+# hello-orders-api on AKS - values exactly as rendered by applications/deployments/core-aks (terraform test fixture,
+# run "defaults": internal-lb exposure, Key Vault CSI enabled). Regenerate: REGEN_EXAMPLES=1 pytest tests/charts -k terraform
+# Release: helm upgrade --install hello-orders-api applications/charts/hello-service -n hello -f <this file>
+autoscaling:
+  enabled: true
+  maxReplicas: 3
+  minReplicas: 1
+  targetCPUUtilizationPercentage: 70
+env:
+  CATALOG_API_URL: http://hello-catalog-api.hello.svc.cluster.local
+  DD_SITE: datadoghq.com
+  GIT_COMMIT: 0123abc
+  LOG_LEVEL: info
+  MESSAGING_MODE: servicebus
+  OTEL_DOTNET_AUTO_LOGS_ENABLED: 'false'
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://$(DD_AGENT_HOST):4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  OTEL_EXPORTER_OTLP_TIMEOUT: '10000'
+  OTEL_LOGS_EXPORTER: none
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_PROPAGATORS: tracecontext,baggage
+  OTEL_RESOURCE_ATTRIBUTES: application=enterprise-hello,cloud.platform=azure_aks,cloud.provider=azure,deployment.environment=dev,deployment.environment.name=dev,domain=orders,owner=orders@example.com,region=swedencentral,service.namespace=enterprise-hello,service.version=1.4.2,team=orders,tier=critical
+  OTEL_SERVICE_NAME: hello-orders-api
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_TRACES_SAMPLER: parentbased_traceidratio
+  OTEL_TRACES_SAMPLER_ARG: '1'
+  SERVICEBUS_FQDN: eh-sbns-msg-dev-sec.servicebus.windows.net
+  SERVICEBUS_TOPIC: order-events
+  SQL_CONNECTION_STRING: Server=tcp:eh-sql-data-dev-sec.database.windows.net,1433;Database=orders;Encrypt=True
+  SQL_USE_AZURE_CREDENTIAL: 'true'
+faults:
+  enabled: false
+identity:
+  clientId: 33333333-3333-3333-3333-000000000001
+  tenantId: 00000000-0000-0000-0000-000000000000
+  workloadIdentity: true
+image:
+  digest: sha256:3333333333333333333333333333333333333333333333333333333333333333
+  pullPolicy: IfNotPresent
+  repository: ehcrshareddevabcde.azurecr.io/hello-orders-api
+ingress:
+  className: webapprouting.kubernetes.azure.com
+  enabled: false
+  host: ''
+  tls:
+    enabled: true
+    keyVaultCertificateUri: ''
+    secretName: keyvault-hello-bff-tls
+k8sService:
+  internalLoadBalancer: false
+  port: 80
+  type: ClusterIP
+keyVault:
+  enabled: true
+  name: eh-kv-ident-dev-abcde
+  tenantId: 00000000-0000-0000-0000-000000000000
+kind: deployment
+logFile:
+  enabled: false
+networkPolicy:
+  allowFromCIDRs: []
+  allowFromNamespaces: []
+  enabled: false
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+port: 8080
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 192Mi
+secretEnv:
+  FAULT_TOKEN: https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token
+service:
+  domain: orders
+  env: dev
+  logsSource: csharp
+  name: hello-orders-api
+  partOf: enterprise-hello
+  team: orders
+  tier: critical
+  version: 1.4.2
+serviceAccount:
+  create: true
+  name: hello-orders-api
+telemetry:
+  agentHostFromHostIP: true
+  disableAgentLogCollection: true
+topologySpread:
+  enabled: true
+  hostnameSkew: 1
+  zoneSpread: false

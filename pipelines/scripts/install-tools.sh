@@ -3,7 +3,7 @@
 # SHA-256 checksums published by each project. Idempotent: an existing binary of the requested
 # version is reused. Usage:
 #   pipelines/scripts/install-tools.sh terraform            # version from versions.yaml
-#   pipelines/scripts/install-tools.sh gitleaks trivy syft  # versions from pipelines/variables/tools.yml env
+#   pipelines/scripts/install-tools.sh gitleaks trivy syft helm kubeconform  # versions: pipelines/variables/tools.yml
 # Versions for scanners come from environment variables GITLEAKS_VERSION, TRIVY_VERSION, SYFT_VERSION
 # (set by pipelines/variables/tools.yml).
 set -euo pipefail
@@ -66,6 +66,24 @@ install_syft() {
   fetch "https://github.com/anchore/syft/releases/download/v${v}/syft_${v}_checksums.txt" "$WORK/sums"
   verify "$WORK/$tgz" "$WORK/sums" "$tgz"
   tar -xzf "$WORK/$tgz" -C "$BIN" syft; syft version
+}
+
+install_helm() {
+  local v="${HELM_VERSION:?HELM_VERSION not set}"; local a; a="$(arch)"
+  local tgz="helm-v${v}-linux-${a}.tar.gz"
+  fetch "https://get.helm.sh/${tgz}" "$WORK/$tgz"
+  fetch "https://get.helm.sh/${tgz}.sha256sum" "$WORK/sums"
+  verify "$WORK/$tgz" "$WORK/sums" "$tgz"
+  tar -xzf "$WORK/$tgz" -C "$WORK" "linux-${a}/helm" && install -m 0755 "$WORK/linux-${a}/helm" "$BIN/helm"; helm version
+}
+
+install_kubeconform() {
+  local v="${KUBECONFORM_VERSION:?KUBECONFORM_VERSION not set}"; local a; a="$(arch)"
+  local tgz="kubeconform-linux-${a}.tar.gz"
+  fetch "https://github.com/yannh/kubeconform/releases/download/v${v}/${tgz}" "$WORK/$tgz"
+  fetch "https://github.com/yannh/kubeconform/releases/download/v${v}/CHECKSUMS" "$WORK/sums"
+  verify "$WORK/$tgz" "$WORK/sums" "$tgz"
+  tar -xzf "$WORK/$tgz" -C "$BIN" kubeconform; kubeconform -v
 }
 
 install_checkov() {

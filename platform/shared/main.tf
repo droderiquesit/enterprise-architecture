@@ -10,7 +10,10 @@ locals {
   identities  = var.foundation_identity.identities
 
   # Only grant identities that exist in the identity contract (profiles may publish a subset).
-  acr_pull = { for k in var.settings.acr_pull_identities : k => local.identities[k] if contains(keys(local.identities), k) }
+  acr_pull = merge(
+    { for k in var.settings.acr_pull_identities : k => local.identities[k] if contains(keys(local.identities), k) },
+    { for p in var.settings.acr_pull_principal_ids : "principal-${p}" => { principal_id = p } },
+  )
   acr_push = merge(
     { for k in var.settings.acr_push_identities : k => local.identities[k] if contains(keys(local.identities), k) },
     { for p in var.settings.acr_push_principal_ids : "principal-${p}" => { principal_id = p } },

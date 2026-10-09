@@ -1,5 +1,7 @@
 # Enterprise Hello core services on AKS (namespace `hello`): hello-bff, hello-orders-api, hello-catalog-api,
-# hello-worker as Deployments with workload identity ServiceAccounts, Services, PDBs and HPAs.
+# hello-worker - one Helm release per workload from the repository chart applications/charts/hello-service
+# (Deployment, workload identity ServiceAccount, Service, PDB, HPA, SecretProviderClass, optional Ingress /
+# NetworkPolicy). Values are rendered here from the upstream contracts (yamlencode of a typed object).
 # Logs: stdout -> Fluent Bit DaemonSet (obs-kubernetes). Traces: OTLP to the node-local Datadog Agent
 # (status.hostIP via the downward API). Secrets: Key Vault via the Secrets Store CSI driver add-on
 # (SecretProviderClass with the workload identity) synced to a Kubernetes Secret.
@@ -104,322 +106,139 @@ resource "kubernetes_namespace_v1" "hello" {
   }
 }
 
-resource "kubernetes_service_account_v1" "app" {
+# ---------------------------------------------------------------- Helm values (one typed object per workload)
+locals {
+  # Repository chart by default; the published OCI chart when settings.helm.chart_repository is set.
+  chart = var.settings.helm.chart_repository == null ? {
+    chart      = abspath("${path.module}/../../charts/hello-service")
+    repository = null
+    version    = null
+    } : {
+    chart      = "hello-service"
+    repository = var.settings.helm.chart_repository
+    version    = var.settings.helm.chart_version
+  }
+
+  # Env vars the chart renders itself from service/identity/faults/port (labels and env cannot disagree);
+  # the schema rejects them in `env`.
+  chart_owned_env = ["DD_AGENT_HOST", "DD_ENV", "DD_SERVICE", "DD_VERSION", "AZURE_CLIENT_ID", "FAULTS_ENABLED", "PORT", "LOG_FILE_PATH"]
+
+  image      = { for k in keys(local.apps) : k => try(var.artifacts[local.meta[k].artifact].image, null) }
+  secret_env = { for k in keys(local.apps) : k => local.csi ? module.env[k].secret_env : {} }
+  bff_lb     = var.settings.exposure.mode == "internal-lb"
+
+  release_values = {
+    for k, a in local.apps : k => {
+      kind = k == "hello-worker" ? "worker" : "deployment"
+      service = {
+        name       = k
+        version    = local.artifact_version[local.meta[k].artifact]
+        env        = local.env_name
+        partOf     = "enterprise-hello"
+        team       = local.meta[k].team
+        domain     = local.meta[k].domain
+        tier       = local.meta[k].tier
+        logsSource = module.env[k].k8s_patch_object.metadata.labels["logs.datadoghq.com/source"]
+      }
+      image = {
+        repository = try(split("@", local.image[k])[0], "")
+        digest     = try(split("@", local.image[k])[1], "")
+        pullPolicy = "IfNotPresent"
+      }
+      identity = {
+        clientId         = local.wi[k].client_id
+        tenantId         = var.environment.tenant_id
+        workloadIdentity = true
+      }
+      serviceAccount = { create = true, name = local.wi[k].service_account }
+      port           = local.port[k]
+      env            = { for n, v in module.env[k].env : n => v if !contains(local.chart_owned_env, n) }
+      secretEnv      = local.secret_env[k]
+      keyVault = {
+        enabled  = length(local.secret_env[k]) > 0
+        name     = local.kv_name
+        tenantId = var.environment.tenant_id
+      }
+      telemetry = { agentHostFromHostIP = true, disableAgentLogCollection = true }
+      logFile   = { enabled = false } # stdout -> Fluent Bit DaemonSet
+      # Faults need FAULT_TOKEN from Key Vault (CSI); without it FAULTS_ENABLED stays false (chart schema rule).
+      faults = { enabled = var.settings.faults_enabled && contains(keys(local.secret_env[k]), "FAULT_TOKEN") }
+      resources = {
+        requests = { cpu = a.cpu_request, memory = a.memory_request }
+        limits   = { cpu = a.cpu_limit, memory = a.memory_limit }
+      }
+      autoscaling = {
+        enabled                        = true
+        minReplicas                    = a.min_replicas
+        maxReplicas                    = min(a.max_replicas, var.settings.replica_ceiling)
+        targetCPUUtilizationPercentage = a.target_cpu
+      }
+      podDisruptionBudget = { enabled = true, maxUnavailable = 1 }
+      k8sService = {
+        type                 = k == "hello-bff" && local.bff_lb ? "LoadBalancer" : "ClusterIP"
+        port                 = 80
+        internalLoadBalancer = k == "hello-bff" && local.bff_lb
+      }
+      ingress = {
+        enabled   = k == "hello-bff" && var.settings.exposure.mode == "app-routing"
+        className = "webapprouting.kubernetes.azure.com"
+        host      = var.settings.exposure.host == null ? "" : var.settings.exposure.host
+        tls = {
+          enabled                = true
+          secretName             = "keyvault-${var.settings.exposure.tls_secret_name}"
+          keyVaultCertificateUri = var.settings.exposure.tls_cert_keyvault_id == null ? "" : var.settings.exposure.tls_cert_keyvault_id
+        }
+      }
+      networkPolicy = {
+        enabled             = var.settings.network_policy_enabled
+        allowFromNamespaces = k == "hello-bff" ? ["app-routing-system"] : []
+        allowFromCIDRs      = k == "hello-bff" ? var.settings.network_policy_allow_cidrs : []
+      }
+      topologySpread = { enabled = true, hostnameSkew = 1, zoneSpread = false }
+    }
+  }
+}
+
+# One release per workload: independent upgrade/rollback (`helm rollback <svc> -n hello`), atomic (a failed
+# upgrade rolls back to the last good revision), waits for readiness (rollout gated by /readyz).
+resource "helm_release" "app" {
   for_each = local.apps
-  metadata {
-    name      = local.wi[each.key].service_account
-    namespace = kubernetes_namespace_v1.hello.metadata[0].name
-    annotations = {
-      "azure.workload.identity/client-id" = local.wi[each.key].client_id
-      "azure.workload.identity/tenant-id" = var.environment.tenant_id
-    }
-    labels = { "app.kubernetes.io/name" = each.key }
-  }
-  automount_service_account_token = false
-}
 
-# Key Vault secrets (FAULT_TOKEN) through the Secrets Store CSI driver add-on, authenticated with the
-# pod's workload identity; synced into the Kubernetes Secret "<svc>-kv" while a pod mounts the volume.
-resource "kubernetes_manifest" "secret_provider" {
-  for_each = { for k in keys(local.apps) : k => module.env[k].secret_env if local.csi && length(module.env[k].secret_env) > 0 }
-  manifest = {
-    apiVersion = "secrets-store.csi.x-k8s.io/v1"
-    kind       = "SecretProviderClass"
-    metadata   = { name = "${each.key}-kv", namespace = local.ns }
-    spec = {
-      provider = "azure"
-      parameters = {
-        usePodIdentity = "false"
-        clientID       = local.wi[each.key].client_id
-        keyvaultName   = local.kv_name
-        tenantId       = var.environment.tenant_id
-        objects = yamlencode({ array = [for name, id in each.value : yamlencode({
-          objectName  = element(split("/", id), length(split("/", id)) - 1)
-          objectType  = "secret"
-          objectAlias = name
-        })] })
-      }
-      secretObjects = [{
-        secretName = "${each.key}-kv"
-        type       = "Opaque"
-        data       = [for name in sort(keys(each.value)) : { objectName = name, key = name }]
-      }]
-    }
-  }
-  depends_on = [kubernetes_namespace_v1.hello]
-}
+  name             = each.key
+  namespace        = kubernetes_namespace_v1.hello.metadata[0].name
+  create_namespace = false
+  chart            = local.chart.chart
+  repository       = local.chart.repository
+  version          = local.chart.version
+  description      = "${each.key} ${local.release_values[each.key].service.version}"
 
-resource "kubernetes_deployment_v1" "app" {
-  #checkov:skip=CKV_K8S_15:Images are digest-pinned (immutable); IfNotPresent cannot run a different image than the digest.
-  for_each         = local.apps
-  wait_for_rollout = true
+  values = [yamlencode(local.release_values[each.key])]
 
-  metadata {
-    name      = each.key
-    namespace = kubernetes_namespace_v1.hello.metadata[0].name
-    labels    = merge(module.env[each.key].k8s_patch_object.metadata.labels, { "app.kubernetes.io/name" = each.key, "app.kubernetes.io/part-of" = "enterprise-hello" })
-  }
+  atomic          = true
+  wait            = true
+  wait_for_jobs   = false
+  cleanup_on_fail = true
+  timeout         = var.settings.helm.timeout_seconds
+  max_history     = var.settings.helm.max_history
+  lint            = true
+  take_ownership  = var.settings.helm.take_ownership
 
-  spec {
-    replicas               = each.value.min_replicas
-    revision_history_limit = 5
-    selector {
-      match_labels = { "app.kubernetes.io/name" = each.key }
-    }
-    strategy {
-      type = "RollingUpdate"
-      rolling_update {
-        max_surge       = "1"
-        max_unavailable = "0"
-      }
-    }
-    template {
-      metadata {
-        labels = merge(module.env[each.key].k8s_patch_object.spec.template.metadata.labels, {
-          "app.kubernetes.io/name"      = each.key
-          "app.kubernetes.io/version"   = local.artifact_version[local.meta[each.key].artifact]
-          "azure.workload.identity/use" = "true"
-        })
-        annotations = {
-          # Logs are collected by the Fluent Bit DaemonSet only; the Datadog Agent must not ship them too.
-          "ad.datadoghq.com/${each.key}.logs" = "[]"
-        }
-      }
-      spec {
-        service_account_name             = kubernetes_service_account_v1.app[each.key].metadata[0].name
-        automount_service_account_token  = true # projected token for workload identity
-        termination_grace_period_seconds = 30
-        security_context {
-          # Images run as a numeric non-root user (.NET chiseled: 1654); no fixed uid imposed here.
-          run_as_non_root = true
-          seccomp_profile {
-            type = "RuntimeDefault"
-          }
-        }
-        topology_spread_constraint {
-          max_skew           = 1
-          topology_key       = "kubernetes.io/hostname"
-          when_unsatisfiable = "ScheduleAnyway"
-          label_selector {
-            match_labels = { "app.kubernetes.io/name" = each.key }
-          }
-        }
-
-        container {
-          name              = each.key
-          image             = try(var.artifacts[local.meta[each.key].artifact].image, null)
-          image_pull_policy = "IfNotPresent"
-
-          port {
-            name           = "http"
-            container_port = local.port[each.key]
-          }
-
-          # DD_AGENT_HOST must precede OTEL_EXPORTER_OTLP_ENDPOINT, which references $(DD_AGENT_HOST).
-          env {
-            name = "DD_AGENT_HOST"
-            value_from {
-              field_ref {
-                field_path = "status.hostIP"
-              }
-            }
-          }
-          dynamic "env" {
-            for_each = sort(keys(module.env[each.key].env))
-            content {
-              name  = env.value
-              value = module.env[each.key].env[env.value]
-            }
-          }
-          dynamic "env" {
-            for_each = local.csi ? sort(keys(module.env[each.key].secret_env)) : []
-            content {
-              name = env.value
-              value_from {
-                secret_key_ref {
-                  name = "${each.key}-kv"
-                  key  = env.value
-                }
-              }
-            }
-          }
-
-          resources {
-            requests = { cpu = each.value.cpu_request, memory = each.value.memory_request }
-            limits   = { cpu = each.value.cpu_limit, memory = each.value.memory_limit }
-          }
-
-          startup_probe {
-            http_get {
-              path = "/healthz"
-              port = local.port[each.key]
-            }
-            period_seconds    = 5
-            failure_threshold = 24
-          }
-          liveness_probe {
-            http_get {
-              path = "/healthz"
-              port = local.port[each.key]
-            }
-            period_seconds    = 15
-            failure_threshold = 3
-          }
-          readiness_probe {
-            http_get {
-              path = "/readyz"
-              port = local.port[each.key]
-            }
-            period_seconds    = 10
-            failure_threshold = 3
-          }
-
-          security_context {
-            allow_privilege_escalation = false
-            read_only_root_filesystem  = true
-            capabilities {
-              drop = ["ALL"]
-            }
-          }
-
-          volume_mount {
-            name       = "tmp"
-            mount_path = "/tmp"
-          }
-          dynamic "volume_mount" {
-            for_each = contains(keys(kubernetes_manifest.secret_provider), each.key) ? [1] : []
-            content {
-              name       = "kv-secrets"
-              mount_path = "/mnt/secrets"
-              read_only  = true
-            }
-          }
-        }
-
-        volume {
-          name = "tmp"
-          empty_dir {
-            size_limit = "256Mi"
-          }
-        }
-        dynamic "volume" {
-          for_each = contains(keys(kubernetes_manifest.secret_provider), each.key) ? [1] : []
-          content {
-            name = "kv-secrets"
-            csi {
-              driver            = "secrets-store.csi.k8s.io"
-              read_only         = true
-              volume_attributes = { secretProviderClass = "${each.key}-kv" }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  # Replica count is owned by the HPA after creation.
   lifecycle {
-    ignore_changes = [spec[0].replicas]
-  }
-}
-
-resource "kubernetes_service_v1" "app" {
-  for_each = local.http
-  metadata {
-    name      = each.key
-    namespace = kubernetes_namespace_v1.hello.metadata[0].name
-    labels    = { "app.kubernetes.io/name" = each.key }
-    annotations = each.key == "hello-bff" && var.settings.exposure.mode == "internal-lb" ? {
-      "service.beta.kubernetes.io/azure-load-balancer-internal" = "true"
-    } : {}
-  }
-  spec {
-    type     = each.key == "hello-bff" && var.settings.exposure.mode == "internal-lb" ? "LoadBalancer" : "ClusterIP"
-    selector = { "app.kubernetes.io/name" = each.key }
-    port {
-      name        = "http"
-      port        = 80
-      target_port = "http"
+    precondition {
+      condition     = can(regex("^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$", coalesce(local.image[each.key], "x")))
+      error_message = "${each.key}: needs a digest-pinned image in var.artifacts[${local.meta[each.key].artifact}]."
     }
   }
-  wait_for_load_balancer = each.key == "hello-bff" && var.settings.exposure.mode == "internal-lb"
 }
 
-# App routing add-on ingress (managed NGINX) with TLS from Key Vault - only when platform-aks enables it.
-resource "kubernetes_ingress_v1" "bff" {
-  count = var.settings.exposure.mode == "app-routing" && contains(keys(local.http), "hello-bff") ? 1 : 0
+# Internal LB address of hello-bff (helm waits for the LoadBalancer ingress IP before the release succeeds).
+data "kubernetes_service_v1" "bff" {
+  count = local.bff_lb && contains(keys(local.http), "hello-bff") ? 1 : 0
   metadata {
     name      = "hello-bff"
-    namespace = kubernetes_namespace_v1.hello.metadata[0].name
-    annotations = var.settings.exposure.tls_cert_keyvault_id == null ? {} : {
-      "kubernetes.azure.com/tls-cert-keyvault-uri" = var.settings.exposure.tls_cert_keyvault_id
-    }
+    namespace = local.ns
   }
-  spec {
-    ingress_class_name = "webapprouting.kubernetes.azure.com"
-    tls {
-      hosts       = [var.settings.exposure.host]
-      secret_name = "keyvault-${var.settings.exposure.tls_secret_name}"
-    }
-    rule {
-      host = var.settings.exposure.host
-      http {
-        path {
-          path      = "/"
-          path_type = "Prefix"
-          backend {
-            service {
-              name = kubernetes_service_v1.app["hello-bff"].metadata[0].name
-              port {
-                number = 80
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-resource "kubernetes_pod_disruption_budget_v1" "app" {
-  for_each = local.apps
-  metadata {
-    name      = each.key
-    namespace = kubernetes_namespace_v1.hello.metadata[0].name
-  }
-  spec {
-    max_unavailable = "1"
-    selector {
-      match_labels = { "app.kubernetes.io/name" = each.key }
-    }
-  }
-}
-
-resource "kubernetes_horizontal_pod_autoscaler_v2" "app" {
-  for_each = local.apps
-  metadata {
-    name      = each.key
-    namespace = kubernetes_namespace_v1.hello.metadata[0].name
-  }
-  spec {
-    min_replicas = each.value.min_replicas
-    max_replicas = min(each.value.max_replicas, var.settings.replica_ceiling)
-    scale_target_ref {
-      api_version = "apps/v1"
-      kind        = "Deployment"
-      name        = kubernetes_deployment_v1.app[each.key].metadata[0].name
-    }
-    metric {
-      type = "Resource"
-      resource {
-        name = "cpu"
-        target {
-          type                = "Utilization"
-          average_utilization = each.value.target_cpu
-        }
-      }
-    }
-  }
+  depends_on = [helm_release.app]
 }
 
 check "artifacts_present" {

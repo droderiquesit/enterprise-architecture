@@ -1,4 +1,5 @@
-%% Delivery: universal Azure DevOps pipeline (azure-pipelines.yml + pipelines/generated/component-stages.yml).
+%% Delivery: two Azure DevOps pipelines on one governed template (pipelines/templates/universal.yml):
+%% azure-pipelines.yml (platform) and azure-pipelines.applications.yml (applications); generated stages per scope.
 %% Sources: pipelines/README.md, tools/README.md, tools/changeset, tools/deploy, tools/report, ADR-0001 sections 4-5.
 flowchart TB
   subgraph LEGEND["Legend"]
@@ -8,12 +9,13 @@ flowchart TB
     lg5["A"] lc@==> lg6["B: deployment / control"]
   end
 
-  GIT["git push to main / PR build validation /<br/>nightly schedule / manual run (mode, components)"]
+  GIT["git push to main / PR build validation /<br/>nightly schedule / manual run (environment, mode, components)<br/>tag observability-v* -> package release only"]
+  PIPES["lab-platform (azure-pipelines.yml): foundation, platform, obs infrastructure<br/>lab-applications (azure-pipelines.applications.yml): artifacts, charts, deploy-*, obs-hosts/diagnostics/monitoring<br/>applications triggered by successful platform runs; promotion dev -> test -> prod = mode promote"]
 
   subgraph SELECT["Select (tools/changeset)"]
     FP["fingerprints per component<br/>validation_fp (files, modules, tests, docs)<br/>deploy_fp (rendered config, versions, contract majors, artifact source fp)"]
     REC[("deployment records<br/>deployments/&lt;env&gt;/&lt;id&gt;.json")]
-    SEL["selection.json + ADO output variables<br/>modes: pr | deploy | manual | reconcile | drift | retire"]
+    SEL["selection.json per scope + ADO output variables<br/>modes: pr | deploy | manual | reconcile | drift | retire | promote<br/>upstream contract hashes; apps wait for pending platform changes"]
   end
 
   subgraph CHECKS["Validate + Security (Microsoft-hosted, no credentials)"]
@@ -21,21 +23,21 @@ flowchart TB
     SEC["gitleaks, trivy fs, checkov<br/>(pinned, checksum-verified)"]
   end
 
-  BUILD["Build (deployPool, build identity)<br/>reuse image/package tagged with source fingerprint<br/>or build + push by digest, SBOM, provenance"]
+  BUILD["Build (applications pipeline, build identity)<br/>dev: reuse image/package tagged with source fingerprint or build + push by digest, SBOM, provenance<br/>test/prod: promote the same digests; Helm charts: lint, package, OCI push"]
 
-  subgraph WAVES["C_&lt;component&gt; stages in dependency order (generated), parallel where independent"]
+  subgraph WAVES["P_&lt;component&gt; plan + C_&lt;component&gt; apply stages in dependency order (generated per pipeline), parallel where independent"]
     direction LR
     W0["foundation-*, obs-prereqs,<br/>obs-azure-integration<br/>(bootstrap is manual)"] w01@==> W1["platform-*"]
     W1 w12@==> W2["obs-telemetry-transport"]
-    W2 w23@==> W3["deploy-* , obs-hosts,<br/>obs-kubernetes, obs-dbm"]
+    W2 w23@==> W3["platform pipeline: obs-kubernetes, obs-dbm<br/>applications pipeline: deploy-*, obs-hosts"]
     W3 w34@==> W4["obs-diagnostics, obs-monitoring<br/>(after all selected deployments)"]
   end
 
-  subgraph STAGE["one component stage (state boundary = &lt;env&gt;/&lt;id&gt;.tfstate)"]
+  subgraph STAGE["one component: P_ plan stage then C_ apply stage (state boundary = &lt;env&gt;/&lt;id&gt;.tfstate)"]
     PLAN["Plan job (plan identity)<br/>render tfvars, materialize upstream contracts,<br/>artifact digests, terraform plan -detailed-exitcode,<br/>plan_policy.py (protected deletes need approvals.yaml)"]
     PLANS[("plans container<br/>(plan file, sensitive)")]
     MAN["manifest.json binding<br/>commit, config/contracts/artifacts sha, plan sha256"]
-    APPLY["Apply deployment job (apply identity)<br/>environment lab-&lt;env&gt; approvals + exclusive lock<br/>only when the plan has changes; re-verifies the binding"]
+    APPLY["C_ apply stage (apply identity)<br/>environment lab-&lt;env&gt; approvals + exclusive lock + required template,<br/>evaluated after the plan exists; only when the plan has changes; re-verifies the binding"]
     POST["deploy_steps (deploy-zip.sh / deploy-swa.sh)<br/>+ smoke.sh for deployment roots"]
     PUB["publish contract envelope<br/>contracts/&lt;env&gt;/&lt;contract&gt;/v1.json"]
     WREC["write deployment record"]
@@ -49,7 +51,8 @@ flowchart TB
   AZ["Azure subscription"]
   DDOG[("Datadog")]
 
-  GIT c1@==> SELECT
+  GIT c1@==> PIPES
+  PIPES c0@==> SELECT
   FP c2@==> SEL
   REC c3@==> SEL
   SEL c4@==> VAL
@@ -84,4 +87,4 @@ flowchart TB
   classDef ctl stroke:#bc4c00,stroke-width:3.5px
   class la,a1,a2 app
   class lt,t1,t2 tel
-  class lc,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,c21,c22,c23,c24,w01,w12,w23,w34 ctl
+  class lc,c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,c21,c22,c23,c24,w01,w12,w23,w34 ctl

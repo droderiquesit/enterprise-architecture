@@ -153,3 +153,134 @@ run "reject_hub_level_rule" {
   }
   expect_failures = [var.destination]
 }
+
+# ---------------------------------------------------------------------------------------- tier policy
+run "tiers_are_cumulative_and_supersede" {
+  command = plan
+  variables {
+    platform_log_tier = "security"
+    resources = {
+      aks = {
+        id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.ContainerService/managedClusters/aks1"
+      }
+      aks_std = {
+        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.ContainerService/managedClusters/aks2"
+        tier = "standard"
+      }
+      aks_verbose = {
+        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks/providers/Microsoft.ContainerService/managedClusters/aks3"
+        tier = "verbose"
+      }
+      kv = {
+        id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sec/providers/Microsoft.KeyVault/vaults/kv1"
+      }
+      blob = {
+        id   = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-st/providers/Microsoft.Storage/storageAccounts/st1/blobServices/default"
+        tier = "verbose"
+      }
+    }
+  }
+  override_data {
+    target = data.azurerm_monitor_diagnostic_categories.this["aks"]
+    values = { log_category_types = ["kube-apiserver", "kube-audit", "kube-audit-admin", "kube-controller-manager", "kube-scheduler", "cluster-autoscaler", "cloud-controller-manager", "guard", "csi-azuredisk-controller"] }
+  }
+  override_data {
+    target = data.azurerm_monitor_diagnostic_categories.this["aks_std"]
+    values = { log_category_types = ["kube-apiserver", "kube-audit", "kube-audit-admin", "kube-controller-manager", "kube-scheduler", "cluster-autoscaler", "cloud-controller-manager", "guard", "csi-azuredisk-controller"] }
+  }
+  override_data {
+    target = data.azurerm_monitor_diagnostic_categories.this["aks_verbose"]
+    values = { log_category_types = ["kube-apiserver", "kube-audit", "kube-audit-admin", "kube-controller-manager", "kube-scheduler", "cluster-autoscaler", "cloud-controller-manager", "guard", "csi-azuredisk-controller"] }
+  }
+  override_data {
+    target = data.azurerm_monitor_diagnostic_categories.this["kv"]
+    values = { log_category_types = ["AuditEvent", "AzurePolicyEvaluationDetails"] }
+  }
+  override_data {
+    target = data.azurerm_monitor_diagnostic_categories.this["blob"]
+    values = { log_category_types = ["StorageRead", "StorageWrite", "StorageDelete"] }
+  }
+  assert {
+    condition     = jsonencode(output.platform_log_settings["aks"]) == jsonencode(["guard", "kube-audit-admin"])
+    error_message = "security tier: AKS audit essentials only (no full kube-audit)."
+  }
+  assert {
+    condition     = jsonencode(output.platform_log_settings["aks_std"]) == jsonencode(["cluster-autoscaler", "guard", "kube-apiserver", "kube-audit-admin"])
+    error_message = "standard tier: + kube-apiserver and cluster-autoscaler."
+  }
+  assert {
+    condition     = contains(output.platform_log_settings["aks_verbose"], "kube-audit") && !contains(output.platform_log_settings["aks_verbose"], "kube-audit-admin")
+    error_message = "verbose tier: full kube-audit supersedes kube-audit-admin (no duplicate audit events)."
+  }
+  assert {
+    condition     = jsonencode(output.platform_log_settings["kv"]) == jsonencode(["AuditEvent"]) && output.platform_log_tiers["aks_std"] == "standard" && output.platform_log_tiers["kv"] == "security"
+    error_message = "Key Vault AuditEvent at security tier; per-resource tier override wins."
+  }
+  assert {
+    condition     = jsonencode(output.platform_log_settings["blob"]) == jsonencode(["StorageDelete", "StorageRead", "StorageWrite"])
+    error_message = "Storage read/write/delete at verbose tier."
+  }
+}
+
+run "overrides_and_legacy_allowlist" {
+  command = plan
+  variables {
+    platform_log_allowlist_overrides = { "microsoft.keyvault/vaults" = ["AzurePolicyEvaluationDetails"] }
+    resources = {
+      kv = {
+        id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sec/providers/Microsoft.KeyVault/vaults/kv1"
+      }
+    }
+  }
+  override_data {
+    target = data.azurerm_monitor_diagnostic_categories.this["kv"]
+    values = { log_category_types = ["AuditEvent", "AzurePolicyEvaluationDetails"] }
+  }
+  assert {
+    condition     = jsonencode(output.platform_log_settings["kv"]) == jsonencode(["AzurePolicyEvaluationDetails"])
+    error_message = "A type override replaces the tier list for that type."
+  }
+}
+
+run "legacy_allowlist_replaces_policy" {
+  command = plan
+  variables {
+    platform_log_allowlist = { "microsoft.keyvault/vaults" = [] }
+    resources = {
+      kv = {
+        id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sec/providers/Microsoft.KeyVault/vaults/kv1"
+      }
+    }
+  }
+  override_data {
+    target = data.azurerm_monitor_diagnostic_categories.this["kv"]
+    values = { log_category_types = ["AuditEvent"] }
+  }
+  assert {
+    condition     = length(output.platform_log_settings) == 0
+    error_message = "A legacy allow-list (1.0.x input) replaces the policy entirely."
+  }
+}
+
+run "destination_namespace_is_never_a_source" {
+  command = plan
+  variables {
+    resources = {
+      obs_hub = {
+        id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-obs/providers/Microsoft.EventHub/namespaces/evhns"
+      }
+    }
+  }
+  assert {
+    condition     = jsonencode(output.self_referencing_resources) == jsonencode(["obs_hub"]) && length(azurerm_monitor_diagnostic_setting.platform_logs) == 0 && length(output.unsupported_resources) == 0
+    error_message = "The destination namespace must not stream its own logs into itself."
+  }
+}
+
+run "reject_unknown_tier" {
+  command = plan
+  variables {
+    platform_log_tier = "everything"
+  }
+  expect_failures = [var.platform_log_tier]
+}

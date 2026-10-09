@@ -21,3 +21,13 @@ output "unsupported_resources" {
 output "resource_types" {
   value = local.resource_types
 }
+
+output "platform_log_tiers" {
+  description = "resource key -> effective platform-log tier (security | standard | verbose)."
+  value       = local.effective_tier
+}
+
+output "self_referencing_resources" {
+  description = "Resources skipped because they ARE the destination Event Hubs namespace (would stream into itself)."
+  value       = local.self_referencing
+}

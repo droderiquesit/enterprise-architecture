@@ -1,0 +1,42 @@
+# hello-catalog-api on Azure Red Hat OpenShift - the shape applications/deployments/specialized renders into its
+# contract (aro.helm.values) and scripts/deploy-aro.sh installs with `helm upgrade --install --rollback-on-failure`.
+# OpenShift: no fixed runAsUser (restricted-v2 SCC assigns the UID), Route instead of Ingress, no AKS workload
+# identity webhook / Key Vault CSI add-on: database credentials come from an existing Secret created out of band.
+kind: deployment
+service:
+  name: hello-catalog-api
+  version: src-555555555555555555555555
+  env: dev
+  team: catalog
+  domain: catalog
+  tier: high
+  logsSource: python
+image:
+  repository: ehcrshareddevabcde.azurecr.io/hello-catalog-api
+  digest: sha256:5555555555555555555555555555555555555555555555555555555555555555
+identity:
+  clientId: 22222222-2222-2222-2222-000000000003
+  workloadIdentity: false
+port: 8080
+env:
+  PG_HOST: eh-psql-data-dev-sec.postgres.database.azure.com
+  PG_DATABASE: catalog
+  PG_AUTH: password
+  PG_USER: catalog_app
+  REDIS_AUTH: none
+  LOG_LEVEL: info
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://$(DD_AGENT_HOST):4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  OTEL_SERVICE_NAME: hello-catalog-api
+existingSecretEnv:
+  PG_PASSWORD: {secretName: hello-catalog-api-db, key: password}
+resources:
+  requests: {cpu: 100m, memory: 192Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+autoscaling:
+  enabled: false
+replicas: 2
+openshift:
+  enabled: true
+  route:
+    enabled: true

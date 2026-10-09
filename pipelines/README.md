@@ -1,204 +1,216 @@
-# Universal Azure DevOps pipeline
+# Delivery: operator guide
 
-`azure-pipelines.yml` deploys **only the components that changed, plus what they need**, for one lab
-environment. The component registry (`catalog/components.yaml`) is the single source of truth for
-change detection, dependency order, state boundaries and the generated stages.
+Two Azure DevOps pipelines deploy **only the components that changed, plus what they need**, to the lab
+environments. Both are thin entry files that `extends:` the same governed template,
+[`pipelines/templates/universal.yml`](templates/universal.yml):
 
-Status of this pipeline (ADR-0001 §11 vocabulary): **implemented** — YAML, templates and tools pass
-the repository's static checks and unit tests (`tests/changeset`, `tests/pipeline`, `tests/tools`).
-It has **not** been run in an Azure DevOps organisation from this repository; nothing has been
-deployed by it. First-run setup is described below.
+| Pipeline (ADO definition name) | Entry file | Scope | Runs when |
+|---|---|---|---|
+| `lab-platform` | [`azure-pipelines.yml`](../azure-pipelines.yml) | IaC platform: `foundation-*`, `platform-*`, observability infrastructure (`obs-prereqs`, `obs-azure-integration`, `obs-telemetry-transport`, `obs-kubernetes`, `obs-dbm`) | push to `main` (dev), PR build validation, nightly 02:17 UTC drift (dev), manual runs (any environment / mode); tag `observability-v<semver>` = observability package release only |
+| `lab-applications` | [`azure-pipelines.applications.yml`](../azure-pipelines.applications.yml) | artifacts (`svc-*`), Helm charts, `deploy-*` roots, and the observability roots that read application contracts (`obs-hosts`, `obs-diagnostics`, `obs-monitoring`) | push to `main` (dev), **every successful `lab-platform` run on `main` that deployed dev** (pipeline resource trigger), PR build validation, nightly 02:47 UTC drift (dev), manual runs |
 
-## How it works
+Architecture picture: [docs/diagrams/svg/05-delivery.svg](../docs/diagrams/svg/05-delivery.svg).
 
 ```
-Select ──> Validate ──┐
-       └─> Security ──┴─> Build ─> C_<component> stages (generated) ─> Retire ─> Verify / Drift ─> Evidence
+             push main / PR / schedule / manual / tag observability-v*
+                    |                                         |
+                    v                                         v
+   lab-platform (scope platform)                lab-applications (scope applications)
+   Select -> Validate + Security                Select -> Validate + Security + Helm lint
+     -> P_x plan -> C_x apply (dependency          -> Build (artifacts: resolve | build | promote; charts)
+        order, parallel where independent)         -> P_x plan -> C_x apply -> Retire -> Verify (smoke,
+     -> Retire -> Drift -> Evidence                   telemetry) -> Drift -> Evidence
+           |  run succeeded on main (dev)                  ^
+           +------ pipeline resource trigger --------------+
+   tag build: ObservabilityRelease only (test, package, sha256, Universal Package)
 ```
+
+Status (ADR-0001 §11): **implemented** - YAML, templates and tools pass the repository's static checks and
+unit tests. Neither pipeline has been run in an Azure DevOps organisation from this repository; nothing has
+been deployed by them. See [What only a real Azure DevOps organisation can prove](#what-only-a-real-azure-devops-organisation-can-prove).
+
+## How a run works
 
 | Stage | Agent | Credentials | What it does |
 |---|---|---|---|
-| Select | hosted (PR) / `deployPool` | none (PR) / plan identity (read records) | validates registry + graph + environment config, runs `python3 -m tools.changeset select`, publishes `selection.json`, sets output variables |
-| Validate | Microsoft-hosted | **none** | matrix over selected components (`tools/validate/component.py`: Terraform fmt/init -backend=false/validate/test, unit tests), tooling tests, pipeline lint, ownership + version checks, generated-file check |
-| Security | Microsoft-hosted | **none** | gitleaks, trivy (fs), checkov, installed in-job at pinned versions with checksum verification |
-| Build | `deployPool` | build identity | one job per artifact: reuse the image/package tagged with the artifact's source fingerprint, else build + push **by digest** (BuildKit provenance + SBOM, syft SPDX file, build metadata JSON) |
-| C_&lt;id&gt; | `deployPool` | plan identity, then apply identity | **Plan** job (render config, materialize contracts, artifact digests, `terraform plan -detailed-exitcode`, plan policy, binding manifest, plan file to the protected `plans` container) → **Apply** deployment job (environment `lab-<env>`, approvals; only when the plan has changes; verifies the binding manifest; applies; publishes the contract; writes the deployment record) |
-| Retire | `deployPool` | apply identity | destroys approved retirements, consumers first (environment `lab-<env>-retire`) |
-| Verify | `deployPool` | plan identity + Datadog keys | HTTP smoke (`tools/smoke`) + telemetry verification (`observability/tools/verify/telemetry_verify.py`) |
+| Select | hosted (PR) / `deployPool` | none (PR) / plan identity | validates registry, scopes, environment config and promotion policy; `python3 -m tools.changeset select --scope <scope>`; publishes `selection.json`; tags the run `env-<env>`, `scope-<scope>` |
+| Validate | Microsoft-hosted | **none** | matrix over selected components of the scope (`tools/validate/component.py`), Helm lint (applications), tooling tests, pipeline lint, template-contract lint, ownership, provider pins, generated-file check |
+| Security | Microsoft-hosted | **none** | gitleaks, trivy fs, checkov (pinned, checksum-verified) |
+| Build (applications) | `deployPool` | build identity | per artifact: first environment of a chain resolves the image/package tagged with the source fingerprint or builds + pushes it **by digest** (provenance, SBOM); later environments **promote** the exact digest/sha256 the previous environment recorded (never rebuild). Helm charts: content-addressed `helm package` + OCI push |
+| P_&lt;x&gt; | `deployPool` | plan identity | render config, materialize contracts, artifact digests, `terraform plan -detailed-exitcode`, plan policy, binding manifest, plan file to the protected `plans` container; publishes the summary |
+| C_&lt;x&gt; | `deployPool` | apply identity, environment `lab-<env>` | runs only when the plan has changes and the component is an apply candidate. Approvals are evaluated when this stage starts, i.e. **after** the plan summary exists. Verifies the binding (stale plan → fail), applies, deploys code + smoke (deployment roots), publishes the contract, writes the deployment record |
+| Retire | `deployPool` | apply identity, `lab-<env>-retire` | destroys approved retirements of the scope, consumers first |
+| Verify (applications) | `deployPool` | plan identity + Datadog keys | HTTP smoke from contract endpoints + telemetry verification |
 | Drift | `deployPool` | none | drift report (drift mode) |
 | Evidence | `deployPool` | plan identity + Datadog key | deployment report, `evidence.json`, Datadog DORA deployment events |
 
-### Change detection (`tools/changeset`)
+### Change detection
 
-Each component has two fingerprints (sha256):
+Per component: `validation_fp` (files, shared modules discovered from `source = "../.."`, referenced Helm
+charts, `inputs` globs, tests, docs) and `deploy_fp` (same without tests/docs, plus rendered config, tool
+versions, consumed contract majors, registry entry, artifact source fingerprints). Records:
+`deployments/<env>/<id>.json` (status, fingerprints, `contracts_sha` it was planned with, scope).
 
-* `validation_fp` – files under its path, the shared Terraform modules it uses (discovered from
-  `source = "../..."`, recursively), its `inputs` globs, tests and docs.
-* `deploy_fp` – the same **without** tests/docs/README/`*.md`, plus: its rendered configuration
-  (`tools/config`; only its own settings and the globals it declares), the relevant
-  `versions.yaml` section, the major versions of the contracts it consumes, its registry entry and –
-  for deployment roots – the source fingerprints of its artifacts.
+| Mode | Selection |
+|---|---|
+| `auto` | PR → `pr`, schedule → `drift`, otherwise `deploy` |
+| `pr` | rename-aware `git diff -M merge-base(origin/<target>, HEAD)..HEAD` + base/head fingerprints; validate changed components of the scope and consumers of infrastructure changes; no credentials |
+| `deploy` | deploy_fp ≠ record, no record, record status ≠ `succeeded`, **or upstream contracts changed since the record** (`contracts_sha`); consumers of infrastructure changes are planned; apply only when the plan has changes |
+| `manual` | listed components (+ upstream planned without apply; `withConsumers` adds consumers) |
+| `reconcile` | every enabled component of the scope planned, applied where the plan has changes |
+| `drift` | every enabled component planned, nothing applied, drift report |
+| `retire` | only scheduled retirements |
+| `promote` | `deploy` selection for test/prod, refused unless the `promote_from` environment successfully deployed the same code |
 
-| Mode | Trigger | Selection |
-|---|---|---|
-| `pr` | branch-policy build (`Build.Reason == PullRequest`) | `git diff -M merge-base(origin/<target>, HEAD)..HEAD` (+ base/head fingerprint comparison); validate changed components and the transitive consumers of infrastructure changes. No plans, no credentials. |
-| `deploy` | CI on `main`, manual `auto` | every enabled component whose `deploy_fp` differs from its record `deployments/<env>/<id>.json`, has no record, or whose record status is not `succeeded`; consumers of infrastructure changes are planned; **apply only when the plan has changes** (exit code 2) |
-| `manual` | parameter | listed components (+ their upstream planned without apply; `withConsumers` adds consumers with apply) |
-| `reconcile` | parameter | every enabled component planned, applied where the plan has changes |
-| `drift` | nightly schedule (`always: true`) | every enabled component planned, nothing applied, drift report |
-| `retire` | parameter | only scheduled retirements |
+Preview a run before pushing:
 
-An artifact-only change (new image of an app) re-deploys the roots that ship that artifact but does
-not re-plan their consumers: artifacts never change Terraform contracts. A documentation-only change
-selects nothing for deployment.
+```bash
+python3 -m tools.changeset explain --env dev                       # like a PR build of the working tree
+python3 -m tools.changeset explain --env dev --scope applications --records-dir <records> --contracts-dir <contracts>
+```
+
+### Cross-pipeline ordering (platform before applications)
+
+* A platform component never depends on an applications component (`python3 -m tools.changeset graph`
+  fails otherwise); `obs-hosts` is in the applications pipeline because it must run after `deploy-vm-workloads`.
+* When a commit changes a platform component, the applications run **on that same commit** does not plan the
+  application components that (transitively) consume it: they are reported as *waiting for the platform
+  pipeline* (warning, `selection.summary.waiting`).
+* When the platform run succeeds, the resource trigger starts the applications pipeline. Its Select compares
+  each component's current materialized contracts with the `contracts_sha` in its record and re-plans exactly
+  the consumers whose inputs changed; if no contract changed, nothing is redeployed.
+* Last line of defence: the apply re-renders the contracts and refuses a plan made before an upstream contract
+  changed (**"stale plan; re-run"**).
 
 ### Stage conditions
 
-Generated for `C_x` (see `tools/pipeline/generate.py`):
+`P_x`: `and(not(canceled()), <Select/Validate/Security succeeded>, sel_x == 'true', <its artifacts ready>,
+upstream_ok(u) for each direct upstream u in the same pipeline)` with
+`upstream_ok(u) = and(or(P_u succeeded, and(P_u skipped, sel_u != 'true')), C_u in (Succeeded, SucceededWithIssues, Skipped))`:
+an unselected or unchanged upstream does not block; a failed/canceled/rejected or selected-but-skipped
+upstream blocks (an infrastructure change selects every transitive consumer, so blocking propagates).
+`C_x`: plan stage succeeded, `has_changes`, apply candidate, not a dry run. No `always()` /
+`succeededOrFailed()` on deploy stages (lint PL001). Tests evaluate the generated expressions for
+Succeeded / SucceededWithIssues / Skipped / Failed / Canceled upstreams and simulate whole runs.
 
-```
-and(not(canceled()),
-    in(dependencies.Select.result,   'Succeeded', 'SucceededWithIssues'),
-    in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'),
-    in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'),
-    eq(dependencies.Select.outputs['select.detect.sel_x'], 'true'),
-    eq(dependencies.Build.outputs['B_<artifact>.ready.ready'], 'true'),          # per artifact of x
-    or(in(dependencies.C_u.result, 'Succeeded', 'SucceededWithIssues'),
-       and(eq(dependencies.C_u.result, 'Skipped'),
-           ne(dependencies.Select.outputs['select.detect.sel_u'], 'true'))))     # per transitive upstream u
-```
+## Promotion: dev → test → prod
 
-* `dependencies.<stage>.outputs['<job>.<step>.<variable>']` is the documented stage-level syntax
-  (Learn: *Expressions → Dependencies*). A custom stage condition replaces the default
-  `succeeded()`, so results are checked explicitly; `always()` and `succeededOrFailed()` are never
-  used on deploy stages (lint rule PL001).
-* An **unselected** upstream (Skipped) does not block; a **failed / canceled** upstream, or a
-  **selected** upstream that was skipped because *its* upstream failed, blocks. `dependsOn` lists the
-  transitive upstream, so this holds across unselected intermediate stages.
-* An unrelated artifact failing in `Build` does not block a root whose own artifacts are ready.
-* `tests/pipeline/test_pipeline.py` evaluates these expressions with `tools/pipeline/conditions.py`
-  for Succeeded / SucceededWithIssues / Skipped / Failed / Canceled upstreams and simulates whole runs.
+[`environments/promotion.yaml`](../environments/promotion.yaml) defines the chain. dev builds; test promotes
+from dev, prod from test. Run either pipeline with `environment: test|prod`, `mode: promote` (allowed modes
+per environment are enforced by Select; test/prod allow `promote`, `drift`, `retire`):
 
-### Plans are bound to their inputs
+1. Select refuses unless every enabled component of the scope has a `succeeded` record in the source
+   environment with identical source / tool / registry / artifact fingerprints ("deploy this commit there first").
+2. Build promotes artifacts: `az acr import` by digest (digest re-verified) and package copy with sha256 check
+   from the source environment's registry/packages (`tools/deploy/artifacts.py promote`); nothing is rebuilt.
+3. Plans/applies use the target environment's state, config and approvals (`lab-test`, `lab-prod`).
 
-The Plan job writes `manifest.json` {commit, component, env, config_sha, contracts_sha, artifacts_sha,
-terraform version + lock-file sha, plan_sha256}. The plan file itself goes to the `plans` blob
-container (it can contain secrets) – only the summary and manifest are pipeline artifacts. The Apply
-job re-renders everything and refuses to apply on any difference; a contracts difference reports
-**"stale plan; re-run"** (re-running the stage re-plans after the upstream).
-`tools/validate/plan_policy.py` fails a plan that deletes/replaces a protected resource type
-(databases, storage, Key Vault, VNets, registries, clusters, identities…) unless
-`environments/<env>/approvals.yaml` has an unexpired `allow_destroy` entry for that component and
-address; cost-relevant changes are flagged as warnings.
+Promote platform first, then applications (their Select waits otherwise).
 
-## Adding a component
+## Adding things
 
-1. Add the entry to `catalog/components.yaml` (id, layer, kind, path, `consumes`/`optional_consumes`,
-   `produces`, `artifacts`, `inputs`, optional `timeout_minutes`).
-2. Enable it in a profile (`environments/profiles/<p>.yaml`) or `custom_components`.
-3. Regenerate the stages and commit the result:
-   ```
-   python3 tools/pipeline/generate.py
-   python3 tools/validate/pipeline_lint.py
-   python3 -m tools.changeset graph
-   ```
-   The Validate stage fails while `pipelines/generated/component-stages.yml` is stale.
-
-Interfaces a Terraform root gets from the pipeline:
-
-| File (written next to the root, git-ignored) | Variables |
-|---|---|
-| `terraform.tfvars.json` (`tools/config/render.py`) | `environment`, `settings` (profile `component_settings.<id>` deep-merged under `environment.yaml components.<id>`), and `network`/`datadog`/`budget`/`features`/`profile_name` **only if the root declares them** |
-| `contracts.auto.tfvars.json` (`tools/contracts/materialize.py`) | one variable per consumed contract (`foundation-network` → `foundation_network`) = envelope `data`; `discovered_contracts` for `discovers_resources` roots that declare it |
-| `artifacts.auto.tfvars.json` (`tools/deploy/artifacts.py tfvars`) | `artifacts = {<artifact component id> = {name, image, digest, package_url, package_sha256, source_fp, tag}}` when the root declares `variable "artifacts"` |
-
-Roots publish `output "contract"` (one produced contract) or `output "contract_<name>"` (several).
-Deployment roots should put their HTTP base URLs under `endpoints = {name = url}` in the contract
-so the smoke runner finds them.
-
-## Azure DevOps setup (not expressible in YAML)
-
-1. **Service connections** (Azure Resource Manager → *Workload identity federation*), one per identity
-   created by `bootstrap` (issuer `https://login.microsoftonline.com/<tenant>/v2.0`, subject copied
-   from the connection – ADR §13):
-   `sc-lab-<env>-plan` (Reader + state lease + read contracts/records + write plans),
-   `sc-lab-<env>-apply` (Contributor + constrained RBAC admin + write all containers),
-   `sc-lab-<env>-build` (AcrPush + write `packages`). Put the names **and ids** in
-   `pipelines/variables/<env>.yml` (service connection names must be known at compile time; the ids
-   feed `ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID`). Terraform authenticates with
-   `ARM_USE_OIDC=true`, `ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID`/`ARM_OIDC_AZURE_SERVICE_CONNECTION_ID`,
-   `SYSTEM_ACCESSTOKEN` and `SYSTEM_OIDCREQUESTURI` (azurerm provider and azurerm backend docs), so
-   tokens are refreshed during long applies (`pipelines/scripts/tf-env.sh`). Grant each connection to
-   this pipeline only.
-2. **Environments**: `lab-<env>` (Approvals + **Exclusive lock** check) and `lab-<env>-retire`
-   (Approvals by a different group + Exclusive lock). Pipelines → Environments → *lab-dev* → ⋮ →
-   *Approvals and checks* → **+** → *Exclusive lock*.
-3. **Concurrency.** `lockBehavior: sequential` is set for the whole pipeline (queued runs wait for
-   the exclusive lock instead of the default `runLatest` cancelling older runs), and every generated
-   component stage sets `lockBehavior: sequential`, which creates a stage-level lock across runs, so
-   one component is never planned/applied by two runs at once. Within a run, independent component
-   stages run in parallel, bounded by the agent pool size. Note: an exclusive lock check on
-   `lab-<env>` serialises every stage that targets it (one Apply at a time); omit the check if
-   parallel applies matter more than strict serialisation – the stage locks still prevent the same
-   component from running twice. A second run that waited reads records written by the first, plans
-   against the new state and applies nothing when there is nothing left to do.
-4. **Variable groups**: `lab-<env>-datadog` linked to the environment's Key Vault, secrets
-   `datadog-api-key`, `datadog-app-key` (names from `environment.yaml datadog.*_secret_name`). The plan/apply
-   templates link it only for `obs-prereqs`, `obs-azure-integration`, `obs-monitoring` (step env `DD_API_KEY` /
-   `DD_APP_KEY` for the Datadog provider) and `obs-kubernetes` (step env `TF_VAR_datadog_api_key`, an ephemeral
-   variable); no other root sees the keys, and they are never written to disk. Grant the pipeline's plan and apply
-   service connections "Use" on the group.
-   They reach scripts only through `env:` and are never echoed (lint rule PL009).
-5. **Branch policies** (Azure Repos ignores YAML `pr:` triggers): Repos → Branches → `main` →
-   Branch policies → *Build validation* → this pipeline, *Required*, trigger *Automatic*, expiry
-   *Immediately when main is updated*. PR builds compile only Select/Validate/Security (the
-   generated stages are inserted with `${{ if ne(variables['Build.Reason'], 'PullRequest') }}`),
-   use Microsoft-hosted agents and reference no service connection, variable group or self-hosted
-   pool, so code from a PR never runs with credentials. Plans against real state happen only on
-   `main` behind the environment approvals.
-6. **Agent pools**: Microsoft-hosted (`ubuntu-24.04`) for Validate/Security/PR Select; the
-   self-hosted pool `foundation-deploy-agents` (deployed by `foundation-deploy-agents` into the
-   `deploy-agents` subnet) for everything that reaches private endpoints (state storage, Key Vault,
-   ACR, smoke tests). Agents need `python3`, `az`, `git`, `docker` (or set `useAcrBuild`), `curl`.
-7. **Bootstrap prerequisites**: containers `tfstate`, `contracts`, `plans`, `deployments`,
-   `evidence` and **`packages`** (zip packages), plus the role assignments above.
+* **Component**: registry entry in `catalog/components.yaml` (`scope` only when the default by layer is
+  wrong), enable it in a profile, then `python3 tools/pipeline/generate.py` and commit both generated files.
+* **Environment**: `environments/<env>/environment.yaml`, `pipelines/variables/<env>.yml`, an entry in
+  `environments/promotion.yaml`, and the name in the `environment` parameter values of **both** entry files.
+  `python3 tools/validate/pipeline_templates.py` fails until all four agree (ENV001-ENV003).
+* **Service**: source under `applications/services/<svc>/`, artifact entry (`kind: artifact`), add it to the
+  deployment root's `artifacts`; Helm charts under `applications/charts/<name>/` are picked up automatically
+  for roots that reference them.
 
 ## Operating
 
-* **Retirement.** A component that has a deployment record but is no longer enabled (or no longer in
-  the registry) is reported `retire-pending` and never destroyed automatically. To retire it add to
-  `environments/<env>/retirements.yaml`:
-  ```yaml
-  retirements:
-    - component: platform-db-mysql
-      confirm: platform-db-mysql        # must repeat the id
-      approved_by: lead@example.com
-      reason: profile change
-  ```
-  The next run schedules it (`retire-scheduled`) unless an enabled component still depends on it
-  (`retire-blocked`); the Retire stage destroys scheduled components consumers-first from the commit
-  recorded in their deployment record, after the `lab-<env>-retire` approval.
-* **Resuming a partial deployment.** Records are written only by a successful apply (or a plan with
-  no changes); a failed/partial/canceled apply writes a non-`succeeded` record. Either *Rerun failed
-  jobs* on the same run or start a new run: change detection re-selects every component whose
-  record is not `succeeded`, and already-applied components plan to no changes.
-* **Dry run** (`dryRun: true`): plans only – no Apply/Retire jobs are compiled, no records written.
-* **Break-glass.** Run the pipeline in `manual` mode for the component. If the pipeline itself is
-  unavailable, an operator with the bootstrap break-glass role can run the same scripts locally:
-  `python3 tools/config/render.py`, `python3 tools/contracts/materialize.py --source <contracts url>`,
-  `pipelines/scripts/tf-init.sh`, `terraform plan/apply`, then `python3 tools/contracts/publish.py`
-  and `python3 tools/deploy/record.py write` so the next pipeline run sees the change.
-  Document the action in the change record.
-* **Timeouts**: per-job `timeoutInMinutes` from the registry (`timeout_minutes`, default 60);
-  `retryCountOnTaskFailure` is used only for idempotent network steps (artifact downloads, tool
-  installs, `terraform init`, artifact resolve).
+* **Retirement**: a recorded component that is no longer enabled is `retire-pending`; it is destroyed only
+  when `environments/<env>/retirements.yaml` lists it with `confirm: <component id>`, no enabled component
+  depends on it, and `lab-<env>-retire` is approved; consumers retire first, from the recorded commit.
+* **Drift**: nightly in dev for both scopes (plan only, report, run marked SucceededWithIssues on drift);
+  run `mode: drift` manually for test/prod.
+* **Resuming**: a failed/partial/canceled apply writes a non-succeeded record, so the next run re-selects it.
+  *Rerun failed jobs* is safe for plan stages; for a failed apply stage rerun the plan stage too (the saved
+  plan may be stale) or start a new run.
+* **Dry run** (`dryRun: true`): plans only; apply stages are skipped without requesting approvals.
+* **Break-glass**: `mode: manual` with the component. If the pipelines are unavailable, an operator with the
+  bootstrap break-glass role runs `tools/config/render.py`, `tools/contracts/materialize.py`,
+  `pipelines/scripts/tf-init.sh`, `terraform plan/apply`, `tools/contracts/publish.py` and
+  `tools/deploy/record.py write` locally, and records the action in the change log.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Select fails "invalid pipeline scopes" | a platform component depends on an applications component | set `scope: applications` on it or remove the edge |
+| Select fails "mode 'auto' is not allowed for environment 'test'" | test/prod only accept `promote`, `drift`, `retire` | run with `mode: promote` |
+| Select fails "cannot promote … has not successfully deployed this commit" | source environment runs other code | promote/deploy the commit in the source environment first |
+| Applications run plans nothing, warns "waiting for the platform pipeline" | platform change on the same commit not yet deployed | let the platform run finish; it triggers the applications run |
+| Apply fails "stale plan; re-run" | an upstream contract changed between plan and apply | rerun the plan stage (or a new run) |
+| Plan fails "protected resource delete/replace" | plan policy | review; add an unexpired `allow_destroy` entry to `environments/<env>/approvals.yaml` |
+| Build promote fails "no successful artifact record in 'dev'" | artifact never built/recorded in the source environment | run the applications pipeline in dev for this commit |
+| Validate fails "… is stale; run tools/pipeline/generate.py" | registry changed without regeneration | regenerate and commit both generated files |
+| `pipeline_templates.py` LIM003 warning/error | expanded YAML approaching ADO limits | see [Scaling](#scaling-and-limits) |
+| Required template check fails on a resource | pipeline does not extend `universal.yml` or the check points at another ref | fix the entry file / check configuration |
+| Stage waits on "Exclusive lock" | another run holds `lab-<env>` | expected (`lockBehavior: sequential`); cancel the older run if obsolete |
+
+## Scaling and limits
+
+Azure Pipelines limits (Learn, *Templates*: at most 100 included YAML files, 100 nesting levels, 20 MB parse
+memory - "typically 600 KB-2 MB of on-disk YAML"; *Stages*: up to 256 jobs per stage). No limit on the number
+of stages is documented. `tools/validate/pipeline_templates.py` fails before them: >80 files, depth >20,
+estimated expanded size >1,000,000 bytes (warning above 600,000), >200 jobs in a stage (including the
+validate matrix legs). Current estimate: platform ~450 KB, applications ~340 KB. When a budget is exceeded:
+split the scope further (another `scope` value and generated file, chained by a pipeline resource trigger),
+shard the Build stage, and keep parallelism bounded by the `deployPool` size (`validateMaxParallel` bounds
+the validation matrix).
+
+## One-time Azure DevOps setup checklist
+
+1. **Pipelines**: create `lab-platform` from `azure-pipelines.yml` and `lab-applications` from
+   `azure-pipelines.applications.yml` (the names matter: the resource trigger uses `source: lab-platform`).
+2. **Service connections** (Azure Resource Manager → *Workload identity federation*, issuer
+   `https://login.microsoftonline.com/<tenant>/v2.0`, subject copied from the connection, ADR §13) per environment:
+   `sc-lab-<env>-plan`, `sc-lab-<env>-apply`, `sc-lab-<env>-build`; names and ids in
+   `pipelines/variables/<env>.yml`. Terraform uses `ARM_USE_OIDC`, `ARM_ADO_PIPELINE_SERVICE_CONNECTION_ID`,
+   `SYSTEM_ACCESSTOKEN`, `SYSTEM_OIDCREQUESTURI` (token refresh during long applies). Authorize them for the
+   two pipelines only. Promoting environments' build identities need AcrPull on the source registry and Blob
+   Data Reader on the source `deployments`/`packages` containers.
+3. **Environments** `lab-<env>` (Approvals - required for test/prod, two approvers, requester cannot approve;
+   **Exclusive lock**) and `lab-<env>-retire` (separate approvers + Exclusive lock). Exclusive lock +
+   `lockBehavior: sequential` queue concurrent runs; every plan/apply stage also takes a stage-level lock.
+4. **Required template**: on every service connection, both environments per env, the `deployPool` agent pool
+   and the Datadog variable groups: *Approvals and checks → Required template → repository
+   `enterprise-architecture`, ref `refs/heads/main`, path `pipelines/templates/universal.yml`*.
+5. **Variable groups** `lab-<env>-datadog` linked to the environment Key Vault (secrets `datadog-api-key`,
+   `datadog-app-key`); used only by the roots that need them and by Verify/Evidence, mapped through `env:`.
+6. **Branch policies** (Azure Repos ignores YAML `pr:`): on `main` add *Build validation* for **both**
+   pipelines (required, automatic). PR builds compile only Select/Validate/Security on hosted agents without
+   credentials; each validates its own scope; a docs-only PR selects nothing.
+7. **Agent pools**: Microsoft-hosted for Validate/Security/PR/release; self-hosted `foundation-deploy-agents`
+   (VNet) for everything that reaches private endpoints (needs `python3`, `az`, `git`, `docker` or
+   `useAcrBuild`, `curl`).
+8. **Permissions**: only release managers may queue runs with `environment: prod`; contributors may queue
+   dev. Azure Artifacts feed `observabilityFeed` (pipelines/variables/tools.yml): the project Build Service
+   needs *Feed Publisher*.
+9. **Bootstrap prerequisites**: storage containers `tfstate`, `contracts`, `plans`, `deployments`,
+   `evidence`, `packages` and the role assignments of `bootstrap/identities.tf`.
+
+## What only a real Azure DevOps organisation can prove
+
+Compilation of the templates by Azure Pipelines (`extends` + `${{ else }}` + `${{ variables.x }}` from
+template variables inside included templates, `lower()`, `iif()`, `replace()`), stage-level output variables
+across 100+ stages, matrix from a relayed output variable, the pipeline resource trigger with branch + tag
+filters, Required template / Exclusive lock / approval behaviour, `lockBehavior` at stage level, workload
+identity federation token refresh during long applies, `az acr import` digest preservation across registries,
+Universal Package publishing, and the real expanded-size margin. The repository proves the logic (selection,
+conditions, ordering, promotion gates, lint) with tests and static checks only.
 
 ## Files
 
 | Path | Purpose |
 |---|---|
-| `azure-pipelines.yml` | triggers, runtime parameters, Select/Validate/Security, include of the generated stages |
-| `pipelines/generated/component-stages.yml` | GENERATED (Build, C_* stages, Retire, Verify, Drift, Evidence) |
-| `pipelines/templates/*.yml` | terraform-plan, terraform-apply, build-artifact, build-dotnet, build-python, build-frontend, container-image, security-scan, validate, smoke, telemetry-verify, deployment-marker, retire, drift, evidence, steps-setup |
-| `pipelines/scripts/*.sh` | Terraform env/init/prepare/plan/apply, pinned tool installer |
-| `pipelines/variables/` | compile-time per-environment settings and tool versions |
+| `azure-pipelines.yml`, `azure-pipelines.applications.yml` | thin entries (triggers, parameters) |
+| `pipelines/templates/universal.yml` | governed template: release dispatch vs lab stages |
+| `pipelines/templates/universal-stages.yml` | Select, Validate, Security, include of the generated stages |
+| `pipelines/generated/{platform,applications}-stages.yml` | GENERATED (Build, P_/C_ stages, Retire, Verify, Drift, Evidence) |
+| `pipelines/templates/*.yml` | plan, apply, build-artifact, container-image, build-*, helm-charts, security-scan, validate, smoke, telemetry-verify, deployment-marker, retire, drift, evidence, observability-release, steps-* |
+| `pipelines/scripts/*.sh` | Terraform env/init/prepare/plan/apply/failure-record, agent setup, pinned tool installer |
+| `pipelines/variables/` | compile-time settings per environment, tool versions |
+| `environments/promotion.yaml` | promotion chains |

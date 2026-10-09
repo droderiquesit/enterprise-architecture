@@ -1,0 +1,915 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://enterprise-hello.example.com/charts/hello-service/values.schema.json",
+  "title": "hello-service values",
+  "description": "Values contract of the Enterprise Hello generic application chart. Digest-pinned images, required identity and resources, no plaintext secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "service",
+    "image",
+    "identity",
+    "resources"
+  ],
+  "properties": {
+    "global": {
+      "type": "object"
+    },
+    "kind": {
+      "enum": [
+        "deployment",
+        "worker",
+        "cronjob"
+      ]
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "pattern": "^([a-z0-9]([-a-z0-9]{0,51}[a-z0-9])?)?$"
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$",
+          "description": "DD_SERVICE"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$",
+          "description": "DD_VERSION (label-safe)"
+        },
+        "env": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$",
+          "description": "DD_ENV"
+        },
+        "partOf": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$"
+        },
+        "team": {
+          "type": "string",
+          "pattern": "^([A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?)?$"
+        },
+        "domain": {
+          "type": "string",
+          "pattern": "^([A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?)?$"
+        },
+        "tier": {
+          "type": "string",
+          "pattern": "^([A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?)?$"
+        },
+        "logsSource": {
+          "type": "string",
+          "pattern": "^([A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?)?$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "env"
+      ]
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+(:[0-9]+)?(/[a-z0-9._-]+)+$",
+          "description": "<registry>/<repo> without tag or digest"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "pullPolicy": {
+          "enum": [
+            "IfNotPresent",
+            "Always",
+            "Never"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "digest"
+      ],
+      "description": "Digest-pinned image. There is deliberately no 'tag' property: additionalProperties=false rejects it."
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "args": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "clientId": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "tenantId": {
+          "type": "string",
+          "pattern": "^(|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+        },
+        "workloadIdentity": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "clientId"
+      ]
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^([a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)?$"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535
+    },
+    "env": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+        "not": {
+          "anyOf": [
+            {
+              "enum": [
+                "DD_AGENT_HOST",
+                "DD_ENV",
+                "DD_SERVICE",
+                "DD_VERSION",
+                "AZURE_CLIENT_ID",
+                "FAULTS_ENABLED",
+                "LOG_FILE_PATH",
+                "PORT",
+                "FAULT_TOKEN",
+                "OTEL_EXPORTER_OTLP_HEADERS",
+                "DD_API_KEY",
+                "DD_APP_KEY"
+              ]
+            },
+            {
+              "pattern": "(PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|PRIVATE_KEY)$"
+            }
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Non-secret env. Chart-owned and secret-looking names are rejected."
+    },
+    "secretEnv": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$"
+      },
+      "description": "name -> versionless Key Vault secret id"
+    },
+    "keyVault": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^([A-Za-z0-9-]{3,24})?$"
+        },
+        "tenantId": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "then": {
+        "properties": {
+          "name": {
+            "minLength": 3
+          },
+          "tenantId": {
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          }
+        },
+        "required": [
+          "name",
+          "tenantId"
+        ]
+      }
+    },
+    "existingSecretEnv": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "secretName": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9]{0,251}[a-z0-9])?$"
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "secretName",
+          "key"
+        ]
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "agentHostFromHostIP": {
+          "type": "boolean"
+        },
+        "disableAgentLogCollection": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "logFile": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/.+/[^/]+$"
+        },
+        "sizeLimit": {
+          "type": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "pattern": "^[0-9]+(\\.[0-9]+)?(m|Ki|Mi|Gi|Ti|k|M|G|T)?$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "faults": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": [
+                "string",
+                "integer",
+                "number"
+              ],
+              "pattern": "^[0-9]+(\\.[0-9]+)?(m|Ki|Mi|Gi|Ti|k|M|G|T)?$"
+            },
+            "memory": {
+              "type": [
+                "string",
+                "integer",
+                "number"
+              ],
+              "pattern": "^[0-9]+(\\.[0-9]+)?(m|Ki|Mi|Gi|Ti|k|M|G|T)?$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "cpu",
+            "memory"
+          ]
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": [
+                "string",
+                "integer",
+                "number"
+              ],
+              "pattern": "^[0-9]+(\\.[0-9]+)?(m|Ki|Mi|Gi|Ti|k|M|G|T)?$"
+            },
+            "memory": {
+              "type": [
+                "string",
+                "integer",
+                "number"
+              ],
+              "pattern": "^[0-9]+(\\.[0-9]+)?(m|Ki|Mi|Gi|Ti|k|M|G|T)?$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "memory"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "requests",
+        "limits"
+      ]
+    },
+    "replicas": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "autoscaling": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 95
+        }
+      },
+      "additionalProperties": false
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxUnavailable": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "probes": {
+      "type": "object",
+      "properties": {
+        "startup": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60
+            },
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "path"
+          ]
+        },
+        "liveness": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60
+            },
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "path"
+          ]
+        },
+        "readiness": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "periodSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60
+            },
+            "failureThreshold": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "path"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "k8sService": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "ClusterIP",
+            "LoadBalancer"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "internalLoadBalancer": {
+          "type": "boolean"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "secretName": {
+              "type": "string"
+            },
+            "keyVaultCertificateUri": {
+              "type": "string",
+              "pattern": "^(|https://[^/]+/certificates/[A-Za-z0-9-]+)$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "then": {
+        "properties": {
+          "host": {
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "openshift": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "route": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "host": {
+              "type": "string"
+            },
+            "tls": {
+              "type": "object",
+              "properties": {
+                "termination": {
+                  "enum": [
+                    "edge",
+                    "reencrypt",
+                    "passthrough"
+                  ]
+                },
+                "insecureEdgeTerminationPolicy": {
+                  "enum": [
+                    "Redirect",
+                    "None",
+                    "Allow"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "allowFromNamespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowFromCIDRs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "properties": {
+        "runAsNonRoot": {
+          "const": true
+        },
+        "privileged": {
+          "not": {}
+        },
+        "runAsUser": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "runAsNonRoot",
+        "seccompProfile"
+      ],
+      "description": "runAsNonRoot must stay true; seccompProfile required."
+    },
+    "tmp": {
+      "type": "object",
+      "properties": {
+        "sizeLimit": {
+          "type": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "pattern": "^[0-9]+(\\.[0-9]+)?(m|Ki|Mi|Gi|Ti|k|M|G|T)?$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 600
+    },
+    "revisionHistoryLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 20
+    },
+    "topologySpread": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "hostnameSkew": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "zoneSpread": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "tolerations": {
+      "type": "array"
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "priorityClassName": {
+      "type": "string"
+    },
+    "cronjob": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "type": "string"
+        },
+        "timeZone": {
+          "type": "string"
+        },
+        "concurrencyPolicy": {
+          "enum": [
+            "Forbid",
+            "Replace",
+            "Allow"
+          ]
+        },
+        "startingDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 10
+        },
+        "successfulJobsHistoryLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failedJobsHistoryLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suspend": {
+          "type": "boolean"
+        },
+        "backoffLimit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "activeDeadlineSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "ttlSecondsAfterFinished": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "cronjob"
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "cronjob": {
+            "properties": {
+              "schedule": {
+                "minLength": 9
+              }
+            },
+            "required": [
+              "schedule"
+            ]
+          }
+        },
+        "required": [
+          "cronjob"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "faults": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
+        },
+        "required": [
+          "faults"
+        ]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "secretEnv": {
+                "required": [
+                  "FAULT_TOKEN"
+                ]
+              }
+            },
+            "required": [
+              "secretEnv"
+            ]
+          },
+          {
+            "properties": {
+              "existingSecretEnv": {
+                "required": [
+                  "FAULT_TOKEN"
+                ]
+              }
+            },
+            "required": [
+              "existingSecretEnv"
+            ]
+          }
+        ]
+      },
+      "description": "faults.enabled requires FAULT_TOKEN from Key Vault or an existing Secret."
+    },
+    {
+      "if": {
+        "properties": {
+          "secretEnv": {
+            "minProperties": 1
+          }
+        },
+        "required": [
+          "secretEnv"
+        ]
+      },
+      "then": {
+        "properties": {
+          "keyVault": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
+        },
+        "required": [
+          "keyVault"
+        ]
+      },
+      "description": "secretEnv needs keyVault.enabled (Secrets Store CSI driver)."
+    }
+  ]
+}

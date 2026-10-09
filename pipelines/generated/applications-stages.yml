@@ -1,0 +1,1018 @@
+# GENERATED FILE - DO NOT EDIT. Scope: applications pipeline.
+# Source: catalog/components.yaml (sha256 prefix eb3570dbbd16f677)
+# Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
+# Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
+# tools/pipeline/conditions.py.
+parameters:
+  - name: environment
+    type: string
+  - name: dryRun
+    type: boolean
+    default: false
+  - name: settings
+    type: object
+stages:
+  - stage: Build
+    displayName: Artifacts + charts (build once per source fingerprint / promote)
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.any_build'], 'true'))
+    pool: &id001
+      name: ${{ parameters.settings.deployPool }}
+    jobs:
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-bff
+          jobName: B_svc_bff
+          componentPath: applications/services/bff
+          artifactName: hello-bff
+          formats:
+            - container-image
+          language: dotnet
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-catalog-api
+          jobName: B_svc_catalog_api
+          componentPath: applications/services/catalog-api
+          artifactName: hello-catalog-api
+          formats:
+            - container-image
+            - zip-package
+          language: python
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-dbadapter
+          jobName: B_svc_dbadapter
+          componentPath: applications/services/dbadapter
+          artifactName: hello-dbadapter
+          formats:
+            - container-image
+            - zip-package
+          language: python
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-durable
+          jobName: B_svc_durable
+          componentPath: applications/services/durable
+          artifactName: hello-durable
+          formats:
+            - zip-package
+            - container-image
+          language: dotnet
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-frontend
+          jobName: B_svc_frontend
+          componentPath: applications/services/frontend
+          artifactName: hello-frontend
+          formats:
+            - static-bundle
+          language: node
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-functions
+          jobName: B_svc_functions
+          componentPath: applications/services/functions
+          artifactName: hello-functions
+          formats:
+            - zip-package
+            - container-image
+          language: python
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-inventory-api
+          jobName: B_svc_inventory_api
+          componentPath: applications/services/inventory-api
+          artifactName: hello-inventory-api
+          formats:
+            - zip-package
+            - container-image
+          language: dotnet
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-jobs
+          jobName: B_svc_jobs
+          componentPath: applications/services/jobs
+          artifactName: hello-jobs
+          formats:
+            - container-image
+            - zip-package
+          language: python
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-logicapps
+          jobName: B_svc_logicapps
+          componentPath: applications/services/logicapps
+          artifactName: hello-logicapps
+          formats:
+            - zip-package
+          language: workflow
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-orders-api
+          jobName: B_svc_orders_api
+          componentPath: applications/services/orders-api
+          artifactName: hello-orders-api
+          formats:
+            - container-image
+          language: dotnet
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-partner-sim
+          jobName: B_svc_partner_sim
+          componentPath: applications/services/partner-sim
+          artifactName: hello-partner-sim
+          formats:
+            - container-image
+          language: python
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-traffic
+          jobName: B_svc_traffic
+          componentPath: applications/services/traffic
+          artifactName: hello-traffic
+          formats:
+            - container-image
+          language: python
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-worker
+          jobName: B_svc_worker
+          componentPath: applications/services/worker
+          artifactName: hello-worker
+          formats:
+            - container-image
+            - zip-package
+          language: python
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/helm-charts.yml
+        parameters:
+          publish: true
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+  - stage: P_deploy_appservice
+    displayName: plan deploy-appservice
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_appservice'], 'true'), eq(dependencies.Build.outputs['B_svc_inventory_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_catalog_api.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-appservice
+          componentPath: applications/deployments/appservice
+          artifacts: &id002
+            - svc-inventory-api
+            - svc-catalog-api
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_appservice
+    displayName: apply deploy-appservice
+    dependsOn:
+      - Select
+      - P_deploy_appservice
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_appservice.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_appservice'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-appservice
+          componentPath: applications/deployments/appservice
+          artifacts: *id002
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_core_aca
+    displayName: plan deploy-core-aca
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'), eq(dependencies.Build.outputs['B_svc_bff.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_orders_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_catalog_api.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-core-aca
+          componentPath: applications/deployments/core-aca
+          artifacts: &id003
+            - svc-bff
+            - svc-orders-api
+            - svc-catalog-api
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_core_aca
+    displayName: apply deploy-core-aca
+    dependsOn:
+      - Select
+      - P_deploy_core_aca
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_core_aca.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_core_aca'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-core-aca
+          componentPath: applications/deployments/core-aca
+          artifacts: *id003
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_dbadapters
+    displayName: plan deploy-dbadapters
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_dbadapters'], 'true'), eq(dependencies.Build.outputs['B_svc_dbadapter.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-dbadapters
+          componentPath: applications/deployments/dbadapters
+          artifacts: &id004
+            - svc-dbadapter
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_dbadapters
+    displayName: apply deploy-dbadapters
+    dependsOn:
+      - Select
+      - P_deploy_dbadapters
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_dbadapters.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_dbadapters'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-dbadapters
+          componentPath: applications/deployments/dbadapters
+          artifacts: *id004
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_functions
+    displayName: plan deploy-functions
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_functions'], 'true'), eq(dependencies.Build.outputs['B_svc_functions.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-functions
+          componentPath: applications/deployments/functions
+          artifacts: &id005
+            - svc-functions
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_functions
+    displayName: apply deploy-functions
+    dependsOn:
+      - Select
+      - P_deploy_functions
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_functions.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_functions'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-functions
+          componentPath: applications/deployments/functions
+          artifacts: *id005
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_logicapps
+    displayName: plan deploy-logicapps
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_logicapps'], 'true'), eq(dependencies.Build.outputs['B_svc_logicapps.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-logicapps
+          componentPath: applications/deployments/logicapps
+          artifacts: &id006
+            - svc-logicapps
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_logicapps
+    displayName: apply deploy-logicapps
+    dependsOn:
+      - Select
+      - P_deploy_logicapps
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_logicapps.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_logicapps'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-logicapps
+          componentPath: applications/deployments/logicapps
+          artifacts: *id006
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_partner_sim
+    displayName: plan deploy-partner-sim
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_partner_sim'], 'true'), eq(dependencies.Build.outputs['B_svc_partner_sim.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-partner-sim
+          componentPath: applications/deployments/partner-sim
+          artifacts: &id007
+            - svc-partner-sim
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_partner_sim
+    displayName: apply deploy-partner-sim
+    dependsOn:
+      - Select
+      - P_deploy_partner_sim
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_partner_sim.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_partner_sim'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-partner-sim
+          componentPath: applications/deployments/partner-sim
+          artifacts: *id007
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_specialized
+    displayName: plan deploy-specialized
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_specialized'], 'true'), eq(dependencies.Build.outputs['B_svc_catalog_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_inventory_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_jobs.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-specialized
+          componentPath: applications/deployments/specialized
+          artifacts: &id008
+            - svc-catalog-api
+            - svc-inventory-api
+            - svc-jobs
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_specialized
+    displayName: apply deploy-specialized
+    dependsOn:
+      - Select
+      - P_deploy_specialized
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_specialized.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_specialized'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-specialized
+          componentPath: applications/deployments/specialized
+          artifacts: *id008
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_vm_workloads
+    displayName: plan deploy-vm-workloads
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'), eq(dependencies.Build.outputs['B_svc_worker.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_inventory_api.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-vm-workloads
+          componentPath: applications/deployments/vm-workloads
+          artifacts: &id009
+            - svc-worker
+            - svc-inventory-api
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_vm_workloads
+    displayName: apply deploy-vm-workloads
+    dependsOn:
+      - Select
+      - P_deploy_vm_workloads
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_vm_workloads.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_vm_workloads'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-vm-workloads
+          componentPath: applications/deployments/vm-workloads
+          artifacts: *id009
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_core_aks
+    displayName: plan deploy-core-aks
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'), eq(dependencies.Build.outputs['B_svc_bff.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_orders_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_catalog_api.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_worker.ready.ready'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-core-aks
+          componentPath: applications/deployments/core-aks
+          artifacts: &id010
+            - svc-bff
+            - svc-orders-api
+            - svc-catalog-api
+            - svc-worker
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_core_aks
+    displayName: apply deploy-core-aks
+    dependsOn:
+      - Select
+      - P_deploy_core_aks
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_core_aks.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_core_aks'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-core-aks
+          componentPath: applications/deployments/core-aks
+          artifacts: *id010
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_obs_hosts
+    displayName: plan obs-hosts
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - P_deploy_vm_workloads
+      - C_deploy_vm_workloads
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_hosts'], 'true'), and(or(in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_vm_workloads.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'))), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: obs-hosts
+          componentPath: observability/lab/hosts
+          artifacts: &id011 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_obs_hosts
+    displayName: apply obs-hosts
+    dependsOn:
+      - Select
+      - P_obs_hosts
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_hosts.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_hosts.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_hosts'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: obs-hosts
+          componentPath: observability/lab/hosts
+          artifacts: *id011
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_durable
+    displayName: plan deploy-durable
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+      - P_deploy_appservice
+      - C_deploy_appservice
+      - P_deploy_core_aca
+      - C_deploy_core_aca
+      - P_deploy_core_aks
+      - C_deploy_core_aks
+      - P_deploy_partner_sim
+      - C_deploy_partner_sim
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_durable'], 'true'), eq(dependencies.Build.outputs['B_svc_durable.ready.ready'], 'true'), and(or(in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_appservice.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_appservice'], 'true'))), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_partner_sim.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_partner_sim'], 'true'))), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-durable
+          componentPath: applications/deployments/durable
+          artifacts: &id012
+            - svc-durable
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_durable
+    displayName: apply deploy-durable
+    dependsOn:
+      - Select
+      - P_deploy_durable
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_durable.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_durable'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-durable
+          componentPath: applications/deployments/durable
+          artifacts: *id012
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_frontend
+    displayName: plan deploy-frontend
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+      - P_deploy_core_aca
+      - C_deploy_core_aca
+      - P_deploy_core_aks
+      - C_deploy_core_aks
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_frontend'], 'true'), eq(dependencies.Build.outputs['B_svc_frontend.ready.ready'], 'true'), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-frontend
+          componentPath: applications/deployments/frontend
+          artifacts: &id013
+            - svc-frontend
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_frontend
+    displayName: apply deploy-frontend
+    dependsOn:
+      - Select
+      - P_deploy_frontend
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_frontend.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_frontend'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-frontend
+          componentPath: applications/deployments/frontend
+          artifacts: *id013
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_deploy_jobs
+    displayName: plan deploy-jobs
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+      - P_deploy_core_aca
+      - C_deploy_core_aca
+      - P_deploy_core_aks
+      - C_deploy_core_aks
+      - P_deploy_durable
+      - C_deploy_durable
+      - P_deploy_frontend
+      - C_deploy_frontend
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_deploy_jobs'], 'true'), eq(dependencies.Build.outputs['B_svc_jobs.ready.ready'], 'true'), eq(dependencies.Build.outputs['B_svc_traffic.ready.ready'], 'true'), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_durable.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_durable'], 'true'))), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_frontend.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_frontend'], 'true'))), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: deploy-jobs
+          componentPath: applications/deployments/jobs
+          artifacts: &id014
+            - svc-jobs
+            - svc-traffic
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_deploy_jobs
+    displayName: apply deploy-jobs
+    dependsOn:
+      - Select
+      - P_deploy_jobs
+      - Build
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_deploy_jobs.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_deploy_jobs'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: deploy-jobs
+          componentPath: applications/deployments/jobs
+          artifacts: *id014
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_obs_diagnostics
+    displayName: plan obs-diagnostics
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - P_deploy_appservice
+      - C_deploy_appservice
+      - P_deploy_core_aca
+      - C_deploy_core_aca
+      - P_deploy_core_aks
+      - C_deploy_core_aks
+      - P_deploy_dbadapters
+      - C_deploy_dbadapters
+      - P_deploy_durable
+      - C_deploy_durable
+      - P_deploy_frontend
+      - C_deploy_frontend
+      - P_deploy_functions
+      - C_deploy_functions
+      - P_deploy_jobs
+      - C_deploy_jobs
+      - P_deploy_logicapps
+      - C_deploy_logicapps
+      - P_deploy_partner_sim
+      - C_deploy_partner_sim
+      - P_deploy_specialized
+      - C_deploy_specialized
+      - P_deploy_vm_workloads
+      - C_deploy_vm_workloads
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_diagnostics'], 'true'), and(or(in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_appservice.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_appservice'], 'true'))), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_dbadapters.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_dbadapters'], 'true'))), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_durable.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_durable'], 'true'))), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_frontend.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_frontend'], 'true'))), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_functions.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_functions'], 'true'))), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_jobs.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_jobs'], 'true'))), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_logicapps.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_logicapps'], 'true'))), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_partner_sim.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_partner_sim'], 'true'))), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_specialized.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_specialized'], 'true'))), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_vm_workloads.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'))), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: obs-diagnostics
+          componentPath: observability/lab/diagnostics
+          artifacts: &id015 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+  - stage: C_obs_diagnostics
+    displayName: apply obs-diagnostics
+    dependsOn:
+      - Select
+      - P_obs_diagnostics
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_diagnostics.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_diagnostics'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: obs-diagnostics
+          componentPath: observability/lab/diagnostics
+          artifacts: *id015
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: none
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_obs_monitoring
+    displayName: plan obs-monitoring
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - P_deploy_appservice
+      - C_deploy_appservice
+      - P_deploy_core_aca
+      - C_deploy_core_aca
+      - P_deploy_core_aks
+      - C_deploy_core_aks
+      - P_deploy_dbadapters
+      - C_deploy_dbadapters
+      - P_deploy_durable
+      - C_deploy_durable
+      - P_deploy_frontend
+      - C_deploy_frontend
+      - P_deploy_functions
+      - C_deploy_functions
+      - P_deploy_jobs
+      - C_deploy_jobs
+      - P_deploy_logicapps
+      - C_deploy_logicapps
+      - P_deploy_partner_sim
+      - C_deploy_partner_sim
+      - P_deploy_specialized
+      - C_deploy_specialized
+      - P_deploy_vm_workloads
+      - C_deploy_vm_workloads
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_monitoring'], 'true'), and(or(in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_appservice.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_appservice'], 'true'))), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aca.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aca'], 'true'))), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_core_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_core_aks'], 'true'))), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_dbadapters.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_dbadapters'], 'true'))), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_durable.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_durable'], 'true'))), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_frontend.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_frontend'], 'true'))), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_functions.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_functions'], 'true'))), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_jobs.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_jobs'], 'true'))), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_logicapps.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_logicapps'], 'true'))), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_partner_sim.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_partner_sim'], 'true'))), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_specialized.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_specialized'], 'true'))), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_vm_workloads.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'))), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: obs-monitoring
+          componentPath: observability/lab/monitoring
+          artifacts: &id016 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: provider
+          settings: ${{ parameters.settings }}
+  - stage: C_obs_monitoring
+    displayName: apply obs-monitoring
+    dependsOn:
+      - Select
+      - P_obs_monitoring
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_monitoring.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_monitoring'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: obs-monitoring
+          componentPath: observability/lab/monitoring
+          artifacts: *id016
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          datadog: provider
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - template: ../templates/retire.yml
+    parameters:
+      dependsOn:
+        - Select
+        - P_deploy_appservice
+        - P_deploy_core_aca
+        - P_deploy_dbadapters
+        - P_deploy_functions
+        - P_deploy_logicapps
+        - P_deploy_partner_sim
+        - P_deploy_specialized
+        - P_deploy_vm_workloads
+        - P_deploy_core_aks
+        - P_obs_hosts
+        - P_deploy_durable
+        - P_deploy_frontend
+        - P_deploy_jobs
+        - P_obs_diagnostics
+        - P_obs_monitoring
+        - C_deploy_appservice
+        - C_deploy_core_aca
+        - C_deploy_dbadapters
+        - C_deploy_functions
+        - C_deploy_logicapps
+        - C_deploy_partner_sim
+        - C_deploy_specialized
+        - C_deploy_vm_workloads
+        - C_deploy_core_aks
+        - C_obs_hosts
+        - C_deploy_durable
+        - C_deploy_frontend
+        - C_deploy_jobs
+        - C_obs_diagnostics
+        - C_obs_monitoring
+      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_hosts.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_hosts.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+      environment: ${{ parameters.environment }}
+      dryRun: ${{ parameters.dryRun }}
+      settings: ${{ parameters.settings }}
+  - stage: Verify
+    displayName: Smoke + telemetry verification
+    dependsOn:
+      - Select
+      - C_deploy_appservice
+      - C_deploy_core_aca
+      - C_deploy_dbadapters
+      - C_deploy_functions
+      - C_deploy_logicapps
+      - C_deploy_partner_sim
+      - C_deploy_specialized
+      - C_deploy_vm_workloads
+      - C_deploy_core_aks
+      - C_obs_hosts
+      - C_deploy_durable
+      - C_deploy_frontend
+      - C_deploy_jobs
+      - C_obs_diagnostics
+      - C_obs_monitoring
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.any_deploy'], 'true'), ne(dependencies.Select.outputs['select.detect.mode'], 'drift'), ne(variables['DRY_RUN'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/smoke.yml
+        parameters:
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/telemetry-verify.yml
+        parameters:
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+  - stage: Drift
+    displayName: Drift report
+    dependsOn:
+      - Select
+      - P_deploy_appservice
+      - P_deploy_core_aca
+      - P_deploy_dbadapters
+      - P_deploy_functions
+      - P_deploy_logicapps
+      - P_deploy_partner_sim
+      - P_deploy_specialized
+      - P_deploy_vm_workloads
+      - P_deploy_core_aks
+      - P_obs_hosts
+      - P_deploy_durable
+      - P_deploy_frontend
+      - P_deploy_jobs
+      - P_obs_diagnostics
+      - P_obs_monitoring
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.mode'], 'drift'))
+    pool: *id001
+    jobs:
+      - template: ../templates/drift.yml
+        parameters:
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+  - stage: Evidence
+    displayName: Report, evidence and deployment markers
+    dependsOn:
+      - Select
+      - Build
+      - P_deploy_appservice
+      - P_deploy_core_aca
+      - P_deploy_dbadapters
+      - P_deploy_functions
+      - P_deploy_logicapps
+      - P_deploy_partner_sim
+      - P_deploy_specialized
+      - P_deploy_vm_workloads
+      - P_deploy_core_aks
+      - P_obs_hosts
+      - P_deploy_durable
+      - P_deploy_frontend
+      - P_deploy_jobs
+      - P_obs_diagnostics
+      - P_obs_monitoring
+      - C_deploy_appservice
+      - C_deploy_core_aca
+      - C_deploy_dbadapters
+      - C_deploy_functions
+      - C_deploy_logicapps
+      - C_deploy_partner_sim
+      - C_deploy_specialized
+      - C_deploy_vm_workloads
+      - C_deploy_core_aks
+      - C_obs_hosts
+      - C_deploy_durable
+      - C_deploy_frontend
+      - C_deploy_jobs
+      - C_obs_diagnostics
+      - C_obs_monitoring
+      - Retire
+      - Verify
+      - Drift
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), or(eq(dependencies.Select.outputs['select.detect.any_deploy'], 'true'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true')))
+    pool: *id001
+    jobs:
+      - template: ../templates/evidence.yml
+        parameters:
+          environment: ${{ parameters.environment }}
+          dryRun: ${{ parameters.dryRun }}
+          settings: ${{ parameters.settings }}

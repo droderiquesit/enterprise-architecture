@@ -1,0 +1,58 @@
+# Helm charts of the applications pipeline (job template). Pinned helm + kubeconform (checksums).
+#   publish: false (Validate stage, PR-safe): helm lint --strict, helm template | kubeconform
+#   publish: true  (Build stage): the same checks, then content-addressed `helm package` and OCI push to
+#                  <containerRegistry>.azurecr.io/helm with the build identity; packages also published as a
+#                  pipeline artifact (attempt-aware name).
+parameters:
+  - name: publish
+    type: boolean
+    default: false
+  - name: environment
+    type: string
+    default: ''
+  - name: settings
+    type: object
+    default: {}
+  - name: hostedImage
+    type: string
+    default: ubuntu-24.04
+
+jobs:
+  - job: Charts
+    displayName: Helm charts (${{ iif(parameters.publish, 'lint + package + push', 'lint') }})
+    timeoutInMinutes: 20
+    cancelTimeoutInMinutes: 5
+    ${{ if eq(parameters.publish, false) }}:
+      pool:
+        vmImage: ${{ parameters.hostedImage }}
+    ${{ else }}:
+      workspace:
+        clean: all
+    steps:
+      - checkout: self
+        fetchDepth: 1
+        clean: true
+      - template: steps-setup.yml
+        parameters:
+          tools: helm kubeconform
+      - script: |
+          set -euo pipefail
+          python3 tools/deploy/charts.py lint
+        displayName: helm lint + kubeconform
+      - ${{ if eq(parameters.publish, true) }}:
+        - task: AzureCLI@2
+          displayName: helm package + OCI push (content-addressed versions)
+          inputs:
+            azureSubscription: ${{ parameters.settings.buildServiceConnection }}
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              set -euo pipefail
+              out="$(Build.ArtifactStagingDirectory)/charts"
+              python3 tools/deploy/charts.py package --out "$out"
+              python3 tools/deploy/charts.py push --out "$out" --registry "${{ parameters.settings.containerRegistry }}"
+        - task: PublishPipelineArtifact@1
+          displayName: Publish chart packages
+          inputs:
+            targetPath: $(Build.ArtifactStagingDirectory)/charts
+            artifact: charts-$(System.JobAttempt)

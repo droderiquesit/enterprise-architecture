@@ -1,0 +1,22 @@
+# hello-jobs reconcile trigger as a CronJob (optional: jobs run on Container Apps jobs today - deploy-jobs).
+# Shows the cronjob kind: no Service/PDB/HPA/probes, restartPolicy Never, bounded runtime and history.
+kind: cronjob
+service: {name: hello-jobs, version: src-bbbbbbbbbbbbbbbbbbbbbbbb, env: dev, team: fulfillment, domain: fulfillment, tier: low, logsSource: python}
+image:
+  repository: ehcrshareddevabcde.azurecr.io/hello-jobs
+  digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+identity:
+  clientId: 22222222-2222-2222-2222-000000000008
+  tenantId: 00000000-0000-0000-0000-000000000000
+args: ["reconcile-trigger"]
+command: ["python", "-m", "hello_jobs"]
+env:
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://$(DD_AGENT_HOST):4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  OTEL_SERVICE_NAME: hello-jobs
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {memory: 256Mi}
+cronjob:
+  schedule: "*/30 * * * *"
+  timeZone: Etc/UTC

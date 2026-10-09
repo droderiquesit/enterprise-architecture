@@ -6,6 +6,6 @@
     "02-platform": {"source": "docs/diagrams/src/02-platform.mmd", "source_sha256": "969ac2938448899769c6d649d005ec5ac9ec502a650971ff9c79a05b47ddf471", "svg_sha256": "044f05c28a7fa49a828427f02b76cd0e031b4617bea5545438e796e1889d408e"},
     "03-application": {"source": "docs/diagrams/src/03-application.mmd", "source_sha256": "6270f434bed7ed0a2a08433adcb26b905287cddd4b392706290bc7cc64c13955", "svg_sha256": "30eede07061f42c1773429d43b02835f7f51272169fcc1b8329c9a07e8fdc324"},
     "04-telemetry": {"source": "docs/diagrams/src/04-telemetry.mmd", "source_sha256": "cc88e0111e5cef350eefebefb8a7eb2678bb7bcc2464046e21fb2fbb83e27df9", "svg_sha256": "808ef73aa05895edc3a3f20e0dc21b9f6833999f0e13d01b536c60d665b01e64"},
-    "05-delivery": {"source": "docs/diagrams/src/05-delivery.mmd", "source_sha256": "1c266ea2c2c9f5b9914e866067df707a7c0284aa9ca235aa0fecc7c90fb15374", "svg_sha256": "197b121d8f4b786e0c2ef09d56d57499bf572b00f6a42a855ece9a840856c530"}
+    "05-delivery": {"source": "docs/diagrams/src/05-delivery.mmd", "source_sha256": "e2882ec97d9136f869ba4816e81f80ff85f406ce56a6710a50e0f56c6353cbf9", "svg_sha256": "751f748ea87941e99d696f1597142d9ad3dfc086c66218757d8d66724130e049"}
   }
 }

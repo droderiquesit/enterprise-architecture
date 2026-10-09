@@ -316,13 +316,29 @@ run "all_specialized" {
     error_message = "Service Fabric guest-executable manifests rendered (faults off)."
   }
   assert {
-    condition     = strcontains(output.contract.aro.manifests, "route.openshift.io/v1") && strcontains(output.contract.aro.manifests, "@sha256:")
-    error_message = "ARO manifests (Deployment/Service/Route) with a digest-pinned image."
+    condition     = yamldecode(output.contract.aro.helm.values).openshift.route.enabled && yamldecode(output.contract.aro.helm.values).openshift.enabled && can(regex("^sha256:[a-f0-9]{64}$", yamldecode(output.contract.aro.helm.values).image.digest)) && output.contract.aro.helm.chart_path == "applications/charts/hello-service"
+    error_message = "ARO: hello-service chart values with an OpenShift Route and a digest-pinned image."
+  }
+  assert {
+    condition     = !can(yamldecode(output.contract.aro.helm.values).podSecurityContext.runAsUser) && !yamldecode(output.contract.aro.helm.values).identity.workloadIdentity && !yamldecode(output.contract.aro.helm.values).faults.enabled && length(setintersection(keys(yamldecode(output.contract.aro.helm.values).env), ["DD_ENV", "DD_SERVICE", "DD_VERSION", "FAULTS_ENABLED", "AZURE_CLIENT_ID", "PORT"])) == 0
+    error_message = "ARO values: no fixed runAsUser (SCC assigns it), no AKS workload identity webhook, faults off, chart-owned env not duplicated."
+  }
+  assert {
+    condition     = output.contract.status.aro == "implemented" && yamldecode(output.contract.aro.helm.values).identity.clientId == var.foundation_identity.identities["hello-catalog-api"].client_id && yamldecode(output.contract.aro.helm.values).replicas == 2
+    error_message = "ARO ready: identity client id from foundation-identity, 2 replicas."
   }
   assert {
     condition     = length(azurerm_virtual_machine_run_command.cvm_worker) == 1 && azurerm_automation_runbook.health_probe[0].runbook_type == "Python3" && length(azurerm_automation_job_schedule.health_probe) == 1
     error_message = "Confidential VM worker run command and python3 health-probe runbook with schedule."
   }
+}
+
+run "aro_rejects_plain_secrets" {
+  command = plan
+  variables {
+    settings = { aro_catalog_env = { PG_PASSWORD = "not-allowed" } }
+  }
+  expect_failures = [var.settings]
 }
 
 run "nothing_enabled" {

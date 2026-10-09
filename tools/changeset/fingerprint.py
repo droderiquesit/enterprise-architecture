@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Set
 import yaml
 
 from . import globs
-from .graph import Graph, discover_modules
+from .graph import Graph, discover_charts, discover_modules
 from .registry import Component, Registry
 from .trees import Tree
 
@@ -98,7 +98,9 @@ class Fingerprinter:
     def modules(self, cid: str) -> List[str]:
         if cid not in self._modules:
             c = self.registry.get(cid)
-            self._modules[cid] = discover_modules(self.tree, c.path) if c.is_terraform else []
+            mods = discover_modules(self.tree, c.path) if c.is_terraform else []
+            charts = discover_charts(self.tree, [c.path, *mods]) if c.is_terraform else []
+            self._modules[cid] = sorted(set(mods) | set(charts))
         return self._modules[cid]
 
     def _nested_paths(self, c: Component) -> List[str]:

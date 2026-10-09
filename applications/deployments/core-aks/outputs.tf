@@ -1,5 +1,5 @@
 locals {
-  bff_lb_ip  = try(kubernetes_service_v1.app["hello-bff"].status[0].load_balancer[0].ingress[0].ip, null)
+  bff_lb_ip  = try(data.kubernetes_service_v1.bff[0].status[0].load_balancer[0].ingress[0].ip, null)
   bff_origin = var.settings.exposure.mode == "app-routing" ? "https://${var.settings.exposure.host}" : (local.bff_lb_ip == null ? null : "http://${local.bff_lb_ip}")
 }
 
@@ -11,7 +11,7 @@ output "contract" {
     cluster_id   = var.platform_aks.cluster_id
     namespace    = local.ns
     apps = {
-      for k, d in kubernetes_deployment_v1.app : k => {
+      for k, r in helm_release.app : k => {
         id              = "${var.platform_aks.cluster_id}/namespaces/${local.ns}/deployments/${k}"
         name            = k
         type            = "Kubernetes/Deployment"
@@ -43,9 +43,16 @@ output "contract" {
       mechanism = local.csi ? "secrets-store-csi-driver (workload identity)" : "none (key_vault_secrets_provider disabled on platform-aks: FAULT_TOKEN not injected)"
     }
     exposure = var.settings.exposure.mode
+    # Helm releases (one per workload) - for rollback tooling and drift checks. No values (they are in state only).
+    helm = {
+      chart         = "hello-service"
+      chart_source  = var.settings.helm.chart_repository == null ? "repository:applications/charts/hello-service" : "${var.settings.helm.chart_repository}/hello-service:${var.settings.helm.chart_version}"
+      releases      = { for k, r in helm_release.app : k => { name = r.name, namespace = r.namespace } }
+      chart_version = var.settings.helm.chart_version
+    }
     rollback = {
       method = "redeploy-previous-digest"
-      how    = "re-run the deployment with the previous artifacts (image digest) -> RollingUpdate (maxUnavailable 0); break-glass: kubectl rollout undo deployment/<svc> -n ${local.ns}"
+      how    = "re-run the deployment with the previous artifacts (image digest) -> helm upgrade (atomic, RollingUpdate maxUnavailable 0); break-glass: helm rollback <svc> [<revision>] -n ${local.ns} --wait (history: helm history <svc> -n ${local.ns}), then re-apply the previous digest so Terraform state matches"
     }
   }
 }

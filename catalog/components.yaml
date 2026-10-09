@@ -291,6 +291,7 @@ components:
     layer: observability
     kind: terraform
     path: observability/lab/hosts
+    scope: applications         # ordered after deploy-vm-workloads (optional_consumes below)
     consumes: [obs-telemetry-transport, platform-vm, platform-vmss]
     # deploy-vm-workloads: ordering only (its run commands create the app log directories the Fluent Bit installer
     # tails, and two managed run commands on one VM should not race); the root declares no variable for it.

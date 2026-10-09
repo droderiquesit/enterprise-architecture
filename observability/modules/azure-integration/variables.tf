@@ -126,3 +126,37 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "eventhub_log_forwarding" {
+  description = <<-EOT
+    What the Event Hubs path (modules/azure-logs + modules/diagnostic-settings, Fluent Bit aggregator) already
+    exports - normally modules/azure-logs output log_forwarding plus the subscriptions that carry resource
+    diagnostic settings. In mode = native the plan FAILS when the native tag rule would forward the same source
+    for the same subscription (Activity Log, resource logs) or tenant (Entra ID): duplicates double the bill and
+    every log-based alert. Native and Event Hubs log forwarding are mutually exclusive per subscription.
+  EOT
+  type = object({
+    activity_log_subscription_ids = optional(list(string), [])
+    resource_log_subscription_ids = optional(list(string), [])
+    entra_enabled                 = optional(bool, false)
+  })
+  default = {}
+  validation {
+    condition = var.mode != "native" || var.native == null || !(
+      try(var.native.send_subscription_logs, true) &&
+      length(setintersection(toset([for s in var.subscription_ids : lower(s)]), toset([for s in var.eventhub_log_forwarding.activity_log_subscription_ids : lower(s)]))) > 0
+    )
+    error_message = "native.send_subscription_logs is on for a subscription whose Activity Log already goes through Event Hubs (eventhub_log_forwarding.activity_log_subscription_ids). Disable one path."
+  }
+  validation {
+    condition = var.mode != "native" || var.native == null || !(
+      try(var.native.send_resource_logs, false) &&
+      length(setintersection(toset([for s in var.subscription_ids : lower(s)]), toset([for s in var.eventhub_log_forwarding.resource_log_subscription_ids : lower(s)]))) > 0
+    )
+    error_message = "native.send_resource_logs is on for a subscription whose resource logs already go through Event Hubs diagnostic settings. Disable one path."
+  }
+  validation {
+    condition     = var.mode != "native" || var.native == null || !(try(var.native.send_aad_logs, false) && var.eventhub_log_forwarding.entra_enabled)
+    error_message = "native.send_aad_logs and the Event Hubs Entra ID export are both on. Disable one path."
+  }
+}

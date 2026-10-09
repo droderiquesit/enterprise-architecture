@@ -1,0 +1,22 @@
+# hello-bff on a local kind cluster (tests/charts smoke). image.digest is set by the test from the loaded image id.
+kind: deployment
+service: {name: hello-bff, version: 0.1.0-e2e, env: kind, team: web, domain: storefront, tier: critical, logsSource: csharp}
+image:
+  repository: docker.io/library/hello-bff
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  pullPolicy: Never
+identity:
+  clientId: 00000000-0000-0000-0000-000000000002
+  workloadIdentity: false
+env:
+  CATALOG_API_URL: http://hello-catalog-api.hello.svc.cluster.local
+  ORDERS_API_URL: http://hello-orders-api.hello.svc.cluster.local
+  AUTH_MODE: none
+  OTEL_TRACES_EXPORTER: none
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {cpu: "1", memory: 384Mi}
+autoscaling: {enabled: false}
+replicas: 1

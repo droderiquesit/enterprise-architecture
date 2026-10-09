@@ -110,3 +110,16 @@ resource "azurerm_role_assignment" "pipeline" {
   condition_version    = each.value.role == "Role Based Access Control Administrator" ? "2.0" : null
   description          = "bootstrap: ${each.key}"
 }
+
+# Promotion readers: downstream environments read this environment's records and packages (never write).
+resource "azurerm_role_assignment" "promotion_readers" {
+  for_each = {
+    for pair in setproduct(local.s.promotion_reader_principal_ids, ["deployments", "packages"]) : "${pair[0]}/${pair[1]}" => { principal = pair[0], container = pair[1] }
+  }
+
+  scope                = azurerm_storage_container.this[each.value.container].id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = each.value.principal
+  principal_type       = "ServicePrincipal"
+  description          = "promotion source read of ${each.value.container}"
+}

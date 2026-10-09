@@ -8,8 +8,9 @@ variable "settings" {
     event_hub_mode                 = optional(string, "create")
     event_hub_capacity             = optional(number, 1)
     event_hub_private_endpoint     = optional(bool, true)
-    eventhub_secret_version        = optional(number, 1)  # increment to re-write the listen secret (secret-rotation runbook)
-    batch_log_setup_enabled        = optional(bool, true) # publish the Batch Fluent Bit setup script in the contract
+    event_hub_activity_logs_hub    = optional(string, "activity-logs") # "" = share the platform-logs hub
+    eventhub_secret_version        = optional(number, 1)               # increment to re-write the listen secret (secret-rotation runbook)
+    batch_log_setup_enabled        = optional(bool, true)              # publish the Batch Fluent Bit setup script in the contract
     aggregator_hosting             = optional(string, "container_app")
     gateway_hosting                = optional(string, "container_app")
     gateway_distribution           = optional(string, "upstream")

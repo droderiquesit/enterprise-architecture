@@ -1,4 +1,6 @@
-# Promotion chains: "build once, promote".
+# Promotion chains: "build once, promote". Promotion is `mode: promote` of the platform and the applications
+# pipeline (no separate entry file). A promote run selects like a deploy run but is refused unless the
+# promote_from environment successfully deployed the same code (tools/changeset/select.py select_promote).
 # The first environment of a chain builds artifacts from source (Build stage: resolve existing digest for the
 # source fingerprint, else build). Every later environment NEVER builds: tools/deploy/artifacts.py promote
 # copies the exact image digest / package sha256 recorded by its `promote_from` environment for the SAME
@@ -20,14 +22,14 @@ chains:
         promote_from: dev
         ado_environment: lab-test                # approvals required
         retire_environment: lab-test-retire
-        ci_trigger: false                        # queued through pipelines/promote.yml
-        allowed_modes: [auto, manual, reconcile, drift, retire]
+        ci_trigger: false                        # queued manually: mode promote (both pipelines)
+        allowed_modes: [promote, drift, retire]  # never deploys code dev has not successfully run
         allow_dry_run: true
       - name: prod
         promote_from: test
         ado_environment: lab-prod                # approvals required (2 approvers, not the requester) + exclusive lock
         retire_environment: lab-prod-retire
         ci_trigger: false
-        allowed_modes: [auto, manual, drift, retire]   # no blanket reconcile in prod: manual per component instead
+        allowed_modes: [promote, drift, retire]
         allow_dry_run: true
         require_apply_approval: true             # operator checklist item: the lab-prod approval check must exist

@@ -263,3 +263,29 @@ run "contract_feeds_instrumentation_hook" {
     error_message = "Sidecar Lua shipped from the contract."
   }
 }
+
+run "activity_logs_hub_dedicated_and_shared" {
+  command = plan
+  assert {
+    condition     = azurerm_eventhub.hub["activity"].name == "activity-logs" && length(azurerm_eventhub_consumer_group.fluentbit) == 3 && output.contract.event_hub.activity_logs_hub == "activity-logs"
+    error_message = "Control-plane logs get their own hub + consumer group by default."
+  }
+  assert {
+    condition     = anytrue([for e in azapi_resource.aggregator[0].body.properties.template.containers[0].env : e.name == "EVENTHUB_TOPICS" && try(e.value, "") == "app-logs,platform-logs,activity-logs"])
+    error_message = "The aggregator consumes all three hubs."
+  }
+}
+
+run "activity_logs_share_platform_hub" {
+  command = plan
+  variables {
+    event_hub = {
+      activity_logs_hub          = ""
+      listen_secret_key_vault_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.KeyVault/vaults/kv-obs"
+    }
+  }
+  assert {
+    condition     = length(azurerm_eventhub.hub) == 2 && output.contract.event_hub.activity_logs_hub == "platform-logs"
+    error_message = "An empty activity_logs_hub shares the platform hub (no extra hub)."
+  }
+}

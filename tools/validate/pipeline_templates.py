@@ -22,14 +22,19 @@ Azure Pipelines limits (Learn, "Templates - imposed limits"; "Stages" - a stage 
   LIM001 distinct YAML files per pipeline        limit 100   -> fail above 80
   LIM002 template nesting depth                  limit 100   -> fail above 20
   LIM003 expanded YAML size (estimate)           limit 20 MB parse memory, "typically 600 KB - 2 MB on disk"
-                                                             -> fail above 1,000,000 bytes, warn above 750,000
+                                                             -> fail above 1,000,000 bytes, warn above 600,000
   LIM004 jobs per stage (incl. validate matrix legs) limit 256 -> fail above 200
   LIM005 stages per run: no documented limit -> warn above 300 (UI and queueing become unwieldy)
+Entry pipelines
+  ENT001 exactly two entry pipelines exist: azure-pipelines.yml (platform) and azure-pipelines.applications.yml
+  ENT002 both only `extends:` pipelines/templates/universal.yml with their scope
+  ENT003 the applications pipeline is triggered by successful platform runs (resources.pipelines)
+  ENT004 the platform pipeline triggers on observability-v* tags (release stage)
 Environments / promotion
   ENV001 every environment in environments/promotion.yaml has environments/<env>/environment.yaml and
          pipelines/variables/<env>.yml, and no stray environment exists without a chain entry
-  ENV002 azure-pipelines.yml `environment` values == all chain environments (default = the ci_trigger env);
-         pipelines/promote.yml values == environments that promote
+  ENV002 both entries: `environment` values == all chain environments (default = the ci_trigger env) and
+         `mode` values == the union of allowed_modes
   ENV003 pipelines/variables/<env>.yml promoteFrom / promoteFromStateStorageAccount / promoteFromContainerRegistry
          match the chain and the source environment's own variables
 """
@@ -49,9 +54,10 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-ENTRY_FILES = ("azure-pipelines.yml", "pipelines/promote.yml", "pipelines/observability-release.yml")
+ENTRY_FILES = ("azure-pipelines.yml", "azure-pipelines.applications.yml")
+ENTRY_SCOPES = {"azure-pipelines.yml": "platform", "azure-pipelines.applications.yml": "applications"}
 TEMPLATE_DIRS = ("pipelines/templates",)
-LIMITS = {"files": 80, "depth": 20, "size_fail": 1_000_000, "size_warn": 750_000, "jobs_per_stage": 200,
+LIMITS = {"files": 80, "depth": 20, "size_fail": 1_000_000, "size_warn": 600_000, "jobs_per_stage": 200,
           "stages_warn": 300}
 PARAM_USE_RE = re.compile(r"parameters(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*'([^']+)'\s*\])")
 SETTINGS_USE_RE = re.compile(r"parameters\.settings\.([A-Za-z_][A-Za-z0-9_]*)")
@@ -105,8 +111,11 @@ def body_size(doc) -> int:
     return len(yaml.safe_dump(doc, sort_keys=False, width=100000, default_flow_style=False))
 
 
-def expand_ref(repo: Path, ref: str) -> List[str]:
-    """Template paths containing ${{ parameters.environment }} are checked for every environment."""
+def expand_ref(repo: Path, ref: str, scope: Optional[str] = None) -> List[str]:
+    """Template paths containing ${{ parameters.environment }} are checked for every environment;
+    ${{ parameters.scope }} is the scope of the entry pipeline being walked."""
+    if scope:
+        ref = re.sub(r"\$\{\{\s*parameters\.scope\s*\}\}", scope, ref)
     if "${{" not in ref:
         return [ref]
     m = re.search(r"\$\{\{\s*parameters\.environment\s*\}\}", ref)
@@ -196,7 +205,7 @@ class Walker:
         except ValueError:
             return str(p)
 
-    def walk(self, entry: Path) -> dict:
+    def walk(self, entry: Path, scope: Optional[str] = None) -> dict:
         files = set()
         max_depth = 0
         size = 0
@@ -212,7 +221,7 @@ class Walker:
             total = body_size(doc)
             for ref_node, _ctx in iter_template_refs(doc):
                 targets = []
-                for ref in expand_ref(self.repo, ref_node["template"]):
+                for ref in expand_ref(self.repo, ref_node["template"], scope):
                     target = resolve_ref(self.repo, path, ref)
                     if target is None:
                         continue
@@ -286,7 +295,7 @@ def check_template_files(repo: Path, report: Report) -> None:
 
 
 def check_settings_keys(repo: Path, report: Report) -> None:
-    universal = repo / "pipelines/templates/universal.yml"
+    universal = repo / "pipelines/templates/universal-stages.yml"
     if not universal.exists():
         return
     provided = set()
@@ -297,7 +306,7 @@ def check_settings_keys(repo: Path, report: Report) -> None:
     for p in sorted((repo / "pipelines/templates").glob("*.yml")):
         for key in set(SETTINGS_USE_RE.findall(strip_comments(p.read_text()))):
             if key not in provided:
-                report.add("TC006", p.relative_to(repo).as_posix(), f"uses parameters.settings.{key}, which universal.yml never provides")
+                report.add("TC006", p.relative_to(repo).as_posix(), f"uses parameters.settings.{key}, which universal-stages.yml never provides")
 
 
 # ----------------------------------------------------- expanded structure
@@ -331,9 +340,10 @@ def _jobs_of(repo: Path, stage: dict, stage_file: Path) -> List[Tuple[str, List[
     return out
 
 
-def expanded_stages(repo: Path) -> List[Tuple[dict, Path]]:
-    """Stages of the universal pipeline after expanding stage templates (both PR and CI branches)."""
-    universal = repo / "pipelines/templates/universal.yml"
+def expanded_stages(repo: Path, scope: str = "platform") -> List[Tuple[dict, Path]]:
+    """Stages of one pipeline scope after expanding stage templates (PR and CI branches; the tag-only
+    release branch is checked separately)."""
+    entry = repo / "pipelines/templates/universal-stages.yml"
     result = []
 
     def collect(items, file: Path, params: dict):
@@ -344,7 +354,8 @@ def expanded_stages(repo: Path) -> List[Tuple[dict, Path]]:
                 if isinstance(k, str) and k.startswith("${{"):
                     collect(v, file, params)
             if "template" in item:
-                target = resolve_ref(repo, file, item["template"])
+                ref = item["template"].replace("${{ parameters.scope }}", scope)
+                target = resolve_ref(repo, file, ref)
                 if target and target.exists():
                     collect(load_yaml(target).get("stages"), target, item.get("parameters") or {})
             elif "stage" in item:
@@ -354,36 +365,44 @@ def expanded_stages(repo: Path) -> List[Tuple[dict, Path]]:
                     st["dependsOn"] = params.get("dependsOn", [])
                 result.append((st, file))
 
-    if universal.exists():
-        collect(load_yaml(universal).get("stages"), universal, {})
+    if entry.exists():
+        collect(load_yaml(entry).get("stages"), entry, {})
     return result
 
 
 def check_structure(repo: Path, report: Report) -> dict:
-    stages = expanded_stages(repo)
-    names = [s["stage"] for s, _ in stages]
-    seen = set()
-    for n in names:
-        if n in seen:
-            report.add("TC007", "expanded pipeline", f"duplicate stage name '{n}'")
-        seen.add(n)
-    max_jobs = 0
-    for st, f in stages:
-        deps = st.get("dependsOn") or []
-        deps = [deps] if isinstance(deps, str) else deps
-        for d in deps:
-            if d not in seen:
-                report.add("TC007", "expanded pipeline", f"stage '{st['stage']}' dependsOn unknown stage '{d}'")
-        jobs = _jobs_of(repo, st, f)
-        jn = [j for j, _ in jobs]
-        for j in set(jn):
-            if jn.count(j) > 1:
-                report.add("TC008", "expanded pipeline", f"stage '{st['stage']}' has duplicate job '{j}'")
-        for j, jdeps in jobs:
-            for d in jdeps:
-                if d not in jn:
-                    report.add("TC008", "expanded pipeline", f"stage '{st['stage']}' job '{j}' dependsOn unknown job '{d}'")
-        max_jobs = max(max_jobs, len(jobs))
+    metrics = {}
+    max_jobs_all = 0
+    for scope in ("platform", "applications"):
+        stages = expanded_stages(repo, scope)
+        names = [s["stage"] for s, _ in stages]
+        seen = set()
+        for n in names:
+            if n in seen:
+                report.add("TC007", f"{scope} pipeline", f"duplicate stage name '{n}'")
+            seen.add(n)
+        max_jobs = 0
+        for st, f in stages:
+            deps = st.get("dependsOn") or []
+            deps = [deps] if isinstance(deps, str) else deps
+            for d in deps:
+                if d not in seen:
+                    report.add("TC007", f"{scope} pipeline", f"stage '{st['stage']}' dependsOn unknown stage '{d}'")
+            jobs = _jobs_of(repo, st, f)
+            jn = [j for j, _ in jobs]
+            for j in set(jn):
+                if jn.count(j) > 1:
+                    report.add("TC008", f"{scope} pipeline", f"stage '{st['stage']}' has duplicate job '{j}'")
+            for j, jdeps in jobs:
+                for d in jdeps:
+                    if d not in jn:
+                        report.add("TC008", f"{scope} pipeline", f"stage '{st['stage']}' job '{j}' dependsOn unknown job '{d}'")
+            max_jobs = max(max_jobs, len(jobs))
+        if len(names) > LIMITS["stages_warn"]:
+            report.add("LIM005", f"{scope} pipeline", f"{len(names)} stages: split further (README 'Scaling')", "warning")
+        metrics[scope] = {"stages": len(names), "max_jobs_per_stage": max_jobs}
+        max_jobs_all = max(max_jobs_all, max_jobs)
+    max_jobs = max_jobs_all
     # validate matrix legs: one per selected component (+ changed modules) - bounded by the registry size
     from tools.changeset.registry import load_registry
     from tools.changeset.trees import WorkTree
@@ -394,10 +413,9 @@ def check_structure(repo: Path, report: Report) -> dict:
         legs = 0
     if max(max_jobs, legs) > LIMITS["jobs_per_stage"]:
         report.add("LIM004", "expanded pipeline", f"{max(max_jobs, legs)} jobs in one stage (ADO limit 256, budget "
-                   f"{LIMITS['jobs_per_stage']}): split the Build stage by layer / shard the validate matrix")
-    if len(names) > LIMITS["stages_warn"]:
-        report.add("LIM005", "expanded pipeline", f"{len(names)} stages: split the pipeline (README 'Scaling')", "warning")
-    return {"stages": len(names), "max_jobs_per_stage": max_jobs, "validate_matrix_max_legs": legs}
+                   f"{LIMITS['jobs_per_stage']}): split the Build stage / shard the validate matrix")
+    metrics["validate_matrix_max_legs"] = legs
+    return metrics
 
 
 # --------------------------------------------------------------- environments
@@ -432,18 +450,50 @@ def check_environments(repo: Path, report: Report) -> None:
     for f in sorted((repo / "pipelines/variables").glob("*.yml")):
         if f.stem not in envs and f.stem != "tools":
             report.add("ENV001", f.relative_to(repo).as_posix(), "variables file for an environment without a chain entry")
-    main_doc = load_yaml(repo / "azure-pipelines.yml") if (repo / "azure-pipelines.yml").exists() else {}
-    values, default = _param_values(main_doc, "environment")
-    if sorted(values) != sorted(envs):
-        report.add("ENV002", "azure-pipelines.yml", f"environment values {values} != promotion environments {sorted(envs)}")
     ci = [e.name for e in envs.values() if e.ci_trigger]
-    if ci and default not in ci:
-        report.add("ENV002", "azure-pipelines.yml", f"default environment {default!r} must be the ci_trigger environment {ci}")
-    if (repo / "pipelines/promote.yml").exists():
-        pvalues, _ = _param_values(load_yaml(repo / "pipelines/promote.yml"), "environment")
-        promoted = sorted(e.name for e in envs.values() if e.promote_from)
-        if sorted(pvalues) != promoted:
-            report.add("ENV002", "pipelines/promote.yml", f"environment values {pvalues} != promoting environments {promoted}")
+    for entry, scope in ENTRY_SCOPES.items():
+        if not (repo / entry).exists():
+            report.add("ENT001", entry, "entry pipeline missing")
+            continue
+        doc = load_yaml(repo / entry) or {}
+        values, default = _param_values(doc, "environment")
+        if sorted(values) != sorted(envs):
+            report.add("ENV002", entry, f"environment values {values} != promotion environments {sorted(envs)}")
+        if ci and default not in ci:
+            report.add("ENV002", entry, f"default environment {default!r} must be the ci_trigger environment {ci}")
+        modes, _ = _param_values(doc, "mode")
+        allowed = sorted({m for e in envs.values() for m in e.allowed_modes})
+        if sorted(modes) != allowed:
+            report.add("ENV002", entry, f"mode values {sorted(modes)} != modes allowed by environments/promotion.yaml {allowed}")
+        ext = (doc.get("extends") or {})
+        if not str(ext.get("template", "")).endswith("pipelines/templates/universal.yml"):
+            report.add("ENT002", entry, "must extend pipelines/templates/universal.yml (Required template check)")
+        elif (ext.get("parameters") or {}).get("scope") != scope:
+            report.add("ENT002", entry, f"must pass scope: {scope}")
+        if set(doc) - {"name", "trigger", "pr", "schedules", "resources", "lockBehavior", "parameters", "extends",
+                        "appendCommitMessageToRunName"}:
+            report.add("ENT002", entry, f"thin entry may not define {sorted(set(doc) - {'name', 'trigger', 'pr', 'schedules', 'resources', 'lockBehavior', 'parameters', 'extends', 'appendCommitMessageToRunName'})}")
+    apps = load_yaml(repo / "azure-pipelines.applications.yml") if (repo / "azure-pipelines.applications.yml").exists() else {}
+    res = [p for p in ((apps or {}).get("resources") or {}).get("pipelines", []) if p.get("pipeline") == "platform"]
+    if not res or not (res[0].get("trigger") or {}).get("branches"):
+        report.add("ENT003", "azure-pipelines.applications.yml",
+                   "needs resources.pipelines 'platform' with a trigger on main (re-plan consumers after platform runs)")
+    plat = load_yaml(repo / "azure-pipelines.yml") if (repo / "azure-pipelines.yml").exists() else {}
+    tags = (((plat or {}).get("trigger") or {}).get("tags") or {}).get("include") or []
+    if "observability-v*" not in tags:
+        report.add("ENT004", "azure-pipelines.yml", "must trigger on tags observability-v* (package release stage)")
+    others = []
+    for p in list(repo.glob("*.yml")) + list(repo.glob("*.yaml")) + list((repo / "pipelines").glob("*.yml")):
+        rel = p.relative_to(repo).as_posix()
+        if rel in ENTRY_FILES:
+            continue
+        doc = load_yaml(p)
+        if isinstance(doc, dict) and ({"trigger", "extends", "pr", "schedules"} & set(doc) or
+                                      ("stages" in doc and "parameters" not in doc)):
+            others.append(rel)
+    if others:
+        report.add("ENT001", ", ".join(sorted(others)), "only two entry pipelines are allowed "
+                   "(azure-pipelines.yml, azure-pipelines.applications.yml)")
     for name, spec in envs.items():
         v = _variables(repo, name)
         want = spec.promote_from or ""
@@ -472,7 +522,7 @@ def run(repo: Path) -> Report:
         p = repo / entry
         if not p.exists():
             continue
-        m = walker.walk(p)
+        m = walker.walk(p, ENTRY_SCOPES.get(entry))
         report.metrics[entry] = m
         if m["files"] > LIMITS["files"]:
             report.add("LIM001", entry, f"{m['files']} YAML files (ADO limit 100, budget {LIMITS['files']})")

@@ -11,6 +11,7 @@
 #  platform-db-postgresql/.mysql/.sqlmi .server.id | platform-db-sql .databases.<k>.id
 #  platform-db-cosmos-{nosql,mongo,cassandra,gremlin,table} .account.id | platform-db-redis .cache.id
 #  platform-batch .account_id                              -> platform categories only (route none)
+#  platform-db-sql .server.id + /databases/master          -> server-level SQL audit (SQLSecurityAuditEvents)
 locals {
   dc = var.discovered_contracts
 
@@ -30,7 +31,7 @@ locals {
   ]...)
 
   deploy_targets = {
-    for k, a in local.deploy_apps : k => { id = a.id, app_log_route = a.app_log_route, platform_logs = true, location = null }
+    for k, a in local.deploy_apps : k => { id = a.id, app_log_route = a.app_log_route, platform_logs = true, location = null, platform_categories = null, tier = null }
     if contains(local.app_types, a.type)
   }
 
@@ -42,10 +43,12 @@ locals {
   )))
   aca_env_targets = {
     for i, env in local.aca_env_ids : "aca-environment.${i}" => {
-      id            = env
-      app_log_route = anytrue([for a in values(local.aca_apps) : a.app_log_route == "eventhub" && lower(coalesce(a.environment, "")) == lower(env)]) ? "eventhub" : "sidecar"
-      platform_logs = true
-      location      = null
+      id                  = env
+      app_log_route       = anytrue([for a in values(local.aca_apps) : a.app_log_route == "eventhub" && lower(coalesce(a.environment, "")) == lower(env)]) ? "eventhub" : "sidecar"
+      platform_logs       = true
+      location            = null
+      platform_categories = null
+      tier                = null
     }
   }
 
@@ -67,12 +70,26 @@ locals {
   sql_db_paths = { for k, d in try(local.dc["platform-db-sql"].databases, {}) : "platform-db-sql.databases.${k}" => try(d.id, null) }
 
   platform_targets = {
-    for k, id in merge(local.platform_paths, local.sql_db_paths) : k => { id = id, app_log_route = "none", platform_logs = true, location = null }
+    for k, id in merge(local.platform_paths, local.sql_db_paths) : k => { id = id, app_log_route = "none", platform_logs = true, location = null, platform_categories = null, tier = null }
     if id != null && startswith(coalesce(id, "-"), "/subscriptions/")
   }
 
+  # Server-level SQL auditing (auditing policy with the Azure Monitor target) is delivered through a diagnostic
+  # setting on the logical server's master database (Microsoft.Sql servers/auditingSettings isAzureMonitorTargetEnabled).
+  sql_server_id = try(local.dc["platform-db-sql"].server.id, null)
+  sql_master_targets = var.settings.sql_server_audit && local.sql_server_id != null && startswith(coalesce(local.sql_server_id, "-"), "/subscriptions/") ? {
+    "platform-db-sql.master" = {
+      id                  = "${local.sql_server_id}/databases/master"
+      app_log_route       = "none"
+      platform_logs       = true
+      location            = null
+      platform_categories = ["SQLSecurityAuditEvents", "DevOpsOperationsAudit"]
+      tier                = null
+    }
+  } : {}
+
   # explicit var.resources wins on key collisions
-  all_targets = merge(local.platform_targets, local.aca_env_targets, local.deploy_targets, var.resources)
+  all_targets = merge(local.platform_targets, local.sql_master_targets, local.aca_env_targets, local.deploy_targets, var.resources)
 }
 
 check "aca_console_allow_covers_eventhub_apps" {

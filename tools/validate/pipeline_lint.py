@@ -13,7 +13,7 @@ Rules
   PL004  component stages use lockBehavior: sequential; the pipeline sets lockBehavior: sequential
          (exclusive lock checks on lab-<env> environments queue runs instead of cancelling them)
   PL005  every deployment job targets an environment named lab-<env>[-retire]
-  PL006  pipelines/generated/component-stages.yml is up to date with the registry
+  PL006  pipelines/generated/{platform,applications}-stages.yml are up to date with the registry
   PL007  conditions parse with the expression subset evaluated in tests (tools/pipeline/conditions.py)
   PL008  retryCountOnTaskFailure only on idempotent network steps (downloads, tool installs, init, resolve)
   PL009  scripts never enable xtrace (set -x) or echo secret variables; secrets reach steps via env only
@@ -21,7 +21,7 @@ Rules
   PL011  scheduled triggers use always: true (drift detection runs even without code changes)
   PL012  every agent job declares cancelTimeoutInMinutes (cleanup / failure records get time to run)
   PL013  every job on a self-hosted pool declares `workspace: clean: all` (no state leaks between runs)
-  PL014  entry pipelines (azure-pipelines.yml, pipelines/promote.yml) only `extends:` the universal template
+  PL014  entry pipelines (azure-pipelines.yml, azure-pipelines.applications.yml) only `extends:` the universal template
   (PL003 per stage kind: P_<x> checks every dependency's result (Build: its artifacts' readiness outputs);
    C_<x> depends on and checks P_<x> result + has_changes and is skipped on dry runs)
 """
@@ -47,7 +47,7 @@ SECRET_ECHO = re.compile(r"echo[^\n]*\$\((datadog-[a-z-]+|[A-Za-z_.]*[Ss]ecret[A
 
 
 def files(repo: Path) -> list[Path]:
-    out = [repo / "azure-pipelines.yml", repo / "pipelines/promote.yml", repo / "pipelines/observability-release.yml"]
+    out = [repo / "azure-pipelines.yml", repo / "azure-pipelines.applications.yml"]
     out += sorted((repo / "pipelines/templates").glob("*.yml"))
     out += sorted((repo / "pipelines/generated").glob("*.yml"))
     return [p for p in out if p.exists()]
@@ -82,7 +82,7 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
             docs[rel] = yaml.safe_load(p.read_text())
         except yaml.YAMLError as exc:
             errors.append(f"{rel}: YAML parse error: {exc}")
-    for entry in ("azure-pipelines.yml", "pipelines/promote.yml"):
+    for entry in ("azure-pipelines.yml", "azure-pipelines.applications.yml"):
         root = docs.get(entry)
         if root is None:
             continue
@@ -172,8 +172,9 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
         walk(doc, visit)
 
     # retire stage condition comes from the generated file as a parameter
-    gen = docs.get("pipelines/generated/component-stages.yml") or {}
-    for st in gen.get("stages", []):
+    gen_stages = [st for rel in ("pipelines/generated/platform-stages.yml", "pipelines/generated/applications-stages.yml")
+                  for st in (docs.get(rel) or {}).get("stages", [])]
+    for st in gen_stages:
         if st.get("template", "").endswith("retire.yml"):
             p = st.get("parameters", {})
             cond = p.get("condition", "")
@@ -186,7 +187,7 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
         proc = subprocess.run([sys.executable, str(repo / "tools/pipeline/generate.py"), "--repo", str(repo), "--check"],
                               capture_output=True, text=True)
         if proc.returncode != 0:
-            errors.append("PL006 pipelines/generated/component-stages.yml is stale: run python3 tools/pipeline/generate.py")
+            errors.append("PL006 pipelines/generated/*-stages.yml are stale: run python3 tools/pipeline/generate.py")
     return errors
 
 

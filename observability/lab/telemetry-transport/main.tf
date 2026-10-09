@@ -61,6 +61,7 @@ module "transport" {
   event_hub = {
     mode                       = var.settings.event_hub_mode
     capacity                   = var.settings.event_hub_capacity
+    activity_logs_hub          = var.settings.event_hub_activity_logs_hub
     listen_secret_key_vault_id = var.settings.event_hub_mode == "create" ? var.foundation_identity.key_vault_id : null
     listen_secret_version      = var.settings.eventhub_secret_version
     private_endpoint = local.use_pe ? {

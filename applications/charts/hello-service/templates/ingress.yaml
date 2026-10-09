@@ -1,0 +1,39 @@
+{{- if and .Values.ingress.enabled (eq .Values.kind "deployment") }}
+{{- $name := include "hello-service.fullname" . }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-service.labels" . | nindent 4 }}
+  {{- if or .Values.ingress.tls.keyVaultCertificateUri .Values.ingress.annotations }}
+  annotations:
+    {{- with .Values.ingress.tls.keyVaultCertificateUri }}
+    # AKS application routing add-on: certificate synced from Key Vault into Secret keyvault-<name>.
+    kubernetes.azure.com/tls-cert-keyvault-uri: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ default (printf "keyvault-%s-tls" $name) .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  name: http
+{{- end }}

@@ -72,12 +72,14 @@ curl -s -X POST localhost:8080/orders -H 'content-type: application/json' -H 'Id
 4. **Azure DevOps setup** (not expressible in YAML) - service connections `sc-lab-dev-{plan,apply,build}` with workload
    identity federation, environments `lab-dev` and `lab-dev-retire` with approvals + exclusive lock, variable group
    `lab-dev-datadog` linked to Key Vault, branch policy on `main`, values in
-   [`pipelines/variables/dev.yml`](../../pipelines/variables/dev.yml). Exact steps: [pipelines/README.md](../../pipelines/README.md#azure-devops-setup-not-expressible-in-yaml).
+   [`pipelines/variables/dev.yml`](../../pipelines/variables/dev.yml). Exact steps: [pipelines/README.md](../../pipelines/README.md#one-time-azure-devops-setup-checklist).
 5. **Secrets** - after `foundation-identity` exists, set `datadog-api-key`, `datadog-app-key`, `datadog-client-token`,
    `fault-token` (and DBM passwords) with `foundation/identity/scripts/set-secrets.sh` from a host on the VNet
    ([secret rotation](../runbooks/secret-rotation.md)).
-6. **Run the pipeline** (`azure-pipelines.yml`, mode `auto`). Change detection selects every enabled component without a
-   succeeded record; stages run in dependency order with approvals on `lab-dev`. The first foundation runs need the
+6. **Run the pipelines**: `lab-platform` (`azure-pipelines.yml`, mode `auto`) first; when it succeeds it triggers
+   `lab-applications` (`azure-pipelines.applications.yml`). Change detection selects every enabled component of each
+   pipeline without a succeeded record; stages run in dependency order with approvals on `lab-dev`. Preview a run with
+   `python3 -m tools.changeset explain --env dev`. The first foundation runs need the
    temporary hosted-agent access described in the bootstrap guide; afterwards point `deployPool` at the private pool.
 7. **Check the result** - the Verify stage runs HTTP smoke tests and telemetry verification; the Evidence stage writes
    `deployment-report.md` and `evidence.json` to the `evidence` container ([evidence](../evidence/README.md)).

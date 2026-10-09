@@ -187,3 +187,10 @@ Phase 2 adds a private endpoint (≈ 7.3/month).
 - Blob versioning restore: https://learn.microsoft.com/azure/storage/blobs/versioning-overview
 - Delegated role assignment conditions: https://learn.microsoft.com/azure/role-based-access-control/delegate-role-assignments-overview
 - Datadog Azure manual setup / Secretless Auth: https://docs.datadoghq.com/integrations/guide/azure-manual-setup/
+
+### Promotion readers (multi-environment)
+
+When `environments/promotion.yaml` promotes artifacts from this environment to a downstream one, list the downstream
+environment's pipeline identity principal ids in `settings.promotion_reader_principal_ids`: they get **Storage Blob Data
+Reader** on `deployments` and `packages` only. Image import by digest additionally needs `AcrPull` on this
+environment's registry: set `platform-shared` `settings.acr_pull_principal_ids` to the same principal ids.

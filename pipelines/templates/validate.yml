@@ -93,6 +93,8 @@ jobs:
           python3 tools/config/resolve.py --env "${{ parameters.environment }}"
           python3 tools/pipeline/generate.py --check
           python3 tools/validate/pipeline_lint.py
+          python3 tools/validate/pipeline_templates.py
+          python3 tools/config/promotion.py list
           python3 tools/validate/ownership.py
           python3 tools/validate/versions.py
         displayName: Registry, generated stages, pipeline lint, ownership, provider pins

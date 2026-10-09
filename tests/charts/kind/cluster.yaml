@@ -1,0 +1,23 @@
+# kind cluster for the hello-service chart smoke (tests/charts/test_kind_smoke.py).
+# Sandbox/CI compatibility, harmless elsewhere:
+#   failCgroupV1: false            kubelet >= 1.35 refuses cgroup v1 hosts by default
+#   restrict_oom_score_adj = true  nested container runtimes may not lower oom_score_adj (pause/static pods fail with
+#                                  "failed to update /proc/self/oom_score_adj: Permission denied")
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri"]
+      restrict_oom_score_adj = true
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: KubeletConfiguration
+        failCgroupV1: false
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            - name: fail-cgroupv1
+              value: "false"

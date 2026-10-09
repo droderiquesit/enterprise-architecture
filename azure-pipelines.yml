@@ -1,31 +1,35 @@
-# Universal pipeline of azure-enterprise-observability-lab (Azure DevOps, YAML) - thin entry point.
-# Everything runs in pipelines/templates/universal.yml (required template of every protected resource).
+# PLATFORM pipeline (IaC) of azure-enterprise-observability-lab - thin entry point.
+#   scope platform: foundation-*, platform-*, observability infrastructure (obs-prereqs, obs-azure-integration,
+#   obs-telemetry-transport, obs-kubernetes, obs-dbm); bootstrap is manual and never deployed here.
+#   Tag builds `observability-v<semver>` only release the portable observability package.
+# The APPLICATIONS pipeline (azure-pipelines.applications.yml) is triggered when a platform run on main succeeds.
+# Everything runs in pipelines/templates/universal.yml (Required template of every protected resource).
 # Operator guide: pipelines/README.md.
 
-name: $(Date:yyyyMMdd)$(Rev:.r)
+name: platform-$(Date:yyyyMMdd)$(Rev:.r)
 
-# CI on main deploys the first environment of the promotion chain (dev). Paths are deliberately NOT used
-# to decide what deploys: tools/changeset compares fingerprints with deployment records, so a docs-only
-# push (or an observability package release tag) selects nothing.
+# CI on main deploys the first environment of the promotion chain (dev). Paths are NOT used to decide what
+# deploys: tools/changeset compares fingerprints with deployment records (a docs-only push selects nothing).
 trigger:
   batch: true
   branches:
     include:
       - main
+  tags:
+    include:
+      - observability-v*
 
-# Azure Repos ignores YAML `pr:` triggers: PR validation = branch policy "Build validation" on main.
+# Azure Repos ignores YAML `pr:` triggers: PR validation = branch policy "Build validation" on main (both pipelines).
 
 schedules:
-  - cron: "17 2 * * *"          # 02:17 UTC nightly: drift detection (auto mode -> drift on Schedule)
-    displayName: Nightly drift detection (dev)
+  - cron: "17 2 * * *"          # 02:17 UTC nightly: drift detection of the platform scope (auto -> drift)
+    displayName: Nightly platform drift detection (dev)
     branches:
       include:
         - main
     always: true                # drift is about the cloud, not the code
 
-# Runs queue behind each other on resources with an exclusive lock check (environment lab-<env>);
-# every generated plan/apply stage additionally takes a stage-level lock.
-lockBehavior: sequential
+lockBehavior: sequential        # queue (do not cancel) runs waiting for exclusive locks
 
 parameters:
   - name: environment
@@ -46,6 +50,11 @@ parameters:
       - reconcile     # plan every enabled component, apply where the plan has changes
       - drift         # plan every enabled component, apply nothing, report drift
       - retire        # only scheduled retirements (environments/<env>/retirements.yaml)
+      - promote       # test/prod: deploy what the source environment already runs (same code, same digests)
+  - name: sourceEnvironment
+    displayName: Promote from (auto = environments/promotion.yaml)
+    type: string
+    default: auto
   - name: components
     displayName: Components (manual mode, comma separated)
     type: string
@@ -62,9 +71,10 @@ parameters:
 extends:
   template: pipelines/templates/universal.yml
   parameters:
+    scope: platform
     environment: ${{ parameters.environment }}
     mode: ${{ parameters.mode }}
+    sourceEnvironment: ${{ parameters.sourceEnvironment }}
     components: ${{ parameters.components }}
     withConsumers: ${{ parameters.withConsumers }}
     dryRun: ${{ parameters.dryRun }}
-    entry: universal

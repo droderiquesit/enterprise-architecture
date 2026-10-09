@@ -55,6 +55,8 @@ def output_variables(doc: dict, registry: Registry) -> Dict[str, str]:
     out["any_build"] = _bool(any(v == "true" for k, v in out.items() if k.startswith("build_")))
     out["has_retirements"] = _bool(any(r["status"] == "retire-scheduled" for r in doc.get("retirements", [])) and not pr)
     out["mode"] = doc["mode"]
+    out["scope"] = doc.get("scope") or "all"
+    out["waiting_count"] = str(len(doc.get("summary", {}).get("waiting", [])))
     out["selection_summary"] = json.dumps(doc.get("summary", {}), separators=(",", ":"), sort_keys=True)
     return out
 
@@ -65,6 +67,10 @@ def logging_commands(doc: dict, registry: Registry) -> List[str]:
         if "\n" in value or "\r" in value:
             raise ValueError(f"output variable {name} must be single-line")
         lines.append(f"##vso[task.setvariable variable={name};isOutput=true]{value}")
+    for cid, e in sorted(doc["components"].items()):
+        if e.get("waiting_for"):
+            lines.append(f"##vso[task.logissue type=warning]{cid}: waiting for the platform pipeline "
+                         f"({', '.join(e['waiting_for'])}); it re-runs when the platform run succeeds")
     for r in doc.get("retirements", []):
         if r["status"] in ("retire-pending", "retire-blocked"):
             lines.append(f"##vso[task.logissue type=warning]{r['component']}: {r['status']} - {r['reason']}")

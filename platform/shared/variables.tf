@@ -55,6 +55,8 @@ variable "settings" {
     acr_public_network_access_enabled = optional(bool, true)
     acr_zone_redundancy_enabled       = optional(bool, false)
     acr_retention_days                = optional(number, 7) # untagged manifest retention (Premium only)
+    # Promotion: downstream environments' build identities import images by digest from this registry.
+    acr_pull_principal_ids = optional(list(string), [])
     # Identities (keys of foundation_identity.identities) granted AcrPull / AcrPush on the registry.
     acr_pull_identities = optional(list(string), [
       "hello-bff", "hello-orders-api", "hello-inventory-api", "hello-catalog-api", "hello-dbadapter",

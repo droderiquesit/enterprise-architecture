@@ -1,0 +1,14 @@
+{{- if and .Values.podDisruptionBudget.enabled (ne .Values.kind "cronjob") }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "hello-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-service.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "hello-service.selectorLabels" . | nindent 6 }}
+{{- end }}

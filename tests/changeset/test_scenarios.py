@@ -36,9 +36,18 @@ def deployed(tmp_path):
 
 
 def _simulate(repo, doc, plan_exit, **kw):
+    """Platform pipeline, then applications pipeline (as the resource trigger orders them)."""
     reg = load_registry(WorkTree(repo))
     outs = output_variables(doc, reg)
-    return simulate(build_stages(reg), outs, plan_exit, **kw)
+    merged = {"results": {}, "applied": [], "planned": []}
+    for scope in ("platform", "applications"):
+        sim = simulate(build_stages(reg, scope), outs, plan_exit, **kw)
+        merged["results"].update({k: v for k, v in sim["results"].items() if k.startswith(("P_", "C_", "Build"))})
+        merged["applied"] += sim["applied"]
+        merged["planned"] += sim["planned"]
+    merged["applied"].sort()
+    merged["planned"].sort()
+    return merged
 
 
 # --------------------------------------------------------------------------- 1
@@ -128,14 +137,21 @@ def test_foundation_change_applies_network_plans_consumers_skips_unrelated(deplo
     exit_codes["foundation-network"] = 2
     sim = _simulate(repo, doc, exit_codes)
     assert sim["applied"] == ["foundation-network"]
-    assert sim["results"]["C_deploy_core_aca"] == "Succeeded"       # planned, empty plan, not redeployed
-    assert sim["results"]["C_deploy_dbadapters"] == "Skipped"
-    # a failing network apply blocks every consumer stage
-    sim = _simulate(repo, doc, exit_codes, apply_fail={"foundation-network"})
-    assert sim["results"]["C_foundation_network"] == "Failed"
-    assert sim["results"]["C_foundation_identity"] == "Skipped"
-    assert sim["results"]["C_deploy_core_aca"] == "Skipped"
-    assert sim["applied"] == []
+    assert sim["results"]["P_deploy_core_aca"] == "Succeeded"       # planned, empty plan ...
+    assert sim["results"]["C_deploy_core_aca"] == "Skipped"         # ... so not redeployed (no approval asked)
+    assert sim["results"]["P_deploy_dbadapters"] == "Skipped"
+    # a failing network apply blocks every consumer stage of the platform pipeline
+    reg = load_registry(WorkTree(repo))
+    plat = simulate(build_stages(reg, "platform"), output_variables(doc, reg), exit_codes, apply_fail={"foundation-network"})
+    assert plat["results"]["C_foundation_network"] == "Failed"
+    assert plat["results"]["P_foundation_identity"] == "Skipped"
+    assert plat["results"]["P_obs_telemetry_transport"] == "Skipped"
+    assert plat["applied"] == []
+    # ... and the applications pipeline does not even plan its consumers: they wait for the platform
+    apps = select_deploy(repo, "dev", store, scope="applications")
+    assert apps["summary"]["plan"] == []
+    assert "deploy-core-aca" in apps["summary"]["waiting"]
+    assert "foundation-network" in apps["components"]["deploy-core-aca"]["waiting_for"]
 
 
 # --------------------------------------------------------------------------- 5

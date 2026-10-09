@@ -11,12 +11,18 @@ variable "resources" {
     app_log_route = optional(string, "none")
     platform_logs = optional(bool, true)
     location      = optional(string)
-    # replaces the allow-list for this resource (still intersected with what the resource supports)
+    # replaces the tier/allow-list for this resource (still intersected with what the resource supports)
     platform_categories = optional(list(string))
+    # per-resource tier (security | standard | verbose); null = var.platform_log_tier
+    tier = optional(string)
   }))
   validation {
     condition     = alltrue([for r in values(var.resources) : contains(["eventhub", "sidecar", "daemonset", "host", "none"], r.app_log_route)])
     error_message = "app_log_route must be one of eventhub, sidecar, daemonset, host, none."
+  }
+  validation {
+    condition     = alltrue([for r in values(var.resources) : r.tier == null || contains(["security", "standard", "verbose"], coalesce(r.tier, "standard"))])
+    error_message = "resources[*].tier must be security, standard or verbose."
   }
   validation {
     condition     = alltrue([for r in values(var.resources) : can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/[^/]+/[^/]+/[^/]+", r.id))])
@@ -59,29 +65,39 @@ variable "app_log_categories" {
   }
 }
 
-variable "platform_log_allowlist" {
-  description = "Platform (non-application) log categories per resource type (lower-case type). Intersected with the categories the resource actually supports."
-  type        = map(list(string))
-  default = {
-    "microsoft.web/sites"                            = ["AppServiceHTTPLogs", "AppServicePlatformLogs", "AppServiceAuditLogs", "AppServiceIPSecAuditLogs", "AppServiceAuthenticationLogs"]
-    "microsoft.web/sites/slots"                      = ["AppServiceHTTPLogs", "AppServicePlatformLogs"]
-    "microsoft.app/managedenvironments"              = ["ContainerAppSystemLogs"]
-    "microsoft.logic/workflows"                      = []
-    "microsoft.containerservice/managedclusters"     = ["kube-audit-admin", "cluster-autoscaler", "guard"]
-    "microsoft.sql/servers/databases"                = ["SQLSecurityAuditEvents", "Errors", "Timeouts", "Blocks", "Deadlocks", "AutomaticTuning"]
-    "microsoft.sql/managedinstances"                 = ["SQLSecurityAuditEvents", "ResourceUsageStats"]
-    "microsoft.dbforpostgresql/flexibleservers"      = ["PostgreSQLLogs", "PostgreSQLFlexSessions"]
-    "microsoft.dbformysql/flexibleservers"           = ["MySqlSlowLogs", "MySqlAuditLogs"]
-    "microsoft.documentdb/databaseaccounts"          = ["ControlPlaneRequests"]
-    "microsoft.keyvault/vaults"                      = ["AuditEvent"]
-    "microsoft.servicebus/namespaces"                = ["OperationalLogs", "RuntimeAuditLogs"]
-    "microsoft.eventhub/namespaces"                  = ["OperationalLogs"]
-    "microsoft.network/applicationgateways"          = ["ApplicationGatewayAccessLog", "ApplicationGatewayFirewallLog"]
-    "microsoft.network/frontdoors"                   = ["FrontdoorAccessLog", "FrontdoorWebApplicationFirewallLog"]
-    "microsoft.cdn/profiles"                         = ["FrontDoorAccessLog", "FrontDoorWebApplicationFirewallLog"]
-    "microsoft.apimanagement/service"                = ["GatewayLogs"]
-    "microsoft.cache/redis"                          = ["ConnectedClientList"]
-    "microsoft.containerregistry/registries"         = ["ContainerRegistryLoginEvents"]
-    "microsoft.storage/storageaccounts/blobservices" = ["StorageWrite", "StorageDelete"]
+variable "platform_log_tier" {
+  description = <<-EOT
+    Default platform-category tier from category-policy.json (cumulative):
+      security = audit / security essentials (Key Vault AuditEvent, SQL audit, AKS kube-audit-admin + guard, WAF, ...)
+      standard = security + operational logs (AKS kube-apiserver, App Service HTTP logs, SQL errors/deadlocks, ...)
+      verbose  = standard + high-volume data-plane / diagnostic categories (full kube-audit, StorageRead, Cosmos DataPlaneRequests, ...)
+    resources[*].tier overrides it per resource.
+  EOT
+  type        = string
+  default     = "standard"
+  validation {
+    condition     = contains(["security", "standard", "verbose"], var.platform_log_tier)
+    error_message = "platform_log_tier must be security, standard or verbose."
   }
+}
+
+variable "platform_log_allowlist_overrides" {
+  description = "Per resource type (lower-case): replaces the tier policy list for that type (still intersected with what the resource supports)."
+  type        = map(list(string))
+  default     = {}
+}
+
+variable "platform_log_allowlist" {
+  description = <<-EOT
+    LEGACY (1.0.x): a complete per-type allow-list that replaces the tier policy for EVERY type. null (default) =
+    use category-policy.json at platform_log_tier plus platform_log_allowlist_overrides.
+  EOT
+  type        = map(list(string))
+  default     = null
+}
+
+variable "category_policy" {
+  description = "Override the whole category policy (same shape as category-policy.json .types). null = the maintained file shipped with the module."
+  type        = any
+  default     = null
 }

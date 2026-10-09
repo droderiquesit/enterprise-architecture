@@ -1,0 +1,7 @@
+{{ include "hello-service.fullname" . }} ({{ .Values.kind }}) {{ .Values.service.name }}@{{ .Values.service.version }} in namespace {{ .Release.Namespace }}
+image: {{ include "hello-service.image" . }}
+{{- if eq .Values.kind "deployment" }}
+in-cluster URL: http://{{ include "hello-service.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.k8sService.port }}
+probe:  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "hello-service.fullname" . }} 8080:{{ .Values.k8sService.port }} && curl -fsS localhost:8080/readyz
+{{- end }}
+rollback: helm -n {{ .Release.Namespace }} rollback {{ .Release.Name }}   (or re-apply the previous image digest)

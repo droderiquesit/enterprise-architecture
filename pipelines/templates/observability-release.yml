@@ -1,0 +1,101 @@
+# Observability package release (stage template). Compiled by universal.yml ONLY for platform-pipeline
+# builds of tags `observability-v<semver>`; such builds run nothing else (no Select, no deployment).
+# Lab deployments are unaffected: the package's VERSION/CHANGELOG are no component input, and a tag push
+# does not match the CI branch filter of either pipeline's deployment flow.
+#   Validate (Microsoft-hosted, no credentials): tag == VERSION, CHANGELOG section exists, portability +
+#            content tests (terraform module tests included), onboarding validation of the example,
+#            deterministic tarball via observability/tools/release/package.sh, sha256 verified.
+#   Publish: Azure Artifacts Universal Package (feed `observabilityFeed`, package observability-package,
+#            version = tag version) + pipeline artifact with tarball, .sha256 and release notes.
+parameters:
+  - name: hostedImage
+    type: string
+    default: ubuntu-24.04
+  - name: feed
+    type: string
+
+stages:
+  - stage: ObservabilityRelease
+    displayName: Observability package release
+    jobs:
+      - job: Validate
+        displayName: Validate + package
+        pool:
+          vmImage: ${{ parameters.hostedImage }}
+        timeoutInMinutes: 45
+        cancelTimeoutInMinutes: 5
+        steps:
+          - checkout: self
+            fetchDepth: 1
+          - template: steps-setup.yml
+            parameters:
+              tools: terraform
+          - script: python3 -m pip install --quiet --user pytest==9.1.1
+            displayName: Install pytest
+            retryCountOnTaskFailure: 2
+          - script: |
+              set -euo pipefail
+              version="$(python3 tools/report/release_notes.py --tag "$(Build.SourceBranch)" --version-file observability/VERSION)"
+              echo "##vso[task.setvariable variable=PACKAGE_VERSION;isOutput=true]$version"
+              echo "release version $version"
+            name: version
+            displayName: Tag must equal observability/VERSION
+          - script: |
+              set -euo pipefail
+              out="$(Build.ArtifactStagingDirectory)/release"; mkdir -p "$out"
+              python3 tools/report/release_notes.py --changelog observability/CHANGELOG.md \
+                --version "$(version.PACKAGE_VERSION)" --out "$out/RELEASE_NOTES.md"
+            displayName: Release notes from CHANGELOG
+          - script: |
+              set -euo pipefail
+              python3 -m pytest -q observability/tests/portability observability/tests/content
+              python3 observability/tools/onboarding/validate.py --strict \
+                --manifests observability/examples/existing-environment/manifests/prod \
+                --routing observability/examples/existing-environment/routing/prod.yaml
+            displayName: Package tests (portability, content, terraform modules) + onboarding validation
+          - script: |
+              set -euo pipefail
+              out="$(Build.ArtifactStagingDirectory)/release"
+              bash observability/tools/release/package.sh --out "$out" --version "$(version.PACKAGE_VERSION)"
+              (cd "$out" && sha256sum --check "observability-$(version.PACKAGE_VERSION).tar.gz.sha256")
+            displayName: Build deterministic tarball + verify sha256
+          - task: PublishPipelineArtifact@1
+            displayName: Publish release (tarball, sha256, notes)
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/release
+              artifact: observability-release-$(System.JobAttempt)
+      - job: Publish
+        displayName: Publish to Azure Artifacts
+        dependsOn: Validate
+        pool:
+          vmImage: ${{ parameters.hostedImage }}
+        timeoutInMinutes: 15
+        cancelTimeoutInMinutes: 5
+        variables:
+          PACKAGE_VERSION: $[ dependencies.Validate.outputs['version.PACKAGE_VERSION'] ]
+        steps:
+          - checkout: none
+          - task: DownloadPipelineArtifact@2
+            displayName: Download validated release
+            retryCountOnTaskFailure: 2
+            inputs:
+              buildType: current
+              itemPattern: observability-release-*/**
+              path: $(Pipeline.Workspace)/release
+          - script: |
+              set -euo pipefail
+              dir="$(ls -d "$(Pipeline.Workspace)"/release/observability-release-* | sort | tail -1)"
+              (cd "$dir" && sha256sum --check "observability-$(PACKAGE_VERSION).tar.gz.sha256")
+              mkdir -p "$(Pipeline.Workspace)/upload" && cp "$dir"/* "$(Pipeline.Workspace)/upload/"
+            displayName: Re-verify sha256 before publishing
+          - task: UniversalPackages@0
+            displayName: Publish universal package observability-package $(PACKAGE_VERSION)
+            inputs:
+              command: publish
+              publishDirectory: $(Pipeline.Workspace)/upload
+              feedsToUsePublish: internal
+              vstsFeedPublish: ${{ parameters.feed }}
+              vstsFeedPackagePublish: observability-package
+              versionOption: custom
+              versionPublish: $(PACKAGE_VERSION)
+              packagePublishDescription: Portable Datadog observability-as-code package (see RELEASE_NOTES.md)

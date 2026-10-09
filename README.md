@@ -22,7 +22,7 @@ Azure DevOps pipeline that deploys only the components that changed (plus what t
 | platform | [`platform/`](platform/README.md), [`platform/data/`](platform/data/README.md) | compute platforms (AKS, Container Apps, App Service, Functions, VM, VMSS, Batch, Service Fabric, ARO, specialized), ACR, Service Bus, 17 database/data-store roots |
 | applications | [`applications/`](applications/deployments/README.md) | Enterprise Hello services (React frontend, .NET BFF/orders/inventory/durable, Python catalog/adapters/worker/jobs/functions/partner-sim/traffic, Logic Apps) and one deployment root per hosting group |
 | observability | [`observability/`](observability/README.md) | portable package (monitors, SLOs, synthetics, dashboards, catalog, RUM, Azure integration, diagnostic settings, Fluent Bit / OTel transport, agents, DBM) + lab roots under `observability/lab/` |
-| delivery | [`azure-pipelines.yml`](azure-pipelines.yml), [`pipelines/`](pipelines/README.md), [`tools/`](tools/README.md) | change detection, generated per-component stages, plan binding, contracts, smoke, telemetry verification, evidence |
+| delivery | [`azure-pipelines.yml`](azure-pipelines.yml) (platform), [`azure-pipelines.applications.yml`](azure-pipelines.applications.yml) (applications), [`pipelines/`](pipelines/README.md), [`tools/`](tools/README.md) | two pipelines on one governed template: change detection, generated plan/apply stages, promotion dev -> test -> prod, plan binding, contracts, smoke, telemetry verification, evidence, observability package release |
 | catalog | [`catalog/`](catalog/) | component registry, Azure service catalog (100 entries), architecture matrix, telemetry capabilities, contract schemas, provider gaps |
 
 Architecture pictures: [docs/diagrams](docs/diagrams/README.md) (foundation, platform, application, telemetry, delivery).
@@ -57,7 +57,7 @@ python3 tools/docs/generate.py --check && tools/docs/render_diagrams.sh --check 
 bootstrap/scripts/bootstrap.sh --env dev              # local state -> migrated to the state account
 
 # 3. Azure DevOps: service connections, environments, variable group, branch policy (pipelines/README.md),
-#    then run azure-pipelines.yml (mode auto) - foundation first on Microsoft-hosted agents, then private agents.
+#    then run azure-pipelines.yml (platform, mode auto) - it triggers azure-pipelines.applications.yml on success.
 ```
 
 Prerequisites, provider registrations, quotas and the bootstrap sequence before private agents exist:
@@ -75,7 +75,7 @@ applications/{dotnet,python,shared}/   build tooling and shared libraries
 observability/modules/*         portable package modules; observability/lab/* lab roots; observability/onboarding/* lab manifests
 catalog/                        components.yaml, services/*.yaml, architecture-matrix.yaml, telemetry-capabilities.yaml, contracts/, schemas/
 environments/                   dev/environment.yaml, profiles/*.yaml, schema/
-pipelines/, azure-pipelines.yml universal pipeline (generated stages in pipelines/generated/)
+pipelines/, azure-pipelines*.yml  platform + applications pipelines (generated stages in pipelines/generated/)
 tools/                          changeset, config, contracts, validate, deploy, smoke, report, catalog, docs
 docs/                           ADR, guides, runbooks, diagrams, coverage (generated), evidence
 tests/                          tooling tests (changeset, pipeline, tools, catalog)

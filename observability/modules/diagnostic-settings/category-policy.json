@@ -1,0 +1,431 @@
+{
+  "_comment": "Platform (non-application) resource-log category policy per resource type. Tiers are cumulative: security <= standard <= verbose. Every category was checked against the Microsoft Learn 'Supported resource log categories' page named in learn_page on _verified_on (snapshot: supported-categories.snapshot.json). Categories are still intersected at plan time with azurerm_monitor_diagnostic_categories, so an entry a resource does not support is skipped. 'supersedes': when the key category is selected, the listed categories are dropped (they would duplicate it).",
+  "_verified_on": "2026-10-09",
+  "types": {
+    "microsoft.apimanagement/service": {
+      "security": [
+        "DeveloperPortalAuditLogs"
+      ],
+      "standard": [
+        "GatewayLogs"
+      ],
+      "verbose": [
+        "WebSocketConnectionLogs",
+        "GatewayLlmLogs",
+        "GatewayMCPLogs"
+      ],
+      "supersedes": {},
+      "cost": "GatewayLogs = one record per API call.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-apimanagement-service-logs"
+    },
+    "microsoft.app/managedenvironments": {
+      "security": [],
+      "standard": [
+        "ContainerAppSystemLogs"
+      ],
+      "verbose": [
+        "ContainerAppHTTPLogs",
+        "AppEnvSessionLifeCycleLogs",
+        "AppEnvSessionPoolEventLogs"
+      ],
+      "supersedes": {},
+      "cost": "ContainerAppSystemLogs = replica/revision lifecycle (low). ContainerAppHTTPLogs = one record per ingress request. ContainerAppConsoleLogs is an APPLICATION category.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-app-managedenvironments-logs"
+    },
+    "microsoft.batch/batchaccounts": {
+      "security": [
+        "AuditLog"
+      ],
+      "standard": [
+        "ServiceLog"
+      ],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "ServiceLog = pool/task lifecycle events.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-batch-batchaccounts-logs"
+    },
+    "microsoft.cache/redis": {
+      "security": [
+        "MSEntraAuthenticationAuditLog"
+      ],
+      "standard": [
+        "ConnectedClientList"
+      ],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "ConnectedClientList is emitted every 10 seconds per node.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cache-redis-logs"
+    },
+    "microsoft.cache/redisenterprise/databases": {
+      "security": [],
+      "standard": [
+        "ConnectionEvents"
+      ],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "One record per connection event.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cache-redisenterprise-databases-logs"
+    },
+    "microsoft.cdn/profiles": {
+      "security": [
+        "FrontDoorWebApplicationFirewallLog"
+      ],
+      "standard": [
+        "FrontDoorAccessLog"
+      ],
+      "verbose": [
+        "FrontDoorHealthProbeLog",
+        "AzureCdnAccessLog"
+      ],
+      "supersedes": {},
+      "cost": "Front Door Standard/Premium. Access log = one record per request; health probe log = one per probe per origin (high).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-cdn-profiles-logs"
+    },
+    "microsoft.containerregistry/registries": {
+      "security": [
+        "ContainerRegistryLoginEvents"
+      ],
+      "standard": [
+        "ContainerRegistryRepositoryEvents"
+      ],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "Repository events = push/pull/delete (pulls dominate on busy registries).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-containerregistry-registries-logs"
+    },
+    "microsoft.containerservice/managedclusters": {
+      "security": [
+        "kube-audit-admin",
+        "guard"
+      ],
+      "standard": [
+        "kube-apiserver",
+        "cluster-autoscaler"
+      ],
+      "verbose": [
+        "kube-audit",
+        "kube-controller-manager",
+        "kube-scheduler",
+        "cloud-controller-manager",
+        "csi-azuredisk-controller",
+        "csi-azurefile-controller",
+        "csi-snapshot-controller",
+        "karpenter-events"
+      ],
+      "supersedes": {
+        "kube-audit": [
+          "kube-audit-admin"
+        ]
+      },
+      "cost": "kube-audit-admin excludes get/list events (Microsoft: significantly fewer logs than kube-audit). kube-audit (verbose) records every read and is usually the largest single source in a cluster; it replaces kube-audit-admin so events are never sent twice. kube-apiserver volume grows with API traffic.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-containerservice-managedclusters-logs"
+    },
+    "microsoft.dbformysql/flexibleservers": {
+      "security": [
+        "MySqlAuditLogs"
+      ],
+      "standard": [
+        "MySqlSlowLogs"
+      ],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "MySqlAuditLogs only carries data when the audit_log_enabled server parameter is ON; slow logs need slow_query_log=ON.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-dbformysql-flexibleservers-logs"
+    },
+    "microsoft.dbforpostgresql/flexibleservers": {
+      "security": [
+        "PostgreSQLLogs"
+      ],
+      "standard": [
+        "PostgreSQLFlexSessions"
+      ],
+      "verbose": [
+        "PostgreSQLFlexQueryStoreRuntime",
+        "PostgreSQLFlexQueryStoreWaitStats",
+        "PostgreSQLFlexTableStats",
+        "PostgreSQLFlexDatabaseXacts",
+        "PostgreSQLFlexPGBouncer",
+        "PostgreSQLQueryStoreSqlText"
+      ],
+      "supersedes": {},
+      "cost": "PostgreSQLLogs volume follows log_* server parameters (log_connections, log_min_duration_statement). PostgreSQLQueryStoreSqlText contains query text.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-dbforpostgresql-flexibleservers-logs"
+    },
+    "microsoft.documentdb/databaseaccounts": {
+      "security": [
+        "ControlPlaneRequests"
+      ],
+      "standard": [],
+      "verbose": [
+        "DataPlaneRequests",
+        "MongoRequests",
+        "CassandraRequests",
+        "GremlinRequests",
+        "TableApiRequests",
+        "QueryRuntimeStatistics",
+        "PartitionKeyStatistics",
+        "PartitionKeyRUConsumption"
+      ],
+      "supersedes": {},
+      "cost": "ControlPlaneRequests = account management operations (low). DataPlaneRequests/<API>Requests = one record per request (highest volume; verbose only).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-documentdb-databaseaccounts-logs"
+    },
+    "microsoft.documentdb/mongoclusters": {
+      "security": [],
+      "standard": [
+        "vCoreMongoRequests"
+      ],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "One record per request.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-documentdb-mongoclusters-logs"
+    },
+    "microsoft.eventhub/namespaces": {
+      "security": [
+        "OperationalLogs"
+      ],
+      "standard": [
+        "RuntimeAuditLogs",
+        "DiagnosticErrorLogs",
+        "EventHubVNetConnectionEvent",
+        "KafkaUserErrorLogs",
+        "AutoScaleLogs"
+      ],
+      "verbose": [
+        "KafkaCoordinatorLogs",
+        "ArchiveLogs",
+        "ApplicationMetricsLogs",
+        "CustomerManagedKeyUserLogs",
+        "DataDRLogs"
+      ],
+      "supersedes": {},
+      "cost": "Never point a namespace's diagnostic setting at itself (the module skips the destination namespace).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-eventhub-namespaces-logs"
+    },
+    "microsoft.keyvault/vaults": {
+      "security": [
+        "AuditEvent"
+      ],
+      "standard": [],
+      "verbose": [
+        "AzurePolicyEvaluationDetails"
+      ],
+      "supersedes": {},
+      "cost": "One AuditEvent per data-plane request (secret/key/certificate get); low for apps that cache secrets, high for per-request reads.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-keyvault-vaults-logs"
+    },
+    "microsoft.logic/workflows": {
+      "security": [],
+      "standard": [],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "WorkflowRuntime (the only category) is treated as an application category (app-logs hub, app_log_route = eventhub).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-logic-workflows-logs"
+    },
+    "microsoft.network/applicationgateways": {
+      "security": [
+        "ApplicationGatewayFirewallLog"
+      ],
+      "standard": [
+        "ApplicationGatewayAccessLog"
+      ],
+      "verbose": [
+        "ApplicationGatewayPerformanceLog"
+      ],
+      "supersedes": {},
+      "cost": "Access log = one record per request (high on busy gateways); firewall log = WAF matches only.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-network-applicationgateways-logs"
+    },
+    "microsoft.network/azurefirewalls": {
+      "security": [
+        "AZFWThreatIntel",
+        "AZFWIdpsSignature"
+      ],
+      "standard": [
+        "AZFWNetworkRule",
+        "AZFWApplicationRule",
+        "AZFWNatRule",
+        "AZFWDnsQuery"
+      ],
+      "verbose": [
+        "AZFWFlowTrace",
+        "AZFWFatFlow",
+        "AZFWFqdnResolveFailure",
+        "AZFWNetworkRuleAggregation",
+        "AZFWApplicationRuleAggregation",
+        "AZFWNatRuleAggregation",
+        "AZFWDnsAdditional"
+      ],
+      "supersedes": {},
+      "cost": "Resource-specific AZFW* categories only (the legacy AzureFirewall* categories duplicate them). Rule logs = one record per flow decision.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-network-azurefirewalls-logs"
+    },
+    "microsoft.network/frontdoors": {
+      "security": [
+        "FrontdoorWebApplicationFirewallLog"
+      ],
+      "standard": [
+        "FrontdoorAccessLog"
+      ],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "Front Door (classic). Access log = one record per request.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-network-frontdoors-logs"
+    },
+    "microsoft.network/networksecuritygroups": {
+      "security": [],
+      "standard": [
+        "NetworkSecurityGroupEvent"
+      ],
+      "verbose": [
+        "NetworkSecurityGroupRuleCounter"
+      ],
+      "supersedes": {},
+      "cost": "Not flow logs: NSG/VNet flow logs are Network Watcher features written to Storage only (see docs/guides/azure-logs-to-datadog.md).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-network-networksecuritygroups-logs"
+    },
+    "microsoft.servicebus/namespaces": {
+      "security": [
+        "OperationalLogs"
+      ],
+      "standard": [
+        "RuntimeAuditLogs",
+        "VNetAndIPFilteringLogs",
+        "DiagnosticErrorLogs"
+      ],
+      "verbose": [
+        "ApplicationMetricsLogs",
+        "DataDRLogs"
+      ],
+      "supersedes": {},
+      "cost": "OperationalLogs = management operations (low). RuntimeAuditLogs (Premium only) aggregates data-plane auth per minute.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-servicebus-namespaces-logs"
+    },
+    "microsoft.sql/managedinstances": {
+      "security": [
+        "SQLSecurityAuditEvents",
+        "DevOpsOperationsAudit"
+      ],
+      "standard": [
+        "ResourceUsageStats"
+      ],
+      "verbose": [],
+      "supersedes": {},
+      "cost": "Audit volume follows the server audit specification.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-sql-managedinstances-logs"
+    },
+    "microsoft.sql/servers/databases": {
+      "security": [
+        "SQLSecurityAuditEvents",
+        "DevOpsOperationsAudit"
+      ],
+      "standard": [
+        "Errors",
+        "Timeouts",
+        "Blocks",
+        "Deadlocks",
+        "AutomaticTuning"
+      ],
+      "verbose": [
+        "SQLInsights",
+        "QueryStoreRuntimeStatistics",
+        "QueryStoreWaitStatistics",
+        "DatabaseWaitStatistics"
+      ],
+      "supersedes": {},
+      "cost": "SQLSecurityAuditEvents carries data only when auditing with the Azure Monitor target is enabled (server-level: diagnostic setting on the master database). Volume follows the audited action groups (BATCH_COMPLETED_GROUP = one event per batch).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-sql-servers-databases-logs"
+    },
+    "microsoft.storage/storageaccounts/blobservices": {
+      "security": [
+        "StorageDelete"
+      ],
+      "standard": [
+        "StorageWrite"
+      ],
+      "verbose": [
+        "StorageRead"
+      ],
+      "supersedes": {},
+      "cost": "One record per request. StorageRead is usually the largest category (verbose only; log-management samples it).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-storage-storageaccounts-blobservices-logs"
+    },
+    "microsoft.storage/storageaccounts/fileservices": {
+      "security": [
+        "StorageDelete"
+      ],
+      "standard": [
+        "StorageWrite"
+      ],
+      "verbose": [
+        "StorageRead"
+      ],
+      "supersedes": {},
+      "cost": "As blob services.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-storage-storageaccounts-fileservices-logs"
+    },
+    "microsoft.storage/storageaccounts/queueservices": {
+      "security": [
+        "StorageDelete"
+      ],
+      "standard": [
+        "StorageWrite"
+      ],
+      "verbose": [
+        "StorageRead"
+      ],
+      "supersedes": {},
+      "cost": "As blob services (every dequeue is a read).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-storage-storageaccounts-queueservices-logs"
+    },
+    "microsoft.storage/storageaccounts/tableservices": {
+      "security": [
+        "StorageDelete"
+      ],
+      "standard": [
+        "StorageWrite"
+      ],
+      "verbose": [
+        "StorageRead"
+      ],
+      "supersedes": {},
+      "cost": "As blob services.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-storage-storageaccounts-tableservices-logs"
+    },
+    "microsoft.web/sites": {
+      "security": [
+        "AppServiceAuditLogs",
+        "AppServiceIPSecAuditLogs",
+        "AppServiceAuthenticationLogs"
+      ],
+      "standard": [
+        "AppServiceHTTPLogs",
+        "AppServicePlatformLogs"
+      ],
+      "verbose": [
+        "AppServiceFileAuditLogs",
+        "AppServiceAntivirusScanAuditLogs"
+      ],
+      "supersedes": {},
+      "cost": "AppServiceHTTPLogs = one record per request. Console/app/function/workflow logs are APPLICATION categories (app-logs hub, app_log_route = eventhub only).",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-web-sites-logs"
+    },
+    "microsoft.web/sites/slots": {
+      "security": [
+        "AppServiceAuditLogs",
+        "AppServiceIPSecAuditLogs"
+      ],
+      "standard": [
+        "AppServiceHTTPLogs",
+        "AppServicePlatformLogs"
+      ],
+      "verbose": [
+        "AppServiceFileAuditLogs",
+        "AppServiceAntivirusScanAuditLogs"
+      ],
+      "supersedes": {},
+      "cost": "As sites.",
+      "learn_page": "https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/microsoft-web-sites-slots-logs"
+    }
+  }
+}

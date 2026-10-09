@@ -20,8 +20,13 @@ output "contract" {
       cluster_id    = local.aro.cluster_id
       api_server    = local.aro.api_server_url
       namespace     = var.settings.aro_namespace
-      manifests     = local.aro_manifest
       deploy_script = "applications/deployments/specialized/scripts/deploy-aro.sh"
+      helm = {
+        release    = "hello-catalog-api"
+        chart      = "hello-service"
+        chart_path = "applications/charts/hello-service"
+        values     = yamlencode(local.aro_values) # no secrets: existing-Secret references only
+      }
     } : null
     apps = merge(
       local.sf_enabled ? { "hello-inventory-api-sf" = {
@@ -33,7 +38,7 @@ output "contract" {
       local.aro_enabled ? { "hello-catalog-api-aro" = {
         id           = local.aro.cluster_id, name = local.aro.cluster_name, type = "Microsoft.RedHatOpenShift/openShiftClusters", service = "hello-catalog-api"
         architecture = "aro", app_log_route = "daemonset", sidecar = false, url = null, urls = { public = null, private = null }
-        health_path  = "/healthz", readiness_path = "/readyz", version_path = "/version", scale_to_zero = false, min_replicas = 2, max_replicas = 2
+        health_path  = "/healthz", readiness_path = "/readyz", version_path = "/version", scale_to_zero = false, min_replicas = var.settings.aro_replicas, max_replicas = var.settings.aro_replicas
         version      = local.cat_version, image = try(var.artifacts["svc-catalog-api"].image, null), identity_name = null
       } } : {},
       local.cvm_enabled ? { "hello-worker-cvm" = {
@@ -53,13 +58,13 @@ output "contract" {
     idle_behavior = {}
     status = {
       service_fabric = local.sf_enabled ? "implemented" : "disabled"
-      aro            = local.aro_enabled ? "implemented" : "blocked"
+      aro            = local.aro_ready ? "implemented" : (local.aro_enabled ? "blocked: needs foundation-identity hello-catalog-api and a digest-pinned svc-catalog-api image" : "blocked")
       confidential   = local.cvm_enabled ? "implemented" : (local.cvm != null ? "blocked: foundation-identity contract not provided" : "disabled")
       automation     = local.automation != null ? "implemented" : "disabled"
     }
     rollback = {
       method = "per-platform"
-      how    = "SF: sfctl application upgrade to the previous type version (monitored upgrade auto-rolls back on health failure) | ARO: oc rollout undo / re-apply previous digest | CVM: re-apply previous package | runbook: re-apply previous commit"
+      how    = "SF: sfctl application upgrade to the previous type version (monitored upgrade auto-rolls back on health failure) | ARO: helm rollback hello-catalog-api -n <ns> / re-apply previous digest | CVM: re-apply previous package | runbook: re-apply previous commit"
     }
   }
 }

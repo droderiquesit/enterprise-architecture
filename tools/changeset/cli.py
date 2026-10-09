@@ -5,6 +5,7 @@ Commands
   owners       which components own the given paths
   fingerprint  deploy/validation fingerprints (and parts) of components
   select       produce the selection document (+ ADO output variables with --ado)
+  explain      preview for the local working tree: what would be validated/built/planned/applied, and why
   apply-set    given a selection and plan exit codes, list components that will apply
 """
 
@@ -27,6 +28,7 @@ from .select import (
     select_deploy,
     select_manual,
     select_pr,
+    select_promote,
     select_retire,
 )
 from .store import open_store
@@ -41,6 +43,12 @@ def cmd_graph(args) -> int:
     tree = WorkTree(Path(args.repo))
     try:
         reg = load_registry(tree)
+        from .registry import scope_errors
+
+        problems = scope_errors(reg)
+        if problems:
+            print("ERROR: " + "\n  ".join(problems), file=sys.stderr)
+            return 2
         g = Graph(reg)
         cyc = g.find_cycle()
         if cyc:
@@ -99,27 +107,39 @@ def _load_digests(path: str | None):
     return json.loads(p.read_text())
 
 
+def run_select(args, mode: str, repo: Path) -> dict:
+    store = open_store(args.records_url or args.records_dir)
+    contracts = open_store(getattr(args, "contracts_url", None) or getattr(args, "contracts_dir", None))
+    scope = getattr(args, "scope", None) or None
+    if scope == "all":
+        scope = None
+    common = dict(head=args.head, worktree=args.worktree, scope=scope)
+    if mode == "pr":
+        return select_pr(repo, args.env, target=args.target, base=args.base, **common)
+    if mode == "deploy":
+        return select_deploy(repo, args.env, store, artifact_digests=_load_digests(args.artifact_digests),
+                             contracts_store=contracts, **common)
+    if mode == "promote":
+        return select_promote(repo, args.env, store, args.source_env or "auto",
+                              open_store(args.source_records_url or args.source_records_dir),
+                              contracts_store=contracts, **common)
+    if mode == "manual":
+        return select_manual(repo, args.env, _split(args.components), with_consumers=args.with_consumers,
+                             store=store, **common)
+    if mode in ("reconcile", "drift"):
+        return select_all(repo, args.env, mode, store=store, **common)
+    if mode == "retire":
+        return select_retire(repo, args.env, store, **common)
+    raise SelectionError(f"unknown mode {mode}")
+
+
 def cmd_select(args) -> int:
     mode = args.mode
     if mode == "auto":
         mode = auto_mode(args.build_reason or os.environ.get("BUILD_REASON"))
-    store = open_store(args.records_url or args.records_dir)
     repo = Path(args.repo)
     try:
-        if mode == "pr":
-            doc = select_pr(repo, args.env, target=args.target, head=args.head, base=args.base)
-        elif mode == "deploy":
-            doc = select_deploy(repo, args.env, store, head=args.head,
-                                artifact_digests=_load_digests(args.artifact_digests), worktree=args.worktree)
-        elif mode == "manual":
-            doc = select_manual(repo, args.env, _split(args.components), with_consumers=args.with_consumers,
-                                store=store, head=args.head, worktree=args.worktree)
-        elif mode in ("reconcile", "drift"):
-            doc = select_all(repo, args.env, mode, store=store, head=args.head, worktree=args.worktree)
-        elif mode == "retire":
-            doc = select_retire(repo, args.env, store, head=args.head, worktree=args.worktree)
-        else:
-            raise SelectionError(f"unknown mode {mode}")
+        doc = run_select(args, mode, repo)
     except Exception as exc:  # noqa: BLE001 - CLI boundary: explicit message, non-zero exit
         print(f"ERROR: selection failed: {exc}", file=sys.stderr)
         if args.ado:
@@ -146,6 +166,54 @@ def cmd_select(args) -> int:
     for cid in s["plan"]:
         e = doc["components"][cid]
         print(f"  plan {cid} (wave {e['wave']}): {'; '.join(e['reason'])}", file=sys.stderr)
+    return 0
+
+
+def cmd_explain(args) -> int:
+    """Preview a run for the local working tree (uncommitted changes included)."""
+    repo = Path(args.repo)
+    args.worktree, args.head = True, "HEAD"
+    args.components, args.with_consumers, args.artifact_digests = "", False, None
+    args.records_url = getattr(args, "records_url", None)
+    mode = "deploy" if (args.records_dir or args.records_url) else "pr"
+    if mode == "pr":
+        args.target = args.target or "main"
+    try:
+        doc = run_select(args, mode, repo)
+    except Exception as exc:  # noqa: BLE001
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(doc, indent=2, sort_keys=True))
+        return 0
+    rows = []
+    for cid, e in sorted(doc["components"].items(), key=lambda kv: (kv[1]["scope"], kv[1]["layer"], kv[0])):
+        if not (e["validate"] or e["plan"] or e["build"] or e["resolve"] or e.get("waiting_for") or e.get("out_of_scope") and e["reason"]):
+            continue
+        flags = {
+            "validate": "yes" if e["validate"] else "",
+            "build": "build" if e["build"] else ("resolve" if e["resolve"] else ""),
+            "plan": "yes" if e["plan"] else ("WAIT" if e.get("waiting_for") else ""),
+            "apply": "if-changes" if e["apply_candidate"] else "",
+        }
+        rows.append((cid, e["scope"], flags, "; ".join(e["reason"])[:160]))
+    base = doc.get("base") or "deployment records"
+    print(f"explain: mode={doc['mode']} env={doc['environment']} scope={doc.get('scope') or 'all'} base={base}")
+    if not rows:
+        print("nothing would be validated, built or deployed")
+    else:
+        w = max(len(r[0]) for r in rows)
+        print(f"{'component'.ljust(w)}  {'scope':12}  validate  build    plan  apply       why")
+        for cid, scope, f, why in rows:
+            print(f"{cid.ljust(w)}  {scope:12}  {f['validate']:8}  {f['build']:7}  {f['plan']:4}  {f['apply']:10}  {why}")
+    pipelines = sorted({e["scope"] for e in doc["components"].values() if e["plan"] or e["build"] or e["validate"]})
+    if pipelines:
+        names = {"platform": "azure-pipelines.yml", "applications": "azure-pipelines.applications.yml"}
+        print("pipelines that would run work: " + ", ".join(f"{p} ({names[p]})" for p in pipelines))
+    for m in doc.get("modules_to_validate", []):
+        print(f"module validation: {m}")
+    for r in doc.get("retirements", []):
+        print(f"retirement: {r['component']} {r['status']} - {r['reason']}")
     return 0
 
 
@@ -193,9 +261,28 @@ def main(argv=None) -> int:
     s.add_argument("--artifact-digests", help="JSON {artifact-id: digest} or directory of build-metadata.json")
     s.add_argument("--build-reason", help="Build.Reason (auto mode); defaults to $BUILD_REASON")
     s.add_argument("--worktree", action="store_true")
+    s.add_argument("--scope", choices=("all", "platform", "applications"), default="all",
+                   help="restrict to one pipeline (azure-pipelines.yml = platform, azure-pipelines.applications.yml = applications)")
+    s.add_argument("--contracts-url", help="contracts store (blob URL); enables upstream-contract change detection")
+    s.add_argument("--contracts-dir", help="local contracts store directory")
+    s.add_argument("--source-env", help="promote mode: source environment ('auto' = promotion.yaml promote_from)")
+    s.add_argument("--source-records-url", help="promote mode: deployment records of the source environment")
+    s.add_argument("--source-records-dir")
     s.add_argument("--out")
     s.add_argument("--ado", action="store_true", help="print ##vso output variables")
     s.set_defaults(func=cmd_select)
+
+    x = sub.add_parser("explain", help="preview what a run would validate/build/plan/apply for the working tree, and why")
+    x.add_argument("--env", default="dev")
+    x.add_argument("--base", help="compare with this revision (default: merge-base with origin/<target>)")
+    x.add_argument("--target", default="main")
+    x.add_argument("--scope", choices=("all", "platform", "applications"), default="all")
+    x.add_argument("--records-dir", help="deployment records: preview a deploy-mode run instead of a PR run")
+    x.add_argument("--records-url")
+    x.add_argument("--contracts-dir")
+    x.add_argument("--contracts-url")
+    x.add_argument("--json", action="store_true")
+    x.set_defaults(func=cmd_explain)
 
     a = sub.add_parser("apply-set")
     a.add_argument("--selection", required=True)

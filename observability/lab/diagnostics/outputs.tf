@@ -24,3 +24,22 @@ output "aca_eventhub_apps" {
   description = "Container Apps/Jobs whose console logs travel via the environment diagnostic setting (must match fluentbit.aca_console_allow)."
   value       = local.aca_eventhub_apps
 }
+
+output "platform_log_tiers" {
+  description = "Effective platform-log tier per target."
+  value       = module.diagnostics.platform_log_tiers
+}
+
+output "activity_log_settings" {
+  description = "Subscription -> Activity Log diagnostic setting id."
+  value       = module.azure_logs.activity_log_settings
+}
+
+output "entra_setting_id" {
+  value = module.azure_logs.entra_setting_id
+}
+
+output "control_plane_log_forwarding" {
+  description = "What is exported through Event Hubs (input for the native-integration exclusivity check of obs-azure-integration)."
+  value       = module.azure_logs.log_forwarding
+}

@@ -1,0 +1,29 @@
+{{- if eq .Values.kind "cronjob" }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "hello-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-service.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjob.schedule | quote }}
+  {{- with .Values.cronjob.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  concurrencyPolicy: {{ .Values.cronjob.concurrencyPolicy }}
+  startingDeadlineSeconds: {{ .Values.cronjob.startingDeadlineSeconds }}
+  successfulJobsHistoryLimit: {{ .Values.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronjob.failedJobsHistoryLimit }}
+  suspend: {{ .Values.cronjob.suspend }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "hello-service.labels" . | nindent 8 }}
+    spec:
+      backoffLimit: {{ .Values.cronjob.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.cronjob.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: {{ .Values.cronjob.ttlSecondsAfterFinished }}
+      template:
+        {{- include "hello-service.podTemplate" . | nindent 8 }}
+{{- end }}

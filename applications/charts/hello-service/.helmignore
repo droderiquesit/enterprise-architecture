@@ -1,0 +1,10 @@
+# Not part of the packaged chart
+examples/
+README.md.gotmpl
+*.tgz
+.DS_Store
+.git/
+.idea/
+*.swp
+*.bak
+*.tmp

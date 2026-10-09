@@ -1,0 +1,216 @@
+# hello-service — values reference. Every key is validated by values.schema.json.
+# One release per workload (release name = workload name, e.g. hello-bff). Required keys have no usable
+# default here and MUST be supplied by the deployer (Terraform deploy root, deploy script or -f file):
+#   service.name, service.version, service.env, image.repository, image.digest, identity.clientId, resources.
+
+# -- Workload shape.
+#    deployment: long-running HTTP service (Deployment + Service [+ Ingress/Route], PDB, HPA)
+#    worker:     long-running background consumer (Deployment, health port only: no Service/Ingress), PDB, HPA
+#    cronjob:    scheduled job (CronJob), no Service/PDB/HPA/probes
+kind: deployment
+
+# -- Override resource names (default: the release name). Keep release name == workload name so in-cluster
+#    DNS stays http://<workload>.<namespace>.svc.cluster.local.
+fullnameOverride: ""
+
+# -- Unified service tagging (Datadog) + ADR-0001 §7 tags. Rendered as pod/workload labels
+#    tags.datadoghq.com/{env,service,version} and as DD_ENV/DD_SERVICE/DD_VERSION (the chart owns these
+#    three env vars so labels and env can never disagree).
+service:
+  name: ""          # DD_SERVICE, e.g. hello-bff (required)
+  version: ""       # DD_VERSION (artifact version / immutable build tag; label-safe) (required)
+  env: ""           # DD_ENV, e.g. dev (required)
+  partOf: enterprise-hello
+  team: ""
+  domain: ""
+  tier: ""
+  # Fluent Bit / Datadog log source (logs.datadoghq.com/source label): csharp | python | nodejs | java
+  logsSource: ""
+
+# -- Container image. Digest pinning is mandatory: `tag` is rejected by the schema.
+image:
+  repository: ""    # <registry>/<repo>, e.g. ehcrshareddevabcde.azurecr.io/hello-bff (required)
+  digest: ""        # sha256:<64 hex> (required)
+  pullPolicy: IfNotPresent   # digest-pinned => IfNotPresent can never run another image
+
+imagePullSecrets: []   # AKS pulls from ACR with the kubelet identity (AcrPull); kind/ARO may need one
+
+# -- Override the container entrypoint (cronjob kind: the job command, e.g. ["python","-m","hello_jobs","seed"]).
+command: []
+args: []
+
+# -- Azure identity. AZURE_CLIENT_ID is always set from clientId (required).
+identity:
+  clientId: ""      # user-assigned managed identity client id (UUID) (required)
+  tenantId: ""      # optional: azure.workload.identity/tenant-id annotation
+  # AKS workload identity: ServiceAccount client-id annotation + pod label azure.workload.identity/use=true.
+  # Disable where the mutating webhook is not installed (ARO without the WI webhook, kind).
+  workloadIdentity: true
+
+serviceAccount:
+  create: true
+  name: ""          # default: the release fullname
+  annotations: {}
+
+# -- HTTP port (PORT env, containerPort "http"; worker kind: the health port, containerPort "health").
+port: 8080
+
+# -- Non-secret environment (name -> string). Rendered sorted, AFTER DD_AGENT_HOST so values may reference
+#    $(DD_AGENT_HOST) (e.g. OTEL_EXPORTER_OTLP_ENDPOINT=http://$(DD_AGENT_HOST):4317).
+#    Chart-owned names (DD_AGENT_HOST, DD_ENV, DD_SERVICE, DD_VERSION, AZURE_CLIENT_ID, FAULTS_ENABLED,
+#    LOG_FILE_PATH, PORT) and secret-looking names (*PASSWORD, *SECRET, *TOKEN, *API_KEY, *ACCESS_KEY,
+#    OTEL_EXPORTER_OTLP_HEADERS) are rejected by the schema: put secrets in secretEnv / existingSecretEnv.
+env: {}
+
+# -- Secret environment from Azure Key Vault: name -> VERSIONLESS secret id
+#    (https://<vault>.vault.azure.net/secrets/<name>). Requires keyVault.enabled: the chart renders a
+#    SecretProviderClass (Secrets Store CSI driver, authenticated with identity.clientId), mounts it
+#    read-only and syncs it to the Secret "<fullname>-kv"; env uses secretKeyRef. Values never pass Helm.
+secretEnv: {}
+
+keyVault:
+  enabled: false
+  name: ""          # Key Vault name (required when enabled)
+  tenantId: ""      # Entra tenant id (required when enabled)
+
+# -- Secret environment from EXISTING Kubernetes Secrets (name -> {secretName, key}); for clusters without
+#    the CSI driver (kind smoke, ARO). The chart never creates Secret objects with literal values.
+existingSecretEnv: {}
+
+# -- Telemetry wiring (instrumentation contract, observability/modules/instrumentation).
+telemetry:
+  # DD_AGENT_HOST from the downward API (status.hostIP): node-local Datadog Agent DaemonSet (OTLP hostPort).
+  agentHostFromHostIP: true
+  # Pod annotation ad.datadoghq.com/<container>.logs: '[]' - logs are collected by the Fluent Bit
+  # DaemonSet only; the Datadog Agent must not ship the same stdout lines.
+  disableAgentLogCollection: true
+
+# -- Optional file logging (LOG_FILE_PATH) on an emptyDir. Off on AKS/ARO: stdout -> Fluent Bit DaemonSet.
+logFile:
+  enabled: false
+  path: /var/log/app/app.log
+  sizeLimit: 128Mi
+
+# -- Fault injection (ADR-0001 §9). FAULTS_ENABLED is rendered from here (default false). The token must come
+#    from secretEnv.FAULT_TOKEN (Key Vault) or existingSecretEnv.FAULT_TOKEN - never plain env.
+faults:
+  enabled: false
+
+# -- Pod resources (required: requests.cpu, requests.memory, limits.memory).
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# -- Fixed replica count (used only when autoscaling.enabled is false).
+replicas: 1
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3            # schema ceiling: 20 (deploy roots enforce their own lower ceiling)
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+# -- Probes (deployment/worker kinds). Paths per the Enterprise Hello interface spec.
+probes:
+  startup:
+    enabled: true
+    path: /healthz
+    periodSeconds: 5
+    failureThreshold: 24
+  liveness:
+    path: /healthz
+    periodSeconds: 15
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    path: /readyz
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# -- Kubernetes Service (deployment kind only).
+k8sService:
+  type: ClusterIP           # ClusterIP | LoadBalancer
+  port: 80
+  internalLoadBalancer: false   # adds service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  annotations: {}
+
+# -- Ingress (deployment kind). Default class: AKS application routing add-on (managed NGINX).
+ingress:
+  enabled: false
+  className: webapprouting.kubernetes.azure.com
+  host: ""
+  path: /
+  annotations: {}
+  tls:
+    enabled: true
+    secretName: ""                  # default "keyvault-<fullname>-tls" (app routing Key Vault sync naming)
+    keyVaultCertificateUri: ""      # kubernetes.azure.com/tls-cert-keyvault-uri (versionless certificate URI)
+
+# -- OpenShift (ARO). enabled: drop runAsUser/runAsGroup/fsGroup so the restricted-v2 SCC assigns the UID.
+openshift:
+  enabled: false
+  route:
+    enabled: false
+    host: ""                        # empty = generated <name>-<ns>.apps.<cluster domain>
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+# -- NetworkPolicy (AKS uses Cilium network policy). Ingress to the app port from pods in the same namespace,
+#    from allowFromNamespaces (e.g. app-routing-system) and from allowFromCIDRs (internal LB clients).
+#    Egress is not restricted (private endpoints, node agent).
+networkPolicy:
+  enabled: false
+  allowFromNamespaces: []
+  allowFromCIDRs: []
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+  # runAsUser/runAsGroup/fsGroup are NOT set: images declare a numeric non-root USER
+  # (.NET chiseled 1654, Python 10001); OpenShift assigns its own range.
+
+# Container securityContext is fixed by the chart (not configurable): allowPrivilegeEscalation false,
+# readOnlyRootFilesystem true, capabilities drop ALL, runAsNonRoot true.
+
+# -- Writable /tmp on a size-limited emptyDir (read-only root filesystem).
+tmp:
+  sizeLimit: 256Mi
+
+terminationGracePeriodSeconds: 30
+revisionHistoryLimit: 5
+
+topologySpread:
+  enabled: true
+  hostnameSkew: 1
+  zoneSpread: false          # also spread across topology.kubernetes.io/zone (zonal node pools)
+
+podLabels: {}
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+# -- cronjob kind only.
+cronjob:
+  schedule: ""               # required for kind=cronjob, e.g. "*/30 * * * *"
+  timeZone: ""               # e.g. Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  suspend: false
+  backoffLimit: 2
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600

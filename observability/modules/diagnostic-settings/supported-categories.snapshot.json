@@ -1,0 +1,217 @@
+{
+ "_comment": "Snapshot of the 'Category' column of https://learn.microsoft.com/azure/azure-monitor/reference/supported-logs/<page>-logs taken on _taken_on. Used by observability/tests/transport/test_category_policy.py to prove category-policy.json only names real categories.",
+ "_taken_on": "2026-10-09",
+ "pages": {
+  "microsoft-apimanagement-service": [
+   "DeveloperPortalAuditLogs",
+   "GatewayLlmLogs",
+   "GatewayLogs",
+   "GatewayMCPLogs",
+   "WebSocketConnectionLogs"
+  ],
+  "microsoft-app-managedenvironments": [
+   "AppEnvSessionConsoleLogs",
+   "AppEnvSessionLifeCycleLogs",
+   "AppEnvSessionPoolEventLogs",
+   "AppEnvSpringAppConsoleLogs",
+   "ContainerAppConsoleLogs",
+   "ContainerAppHTTPLogs",
+   "ContainerAppSystemLogs"
+  ],
+  "microsoft-batch-batchaccounts": [
+   "AuditLog",
+   "ServiceLog"
+  ],
+  "microsoft-cache-redis": [
+   "ConnectedClientList",
+   "MSEntraAuthenticationAuditLog"
+  ],
+  "microsoft-cache-redisenterprise-databases": [
+   "ConnectionEvents"
+  ],
+  "microsoft-cdn-profiles": [
+   "AzureCdnAccessLog",
+   "FrontDoorAccessLog",
+   "FrontDoorHealthProbeLog",
+   "FrontDoorWebApplicationFirewallLog"
+  ],
+  "microsoft-containerregistry-registries": [
+   "ContainerRegistryLoginEvents",
+   "ContainerRegistryRepositoryEvents"
+  ],
+  "microsoft-containerservice-managedclusters": [
+   "cloud-controller-manager",
+   "cluster-autoscaler",
+   "csi-azuredisk-controller",
+   "csi-azurefile-controller",
+   "csi-snapshot-controller",
+   "fleet-mcs-controller-manager",
+   "fleet-member-agent",
+   "fleet-member-net-controller-manager",
+   "guard",
+   "karpenter-events",
+   "kube-apiserver",
+   "kube-audit",
+   "kube-audit-admin",
+   "kube-controller-manager",
+   "kube-scheduler"
+  ],
+  "microsoft-dbformysql-flexibleservers": [
+   "MySqlAuditLogs",
+   "MySqlSlowLogs"
+  ],
+  "microsoft-dbforpostgresql-flexibleservers": [
+   "PostgreSQLFlexDatabaseXacts",
+   "PostgreSQLFlexPGBouncer",
+   "PostgreSQLFlexQueryStoreRuntime",
+   "PostgreSQLFlexQueryStoreWaitStats",
+   "PostgreSQLFlexSessions",
+   "PostgreSQLFlexTableStats",
+   "PostgreSQLLogs",
+   "PostgreSQLQueryStoreSqlText"
+  ],
+  "microsoft-documentdb-databaseaccounts": [
+   "CassandraRequests",
+   "ControlPlaneRequests",
+   "DataPlaneRequests",
+   "DataPlaneRequests15M",
+   "DataPlaneRequests5M",
+   "GremlinRequests",
+   "MongoRequests",
+   "PartitionKeyRUConsumption",
+   "PartitionKeyStatistics",
+   "QueryRuntimeStatistics",
+   "TableApiRequests"
+  ],
+  "microsoft-documentdb-mongoclusters": [
+   "vCoreMongoRequests"
+  ],
+  "microsoft-eventhub-namespaces": [
+   "ApplicationMetricsLogs",
+   "ArchiveLogs",
+   "AutoScaleLogs",
+   "CustomerManagedKeyUserLogs",
+   "DataDRLogs",
+   "DiagnosticErrorLogs",
+   "EventHubVNetConnectionEvent",
+   "KafkaCoordinatorLogs",
+   "KafkaUserErrorLogs",
+   "OperationalLogs",
+   "RuntimeAuditLogs"
+  ],
+  "microsoft-keyvault-vaults": [
+   "AuditEvent",
+   "AzurePolicyEvaluationDetails"
+  ],
+  "microsoft-logic-workflows": [
+   "WorkflowRuntime"
+  ],
+  "microsoft-network-applicationgateways": [
+   "ApplicationGatewayAccessLog",
+   "ApplicationGatewayFirewallLog",
+   "ApplicationGatewayPerformanceLog"
+  ],
+  "microsoft-network-azurefirewalls": [
+   "AZFWApplicationRule",
+   "AZFWApplicationRuleAggregation",
+   "AZFWDnsAdditional",
+   "AZFWDnsQuery",
+   "AZFWFatFlow",
+   "AZFWFlowTrace",
+   "AZFWFqdnResolveFailure",
+   "AZFWIdpsSignature",
+   "AZFWNatRule",
+   "AZFWNatRuleAggregation",
+   "AZFWNetworkRule",
+   "AZFWNetworkRuleAggregation",
+   "AZFWThreatIntel",
+   "AzureFirewallApplicationRule",
+   "AzureFirewallDnsProxy",
+   "AzureFirewallNetworkRule"
+  ],
+  "microsoft-network-frontdoors": [
+   "FrontdoorAccessLog",
+   "FrontdoorWebApplicationFirewallLog"
+  ],
+  "microsoft-network-networksecuritygroups": [
+   "NetworkSecurityGroupEvent",
+   "NetworkSecurityGroupFlowEvent",
+   "NetworkSecurityGroupRuleCounter"
+  ],
+  "microsoft-servicebus-namespaces": [
+   "ApplicationMetricsLogs",
+   "DataDRLogs",
+   "DiagnosticErrorLogs",
+   "OperationalLogs",
+   "RuntimeAuditLogs",
+   "VNetAndIPFilteringLogs"
+  ],
+  "microsoft-sql-managedinstances": [
+   "DevOpsOperationsAudit",
+   "ResourceUsageStats",
+   "SQLSecurityAuditEvents"
+  ],
+  "microsoft-sql-servers-databases": [
+   "AutomaticTuning",
+   "Blocks",
+   "DatabaseWaitStatistics",
+   "Deadlocks",
+   "DevOpsOperationsAudit",
+   "DmsWorkers",
+   "Errors",
+   "ExecRequests",
+   "QueryStoreRuntimeStatistics",
+   "QueryStoreWaitStatistics",
+   "RequestSteps",
+   "SQLInsights",
+   "SqlRequests",
+   "SQLSecurityAuditEvents",
+   "Timeouts",
+   "Waits"
+  ],
+  "microsoft-storage-storageaccounts-blobservices": [
+   "StorageDelete",
+   "StorageRead",
+   "StorageWrite"
+  ],
+  "microsoft-storage-storageaccounts-fileservices": [
+   "StorageDelete",
+   "StorageRead",
+   "StorageWrite"
+  ],
+  "microsoft-storage-storageaccounts-queueservices": [
+   "StorageDelete",
+   "StorageRead",
+   "StorageWrite"
+  ],
+  "microsoft-storage-storageaccounts-tableservices": [
+   "StorageDelete",
+   "StorageRead",
+   "StorageWrite"
+  ],
+  "microsoft-web-sites-slots": [
+   "AppServiceAntivirusScanAuditLogs",
+   "AppServiceAppLogs",
+   "AppServiceAuditLogs",
+   "AppServiceConsoleLogs",
+   "AppServiceFileAuditLogs",
+   "AppServiceHTTPLogs",
+   "AppServiceIPSecAuditLogs",
+   "AppServicePlatformLogs",
+   "FunctionAppLogs"
+  ],
+  "microsoft-web-sites": [
+   "AppServiceAntivirusScanAuditLogs",
+   "AppServiceAppLogs",
+   "AppServiceAuditLogs",
+   "AppServiceAuthenticationLogs",
+   "AppServiceConsoleLogs",
+   "AppServiceFileAuditLogs",
+   "AppServiceHTTPLogs",
+   "AppServiceIPSecAuditLogs",
+   "AppServicePlatformLogs",
+   "FunctionAppLogs",
+   "WorkflowRuntime"
+  ]
+ }
+}

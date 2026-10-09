@@ -1,0 +1,143 @@
+# Lab stages of the universal pipeline (stage template, included by universal.yml for every build that
+# is not an observability package release).
+#   Select ──> Validate ──┐
+#          └─> Security ──┴─> [applications: Build] ─> P_<x> plan ─> C_<x> apply ─> Retire
+#                                                    ─> [applications: Verify] / Drift ─> Evidence
+# Generated stages: pipelines/generated/<scope>-stages.yml (tools/pipeline/generate.py).
+# PR builds compile only Select/Validate/Security: Microsoft-hosted agents, no service connection,
+# variable group or self-hosted pool.
+parameters:
+  - name: scope
+    type: string
+    values: [platform, applications]
+  - name: environment
+    type: string
+  - name: mode
+    type: string
+    values: [auto, manual, reconcile, drift, retire, promote]
+  - name: sourceEnvironment
+    type: string
+  - name: components
+    type: string
+  - name: withConsumers
+    type: boolean
+  - name: dryRun
+    type: boolean
+
+stages:
+  # ------------------------------------------------------------------ Select
+  - stage: Select
+    displayName: Select ${{ parameters.scope }} changes (${{ parameters.environment }})
+    jobs:
+      - job: select
+        displayName: Detect changes
+        timeoutInMinutes: 20
+        cancelTimeoutInMinutes: 5
+        ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+          pool:
+            vmImage: ${{ variables.hostedImage }}
+        ${{ else }}:
+          pool:
+            name: ${{ variables.deployPool }}
+          workspace:
+            clean: all
+        steps:
+          - checkout: self
+            fetchDepth: 0               # merge-base / fingerprints need history
+            clean: true
+          - template: steps-setup.yml
+          - script: |
+              set -euo pipefail
+              python3 -m tools.changeset graph
+              python3 tools/config/resolve.py --env "${{ parameters.environment }}"
+              python3 tools/config/promotion.py check --env "${{ parameters.environment }}" --mode "${{ parameters.mode }}" --dry-run "${{ lower(parameters.dryRun) }}"
+              echo "##vso[build.addbuildtag]env-${{ parameters.environment }}"
+              echo "##vso[build.addbuildtag]scope-${{ parameters.scope }}"
+            displayName: Validate registry, environment and promotion policy
+          - ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+            - script: |
+                set -euo pipefail
+                target="${SYSTEM_PULLREQUEST_TARGETBRANCH#refs/heads/}"
+                git fetch --no-tags origin "+refs/heads/${target}:refs/remotes/origin/${target}"
+                mkdir -p "$(Build.ArtifactStagingDirectory)/selection"
+                python3 -m tools.changeset select --mode pr --scope "${{ parameters.scope }}" --env "${{ parameters.environment }}" \
+                  --target "$target" --out "$(Build.ArtifactStagingDirectory)/selection/selection.json" --ado
+              name: detect
+              displayName: Select (PR, merge-base diff, no credentials)
+          - ${{ else }}:
+            - task: AzureCLI@2
+              name: detect
+              displayName: Select (fingerprints, records, upstream contracts)
+              inputs:
+                azureSubscription: ${{ variables.planServiceConnection }}
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -euo pipefail
+                  blob="https://${{ variables.stateStorageAccount }}.blob.core.windows.net"
+                  extra=()
+                  if [[ "${{ parameters.mode }}" == "promote" ]]; then
+                    extra+=(--source-env "${{ parameters.sourceEnvironment }}"
+                            --source-records-url "https://${{ variables.promoteFromStateStorageAccount }}.blob.core.windows.net/deployments")
+                  fi
+                  mkdir -p "$(Build.ArtifactStagingDirectory)/selection"
+                  python3 -m tools.changeset select --mode "${{ parameters.mode }}" --scope "${{ parameters.scope }}" \
+                    --env "${{ parameters.environment }}" --components "${{ parameters.components }}" \
+                    ${{ iif(parameters.withConsumers, '--with-consumers', '') }} \
+                    --records-url "$blob/deployments" --contracts-url "$blob/contracts" --build-reason "$(Build.Reason)" \
+                    "${extra[@]}" --out "$(Build.ArtifactStagingDirectory)/selection/selection.json" --ado
+          - task: PublishPipelineArtifact@1
+            displayName: Publish selection document
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/selection
+              artifact: selection
+
+  # ---------------------------------------------------------------- Validate
+  - stage: Validate
+    displayName: Validate (no credentials)
+    dependsOn: Select
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'))
+    jobs:
+      - template: validate.yml
+        parameters:
+          environment: ${{ parameters.environment }}
+          hostedImage: ${{ variables.hostedImage }}
+          maxParallel: ${{ variables.validateMaxParallel }}
+      - ${{ if eq(parameters.scope, 'applications') }}:
+        - template: helm-charts.yml
+          parameters:
+            publish: false
+            hostedImage: ${{ variables.hostedImage }}
+
+  # ---------------------------------------------------------------- Security
+  - stage: Security
+    displayName: Security scans (no credentials)
+    dependsOn: Select
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'))
+    jobs:
+      - template: security-scan.yml
+        parameters:
+          hostedImage: ${{ variables.hostedImage }}
+
+  # --------------- [Build], plan, apply, retire, [verify], drift, evidence (generated per scope)
+  - ${{ if ne(variables['Build.Reason'], 'PullRequest') }}:
+    - template: ../generated/${{ parameters.scope }}-stages.yml
+      parameters:
+        environment: ${{ parameters.environment }}
+        dryRun: ${{ parameters.dryRun }}
+        settings:
+          deployPool: ${{ variables.deployPool }}
+          hostedImage: ${{ variables.hostedImage }}
+          planServiceConnection: ${{ variables.planServiceConnection }}
+          planServiceConnectionId: ${{ variables.planServiceConnectionId }}
+          applyServiceConnection: ${{ variables.applyServiceConnection }}
+          applyServiceConnectionId: ${{ variables.applyServiceConnectionId }}
+          buildServiceConnection: ${{ variables.buildServiceConnection }}
+          stateStorageAccount: ${{ variables.stateStorageAccount }}
+          containerRegistry: ${{ variables.containerRegistry }}
+          datadogVariableGroup: ${{ variables.datadogVariableGroup }}
+          datadogSite: ${{ variables.datadogSite }}
+          promoteFrom: ${{ variables.promoteFrom }}
+          promoteFromStateStorageAccount: ${{ variables.promoteFromStateStorageAccount }}
+          promoteFromContainerRegistry: ${{ variables.promoteFromContainerRegistry }}
+          useAcrBuild: 'false'

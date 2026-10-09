@@ -1,0 +1,26 @@
+{{- include "hello-service.validate" . -}}
+{{- if ne .Values.kind "cronjob" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hello-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hello-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicas }}
+  {{- end }}
+  {{- /* With autoscaling the HPA owns spec.replicas; omitting it keeps upgrades from resetting the scale. */}}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "hello-service.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    {{- include "hello-service.podTemplate" . | nindent 4 }}
+{{- end }}

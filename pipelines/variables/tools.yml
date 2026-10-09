@@ -6,9 +6,13 @@ variables:
   TRIVY_VERSION: "0.75.0"
   SYFT_VERSION: "1.54.1"
   CHECKOV_VERSION: "3.3.26"
+  HELM_VERSION: "4.3.0"               # Helm CLI (chart lint/package/OCI push); not the Terraform helm provider
+  KUBECONFORM_VERSION: "0.8.0"
   PYTHON_TOOLS_REQUIREMENTS: pipelines/requirements-tools.txt
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "0"
   # Agents: Microsoft-hosted for untrusted work (PR validation, security scans);
   # self-hosted VNet pool (foundation-deploy-agents) for anything that touches private endpoints.
   hostedImage: ubuntu-24.04
+  # Azure Artifacts feed (project/feed or feed) receiving the observability package as a Universal Package.
+  observabilityFeed: lab/observability

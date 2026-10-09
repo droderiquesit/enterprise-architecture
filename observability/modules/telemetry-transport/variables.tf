@@ -78,20 +78,24 @@ variable "key_vault" {
 variable "event_hub" {
   description = <<-EOT
     Event Hubs used by diagnostic settings (app-logs / platform-logs hubs, read by the aggregator Kafka input).
-    mode = create   : Standard namespace (Kafka endpoint), 2 hubs, consumer group, SAS rules
+    mode = create   : Standard namespace (Kafka endpoint), 3 hubs (app-logs, platform-logs, activity-logs),
+                      consumer group per hub, SAS rules
     mode = existing : bring your own namespace; provide namespace_id, send_authorization_rule_id and
                       listen_connection_string_secret_id (Key Vault) plus the hub names
     mode = none     : no Event Hub route (App Service/Functions app logs then need another collector)
   EOT
   type = object({
-    mode                               = optional(string, "create")
-    sku                                = optional(string, "Standard")
-    capacity                           = optional(number, 1)
-    auto_inflate_max_throughput_units  = optional(number, 0)
-    partition_count                    = optional(number, 2)
-    message_retention_days             = optional(number, 1)
-    app_logs_hub                       = optional(string, "app-logs")
-    platform_logs_hub                  = optional(string, "platform-logs")
+    mode                              = optional(string, "create")
+    sku                               = optional(string, "Standard")
+    capacity                          = optional(number, 1)
+    auto_inflate_max_throughput_units = optional(number, 0)
+    partition_count                   = optional(number, 2)
+    message_retention_days            = optional(number, 1)
+    app_logs_hub                      = optional(string, "app-logs")
+    platform_logs_hub                 = optional(string, "platform-logs")
+    # control-plane logs (subscription Activity Log, optional Entra ID): a dedicated hub so a data-plane burst on
+    # platform-logs never delays/throttles audit events; "" = share platform_logs_hub (no extra hub)
+    activity_logs_hub                  = optional(string, "activity-logs")
     consumer_group                     = optional(string, "fluent-bit")
     namespace_id                       = optional(string)
     namespace_fqdn                     = optional(string)

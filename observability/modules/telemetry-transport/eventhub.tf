@@ -1,12 +1,18 @@
-# Event Hubs for diagnostic-settings export (app-logs + platform-logs) consumed by the aggregator's Kafka input.
+# Event Hubs for diagnostic-settings export (app-logs + platform-logs + activity-logs) consumed by the aggregator's
+# Kafka input.
 locals {
   eh_create         = var.event_hub.mode == "create"
   eh_enabled        = var.event_hub.mode != "none"
   eh_namespace_name = coalesce(var.names.eventhub_namespace, substr("${var.name_prefix}-evhns", 0, 50))
-  hubs = local.eh_create ? {
-    app      = var.event_hub.app_logs_hub
-    platform = var.event_hub.platform_logs_hub
-  } : {}
+  activity_hub      = coalesce(var.event_hub.activity_logs_hub, var.event_hub.platform_logs_hub)
+  hubs = local.eh_create ? merge(
+    {
+      app      = var.event_hub.app_logs_hub
+      platform = var.event_hub.platform_logs_hub
+    },
+    local.activity_hub != var.event_hub.platform_logs_hub ? { activity = local.activity_hub } : {},
+  ) : {}
+  eventhub_topics = join(",", distinct([var.event_hub.app_logs_hub, var.event_hub.platform_logs_hub, local.activity_hub]))
 }
 
 resource "azurerm_eventhub_namespace" "this" {

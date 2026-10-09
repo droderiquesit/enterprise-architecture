@@ -36,8 +36,12 @@ def merge_base(repo: Path, target_ref: str, head: str = "HEAD") -> str:
     return out
 
 
-def diff(repo: Path, base: str, head: str = "HEAD") -> List[Change]:
-    out = git(repo, "diff", "--name-status", "-z", "-M", "--no-color", f"{base}..{head}")
+def diff(repo: Path, base: str, head: Optional[str] = "HEAD") -> List[Change]:
+    """head=None compares `base` with the working tree (tracked changes + untracked, non-ignored files)."""
+    if head is None:
+        out = git(repo, "diff", "--name-status", "-z", "-M", "--no-color", base)
+    else:
+        out = git(repo, "diff", "--name-status", "-z", "-M", "--no-color", f"{base}..{head}")
     tokens = [t for t in out.split("\0")]
     changes: List[Change] = []
     i = 0
@@ -54,6 +58,10 @@ def diff(repo: Path, base: str, head: str = "HEAD") -> List[Change]:
         else:
             changes.append(Change(code, tokens[i + 1]))
             i += 2
+    if head is None:
+        for p in git(repo, "ls-files", "-z", "--others", "--exclude-standard").split("\0"):
+            if p:
+                changes.append(Change("A", p))
     return changes
 
 

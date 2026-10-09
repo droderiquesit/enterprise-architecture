@@ -81,6 +81,7 @@ locals {
       authorization_rule_id = local.eh_send_rule_id
       app_logs_hub          = var.event_hub.app_logs_hub
       platform_logs_hub     = var.event_hub.platform_logs_hub
+      activity_logs_hub     = local.activity_hub
       kafka_endpoint        = "${local.eh_fqdn}:9093"
       consumer_group        = var.event_hub.consumer_group
       location              = var.location

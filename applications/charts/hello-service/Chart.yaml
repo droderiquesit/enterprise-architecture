@@ -1,0 +1,23 @@
+apiVersion: v2
+name: hello-service
+description: >-
+  Generic application chart for every Enterprise Hello workload on Kubernetes (AKS, ARO, kind):
+  HTTP services (Deployment + Service), background workers (Deployment with a health port) and
+  scheduled jobs (CronJob). Digest-pinned images, workload identity, Key Vault secrets through the
+  Secrets Store CSI driver, Datadog unified service tagging and the OTel instrumentation contract.
+type: application
+# Chart version: semver of the CHART (templates/schema), independent from the application version.
+# Bump MINOR for backwards-compatible template/values additions, MAJOR for breaking values changes.
+version: 1.0.0
+# appVersion is informational only. The deployed application version is `service.version`
+# (DD_VERSION, app.kubernetes.io/version, tags.datadoghq.com/version); the applications pipeline
+# overrides appVersion when it packages the chart (`helm package --app-version`).
+appVersion: "0.0.0"
+kubeVersion: ">=1.30.0-0"
+keywords: [enterprise-hello, datadog, opentelemetry, workload-identity]
+home: https://learn.microsoft.com/azure/aks/workload-identity-overview
+maintainers:
+  - name: applications-layer
+    email: platform-team@example.com
+annotations:
+  enterprise-hello/owner: applications-layer

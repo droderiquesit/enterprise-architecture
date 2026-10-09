@@ -1,7 +1,8 @@
 # Specialized compute workloads:
 #   Service Fabric managed cluster  hello-inventory-api guest executable  (azurerm has no SF application resources:
 #                                   manifests rendered here, deployed by scripts/deploy-sf.sh with sfctl)
-#   ARO                             hello-catalog-api                    (manifests rendered here, scripts/deploy-aro.sh, oc)
+#   ARO                             hello-catalog-api                    (Helm values rendered here for applications/charts/hello-service;
+#                                   scripts/deploy-aro.sh: helm upgrade --install, rollback on failure)
 #   Confidential VM                 hello-worker                         (managed run command)
 #   Automation                      python3 health-probe runbook          (azurerm_automation_runbook + job schedule)
 module "meta" {
@@ -66,50 +67,52 @@ locals {
   }) : null
 }
 
-# ---------------------------------------------------------------- ARO (rendered manifests)
+# ---------------------------------------------------------------- ARO (Helm values for the shared chart)
+# The same chart as AKS (applications/charts/hello-service) with OpenShift values: no fixed runAsUser (the
+# restricted-v2 SCC assigns the UID), a Route instead of an Ingress, no AKS workload identity webhook / Key Vault
+# CSI add-on (database secrets come from existing Secrets: settings.aro_secret_env). Terraform renders the values;
+# scripts/deploy-aro.sh installs them (the ARO API needs an OpenShift login, which Terraform does not hold).
 locals {
-  aro_env = local.aro_enabled ? module.env["aro"].env : {}
-  aro_manifest = local.aro_enabled ? join("\n---\n", [
-    yamlencode({
-      apiVersion = "apps/v1", kind = "Deployment"
-      metadata   = { name = "hello-catalog-api", namespace = var.settings.aro_namespace, labels = module.env["aro"].k8s_patch_object.metadata.labels }
-      spec = {
-        replicas = 2
-        selector = { matchLabels = { "app.kubernetes.io/name" = "hello-catalog-api" } }
-        template = {
-          metadata = { labels = merge(module.env["aro"].k8s_patch_object.spec.template.metadata.labels, { "app.kubernetes.io/name" = "hello-catalog-api" }) }
-          spec = {
-            securityContext = { runAsNonRoot = true, seccompProfile = { type = "RuntimeDefault" } }
-            containers = [{
-              name  = "hello-catalog-api"
-              image = try(var.artifacts["svc-catalog-api"].image, null)
-              ports = [{ containerPort = 8080, name = "http" }]
-              env = concat(
-                [{ name = "DD_AGENT_HOST", valueFrom = { fieldRef = { fieldPath = "status.hostIP" } } }],
-                [for k in sort(keys(local.aro_env)) : { name = k, value = local.aro_env[k] }],
-              )
-              resources       = { requests = { cpu = "100m", memory = "192Mi" }, limits = { cpu = "500m", memory = "512Mi" } }
-              livenessProbe   = { httpGet = { path = "/healthz", port = 8080 }, periodSeconds = 15 }
-              readinessProbe  = { httpGet = { path = "/readyz", port = 8080 }, periodSeconds = 10 }
-              securityContext = { allowPrivilegeEscalation = false, readOnlyRootFilesystem = true, capabilities = { drop = ["ALL"] } }
-              volumeMounts    = [{ name = "tmp", mountPath = "/tmp" }]
-            }]
-            volumes = [{ name = "tmp", emptyDir = { sizeLimit = "256Mi" } }]
-          }
-        }
-      }
-    }),
-    yamlencode({
-      apiVersion = "v1", kind = "Service"
-      metadata   = { name = "hello-catalog-api", namespace = var.settings.aro_namespace }
-      spec       = { selector = { "app.kubernetes.io/name" = "hello-catalog-api" }, ports = [{ name = "http", port = 80, targetPort = "http" }] }
-    }),
-    yamlencode({
-      apiVersion = "route.openshift.io/v1", kind = "Route"
-      metadata   = { name = "hello-catalog-api", namespace = var.settings.aro_namespace }
-      spec       = { to = { kind = "Service", name = "hello-catalog-api" }, port = { targetPort = "http" }, tls = { termination = "edge", insecureEdgeTerminationPolicy = "Redirect" } }
-    }),
-  ]) : null
+  aro_client_id   = try(local.ids["hello-catalog-api"].client_id, null)
+  aro_chart_owned = ["DD_AGENT_HOST", "DD_ENV", "DD_SERVICE", "DD_VERSION", "AZURE_CLIENT_ID", "FAULTS_ENABLED", "PORT", "LOG_FILE_PATH"]
+  aro_image       = try(var.artifacts["svc-catalog-api"].image, null)
+  aro_ready       = local.aro_enabled && local.aro_client_id != null && can(regex("@sha256:[a-f0-9]{64}$", coalesce(local.aro_image, "x")))
+  aro_values = local.aro_enabled ? {
+    kind = "deployment"
+    service = {
+      name       = "hello-catalog-api"
+      version    = local.cat_version
+      env        = local.env_name
+      partOf     = "enterprise-hello"
+      team       = module.meta.services["hello-catalog-api"].team
+      domain     = module.meta.services["hello-catalog-api"].domain
+      tier       = module.meta.services["hello-catalog-api"].tier
+      logsSource = module.env["aro"].k8s_patch_object.metadata.labels["logs.datadoghq.com/source"]
+    }
+    image = {
+      repository = try(split("@", local.aro_image)[0], "")
+      digest     = try(split("@", local.aro_image)[1], "")
+      pullPolicy = "IfNotPresent"
+    }
+    identity          = { clientId = coalesce(local.aro_client_id, "missing"), workloadIdentity = false }
+    port              = 8080
+    env               = { for n, v in module.env["aro"].env : n => v if !contains(local.aro_chart_owned, n) }
+    existingSecretEnv = var.settings.aro_secret_env
+    telemetry         = { agentHostFromHostIP = true, disableAgentLogCollection = true }
+    faults            = { enabled = false }
+    resources = {
+      requests = { cpu = "100m", memory = "192Mi" }
+      limits   = { cpu = "500m", memory = "512Mi" }
+    }
+    autoscaling         = { enabled = false }
+    replicas            = var.settings.aro_replicas
+    podDisruptionBudget = { enabled = true, maxUnavailable = 1 }
+    k8sService          = { type = "ClusterIP", port = 80 }
+    openshift = {
+      enabled = true
+      route   = { enabled = true, tls = { termination = "edge", insecureEdgeTerminationPolicy = "Redirect" } }
+    }
+  } : null
 }
 
 # ---------------------------------------------------------------- Confidential VM worker

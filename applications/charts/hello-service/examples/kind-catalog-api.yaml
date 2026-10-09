@@ -1,0 +1,34 @@
+# hello-catalog-api on a local kind cluster (tests/charts smoke): local image loaded with `kind load`, Postgres and
+# Redis in-cluster, password from an existing Secret, no workload identity / Key Vault / Datadog Agent on the node.
+# image.digest is set by the test from the loaded image id.
+kind: deployment
+service: {name: hello-catalog-api, version: 0.1.0-e2e, env: kind, team: catalog, domain: catalog, tier: high, logsSource: python}
+image:
+  repository: docker.io/library/hello-catalog-api
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  pullPolicy: Never
+identity:
+  clientId: 00000000-0000-0000-0000-000000000001
+  workloadIdentity: false
+env:
+  PG_HOST: postgres
+  PG_DATABASE: catalog
+  PG_USER: postgres
+  PG_AUTH: password
+  PG_SSLMODE: disable
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: none
+  REDIS_TLS: "false"
+  OTEL_TRACES_EXPORTER: none
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
+existingSecretEnv:
+  PG_PASSWORD: {secretName: catalog-db, key: password}
+telemetry:
+  agentHostFromHostIP: true
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {cpu: "1", memory: 384Mi}
+autoscaling: {enabled: false}
+replicas: 1

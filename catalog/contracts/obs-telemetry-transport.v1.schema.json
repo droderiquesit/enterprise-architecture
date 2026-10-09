@@ -162,6 +162,10 @@
         "platform_logs_hub": {
           "type": "string"
         },
+        "activity_logs_hub": {
+          "type": "string",
+          "description": "optional (1.1+): hub for control-plane logs (subscription Activity Log, Entra ID); equals platform_logs_hub when shared"
+        },
         "kafka_endpoint": {
           "type": "string",
           "description": "<namespace>.servicebus.windows.net:9093"

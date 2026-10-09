@@ -21,6 +21,25 @@ from .trees import Tree
 MODULE_SOURCE_RE = re.compile(r'^\s*source\s*=\s*"(\.{1,2}/[^"]*)"', re.MULTILINE)
 
 
+CHART_REF_RE = re.compile(r"charts/([A-Za-z0-9._-]+)")
+CHARTS_DIR = "applications/charts"
+
+
+def discover_charts(tree: Tree, dirs: Iterable[str]) -> List[str]:
+    """Helm chart directories (applications/charts/<name>) referenced from .tf files of `dirs`
+    (e.g. helm_release.chart = "${path.module}/../../charts/hello"). They are deployment inputs."""
+    found = set()
+    for d in dirs:
+        prefix = d.rstrip("/") + "/"
+        for path in tree.files():
+            if path.startswith(prefix) and "/" not in path[len(prefix):] and path.endswith(".tf"):
+                for name in CHART_REF_RE.findall(tree.read_text(path) or ""):
+                    cand = f"{CHARTS_DIR}/{name}"
+                    if tree.is_dir(cand):
+                        found.add(cand)
+    return sorted(found)
+
+
 class CycleError(Exception):
     def __init__(self, cycle: List[str]):
         self.cycle = cycle
