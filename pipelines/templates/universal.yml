@@ -25,7 +25,7 @@ parameters:
   - name: mode
     type: string
     default: auto
-    values: [auto, manual, reconcile, drift, retire, promote]
+    values: [auto, manual, reconcile, drift, retire, promote, heal]
   - name: sourceEnvironment          # promote mode: 'auto' = promote_from of environments/promotion.yaml
     type: string
     default: auto

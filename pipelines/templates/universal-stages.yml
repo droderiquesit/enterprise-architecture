@@ -14,7 +14,7 @@ parameters:
     type: string
   - name: mode
     type: string
-    values: [auto, manual, reconcile, drift, retire, promote]
+    values: [auto, manual, reconcile, drift, retire, promote, heal]
   - name: sourceEnvironment
     type: string
   - name: components
@@ -91,6 +91,24 @@ stages:
             inputs:
               targetPath: $(Build.ArtifactStagingDirectory)/selection
               artifact: selection
+      # Scheduled runs always use the default environment (dev): the dev heal schedule queues heal runs for the
+      # promoted environments (tools/deploy/heal_queue.py; their apply stages stop at the lab-<env> approval).
+      - ${{ if and(ne(variables['Build.Reason'], 'PullRequest'), eq(parameters.environment, 'dev')) }}:
+        - job: heal_fanout
+          displayName: Heal fan-out (promoted environments)
+          condition: and(eq(variables['Build.Reason'], 'Schedule'), contains(variables['Build.CronSchedule.DisplayName'], 'heal'))
+          timeoutInMinutes: 10
+          cancelTimeoutInMinutes: 2
+          pool:
+            vmImage: ${{ variables.hostedImage }}
+          steps:
+            - checkout: self
+              fetchDepth: 1
+            - template: steps-setup.yml
+            - script: python3 tools/deploy/heal_queue.py
+              displayName: Queue heal runs (test/prod, same commit they last ran)
+              env:
+                SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
   # ---------------------------------------------------------------- Validate
   - stage: Validate
@@ -140,3 +158,4 @@ stages:
           promoteFromStateStorageAccount: ${{ variables.promoteFromStateStorageAccount }}
           promoteFromContainerRegistry: ${{ variables.promoteFromContainerRegistry }}
           useAcrBuild: 'false'
+          scope: ${{ parameters.scope }}

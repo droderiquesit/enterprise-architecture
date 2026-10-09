@@ -13,8 +13,16 @@ Modes
   reconcile  every enabled component planned, applied only where the plan has changes.
   drift      every enabled component planned, nothing applied; the run reports drift.
   retire     only scheduled retirements.
+  heal       scheduled self-healing: only components whose last record is failed / partial / canceled
+             or whose post-deployment verification failed (smoke / telemetry); quarantined and rolled_back
+             components are skipped (they need a new commit or a manual run). Normal approvals apply.
   promote    deploy-mode selection for a later environment of a promotion chain, refused unless the
              source environment successfully deployed the same code (select_promote).
+Held records (status rolled_back | quarantined, tools/deploy/record.py HELD) are never auto-selected again
+for the SAME deploy fingerprint (deploy / heal / reconcile); a new commit touching the component (deploy_fp
+changes) or a manual run clears the hold. Drift runs may re-apply additive-only drift of components with
+registry `drift.auto_remediate` when the environment's `self_healing.drift_auto_remediate` is true
+(entry `remediate: additive-only`; tf-plan.sh refuses deletes/replaces and only reports them).
 Every mode can be restricted to one pipeline scope (platform | applications); see _scope_filter.
 
 A change that only touches a deploy root's artifact digests (new image of an app) re-deploys
@@ -36,7 +44,9 @@ from .registry import SCOPES, Registry, RegistryError, load_registry, scope_erro
 from .store import Store
 from .trees import GitTree, Tree, WorkTree
 
-MODES = ("pr", "deploy", "manual", "reconcile", "drift", "retire", "promote")
+MODES = ("pr", "deploy", "manual", "reconcile", "drift", "retire", "promote", "heal")
+HELD = ("rolled_back", "quarantined")          # == tools/deploy/record.py HELD
+FAILED = ("failed", "partial", "canceled")
 MODULE_DIR_RE = re.compile(r"^((?:[^/]+/)*modules/[^/]+)/")
 TOOLING_PATHS = ("tools/", "pipelines/", "azure-pipelines.yml", "tests/", "catalog/schemas/", "environments/schema/")
 SUCCEEDED = "succeeded"
@@ -475,11 +485,16 @@ def _deploy(ctx: Context, store: Optional[Store], contracts_store: Optional[Stor
         doc["notes"].append("no record store given: every enabled component is treated as never deployed")
     comps = doc["components"]
     infra_changed: Set[str] = set()
+    held: Dict[str, dict] = {}
     for cid, e in comps.items():
         c = ctx.registry.get(cid)
         if cid not in ctx.enabled or not (c.deployable or c.is_artifact):
             continue
         rec = _record(store, env, cid)
+        if rec is not None and _is_held(rec, e):
+            held[cid] = rec
+            e["previous_fp"] = (rec.get("last_succeeded") or {}).get("deploy_fp")
+            continue
         if rec is None:
             reason, parts = "no deployment record", sorted(e["fp_parts"])
         elif rec.get("status") != SUCCEEDED:
@@ -506,8 +521,102 @@ def _deploy(ctx: Context, store: Optional[Store], contracts_store: Optional[Stor
         for d in sorted(ctx.graph.transitive_consumers([cid], enabled=ctx.enabled)):
             if ctx.registry.get(d).deployable:
                 _plan(ctx, doc, d, f"upstream {cid} changed (apply only if plan has changes)", apply=True)
+    _apply_holds(doc, held)
     _artifacts_for_planned(ctx, doc)
     _retirements(ctx, doc, store)
+    return _finish(ctx, doc)
+
+
+def _is_held(rec: dict, e: dict) -> bool:
+    """A rolled_back / quarantined record holds the component until its deploy fingerprint changes."""
+    return rec.get("status") in HELD and rec.get("deploy_fp") == e.get("deploy_fp")
+
+
+def _apply_holds(doc: dict, held: Dict[str, dict]) -> None:
+    for cid, rec in sorted(held.items()):
+        e = doc["components"][cid]
+        why = (rec.get("quarantine") or {}).get("reason") or rec.get("note") or ""
+        e["held"] = rec.get("status")
+        e.update(plan=False, apply_candidate=False, build=False)
+        _add_reason(e, f"held: {rec.get('status')}{' (' + why + ')' if why else ''} - "
+                       "a new commit touching it or a manual run clears this")
+    doc["held"] = sorted(held)
+
+
+def _promote_from(repo: Path, env: str) -> Optional[str]:
+    try:
+        from tools.config.promotion import load as load_promotion
+
+        spec = load_promotion(Path(repo)).get(env)
+        return spec.promote_from if spec else None
+    except Exception:  # noqa: BLE001 - no promotion file: single environment lab
+        return None
+
+
+def self_healing(env_doc: dict) -> dict:
+    sh = dict((env_doc or {}).get("self_healing") or {})
+    sh.setdefault("enabled", False)
+    sh.setdefault("drift_auto_remediate", False)
+    sh.setdefault("max_consecutive_failures", 3)
+    return sh
+
+
+# ---------------------------------------------------------------------- HEAL
+def select_heal(repo: Path, env: str, store: Optional[Store], head: str = "HEAD", worktree: bool = False,
+                scope: Optional[str] = None, contracts_store: Optional[Store] = None) -> dict:
+    """Re-run only what failed: last record failed / partial / canceled, or verification failed.
+    Held (rolled_back / quarantined) components are skipped; the environment's approvals still apply."""
+    ctx = Context(repo, env, head, worktree=worktree, scope=scope)
+    doc = _base_doc(ctx, "heal")
+    sh = self_healing(ctx.env_doc)
+    doc["self_healing"] = sh
+    doc["held"] = []
+    if store is None:
+        raise SelectionError("heal mode needs the deployment record store (--records-dir/--records-url)")
+    if not sh["enabled"]:
+        doc["notes"].append(f"self_healing.enabled is false for '{env}': heal run selects nothing")
+        return _finish(ctx, doc)
+    promoted = _promote_from(repo, env)
+    for cid, e in doc["components"].items():
+        c = ctx.registry.get(cid)
+        if cid not in ctx.enabled or not (c.deployable or c.is_artifact):
+            continue
+        rec = _record(store, env, cid)
+        if not rec:
+            continue
+        status = rec.get("status")
+        verification = (rec.get("verification") or {}).get("status")
+        if status in HELD:
+            e["held"] = status
+            doc["held"].append(cid)
+            _add_reason(e, f"held: {status} - not healed automatically (new commit or manual run)")
+            continue
+        if status in FAILED:
+            reason = f"heal: last deployment {status}"
+        elif status == SUCCEEDED and verification == "failed":
+            reason = "heal: post-deployment verification failed"
+        else:
+            continue
+        if promoted and rec.get("fp_parts"):
+            # promoted environments only heal the SAME code that was promoted (the promote gate passed for it)
+            mine = e["fp_parts"] or {}
+            diff = [k for k in PROMOTION_PARTS if k in mine and (rec.get("fp_parts") or {}).get(k) != mine.get(k)]
+            if diff:
+                doc["notes"].append(f"{cid}: not healed - this commit has different {'/'.join(diff)} than the failed "
+                                    f"promotion (promote again from '{promoted}')")
+                continue
+        e["heal"] = reason
+        e["previous_fp"] = (rec.get("last_succeeded") or {}).get("deploy_fp") or rec.get("deploy_fp")
+        e["changed_parts"] = sorted(changed_parts(rec.get("fp_parts"), e["fp_parts"])) if rec.get("fp_parts") else []
+        e["validate"] = True
+        e["direct"] = True
+        if c.is_artifact:
+            e["build"] = True
+            _add_reason(e, reason)
+            continue
+        _plan(ctx, doc, cid, reason, apply=True)
+    doc["held"] = sorted(doc["held"])
+    _artifacts_for_planned(ctx, doc)
     return _finish(ctx, doc)
 
 
@@ -559,14 +668,29 @@ def select_all(repo: Path, env: str, mode: str, store: Optional[Store] = None, h
     assert mode in ("reconcile", "drift")
     ctx = Context(repo, env, head, worktree=worktree, scope=scope)
     doc = _base_doc(ctx, mode)
+    sh = self_healing(ctx.env_doc)
+    remediate_env = mode == "drift" and bool(sh["drift_auto_remediate"])
+    doc["drift_remediation"] = {"environment_allows": remediate_env, "components": []}
+    held: Dict[str, dict] = {}
     for c in ctx.registry:
         if c.deployable and c.id in ctx.enabled:
-            reason = "reconcile: plan every enabled component" if mode == "reconcile" else "drift detection (plan only)"
-            _plan(ctx, doc, c.id, reason, apply=(mode == "reconcile"))
-            doc["components"][c.id]["validate"] = True
+            e = doc["components"][c.id]
             rec = _record(store, env, c.id)
+            reason = "reconcile: plan every enabled component" if mode == "reconcile" else "drift detection (plan only)"
+            remediate = remediate_env and c.drift_auto_remediate and not (rec and rec.get("status") in HELD)
+            if remediate:
+                reason = "drift detection; additive-only drift is re-applied (drift.auto_remediate)"
+            _plan(ctx, doc, c.id, reason, apply=(mode == "reconcile") or remediate)
+            e["validate"] = True
+            if remediate:
+                e["remediate"] = "additive-only"
+                doc["drift_remediation"]["components"].append(c.id)
             if rec:
-                doc["components"][c.id]["previous_fp"] = rec.get("deploy_fp")
+                e["previous_fp"] = rec.get("deploy_fp")
+                if mode == "reconcile" and _is_held(rec, e):
+                    held[c.id] = rec
+    if mode == "reconcile":
+        _apply_holds(doc, held)
     _artifacts_for_planned(ctx, doc)
     _retirements(ctx, doc, store)
     return _finish(ctx, doc)
@@ -634,11 +758,13 @@ def select_promote(repo: Path, env: str, store: Optional[Store], source_env: str
     return doc
 
 
-def auto_mode(build_reason: Optional[str]) -> str:
+def auto_mode(build_reason: Optional[str], schedule_name: Optional[str] = None) -> str:
+    """PR -> pr; scheduled -> heal when the schedule's displayName contains 'heal'
+    (Build.CronSchedule.DisplayName), else drift; everything else -> deploy."""
     if build_reason == "PullRequest":
         return "pr"
     if build_reason == "Schedule":
-        return "drift"
+        return "heal" if "heal" in (schedule_name or "").lower() else "drift"
     return "deploy"
 
 
@@ -649,5 +775,6 @@ def docs_only(paths: Iterable[str]) -> bool:
 
 __all__ = [
     "MODES", "SelectionError", "select_pr", "select_deploy", "select_manual", "select_all", "select_retire",
+    "select_heal", "select_promote", "self_healing",
     "auto_mode", "docs_only", "deploy_relevant",
 ]

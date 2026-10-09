@@ -22,4 +22,7 @@ export ARM_OIDC_AZURE_SERVICE_CONNECTION_ID="$ARM_ADO_PIPELINE_SERVICE_CONNECTIO
 ARM_SUBSCRIPTION_ID="$(python3 -c "import yaml,sys;print(yaml.safe_load(open(sys.argv[1]))['environment']['subscription_id'])" "environments/${LAB_ENV}/environment.yaml")"
 export ARM_SUBSCRIPTION_ID
 export TF_IN_AUTOMATION=true TF_INPUT=0
+mkdir -p "$OUT_DIR/health"
+export RETRY_LOG="${RETRY_LOG:-$OUT_DIR/health/retries.jsonl}"
+bash pipelines/scripts/preflight.sh || { echo "##vso[task.logissue type=error]agent pre-flight failed (see PREFLIGHT_FAIL lines)"; exit 1; }
 unset idToken servicePrincipalKey 2>/dev/null || true

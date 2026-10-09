@@ -79,7 +79,17 @@ jobs:
                   azureSubscription: ${{ parameters.settings.applyServiceConnection }}
                   scriptType: bash
                   scriptLocation: inlineScript
-                  inlineScript: bash pipelines/scripts/tf-record-failure.sh "${{ parameters.component }}" "$(Agent.JobStatus)"
+                  inlineScript: bash pipelines/scripts/tf-record-failure.sh "${{ parameters.component }}" "$(Agent.JobStatus)" apply
+                env:
+                  SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                  DD_SITE: ${{ parameters.settings.datadogSite }}
+              - task: PublishPipelineArtifact@1
+                displayName: Publish apply health (retries, rollback, smoke)
+                condition: not(canceled())
+                continueOnError: true
+                inputs:
+                  targetPath: $(Build.ArtifactStagingDirectory)/plan/health
+                  artifact: health-${{ parameters.component }}-$(System.JobAttempt)
   - ${{ else }}:
     # dry run: the stage still needs a job to compile; its condition (DRY_RUN) keeps it skipped, so no
     # environment, approval or credential is ever requested.

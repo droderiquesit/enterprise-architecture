@@ -6,6 +6,9 @@
 #   pipelines/scripts/install-tools.sh gitleaks trivy syft helm kubeconform  # versions: pipelines/variables/tools.yml
 # Versions for scanners come from environment variables GITLEAKS_VERSION, TRIVY_VERSION, SYFT_VERSION
 # (set by pipelines/variables/tools.yml).
+# Agent resilience: every downloaded archive and checksum file is also kept in $TOOL_CACHE_DIR (restored/saved by the
+# Cache@2 step of steps-setup.yml, keyed by the tool versions). When a download fails (release host down, throttled,
+# agent egress hiccup) the cached copy is used instead - and the checksum is ALWAYS verified, whichever copy is used.
 set -euo pipefail
 
 BIN="${TOOLS_BIN:-$HOME/.local/bin}"
@@ -17,8 +20,25 @@ trap 'rm -rf "$WORK"' EXIT
 
 arch() { case "$(uname -m)" in x86_64) echo amd64 ;; aarch64|arm64) echo arm64 ;; *) echo "unsupported arch" >&2; exit 1 ;; esac; }
 
-fetch() { # url dest  (bounded retries for transient network errors)
+CACHE="${TOOL_CACHE_DIR:-${PIPELINE_WORKSPACE:-$HOME}/.tool-cache}"
+mkdir -p "$CACHE"
+
+download() { # url dest  (bounded retries for transient network errors)
   curl --fail --silent --show-error --location --retry 4 --retry-delay 3 --retry-all-errors --max-time 300 -o "$2" "$1"
+}
+
+fetch() { # url dest: download (and refresh the cache) or fall back to the cached copy; callers verify checksums
+  local c; c="$CACHE/$(printf %s "$1" | sha256sum | cut -c1-16)-$(basename "$1")"
+  if download "$1" "$2"; then
+    cp -f "$2" "$c" 2>/dev/null || true
+  elif [[ -s "$c" ]]; then
+    echo "##vso[task.logissue type=warning]download failed: $1 - using the cached copy (checksum verified next)"
+    echo "TOOL_CACHE_FALLBACK $(basename "$1")" >&2
+    cp -f "$c" "$2"
+  else
+    echo "##vso[task.logissue type=error]download failed and no cached copy: $1"
+    return 1
+  fi
 }
 
 verify() { # file sums-file name-in-sums

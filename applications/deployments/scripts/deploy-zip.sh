@@ -13,6 +13,7 @@
 #   vmss-flex-rollout     existing Flexible instances: az vm run-command invoke with the root's vmss_rollout_script output
 #   batch-job             delegated to jobs/scripts/submit-batch-job.sh
 # Packages are downloaded with Entra auth (`az storage blob download --auth-mode login`) and sha256-verified.
+# Progress: "deployed <app>" / "swapped <app>" lines are appended to $DEPLOY_PROGRESS_FILE (when set) for rollback.sh.
 # Rollback: webapps -> `az webapp deployment slot swap --slot staging` again; others -> re-run with the previous artifacts.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -52,7 +53,7 @@ for ((i = 0; i < n; i++)); do
       fetch_package "$url" "$sha" "$pkg"
       args=(--resource-group "$rg" --name "$name" --src-path "$pkg" --type zip --async false --only-show-errors)
       [[ -n "$slot" ]] && args+=(--slot "$slot")
-      az webapp deploy "${args[@]}" >/dev/null
+      with_retry az webapp deploy "${args[@]}" >/dev/null
       if [[ -n "$slot" ]]; then
         host=$(az webapp show -g "$rg" -n "$name" --slot "$slot" --query defaultHostName -o tsv)
         if poll_http "https://$host/healthz" 18 10; then
@@ -63,6 +64,7 @@ for ((i = 0; i < n; i++)); do
         if [[ $SWAP == 1 ]]; then
           az webapp deployment slot swap -g "$rg" -n "$name" --slot "$slot" --target-slot production --only-show-errors
           log INFO "swapped $slot -> production (rollback: run the same swap again)"
+          progress "swapped $app"
         fi
       fi
       ;;
@@ -70,11 +72,11 @@ for ((i = 0; i < n; i++)); do
       fetch_package "$url" "$sha" "$pkg"
       az functionapp deployment config show -g "$rg" -n "$name" --query "storage.value" -o tsv >/dev/null \
         || die "Flex deployment storage not configured on $name"
-      az functionapp deployment source config-zip -g "$rg" -n "$name" --src "$pkg" --only-show-errors >/dev/null
+      with_retry az functionapp deployment source config-zip -g "$rg" -n "$name" --src "$pkg" --only-show-errors >/dev/null
       ;;
     logicapp-zip)
       fetch_package "$url" "$sha" "$pkg"
-      az logicapp deployment source config-zip -g "$rg" -n "$name" --src "$pkg" --only-show-errors >/dev/null
+      with_retry az logicapp deployment source config-zip -g "$rg" -n "$name" --src "$pkg" --only-show-errors >/dev/null
       ;;
     swa)
       "$HERE/deploy-swa.sh" --contract "$SRC"
@@ -96,5 +98,6 @@ for ((i = 0; i < n; i++)); do
       ;;
     *) die "unknown deploy step kind $kind" ;;
   esac
+  progress "deployed $app"
   log INFO "step $kind $app done"
 done

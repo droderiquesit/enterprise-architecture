@@ -26,6 +26,7 @@ from .select import (
     auto_mode,
     select_all,
     select_deploy,
+    select_heal,
     select_manual,
     select_pr,
     select_promote,
@@ -130,13 +131,16 @@ def run_select(args, mode: str, repo: Path) -> dict:
         return select_all(repo, args.env, mode, store=store, **common)
     if mode == "retire":
         return select_retire(repo, args.env, store, **common)
+    if mode == "heal":
+        return select_heal(repo, args.env, store, contracts_store=contracts, **common)
     raise SelectionError(f"unknown mode {mode}")
 
 
 def cmd_select(args) -> int:
     mode = args.mode
     if mode == "auto":
-        mode = auto_mode(args.build_reason or os.environ.get("BUILD_REASON"))
+        mode = auto_mode(args.build_reason or os.environ.get("BUILD_REASON"),
+                         args.schedule_name or os.environ.get("BUILD_CRONSCHEDULE_DISPLAYNAME"))
     repo = Path(args.repo)
     try:
         doc = run_select(args, mode, repo)
@@ -260,6 +264,7 @@ def main(argv=None) -> int:
     s.add_argument("--records-url", help="https://<acct>.blob.core.windows.net/deployments")
     s.add_argument("--artifact-digests", help="JSON {artifact-id: digest} or directory of build-metadata.json")
     s.add_argument("--build-reason", help="Build.Reason (auto mode); defaults to $BUILD_REASON")
+    s.add_argument("--schedule-name", help="Build.CronSchedule.DisplayName (auto mode: 'heal' schedules -> heal mode)")
     s.add_argument("--worktree", action="store_true")
     s.add_argument("--scope", choices=("all", "platform", "applications"), default="all",
                    help="restrict to one pipeline (azure-pipelines.yml = platform, azure-pipelines.applications.yml = applications)")

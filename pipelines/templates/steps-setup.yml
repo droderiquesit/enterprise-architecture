@@ -1,10 +1,23 @@
 # Common job setup (steps template): Python tool requirements and pinned CLIs (checksum-verified by
 # install-tools.sh) in ONE step. Network-bound and idempotent, therefore the only retried kind of step.
+# Cache@2 keeps the downloaded tool archives (keyed by the pinned versions): install-tools.sh falls back to the cached
+# copy when a download fails, and verifies the checksum either way.
 parameters:
   - name: tools
     type: string
     default: ''          # e.g. 'terraform' or 'gitleaks trivy checkov'
 steps:
+  - ${{ if ne(parameters.tools, '') }}:
+    - task: Cache@2
+      displayName: Tool download cache
+      continueOnError: true
+      inputs:
+        key: 'tools | "$(Agent.OS)" | "${{ parameters.tools }}" | pipelines/variables/tools.yml | versions.yaml'
+        restoreKeys: |
+          tools | "$(Agent.OS)" | "${{ parameters.tools }}"
+        path: $(Pipeline.Workspace)/.tool-cache
   - script: bash pipelines/scripts/setup-agent.sh ${{ parameters.tools }}
     displayName: Setup tools ${{ parameters.tools }}
     retryCountOnTaskFailure: 2
+    env:
+      TOOL_CACHE_DIR: $(Pipeline.Workspace)/.tool-cache

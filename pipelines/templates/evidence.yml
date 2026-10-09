@@ -38,6 +38,7 @@ jobs:
             smoke-*/**
             telemetry-*/**
             artifact-*/**
+            health-*/**
           path: $(Pipeline.Workspace)/run
       - template: steps-setup.yml
       - task: AzureCLI@2
@@ -52,14 +53,31 @@ jobs:
             python3 tools/report/report.py deployment --run-dir "$(Pipeline.Workspace)/run" \
               --records "$RECORDS_URL" --env "$LAB_ENV" --run-id "$(Build.BuildId)" --commit "$(Build.SourceVersion)" \
               --out "$out/deployment-report.md" --evidence "$out/evidence.json"
+            # pipeline self-monitoring: retries, heals, rollbacks, quarantines, lock recoveries (tools/report/ci_metrics.py)
+            python3 tools/report/ci_metrics.py summarize --run-dir "$(Pipeline.Workspace)/run" --env "$LAB_ENV" \
+              --run-id "$(Build.BuildId)" --records-url "$RECORDS_URL" --scope "${{ parameters.settings.scope }}" \
+              --out "$out/health.json" --markdown "$out/health.md" \
+              || echo "##vso[task.logissue type=warning]pipeline health summary failed"
+            if [[ -f "$out/health.md" ]]; then echo "##vso[task.uploadsummary]$out/health.md"; fi
             if [[ "${{ parameters.dryRun }}" != "True" ]]; then
               # needs Storage Blob Data Contributor on `evidence` for the plan identity (pipelines/README.md)
-              for f in evidence.json deployment-report.md; do
+              for f in evidence.json deployment-report.md health.json; do
                 python3 tools/deploy/storecp.py put --store "$EVIDENCE_URL" \
                   --key "$LAB_ENV/runs/$(Build.BuildId)/$f" --file "$out/$f" \
                   || echo "##vso[task.logissue type=warning]evidence upload of $f failed; pipeline artifact still holds it"
               done
             fi
+      - script: |
+          set -uo pipefail
+          [[ -f "$(Build.ArtifactStagingDirectory)/evidence/health.json" ]] || exit 0
+          python3 tools/secrets/fetch.py exec --env "$LAB_ENV" --map 'DD_API_KEY=datadog-api-key?' -- \
+          python3 tools/report/ci_metrics.py send --health "$(Build.ArtifactStagingDirectory)/evidence/health.json" \
+            --site "$DD_SITE" --pipeline "$(Build.DefinitionName)" \
+            || echo "##vso[task.logissue type=warning]pipeline health not sent to Datadog"
+        displayName: Send pipeline health (Datadog event + pipeline.heal.* metrics)
+        condition: not(canceled())
+        env:
+          DD_SITE: ${{ parameters.settings.datadogSite }}
       - ${{ if eq(parameters.dryRun, false) }}:
         - template: deployment-marker.yml
           parameters:

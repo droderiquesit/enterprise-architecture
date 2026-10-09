@@ -16,6 +16,7 @@ jobs:
     variables:
       LAB_ENV: ${{ parameters.environment }}
       CONTRACTS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/contracts
+      RECORDS_URL: https://${{ parameters.settings.stateStorageAccount }}.blob.core.windows.net/deployments
     steps:
       - checkout: self
         fetchDepth: 1
@@ -40,9 +41,17 @@ jobs:
           inlineScript: |
             set -euo pipefail
             mkdir -p "$(Build.ArtifactStagingDirectory)/smoke"
+            set +e
             python3 tools/smoke/smoke.py --env "$LAB_ENV" --contracts "$CONTRACTS_URL" \
               --selection "$(Pipeline.Workspace)/selection/selection.json" \
               --out "$(Build.ArtifactStagingDirectory)/smoke/smoke-results.json" --timeout 600
+            rc=$?
+            set -e
+            # verification outcome on the records: heal runs re-run components whose verification failed
+            python3 tools/deploy/record.py verify --env "$LAB_ENV" --component '*' --store "$RECORDS_URL" \
+              --smoke-results "$(Build.ArtifactStagingDirectory)/smoke/smoke-results.json" \
+              || echo "##vso[task.logissue type=warning]verification not recorded (plan identity lacks write on deployments?)"
+            exit $rc
       - task: PublishPipelineArtifact@1
         displayName: Publish smoke results
         condition: not(canceled())

@@ -28,6 +28,12 @@ schedules:
       include:
         - main
     always: true                # drift is about the cloud, not the code
+  - cron: "37 */2 * * *"         # self-healing: auto -> heal (displayName contains 'heal'; Build.CronSchedule.DisplayName)
+    displayName: Platform heal (every 2 h, dev)
+    branches:
+      include:
+        - main
+    always: true                # failures are in records, not in code changes; heal selects only failed components
 
 lockBehavior: sequential        # queue (do not cancel) runs waiting for exclusive locks
 
@@ -45,12 +51,13 @@ parameters:
     type: string
     default: auto
     values:
-      - auto          # PR -> pr, schedule -> drift, otherwise deploy (fingerprints vs records)
+      - auto          # PR -> pr, 'heal' schedule -> heal, other schedule -> drift, otherwise deploy
       - manual        # only `components` (+ upstream planned without apply)
       - reconcile     # plan every enabled component, apply where the plan has changes
       - drift         # plan every enabled component, apply nothing, report drift
       - retire        # only scheduled retirements (environments/<env>/retirements.yaml)
       - promote       # test/prod: deploy what the source environment already runs (same code, same digests)
+      - heal          # re-run only failed / partial / canceled components and failed verifications (never held ones)
   - name: sourceEnvironment
     displayName: Promote from (auto = environments/promotion.yaml)
     type: string

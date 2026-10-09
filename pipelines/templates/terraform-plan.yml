@@ -59,6 +59,17 @@ jobs:
             bash pipelines/scripts/tf-prepare.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
             bash pipelines/scripts/tf-init.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
             bash pipelines/scripts/tf-plan.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
+      - task: AzureCLI@2
+        displayName: Record failed plan (circuit breaker)
+        condition: failed()
+        inputs:
+          azureSubscription: ${{ parameters.settings.planServiceConnection }}
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: bash pipelines/scripts/tf-record-failure.sh "${{ parameters.component }}" "$(Agent.JobStatus)" plan
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+          DD_SITE: ${{ parameters.settings.datadogSite }}
       - task: PublishPipelineArtifact@1
         displayName: Publish plan summary + manifest (no plan file)
         condition: not(canceled())
