@@ -43,6 +43,10 @@ def test_rules_file_is_well_formed():
 def test_policy_from_registry_and_env(monkeypatch, tmp_path):
     p = retry.policy_for(None)
     assert (p.attempts, p.max_minutes) == (3, 20)
+    # per-component registry budget (catalog/components.yaml `retry`)
+    p = retry.policy_for("platform-aro")
+    assert (p.attempts, p.max_minutes) == (2, 90) and p.base_seconds == 15
+    assert (retry.policy_for("foundation-network").attempts, retry.policy_for("no-such").attempts) == (3, 3)
     monkeypatch.setenv("RETRY_ATTEMPTS", "5")
     assert retry.policy_for(None).attempts == 5
 
