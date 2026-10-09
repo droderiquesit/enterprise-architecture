@@ -455,5 +455,5 @@ run "traffic_split_requires_previous_revision" {
   variables {
     settings = { traffic = { "hello-bff" = { latest_weight = 50 } } }
   }
-  expect_failures = [module.app["hello-bff"].var.revisions]
+  expect_failures = [var.settings]
 }

@@ -1,0 +1,12 @@
+# Build context is applications/ ; only the shared Python package and this service are needed.
+**
+!services/worker/deploy/**
+!shared/python/hello_common/**
+!services/worker/**
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/tests
+**/*.egg-info
+**/build

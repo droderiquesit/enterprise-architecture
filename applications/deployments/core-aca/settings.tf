@@ -47,6 +47,10 @@ variable "settings" {
     error_message = "Every app needs min_replicas <= max_replicas <= replica_ceiling."
   }
   validation {
+    condition     = alltrue([for t in values(var.settings.traffic) : t.latest_weight == 100 || t.previous_revision_suffix != null]) && contains(["Single", "Multiple"], var.settings.revision_mode)
+    error_message = "traffic.<svc>.latest_weight < 100 requires previous_revision_suffix; revision_mode is Single or Multiple."
+  }
+  validation {
     condition     = contains(["none", "entra"], var.settings.auth_mode)
     error_message = "auth_mode must be none or entra."
   }

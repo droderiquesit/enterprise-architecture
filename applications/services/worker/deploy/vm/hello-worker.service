@@ -1,0 +1,43 @@
+# systemd unit for hello-worker on Linux VMs / VMSS (installed by install.sh).
+# Settings come from /etc/hello-worker/hello-worker.env (written by the deployment, mode 0640).
+# Logs: JSON lines to journald (stdout) AND /var/log/hello-worker/worker.log (LOG_FILE_PATH) which the
+# Fluent Bit service (observability layer) tails; the Datadog Agent receives OTLP on localhost:4317.
+[Unit]
+Description=Enterprise Hello notification worker (hello-worker)
+Documentation=file:///opt/hello-worker/current/README.md
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=exec
+User=hello-worker
+Group=hello-worker
+WorkingDirectory=/opt/hello-worker/current
+Environment=PYTHONUNBUFFERED=1 PORT=8081 LOG_FILE_PATH=/var/log/hello-worker/worker.log OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+EnvironmentFile=-/etc/hello-worker/hello-worker.env
+ExecStart=/opt/hello-worker/current/venv/bin/python -m hello_worker
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=40
+# hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/log/hello-worker
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
