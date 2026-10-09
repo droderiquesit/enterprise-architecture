@@ -14,7 +14,6 @@ import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Dict, List, Optional
 
 BOT_ID = "99999999-9999-9999-9999-999999999999"
 AUTHOR_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -33,22 +32,41 @@ def git(repo: Path, *args: str) -> str:
 class FakeAdo:
     def __init__(self, repo: Path):
         self.repo = Path(repo)
-        self.prs: Dict[int, dict] = {}
-        self.calls: List[str] = []
-        self.token_seen: Optional[str] = None
+        self.prs: dict[int, dict] = {}
+        self.calls: list[str] = []
+        self.token_seen: str | None = None
         self._lock = threading.Lock()
         self._thread_id = 100
 
     # -------------------------------------------------------------- state
-    def add_pr(self, pr_id: int, base_ref: str, head_ref: str, target: str = "refs/heads/main", author: str = "dev@example.com",
-               author_id: str = AUTHOR_ID, build: str = "approved") -> dict:
-        pr = {"id": pr_id, "target": target, "author": author, "author_id": author_id, "iterations": [], "threads": [],
-              "statuses": [], "reviewers": [], "build": build, "status": "active", "target_head": git(self.repo, "rev-parse", base_ref).strip()}
+    def add_pr(  # noqa: PLR0917
+        self,
+        pr_id: int,
+        base_ref: str,
+        head_ref: str,
+        target: str = "refs/heads/main",
+        author: str = "dev@example.com",
+        author_id: str = AUTHOR_ID,
+        build: str = "approved",
+    ) -> dict:
+        pr = {
+            "id": pr_id,
+            "target": target,
+            "author": author,
+            "author_id": author_id,
+            "iterations": [],
+            "threads": [],
+            "statuses": [],
+            "reviewers": [],
+            "build": build,
+            "status": "active",
+            "target_head": git(self.repo, "rev-parse", base_ref).strip(),
+        }
         self.prs[pr_id] = pr
         self.push(pr_id, base_ref, head_ref)
         return pr
 
-    def push(self, pr_id: int, base_ref: str, head_ref: str, target_head: Optional[str] = None) -> int:
+    def push(self, pr_id: int, base_ref: str, head_ref: str, target_head: str | None = None) -> int:
         """New iteration (a push to the source branch). Votes are reset as branch policy would do."""
         pr = self.prs[pr_id]
         base = git(self.repo, "merge-base", base_ref, head_ref).strip()
@@ -69,7 +87,7 @@ class FakeAdo:
             pr["reviewers"].append(r)
         r["vote"] = vote
 
-    def changes(self, base: str, head: str) -> List[dict]:
+    def changes(self, base: str, head: str) -> list[dict]:
         out = git(self.repo, "diff", "--name-status", "-z", "-M", f"{base}..{head}")
         toks = [t for t in out.split("\0")]
         entries, i, tid = [], 0, 1
@@ -81,8 +99,7 @@ class FakeAdo:
             if st[0] in "RC":
                 old, new = toks[i + 1], toks[i + 2]
                 i += 3
-                entries.append({"changeTrackingId": tid, "changeId": tid, "item": {"path": "/" + new}, "changeType": "rename, edit",
-                                "originalPath": "/" + old})
+                entries.append({"changeTrackingId": tid, "changeId": tid, "item": {"path": "/" + new}, "changeType": "rename, edit", "originalPath": "/" + old})
             else:
                 path = toks[i + 1]
                 i += 2
@@ -91,7 +108,7 @@ class FakeAdo:
             tid += 1
         return entries
 
-    def item(self, path: str, commit: str) -> Optional[dict]:
+    def item(self, path: str, commit: str) -> dict | None:
         try:
             data = subprocess.run(["git", "-C", str(self.repo), "show", f"{commit}:{path.lstrip('/')}"], check=True, capture_output=True).stdout
         except subprocess.CalledProcessError:
@@ -153,7 +170,7 @@ class FakeAdo:
         self.server.shutdown()
 
     # -------------------------------------------------------------- routes
-    def route(self, method: str, path: str, q: dict, body):  # noqa: PLR0911, PLR0912
+    def route(self, method: str, path: str, q: dict, body):
         p = urllib.parse.unquote(path)
         if p == f"/{ORG}/_apis/connectionData":
             return 200, {"authenticatedUser": {"id": BOT_ID, "providerDisplayName": "eh-id-pr-reviewer"}}
@@ -162,10 +179,23 @@ class FakeAdo:
             pr = self.prs.get(int(m.group(1))) if m else None
             if not pr:
                 return 200, {"value": [], "count": 0}
-            return 200, {"count": 1, "value": [{
-                "evaluationId": "e1", "status": pr["build"], "context": {"buildId": 42, "isExpired": False},
-                "configuration": {"id": 7, "isEnabled": True, "isBlocking": True, "isDeleted": False,
-                                  "type": {"id": BUILD_TYPE, "displayName": "Build"}}}]}
+            return 200, {
+                "count": 1,
+                "value": [
+                    {
+                        "evaluationId": "e1",
+                        "status": pr["build"],
+                        "context": {"buildId": 42, "isExpired": False},
+                        "configuration": {
+                            "id": 7,
+                            "isEnabled": True,
+                            "isBlocking": True,
+                            "isDeleted": False,
+                            "type": {"id": BUILD_TYPE, "displayName": "Build"},
+                        },
+                    }
+                ],
+            }
         m = re.match(rf"^/{ORG}/{PROJECT}/_apis/git/repositories/([^/]+)/items$", p)
         if m and method == "GET":
             item = self.item(q.get("path", ""), q.get("versionDescriptor.version", ""))
@@ -179,29 +209,50 @@ class FakeAdo:
         rest = m.group(3) or ""
         last = pr["iterations"][-1]
         if rest == "" and method == "GET":
-            return 200, {"pullRequestId": pr["id"], "status": pr["status"], "title": f"PR {pr['id']}",
-                         "repository": {"id": REPO_ID, "project": {"id": PROJECT_ID}}, "targetRefName": pr["target"],
-                         "sourceRefName": "refs/heads/feature", "createdBy": {"id": pr["author_id"], "uniqueName": pr["author"]},
-                         "lastMergeSourceCommit": {"commitId": last["head"]}}
+            return 200, {
+                "pullRequestId": pr["id"],
+                "status": pr["status"],
+                "title": f"PR {pr['id']}",
+                "repository": {"id": REPO_ID, "project": {"id": PROJECT_ID}},
+                "targetRefName": pr["target"],
+                "sourceRefName": "refs/heads/feature",
+                "createdBy": {"id": pr["author_id"], "uniqueName": pr["author"]},
+                "lastMergeSourceCommit": {"commitId": last["head"]},
+            }
         if rest == "/iterations":
-            return 200, {"count": len(pr["iterations"]), "value": [
-                {"id": it["id"], "sourceRefCommit": {"commitId": it["head"]}, "targetRefCommit": {"commitId": pr["target_head"]},
-                 "commonRefCommit": {"commitId": it["base"]}} for it in pr["iterations"]]}
+            return 200, {
+                "count": len(pr["iterations"]),
+                "value": [
+                    {
+                        "id": it["id"],
+                        "sourceRefCommit": {"commitId": it["head"]},
+                        "targetRefCommit": {"commitId": pr["target_head"]},
+                        "commonRefCommit": {"commitId": it["base"]},
+                    }
+                    for it in pr["iterations"]
+                ],
+            }
         mi = re.match(r"^/iterations/(\d+)/changes$", rest)
         if mi:
             it = pr["iterations"][int(mi.group(1)) - 1]
             entries = self.changes(it["base"], it["head"])
             skip, top = int(q.get("$skip", 0)), int(q.get("$top", 100))
-            page = entries[skip: skip + top]
+            page = entries[skip : skip + top]
             nxt = skip + top if skip + top < len(entries) else 0
             return 200, {"changeEntries": page, "nextSkip": nxt, "nextTop": top if nxt else 0}
         if rest == "/threads" and method == "GET":
             return 200, {"count": len(pr["threads"]), "value": pr["threads"]}
         if rest == "/threads" and method == "POST":
             self._thread_id += 1
-            t = {"id": self._thread_id, "status": body.get("status", "active"), "threadContext": body.get("threadContext"),
-                 "pullRequestThreadContext": body.get("pullRequestThreadContext"), "isDeleted": False, "properties": {},
-                 "comments": [dict(c, id=i + 1, author={"id": BOT_ID}, commentType="text") for i, c in enumerate(body["comments"])]}
+            t = {
+                "id": self._thread_id,
+                "status": body.get("status", "active"),
+                "threadContext": body.get("threadContext"),
+                "pullRequestThreadContext": body.get("pullRequestThreadContext"),
+                "isDeleted": False,
+                "properties": {},
+                "comments": [dict(c, id=i + 1, author={"id": BOT_ID}, commentType="text") for i, c in enumerate(body["comments"])],
+            }
             pr["threads"].append(t)
             return 200, t
         mt = re.match(r"^/threads/(\d+)$", rest)
@@ -230,11 +281,11 @@ class FakeAdo:
         return 404, {"message": f"unhandled {method} {rest}"}
 
     # -------------------------------------------------------------- helpers for assertions
-    def bot_vote(self, pr_id: int) -> Optional[int]:
+    def bot_vote(self, pr_id: int) -> int | None:
         r = next((x for x in self.prs[pr_id]["reviewers"] if x["id"] == BOT_ID), None)
         return None if r is None else r["vote"]
 
-    def latest_status(self, pr_id: int) -> Optional[dict]:
+    def latest_status(self, pr_id: int) -> dict | None:
         pr = self.prs[pr_id]
         it = pr["iterations"][-1]["id"]
         ours = [s for s in pr["statuses"] if s.get("iterationId") == it]

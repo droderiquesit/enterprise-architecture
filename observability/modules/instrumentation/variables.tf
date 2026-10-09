@@ -190,3 +190,50 @@ variable "extra_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "fleet_policy" {
+  description = "Decoded fleet policy (schemas/fleet-policy.v1.schema.json); null = the package default config/fleet-policy.yaml."
+  type        = any
+  default     = null
+}
+
+variable "apm" {
+  description = "Per-workload APM overrides (fleet policy apm section shape, e.g. { mode = \"otel\" } or { sample_rate = 0.5 }). Null = policy."
+  type        = any
+  default     = null
+}
+
+variable "profiling" {
+  description = "Per-workload Continuous Profiler overrides (fleet policy profiling section shape, e.g. { enabled = false } or { dotnet = { lock = true } }). Null = policy."
+  type        = any
+  default     = null
+}
+
+variable "os_type" {
+  description = "linux | windows (App Service / Functions plan OS, VM OS). Decides tracer paths and the Windows OTel fallback on VMs."
+  type        = string
+  default     = "linux"
+  validation {
+    condition     = contains(["linux", "windows"], var.os_type)
+    error_message = "os_type must be linux or windows."
+  }
+}
+
+variable "dotnet_tracer_home" {
+  description = "Override DD_DOTNET_TRACER_HOME for apm.method agent_gateway / serverless_init (default /opt/datadog in containers, <wwwroot>/datadog for the Datadog.Trace.Bundle NuGet package on App Service / Functions)."
+  type        = string
+  default     = null
+}
+
+variable "serverless_init" {
+  description = "apm.managed_runtime_path = serverless_init (Container Apps only): sidecar image, sizing, Azure context and the NAME of the ACA secret holding the Datadog API key (owned by the application root; documented DSV exception)."
+  type = object({
+    image               = optional(string, "datadog/serverless-init:1.10.4")
+    cpu                 = optional(number, 0.25)
+    memory              = optional(string, "0.5Gi")
+    api_key_secret_name = optional(string, "dd-api-key")
+    subscription_id     = optional(string)
+    resource_group      = optional(string)
+  })
+  default = {}
+}

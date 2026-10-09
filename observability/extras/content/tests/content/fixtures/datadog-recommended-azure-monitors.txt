@@ -1,0 +1,95 @@
+# Datadog recommended monitor templates (integration | query), retrieved 2026-10-09 via the Datadog MCP get_monitor_templates(search="azure").
+# Used as evidence for tag names (subscription_id, resource_group, name, server_name, statuscodecategory).
+Azure IoT Edge | max(last_1h):avg:azure.iot_edge.edge_agent.available_disk_space_bytes{*} by {host} / avg:azure.iot_edge.edge_agent.total_disk_space_bytes{*} by {host}.rollup(max, 60) * 100 < 10
+Azure IoT Edge | avg(last_1h):anomalies(per_minute(avg:azure.iot_edge.edge_hub.operation_retry_total{*} by {host}), 'basic', 2, direction='above', alert_window='last_15m', interval=60, count_default_zero='true') >= 1
+Azure IoT Edge | avg(last_1h):anomalies(per_minute(avg:azure.iot_edge.edge_agent.unsuccessful_iothub_syncs_total{*} by {host}), 'basic', 2, direction='above', alert_window='last_15m', interval=60, count_default_zero='true') >= 1
+Azure IoT Edge | max(last_1h):avg:azure.iot_edge.edge_agent.used_memory_bytes{*} by {host} / avg:azure.iot_edge.edge_agent.total_memory_bytes{*} by {host}.rollup(max, 60) * 100 > 80
+crest_data_systems_microsoft_defender | logs("source:crest_data_systems_microsoft_defender @cds.ms_defender.service_name:cds.ms.365.defender.cloud_app_events @IsExternalUser:1 OR @IsAnonymousProxy:1").index("*").rollup("count").by("@AccountDisplayName,@Application").last("1h") > 0
+crest_data_systems_microsoft_defender | change(avg(last_30m),last_1d):avg:cds.ms.365.defender.current_score.current_score{*} < -10
+Azure | avg(last_15m):sum:azure.network_applicationgateways.unhealthy_host_count{*} by {name,resource_group,subscription_name} / (sum:azure.network_applicationgateways.unhealthy_host_count{*} by {name,resource_group,subscription_name} + sum:azure.network_applicationgateways.healthy_host_count{*} by {name,resource_group,subscription_name}) > 0.2
+Azure | avg(last_15m):avg:azure.network_applicationgateways.cpu_utilization{*} by {name,resource_group,subscription_name} > 95
+Azure | avg(last_4h):anomalies(sum:azure.network_applicationgateways.failed_requests{*} by {name,resource_group,subscription_name}.as_count(), 'agile', 2, direction='both', interval=60, alert_window='last_15m', timezone='utc', count_default_zero='true', seasonality='hourly') >= 0.95
+Azure | avg(last_4h):anomalies(sum:azure.network_applicationgateways.response_status{*} by {httpstatusgroup,name,resource_group,subscription_name}.as_count(), 'basic', 2, direction='both', interval=60, alert_window='last_15m', count_default_zero='true') >= 0.95
+Azure | avg(last_4h):anomalies(sum:azure.app_services.http3xx{*} by {name,resource_group,subscription_name}.as_count() + sum:azure.app_services.http4xx{*} by {name,resource_group,subscription_name}.as_count() + sum:azure.app_services.http5xx{*} by {name,resource_group,subscription_name}.as_count(), 'basic', 2, direction='both', interval=60, alert_window='last_15m', count_default_zero='true') >= 0.95
+Azure | avg(last_4h):anomalies(sum:azure.app_services.connections{*} by {name,resource_group,subscription_name}.as_count(), 'basic', 2, direction='both', interval=60, alert_window='last_15m', count_default_zero='true') >= 0.95
+Azure | avg(last_15m):avg:azure.web_serverfarms.cpu_percentage{*} by {name,resource_group,subscription_name} > 95
+Azure | avg(last_4h):anomalies(sum:azure.functions.http3xx{*} by {name,resource_group,subscription_name}.as_count() + sum:azure.functions.http4xx{*} by {name,resource_group,subscription_name}.as_count() + sum:azure.functions.http5xx{*} by {name,resource_group,subscription_name}.as_count(), 'basic', 2, direction='both', interval=60, alert_window='last_15m', count_default_zero='true') >= 0.95
+Azure | avg(last_15m):avg:azure.web_serverfarms.memory_percentage{*} by {name,resource_group,subscription_name} > 95
+Azure | avg(last_4h):anomalies(sum:azure.app_services.requests{*} by {name,resource_group,subscription_name}.as_count(), 'basic', 2, direction='both', interval=60, alert_window='last_15m', count_default_zero='true') >= 0.95
+Azure | avg(last_15m):avg:azure.app_services.response_time{*} by {name,resource_group,subscription_name} > 4
+Azure | events("tags:integration_error level:error source:azure").rollup("count").by("@event_object").last("15m") > 0
+Azure | min(last_30m):avg:azure.usage.remaining_api_calls{*} by {subscription_id,region,usage_name} <= 0
+Azure | avg(last_30m):avg:azure.usage.percentage{!usage_name:networkwatchers} by {subscription_id,usage_name,region} * 100 > 95
+Azure | events("source:azure_service_health status:warn").rollup("count").by("@aggregation_key").last("15m") > 0
+Azure | sum(last_15m):anomalies(sum:azure.sql_servers_databases.connection_failed{*} by {name,resource_group,subscription_id,server_name}.as_count() / (sum:azure.sql_servers_databases.connection_failed{*} by {name,resource_group,subscription_id,server_name}.as_count() + sum:azure.sql_servers_databases.connection_successful{*} by {name,resource_group,subscription_id,server_name}.as_count()), 'agile', 2, direction='both', interval=60, alert_window='last_15m', timezone='utc', count_default_zero='true', seasonality='hourly') >= 0.95
+Azure | sum(last_15m):anomalies(sum:azure.sql_servers_databases.deadlock{*} by {name,resource_group,subscription_id,server_name}.as_count(), 'agile', 2, direction='both', interval=60, alert_window='last_15m', seasonality='hourly', count_default_zero='true', timezone='utc') >= 0.95
+Azure | max(last_15m):sum:azure.sql_servers_databases.replication_links.count{!state:catch_up,!state:pending*} by {database_name,subscription_id,primary_server_name} >= 1
+Azure | avg(last_30m):avg:azure.sql_servers_databases.storage_percent{*} by {subscription_id,resource_group,name} > 95
+Azure | max(last_15m):avg:azure.vm.count{!status:running,!status:stopped_deallocated} by {host} > 1
+Azure AI Bot Service | sum(last_15m):( sum:azure.botservice_botservices.request_latency{*} by {subscription_id,resource_group,name}.as_count() / sum:azure.botservice_botservices.requests_traffic{*} by {subscription_id,resource_group,name}.as_count() ) > 3000
+Azure AI Bot Service | avg(last_15m):avg:azure.botservice_botservices_channels.request_latency{*} by {subscription_id,resource_group,name} > 3000
+Azure AI Bot Service | avg(last_15m):avg:azure.botservice_botservices_connections.request_latency{*} by {subscription_id,resource_group,name} > 3000
+Azure AI Foundry | avg(last_1h):avg:azure.cognitiveservices_accounts.availability_rate{*} < 80
+Azure AI Search | sum(last_5m):sum:azure.search_searchservices.throttled_search_queries_percentage{*} by {name} > 10
+Azure App Services | avg(last_2w):anomalies(avg:azure.app_services.response_time{*} by {name,resource_group,subscription_id,server_farm_id,plan_resource_group}, 'agile', 2, direction='above', interval=7200, alert_window='last_1w', count_default_zero='true', seasonality='weekly') >= 0.75
+Azure App Services | avg(last_1h):anomalies(sum:azure.app_services.http4xx{*} by {name,resource_group,subscription_id,subscription_name}.as_count() / sum:azure.app_services.requests{*} by {name,resource_group,subscription_id,subscription_name}.as_count(), 'agile', 2, direction='above', interval=60, alert_window='last_30m', seasonality='hourly', count_default_zero='true') >= 1
+Azure Functions | avg(last_30m):anomalies(avg:azure.functions.response_time{NOT plan_tier:workflow_standard} by {name,resource_group,subscription_id,subscription_name}, 'agile', 3, direction='above', interval=60, alert_window='last_30m', seasonality='hourly', count_default_zero='true') >= 1
+Azure Functions | sum(last_15m):(sum:azure.functions.http5xx{!plan_tier:workflow_standard} by {name,resource_group,subscription_id,subscription_name}.as_count() / sum:azure.functions.requests{!plan_tier:workflow_standard} by {name,resource_group,subscription_id,subscription_name}.as_count()) * 100 > 5
+Azure Machine Learning Services | avg(last_15m):avg:azure.machinelearningservices_workspaces_onlineendpoints.request_latency_p95{*} by {subscription_id,resource_group,name} > 3000
+Azure Machine Learning Services | avg(last_15m):avg:azure.machinelearningservices_workspaces.quota_utilization_percentage{*} by {subscription_id,resource_group,name} > 90
+Azure Machine Learning Services | sum(last_1h):sum:azure.machinelearningservices_workspaces.failed_runs{*} by {subscription_id,resource_group,name}.as_count() / ( sum:azure.machinelearningservices_workspaces.failed_runs{*} by {subscription_id,resource_group,name}.as_count() + sum:azure.machinelearningservices_workspaces.completed_runs{*} by {subscription_id,resource_group,name}.as_count() ) * 100 > 25
+Azure Managed Disks | min(last_4h):min:azure.compute_disks.disk_paid_burst_iops{*} by {subscription_id,resource_group,name} > 0
+Azure Managed Redis | avg(last_1h):( avg:azure.cache_redisenterprise.cachehits{*} by {subscription_id,resource_group,name} / ( avg:azure.cache_redisenterprise.cachehits{*} by {subscription_id,resource_group,name} + avg:azure.cache_redisenterprise.cachemisses{*} by {subscription_id,resource_group,name} ) ) * 100 < 80
+Azure Managed Redis | avg(last_1h):avg:azure.cache_redisenterprise.server_load{*} by {subscription_id,resource_group,name} > 90
+Azure NAT Gateway | avg(last_15m):avg:azure.network_natgateways.datapath_availability{*} by {subscription_id,resource_group,name} < 90
+Azure NAT Gateway | sum(last_15m):(sum:azure.network_natgateways.packet_drop_count{*} by {subscription_id,resource_group,name}.as_count() / sum:azure.network_natgateways.packet_count{*} by {subscription_id,resource_group,name}.as_count()) * 100 > 1
+Azure OpenAI | sum(last_1h):sum:azure.cognitiveservices_accounts.harmful_volume_detected{kind:openai} by {name,modelname,modeldeploymentname} > 0.1
+Azure OpenAI | avg(last_15m):anomalies(sum:azure.cognitiveservices_accounts.processed_inference_tokens{kind:openai} by {name}.as_count() + sum:azure.cognitiveservices_accounts.processed_prompt_tokens{kind:openai} by {name}.as_count() + sum:azure.cognitiveservices_accounts.generated_completion_tokens{kind:openai} by {name}.as_count(), 'basic', 2, direction='above', interval=60, alert_window='last_15m', count_default_zero='true') >= 1
+Power BI Embedded | avg(last_15m):avg:azure.powerbidedicated_capacities.cpu_metric{*} by {subscription_id,resource_group,name} > 90
+Azure Private Link | avg(last_15m):max:azure.network_privatelinkservices.pls_nat_ports_usage{*} by {subscription_id,resource_group,name} > 95
+Azure App Services | sum(last_15m):sum:azure.app_services.http5xx{*} by {name,resource_group,subscription_id,server_farm_id,plan_resource_group}.as_count() / sum:azure.app_services.requests{*} by {name,resource_group,subscription_id,server_farm_id,plan_resource_group}.as_count() * 100 > 5
+Azure App Services | avg(last_15m):avg:azure.web_serverfarms.cpu_percentage{*} by {name,resource_group,subscription_id,subscription_name} > 90
+Azure App Services | avg(last_15m):avg:azure.web_serverfarms.memory_percentage{*} by {name,resource_group,subscription_id,subscription_name} > 90
+Azure AppConfiguration | avg(last_15m):avg:azure.appconfiguration_configurationstores.http_incoming_request_duration{*} by {subscription_id,resource_group,name} > 1000
+Azure AppConfiguration | sum(last_15m):sum:azure.appconfiguration_configurationstores.throttled_http_request_count{*} by {subscription_id,resource_group,name}.as_count() / sum:azure.appconfiguration_configurationstores.http_incoming_request_count{*} by {subscription_id,resource_group,name}.as_count() * 100 > 5
+Azure Backup | sum(last_15m):sum:azure.recoveryservices_vaults.backup_health_event{!healthstatus:healthy} by {name,backupinstancename,backupinstanceurl,healthstatus}.as_count() >= 1
+Azure Backup Vault | avg(last_1h):sum:azure.dataprotection_backupvaults.backup_health_event{!healthstatus:healthy} by {backupinstancename} > 0
+Azure Bastion | avg(last_15m):avg:azure.network_bastionhosts.usage_user{*} by {subscription_id,resource_group,name,host} > 90
+Azure Bastion | avg(last_15m):( avg:azure.network_bastionhosts.used{*} by {subscription_id,resource_group,name,host} / avg:azure.network_bastionhosts.total{*} by {subscription_id,resource_group,name,host} ) * 100 > 90
+Azure Bastion | max(last_10m):avg:azure.network_bastionhosts.pingmesh{*} by {subscription_id,resource_group,name} < 1
+Azure Blob Storage | avg(last_15m):avg:azure.storage_storageaccounts_blobservices.success_e2_e_latency{*} by {subscription_id,resource_group,name} > 2000
+Azure CDN | avg(last_15m):avg:azure.cdn_profiles.percentage5_xx{*} by {subscription_id,resource_group,name} > 5
+Azure CDN | avg(last_15m):avg:azure.cdn_profiles.origin_health_percentage{*} by {subscription_id,resource_group,name} < 90
+Azure CDN | avg(last_15m):avg:azure.cdn_profiles.total_latency{*} by {subscription_id,resource_group,name} > 5000
+Azure Container Apps | avg(last_1h):anomalies(sum:azure.app_containerapps.requests{statuscodecategory:4xx} by {name,resource_group,subscription_id,subscription_name}.as_count() / sum:azure.app_containerapps.requests{*} by {name,resource_group,subscription_id,subscription_name}.as_count(), 'agile', 2, direction='above', interval=60, alert_window='last_30m', seasonality='hourly', count_default_zero='true') >= 1
+Azure Container Apps | avg(last_4h):anomalies(avg:azure.app_containerapps.restart_count{*} by {name,resource_group,subscription_id,subscription_name}, 'agile', 2, direction='above', interval=60, alert_window='last_15m', count_default_zero='true') >= 0.9
+Azure Container Apps | sum(last_15m):sum:azure.app_containerapps.requests{statuscodecategory:5xx} by {name,resource_group,subscription_id,subscription_name}.as_count() / sum:azure.app_containerapps.requests{*} by {name,resource_group,subscription_id,subscription_name}.as_count() * 100 > 5
+Azure Container Apps | avg(last_15m):avg:azure.app_containerapps.cpu_percentage{*} by {name,resource_group,subscription_id,subscription_name} > 90
+Azure Container Apps | avg(last_15m):avg:azure.app_containerapps.memory_percentage{*} by {name,resource_group,subscription_id,subscription_name} > 90
+Azure Container Apps | avg(last_15m):avg:azure.app_containerapps.response_time{*} by {name,resource_group,subscription_id,subscription_name} > 4000
+Azure Container Registry | avg(last_4h):anomalies(sum:azure.containerregistry_registries.run_duration{*} by {subscription_id,resource_group,name}.as_count(), 'agile', 2, direction='above', interval=60, alert_window='last_30m', seasonality='hourly', count_default_zero='true') >= 0.9
+Azure CosmosDB | avg(last_15m):max:azure.cosmosdb.normalized_ru_consumption{*} by {subscription_id,resource_group,name} > 95
+Azure CosmosDB | avg(last_15m):avg:azure.cosmosdb.server_side_latency_gateway{*} by {subscription_id,resource_group,name} > 50
+Azure CosmosDB | avg(last_1h):avg:azure.cosmosdb.service_availability{*} by {subscription_id,resource_group,name} < 100
+Azure DB for MySQL | avg(last_15m):avg:azure.dbformysql_flexibleservers.cpu_percent{*} by {subscription_id,resource_group,name} > 95
+Azure DB for MySQL | min(last_5m):avg:azure.dbformysql_flexibleservers.uptime{*} by {subscription_id,resource_group,name} < 60
+Azure DB for MySQL | avg(last_15m):avg:azure.dbformysql_flexibleservers.storage_percent{*} by {subscription_id,resource_group,name} > 90
+Azure DB for PostgreSQL | avg(last_1h):( avg:azure.dbforpostgresql_flexibleservers.active_connections{*} by {subscription_id,resource_group,name} / avg:azure.dbforpostgresql_flexibleservers.max_connections{*} by {subscription_id,resource_group,name} ) * 100 > 95
+Azure DB for PostgreSQL | avg(last_15m):avg:azure.dbforpostgresql_flexibleservers.cpu_percent{*} by {subscription_id,resource_group,name} > 95
+Azure DB for PostgreSQL | min(last_5m):avg:azure.dbforpostgresql_flexibleservers.is_db_alive{*} by {subscription_id,resource_group,name} < 1
+Azure DB for PostgreSQL | avg(last_15m):avg:azure.dbforpostgresql_flexibleservers.storage_percent{*} by {subscription_id,resource_group,name} > 90
+Azure DNS | avg(last_2h):max:azure.network_dnszones.record_set_capacity_utilization{*} by {subscription_id,resource_group,name} > 95
+Azure DNS | avg(last_2h):max:azure.network_privatednszones.record_set_capacity_utilization{*} by {subscription_id,resource_group,name} > 95
+Azure DNS | avg(last_2h):max:azure.network_privatednszones.virtual_network_link_capacity_utilization{*} by {subscription_id,resource_group,name} > 95
+Azure VM Scale Set | avg(last_15m):avg:azure.compute_virtualmachinescalesets.percentage_cpu{*} by {subscription_id,resource_group,vmname} > 90
+Azure VPN Gateway | change(avg(last_15m),last_1h):sum:azure.network_virtualnetworkgateways.bgp_peer_status{*} by {subscription_id,resource_group,name} <= -1
+Azure VPN Gateway | sum(last_15m):(sum:azure.network_virtualnetworkgateways.tunnel_egress_packet_drop_count{*} by {subscription_id,resource_group,name}.as_count() / sum:azure.network_virtualnetworkgateways.tunnel_egress_packets{*} by {subscription_id,resource_group,name}.as_count()) * 100 > 1
+Azure VPN Gateway | sum(last_15m):(sum:azure.network_virtualnetworkgateways.tunnel_ingress_packet_drop_count{*} by {subscription_id,resource_group,name}.as_count() / sum:azure.network_virtualnetworkgateways.tunnel_ingress_packets{*} by {subscription_id,resource_group,name}.as_count()) * 100 > 1
+Azure VPN Gateway | change(avg(last_15m),last_1h):sum:azure.network_vpngateways.bgp_peer_status{*} by {subscription_id,resource_group,name} <= -1
+Azure VPN Gateway | sum(last_15m):(sum:azure.network_vpngateways.tunnel_egress_packet_drop_count{*} by {subscription_id,resource_group,name}.as_count() / sum:azure.network_vpngateways.tunnel_egress_packets{*} by {subscription_id,resource_group,name}.as_count()) * 100 > 1
+Azure VPN Gateway | sum(last_15m):(sum:azure.network_vpngateways.tunnel_ingress_packet_drop_count{*} by {subscription_id,resource_group,name}.as_count() / sum:azure.network_vpngateways.tunnel_ingress_packets{*} by {subscription_id,resource_group,name}.as_count()) * 100 > 1
+Azure Site Recovery | max(last_15m):avg:azure.site_recovery.replication_health{!protected_item_health:normal} by {subscription_id,resource_group,vault_name,protected_item_name} >= 1
+Azure Site Recovery | avg(last_15m):avg:azure.site_recovery.rpo_age_seconds{*} by {subscription_id,resource_group,vault_name,protected_item_name} > 14400
+Azure SQL Database | avg(last_5m):avg:azure.sql_servers_databases.availability{*} by {subscription_id,resource_group,server_name,name} < 100
+Azure SQL Database | avg(last_15m):avg:azure.sql_servers_databases.cpu_percent{*} by {subscription_id,resource_group,server_name,name} > 90
+Azure SQL Database | avg(last_30m):avg:azure.sql_servers_databases.dtu_consumption_percent{*} by {subscription_id,resource_group,server_name,name} > 90

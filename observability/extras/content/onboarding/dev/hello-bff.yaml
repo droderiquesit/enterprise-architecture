@@ -1,0 +1,64 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-bff
+  display_name: hello-bff
+  team: web
+  owner: web@example.com
+  application: enterprise-hello
+  domain: storefront
+  tier: critical
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  description: Backend-for-frontend; public API entry point.
+  languages:
+  - dotnet
+  depends_on:
+  - service:hello-orders-api
+  - service:hello-catalog-api
+  - service:hello-inventory-api
+  contacts:
+  - name: web mailbox
+    type: email
+    contact: web@example.com
+spec:
+  architecture: aca
+  runtime: dotnet
+  telemetry:
+    profile: http-api
+  resources:
+  - id: ${contract:deploy-core-aca.apps.hello-bff.id}
+    type: Microsoft.App/containerApps
+    role: app
+    required: false
+  endpoints:
+  - name: api
+    url: ${contract:deploy-core-aca.apps.hello-bff.url}
+    visibility: public
+    health_path: /api/healthz
+    required: false
+  slos:
+  - name: availability
+    type: availability
+    target: 99.5
+    warning: 99.8
+    timeframe: 30d
+  - name: latency
+    type: latency
+    target: 99.0
+    timeframe: 30d
+    threshold_ms: 800
+  presence_ref: deploy-core-aca.apps.hello-bff.url
+  notifications:
+    default:
+    - team-web
+    critical:
+    - team-web
+    - oncall
+    warning:
+    - team-web
+  catalog:
+    component_of:
+    - system:enterprise-hello

@@ -1,0 +1,419 @@
+{
+  "architecture": "external",
+  "catalog": {
+    "component_of": [
+      "system:enterprise-hello"
+    ],
+    "enabled": true,
+    "lifecycle": "production",
+    "type": "custom"
+  },
+  "dashboards": {
+    "enabled": true,
+    "workflow_metric_prefix": null
+  },
+  "enabled": true,
+  "endpoints": [],
+  "env": "dev",
+  "generated_from": {
+    "layers": [
+      "global-defaults",
+      "profiles/azure-platform-logs",
+      "manifest"
+    ],
+    "manifest": "dev/azure-platform-logs.yaml",
+    "sha256": "1a76cbccdbd41a9043c792ebf989462d83706f5dc104f129e87636adef46535f"
+  },
+  "idle_behavior": {
+    "expected_quiet_hours": null,
+    "scale_to_zero": false
+  },
+  "metadata": {
+    "application": "enterprise-hello",
+    "contacts": [
+      {
+        "contact": "observability@example.com",
+        "name": "observability mailbox",
+        "type": "email"
+      }
+    ],
+    "depends_on": [],
+    "description": "Azure Activity Log, Key Vault / AKS audit and (optional) Entra ID logs of the lab subscription.",
+    "display_name": "Azure platform logs",
+    "domain": "observability",
+    "languages": [],
+    "owner": "observability@example.com",
+    "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md",
+    "team": "observability",
+    "tier": "high"
+  },
+  "monitors": {
+    "azlogs.activity_deletes": {
+      "evaluation_delay": 0,
+      "key": "azlogs.activity_deletes",
+      "message": "{{#is_alert}}**WARNING**: Azure resources were deleted in a protected resource group (Activity Log, Administrative category).{{/is_alert}}\n{{#is_warning}}**WARNING**: Azure resources were deleted in a protected resource group (Activity Log, Administrative category).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `azure-platform-logs` | env: `dev` | team: `observability` | owner: observability@example.com | tier: high\n\nTroubleshooting:\n1. Logs: source:azure* -azure_log_type:application env:dev azure_log_type:activity @category:Administrative @operationName:*DELETE* - group by @operationName and resource_group.\n2. Who: identity.claims (upn / appid) and callerIpAddress; correlationId groups the steps of one operation.\n3. Expected during a pipeline teardown/retire run: mute the monitor for the run window; otherwise treat as an incident.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-activity-deletes",
+      "name": "[dev] Azure Activity Log: successful deletes in protected resource groups",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-observability"
+        ],
+        "warning": [
+          "team-observability"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"source:azure* -azure_log_type:application env:dev azure_log_type:activity @category:Administrative @resultType:Success @operationName:(*\\/DELETE OR *\\/delete) resource_group:eh-rg-*\").index(\"*\").rollup(\"count\").by(\"resource_group\").last(\"15m\") > 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-activity-deletes",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:observability",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:azlogs.activity_deletes",
+        "service:azure-platform-logs",
+        "severity:warning",
+        "team:observability",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "log alert"
+    },
+    "azlogs.aks_exec": {
+      "evaluation_delay": 0,
+      "key": "azlogs.aks_exec",
+      "message": "{{#is_alert}}**WARNING**: Someone opened an interactive session into a pod (kube-audit-admin / kube-audit).{{/is_alert}}\n{{#is_warning}}**WARNING**: Someone opened an interactive session into a pod (kube-audit-admin / kube-audit).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `azure-platform-logs` | env: `dev` | team: `observability` | owner: observability@example.com | tier: high\n\nTroubleshooting:\n1. Logs: source:azure.containerservice @aks_audit.objectRef.subresource:exec - aks_audit.user.username and objectRef namespace/name.\n2. properties.log holds the full audit event (sourceIPs, userAgent, annotations authorization.k8s.io/reason).\n3. Not break-glass (docs/runbooks/break-glass.md) or not approved: revoke the user's cluster role binding.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#aks-exec",
+      "name": "[dev] AKS exec / port-forward / attach into a pod",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-observability"
+        ],
+        "warning": [
+          "team-observability"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"source:azure.containerservice @aks_audit.objectRef.subresource:(exec OR portforward OR attach) env:dev\").index(\"*\").rollup(\"count\").by(\"resource_name\").last(\"15m\") > 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#aks-exec",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:observability",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:azlogs.aks_exec",
+        "service:azure-platform-logs",
+        "severity:warning",
+        "team:observability",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "log alert"
+    },
+    "azlogs.diagnostic_settings_deleted": {
+      "evaluation_delay": 0,
+      "key": "azlogs.diagnostic_settings_deleted",
+      "message": "{{#is_alert}}**CRITICAL**: A diagnostic setting was deleted - logs of that resource no longer reach Datadog (defense-evasion pattern).{{/is_alert}}\n{{#is_warning}}**WARNING**: A diagnostic setting was deleted - logs of that resource no longer reach Datadog (defense-evasion pattern).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `azure-platform-logs` | env: `dev` | team: `observability` | owner: observability@example.com | tier: high\n\nTroubleshooting:\n1. Logs: @operationName:*DIAGNOSTICSETTINGS/DELETE* - resourceId names the resource that lost its export.\n2. If not done by the obs-diagnostics pipeline (retire/destroy), re-apply obs-diagnostics and investigate the caller.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-diagnostics-deleted",
+      "name": "[dev] Azure diagnostic setting deleted (log export disabled)",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-observability",
+          "oncall"
+        ],
+        "warning": [
+          "team-observability"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "logs(\"source:azure* -azure_log_type:application env:dev azure_log_type:activity @category:Administrative @resultType:Success @operationName:(MICROSOFT.INSIGHTS\\/DIAGNOSTICSETTINGS\\/DELETE OR microsoft.insights\\/diagnosticSettings\\/delete OR Microsoft.Insights\\/diagnosticSettings\\/delete)\").index(\"*\").rollup(\"count\").by(\"resource_group\").last(\"15m\") > 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-diagnostics-deleted",
+      "severity": "critical",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:observability",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:azlogs.diagnostic_settings_deleted",
+        "service:azure-platform-logs",
+        "severity:critical",
+        "team:observability",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "log alert"
+    },
+    "azlogs.keyvault_access_denied": {
+      "evaluation_delay": 0,
+      "key": "azlogs.keyvault_access_denied",
+      "message": "{{#is_alert}}**WARNING**: A burst of denied Key Vault requests (missing RBAC role / access policy, or someone probing secrets).{{/is_alert}}\n{{#is_warning}}**WARNING**: A burst of denied Key Vault requests (missing RBAC role / access policy, or someone probing secrets).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `azure-platform-logs` | env: `dev` | team: `observability` | owner: observability@example.com | tier: high\n\nTroubleshooting:\n1. Logs: source:azure.keyvault @properties.httpStatusCode:403 - identity.claim (appid / objectidentifier / xms_mirid) is the caller.\n2. A workload identity after a role change: re-apply its role assignment. An unknown caller: security incident.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#keyvault-access-denied",
+      "name": "[dev] Key Vault access denied (401/403) above 10 in 15m",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-observability"
+        ],
+        "warning": [
+          "team-observability"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"source:azure.keyvault @category:AuditEvent @properties.httpStatusCode:(401 OR 403) env:dev\").index(\"*\").rollup(\"count\").by(\"resource_name\").last(\"15m\") > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#keyvault-access-denied",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:observability",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:azlogs.keyvault_access_denied",
+        "service:azure-platform-logs",
+        "severity:warning",
+        "team:observability",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 10
+      },
+      "type": "log alert"
+    },
+    "azlogs.logs_missing": {
+      "evaluation_delay": 0,
+      "key": "azlogs.logs_missing",
+      "message": "{{#is_alert}}**WARNING**: No Azure platform / Activity Log record reached Datadog (diagnostic settings, Event Hubs or the aggregator Kafka input broken).{{/is_alert}}\n{{#is_warning}}**WARNING**: No Azure platform / Activity Log record reached Datadog (diagnostic settings, Event Hubs or the aggregator Kafka input broken).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `azure-platform-logs` | env: `dev` | team: `observability` | owner: observability@example.com | tier: high\n\nTroubleshooting:\n1. Check the telemetry pipeline canary first (aggregator alive?).\n2. Event Hubs metrics: incoming messages on platform-logs / activity-logs; consumer group fluent-bit lag.\n3. Aggregator logs: kafka input errors (SASL, connection string rotated?); re-apply obs-diagnostics if settings were deleted.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-logs-missing",
+      "name": "[dev] No Azure platform logs received in 2h",
+      "new_group_delay": 0,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-observability"
+        ],
+        "warning": [
+          "team-observability"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"source:azure* -azure_log_type:application env:dev\").index(\"*\").rollup(\"count\").last(\"2h\") < 1",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-logs-missing",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:observability",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:azlogs.logs_missing",
+        "service:azure-platform-logs",
+        "severity:warning",
+        "team:observability",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 1
+      },
+      "type": "log alert"
+    },
+    "azlogs.policy_deny_spike": {
+      "evaluation_delay": 0,
+      "key": "azlogs.policy_deny_spike",
+      "message": "{{#is_alert}}**WARNING**: Azure Policy is denying many requests (a deployment is fighting a policy assignment).{{/is_alert}}\n{{#is_warning}}**WARNING**: Azure Policy is denying many requests (a deployment is fighting a policy assignment).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `azure-platform-logs` | env: `dev` | team: `observability` | owner: observability@example.com | tier: high\n\nTroubleshooting:\n1. Logs: @category:Policy - properties.policies names the assignment and definition that denied the request.\n2. Correlate with the deployment pipeline run (correlationId); fix the template or request a policy exemption.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-policy-denies",
+      "name": "[dev] Azure Policy denies above 20 in 1h",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-observability"
+        ],
+        "warning": [
+          "team-observability"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"source:azure* -azure_log_type:application env:dev azure_log_type:activity @category:Policy @operationName:(MICROSOFT.AUTHORIZATION\\/POLICIES\\/DENY\\/ACTION OR Microsoft.Authorization\\/policies\\/deny\\/action)\").index(\"*\").rollup(\"count\").by(\"resource_group\").last(\"1h\") > 20",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-policy-denies",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:observability",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:azlogs.policy_deny_spike",
+        "service:azure-platform-logs",
+        "severity:warning",
+        "team:observability",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 20
+      },
+      "type": "log alert"
+    },
+    "azlogs.rbac_changes": {
+      "evaluation_delay": 0,
+      "key": "azlogs.rbac_changes",
+      "message": "{{#is_alert}}**WARNING**: A role assignment was created or removed (privilege change).{{/is_alert}}\n{{#is_warning}}**WARNING**: A role assignment was created or removed (privilege change).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `azure-platform-logs` | env: `dev` | team: `observability` | owner: observability@example.com | tier: high\n\nTroubleshooting:\n1. Logs: @operationName:*ROLEASSIGNMENTS* - properties.requestbody / responseBody hold principalId and roleDefinitionId.\n2. Confirm the change came from the deployment pipeline identity (identity.claims.appid) and a reviewed change.\n3. Unexpected: remove the assignment, rotate credentials of the acting principal, open a security incident.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-rbac-changes",
+      "name": "[dev] Azure RBAC role assignment created or deleted",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-observability"
+        ],
+        "warning": [
+          "team-observability"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "logs(\"source:azure* -azure_log_type:application env:dev azure_log_type:activity @category:Administrative @resultType:Success @operationName:(MICROSOFT.AUTHORIZATION\\/ROLEASSIGNMENTS\\/WRITE OR MICROSOFT.AUTHORIZATION\\/ROLEASSIGNMENTS\\/DELETE OR Microsoft.Authorization\\/roleAssignments\\/write OR Microsoft.Authorization\\/roleAssignments\\/delete)\").index(\"*\").rollup(\"count\").by(\"subscription_id\").last(\"15m\") > 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-rbac-changes",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:observability",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:azlogs.rbac_changes",
+        "service:azure-platform-logs",
+        "severity:warning",
+        "team:observability",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "log alert"
+    },
+    "azlogs.service_health": {
+      "evaluation_delay": 0,
+      "key": "azlogs.service_health",
+      "message": "{{#is_alert}}**WARNING**: Microsoft published a Service Health event (incident / action required / security) affecting this subscription and region.{{/is_alert}}\n{{#is_warning}}**WARNING**: Microsoft published a Service Health event (incident / action required / security) affecting this subscription and region.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `azure-platform-logs` | env: `dev` | team: `observability` | owner: observability@example.com | tier: high\n\nTroubleshooting:\n1. Logs: @category:ServiceHealth - properties.title, properties.impactedServices, properties.trackingId.\n2. Check Azure Service Health in the portal for the tracking id; correlate with application monitors before acting.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-service-health",
+      "name": "[dev] Azure Service Health incident for a region in use",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-observability"
+        ],
+        "warning": [
+          "team-observability"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "logs(\"source:azure* -azure_log_type:application env:dev azure_log_type:activity @category:ServiceHealth @properties.incidentType:(Incident OR ActionRequired OR Security) (@properties.region:Sweden\\ Central OR @properties.region:Global)\").index(\"*\").rollup(\"count\").by(\"@properties.trackingId\").last(\"30m\") > 0",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/azure-platform-logs.md#azure-service-health",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:observability",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:azlogs.service_health",
+        "service:azure-platform-logs",
+        "severity:warning",
+        "team:observability",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 0
+      },
+      "type": "log alert"
+    }
+  },
+  "notifications": {
+    "critical": [
+      "team-observability",
+      "oncall"
+    ],
+    "default": [
+      "team-observability"
+    ],
+    "warning": [
+      "team-observability"
+    ]
+  },
+  "package_version": "2.0.0",
+  "presence_ref": "obs-telemetry-transport.event_hub.namespace_id",
+  "resources": [],
+  "runtime": "other",
+  "schema": "rendered-service/v1",
+  "service": "azure-platform-logs",
+  "slos": [],
+  "synthetics_defaults": {
+    "min_failure_duration": 120,
+    "min_location_failed": 1,
+    "retry": {
+      "count": 1,
+      "interval": 300
+    }
+  },
+  "tags": [
+    "application:enterprise-hello",
+    "domain:observability",
+    "env:dev",
+    "managed_by:observability-package",
+    "service:azure-platform-logs",
+    "team:observability",
+    "tier:high"
+  ],
+  "telemetry": {
+    "dbm": {
+      "enabled": false
+    },
+    "logs": {
+      "route": "none"
+    },
+    "profile": "azure-platform-logs",
+    "rum": {
+      "enabled": false
+    },
+    "traces": {
+      "enabled": false,
+      "sample_rate": 1.0,
+      "server_operation": "http.server.request"
+    }
+  }
+}

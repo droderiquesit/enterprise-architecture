@@ -7,9 +7,9 @@ from pathlib import Path
 
 from conftest import REPO
 from fake_ado import BOT_ID, ORG, PROJECT, PROJECT_ID, REPO_ID, FakeAdo
-
 from pr_reviewer import handlers
 from pr_reviewer.settings import Settings
+
 from tools.review.ado import AdoClient
 from tools.review.webhook import ReplayCache
 
@@ -34,8 +34,16 @@ class BusyLease:
 
 
 def settings(**over):
-    env = {"ADO_ORGANIZATION": ORG, "ADO_PROJECT": PROJECT, "ADO_PROJECT_ID": PROJECT_ID, "ADO_REPOSITORY_IDS": REPO_ID,
-           "ADO_REVIEWER_ID": BOT_ID, "WEBHOOK_SECRET": SECRET, "ADO_AUTH": "static", "REVIEW_RECHECK_SECONDS": "60"}
+    env = {
+        "ADO_ORGANIZATION": ORG,
+        "ADO_PROJECT": PROJECT,
+        "ADO_PROJECT_ID": PROJECT_ID,
+        "ADO_REPOSITORY_IDS": REPO_ID,
+        "ADO_REVIEWER_ID": BOT_ID,
+        "WEBHOOK_SECRET": SECRET,
+        "ADO_AUTH": "static",
+        "REVIEW_RECHECK_SECONDS": "60",
+    }
     env.update(over)
     return Settings.from_env(env)
 
@@ -129,21 +137,38 @@ def test_queue_job_pending_build_is_rechecked_later(tmp_path):
     try:
         s = settings(ADO_BASE_URL=ado.url)
         q = MemQueue()
-        job = {"job": {"event_id": "e", "event_type": "git.pullrequest.created", "project_id": PROJECT_ID, "repository_id": REPO_ID,
-                       "pull_request_id": 1, "created": ""}, "attempt": 3}
+        job = {
+            "job": {
+                "event_id": "e",
+                "event_type": "git.pullrequest.created",
+                "project_id": PROJECT_ID,
+                "repository_id": REPO_ID,
+                "pull_request_id": 1,
+                "created": "",
+            },
+            "attempt": 3,
+        }
         out = handlers.process_message(json.dumps(job), s, q, client=AdoClient(ado.url, ORG, PROJECT, lambda: "t", max_attempts=1))
         assert out["status"] == "pending" and out["requeued"]
         assert q.sent[-1] == ({"job": job["job"], "attempt": 4}, 60)
         out2 = handlers.process_message(json.dumps(dict(job, attempt=30)), s, q, client=AdoClient(ado.url, ORG, PROJECT, lambda: "t", max_attempts=1))
-        assert not out2["requeued"]                  # bounded
+        assert not out2["requeued"]  # bounded
     finally:
         ado.stop()
 
 
 def test_queue_job_outside_allowlist_dropped_and_lock_contention_requeues():
     q, s = MemQueue(), settings()
-    bad = {"job": {"event_id": "e", "event_type": "x", "project_id": PROJECT_ID, "repository_id": "44444444-4444-4444-4444-444444444444",
-                   "pull_request_id": 1, "created": ""}}
+    bad = {
+        "job": {
+            "event_id": "e",
+            "event_type": "x",
+            "project_id": PROJECT_ID,
+            "repository_id": "44444444-4444-4444-4444-444444444444",
+            "pull_request_id": 1,
+            "created": "",
+        }
+    }
     assert handlers.process_message(json.dumps(bad), s, q, client=object())["state"] == "dropped"
     ok = {"job": dict(bad["job"], repository_id=REPO_ID), "attempt": 0}
     out = handlers.process_message(json.dumps(ok), s, q, lease=BusyLease(), client=object())

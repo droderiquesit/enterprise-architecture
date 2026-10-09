@@ -11,7 +11,7 @@ import fnmatch
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
 
@@ -20,7 +20,7 @@ from tools.changeset import globs
 POLICY_PATH = ".review/policy.yaml"
 SCHEMA_PATH = Path(__file__).with_name("policy.schema.json")
 
-DEFAULTS: Dict[str, Any] = {
+DEFAULTS: dict[str, Any] = {
     "owner_protected": [".review/**"],
     "decision": {
         "require_build_green": True,
@@ -31,15 +31,25 @@ DEFAULTS: Dict[str, Any] = {
         "max_files_for_auto_approve": 40,
     },
     "limits": {"max_changed_lines": 2000, "max_files": 150, "max_file_bytes": 512000, "max_inline_threads": 30},
-    "secrets": {"entropy_min_length": 32, "entropy_threshold_base64": 4.3, "entropy_threshold_hex": 3.2,
-                "fixture_paths": [], "skip_paths": []},
+    "secrets": {"entropy_min_length": 32, "entropy_threshold_base64": 4.3, "entropy_threshold_hex": 3.2, "fixture_paths": [], "skip_paths": []},
     "terraform": {"sensitive_resource_types": ["azurerm_role_assignment"], "security_attributes": []},
     "observability": {"manifest_schema": "", "prod_envs": ["prod"], "threshold_paths": []},
     "dependencies": {"allow_new_packages": False},
-    "ai": {"enabled": False, "model": "claude-opus-5-5", "api_key_env": "ANTHROPIC_API_KEY", "effort": "medium",
-           "max_input_chars": 120000, "max_file_chars": 20000, "max_output_tokens": 8000, "max_findings": 25,
-           "timeout_seconds": 120, "max_retries": 2, "server_fallbacks": True, "exclude_globs": [],
-           "blocking_severities": ["critical", "high"]},
+    "ai": {
+        "enabled": False,
+        "model": "claude-opus-5-5",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "effort": "medium",
+        "max_input_chars": 120000,
+        "max_file_chars": 20000,
+        "max_output_tokens": 8000,
+        "max_findings": 25,
+        "timeout_seconds": 120,
+        "max_retries": 2,
+        "server_fallbacks": True,
+        "exclude_globs": [],
+        "blocking_severities": ["critical", "high"],
+    },
 }
 
 
@@ -70,7 +80,7 @@ class Policy:
     def classes(self) -> list:
         return self.doc["classes"]
 
-    def class_def(self, name: str) -> Optional[dict]:
+    def class_def(self, name: str) -> dict | None:
         for c in self.classes:
             if c["name"] == name:
                 return c

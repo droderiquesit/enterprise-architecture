@@ -27,12 +27,12 @@ def body(name="git.pullrequest.created", **over):
 
 
 def call(raw, header=None, replay=None, now=NOW, secrets=(SECRET,)):
-    return validate(raw, basic() if header is None else header, username="eh-review", secrets=list(secrets), allow=ALLOW,
-                    replay=replay or ReplayCache(), now=now)
+    return validate(
+        raw, basic() if header is None else header, username="eh-review", secrets=list(secrets), allow=ALLOW, replay=replay or ReplayCache(), now=now
+    )
 
 
-@pytest.mark.parametrize("name", ["git.pullrequest.created", "git.pullrequest.updated", "git-pullrequest-comment-event",
-                                  "git.pullrequest.updated.minimal"])
+@pytest.mark.parametrize("name", ["git.pullrequest.created", "git.pullrequest.updated", "git-pullrequest-comment-event", "git.pullrequest.updated.minimal"])
 def test_valid_payloads(name):
     job = call(body(name))
     assert (job.repository_id, job.pull_request_id, job.project_id) == (REPO_ID, 7, PROJECT_ID)
@@ -57,7 +57,7 @@ def test_replay_rejected_by_age_and_by_event_id():
         call(body(), now=NOW + dt.timedelta(minutes=30))
     assert e.value.status == 401 and "replay" in e.value.reason
     with pytest.raises(WebhookRejected):
-        call(body(), now=NOW - dt.timedelta(minutes=10))     # from the future beyond skew
+        call(body(), now=NOW - dt.timedelta(minutes=10))  # from the future beyond skew
     cache = ReplayCache()
     job = call(body(), replay=cache)
     cache.add(job.event_id)
@@ -66,10 +66,15 @@ def test_replay_rejected_by_age_and_by_event_id():
     assert e.value.status == 409
 
 
-@pytest.mark.parametrize("over,status", [
-    ({"publisherId": "evil"}, 400), ({"eventType": "git.push"}, 400), ({"id": "not-a-guid"}, 400),
-    ({"resourceContainers": {"project": {"id": "00000000-0000-0000-0000-000000000000"}}}, 403),
-])
+@pytest.mark.parametrize(
+    "over,status",
+    [
+        ({"publisherId": "evil"}, 400),
+        ({"eventType": "git.push"}, 400),
+        ({"id": "not-a-guid"}, 400),
+        ({"resourceContainers": {"project": {"id": "00000000-0000-0000-0000-000000000000"}}}, 403),
+    ],
+)
 def test_payload_sanity(over, status):
     with pytest.raises(WebhookRejected) as e:
         call(body(**over))

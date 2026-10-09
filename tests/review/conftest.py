@@ -26,16 +26,17 @@ BASE_FILES = {
     "applications/services/worker/requirements.txt": "httpx==0.28.1\npydantic==2.14.0\nfastapi==0.143.0\n",
     "applications/services/worker/app.py": "def main():\n    return 1\n",
     "azure-pipelines.yml": "trigger: none\n",
-    "platform/shared/main.tf": ('resource "azurerm_storage_account" "st" {\n  name = "st"\n  public_network_access_enabled = false\n'
-                                '  lifecycle {\n    prevent_destroy = true\n  }\n}\n\nresource "azurerm_container_registry" "acr" {\n  name = "acr"\n}\n'),
+    "platform/shared/main.tf": (
+        'resource "azurerm_storage_account" "st" {\n  name = "st"\n  public_network_access_enabled = false\n'
+        '  lifecycle {\n    prevent_destroy = true\n  }\n}\n\nresource "azurerm_container_registry" "acr" {\n  name = "acr"\n}\n'
+    ),
 }
 
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com"}
 
 
 def git(repo: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True,
-                          env={**os.environ, **GIT_ENV}).stdout
+    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env={**os.environ, **GIT_ENV}).stdout
 
 
 class Repo:

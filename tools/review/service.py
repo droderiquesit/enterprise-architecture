@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from tools.changeset.registry import REGISTRY_PATH, REGISTRY_SCHEMA
 
@@ -30,24 +29,33 @@ log = logging.getLogger("eh.review.service")
 @dataclass
 class Outcome:
     pull_request_id: int
-    iteration: Optional[int]
-    state: str                    # published | unchanged | skipped | error
-    decision: Optional[str] = None
-    vote: Optional[int] = None
-    status: Optional[str] = None
-    requeue: bool = False         # build pending: re-check later
+    iteration: int | None
+    state: str  # published | unchanged | skipped | error
+    decision: str | None = None
+    vote: int | None = None
+    status: str | None = None
+    requeue: bool = False  # build pending: re-check later
     actions: tuple = ()
     detail: str = ""
-    result: Optional[dict] = None
+    result: dict | None = None
 
 
-def _fail_closed(client: AdoClient, ref: PrRef, iteration: int, genre: str, name: str, why: str) -> None:
-    client.request("POST", f"{ref.base}/statuses", {"state": "error", "description": why[:250],
-                                                     "context": {"genre": genre, "name": name}, "iterationId": iteration})
+def _fail_closed(client: AdoClient, ref: PrRef, iteration: int, genre: str, name: str, why: str) -> None:  # noqa: PLR0917
+    client.request(
+        "POST", f"{ref.base}/statuses", {"state": "error", "description": why[:250], "context": {"genre": genre, "name": name}, "iterationId": iteration}
+    )
 
 
-def process(client: AdoClient, project_id: str, repository_id: str, pull_request_id: int, bot_id: str,
-            env: Optional[dict] = None, ai_client=None, keep_result: bool = False) -> Outcome:
+def process(  # noqa: PLR0917
+    client: AdoClient,
+    project_id: str,
+    repository_id: str,
+    pull_request_id: int,
+    bot_id: str,
+    env: dict | None = None,
+    ai_client=None,
+    keep_result: bool = False,
+) -> Outcome:
     ref = PrRef(repository_id, pull_request_id)
     pr = AdoPr(client, ref)
     info = pr.pr()
@@ -80,19 +88,34 @@ def process(client: AdoClient, project_id: str, repository_id: str, pull_request
     reviewers = client.request("GET", f"{ref.base}/reviewers").get("value", [])
     approved = human_approved(reviewers, bot_id, created_by.get("id", ""))
     build = pr.build_status(project_id)
-    ctx = ReviewContext(author=created_by.get("uniqueName", ""), author_id=created_by.get("id", ""), bot_ids=[bot_id],
-                        target_branch=info.get("targetRefName", ""), build=build, head=head, base=merge_base,
-                        pr_id=pull_request_id, iteration=iteration, title=info.get("title", ""))
+    ctx = ReviewContext(
+        author=created_by.get("uniqueName", ""),
+        author_id=created_by.get("id", ""),
+        bot_ids=[bot_id],
+        target_branch=info.get("targetRefName", ""),
+        build=build,
+        head=head,
+        base=merge_base,
+        pr_id=pull_request_id,
+        iteration=iteration,
+        title=info.get("title", ""),
+    )
     changes = pr.file_changes(it)
     result = review(changes, policy, base, ctx, ai_reviewer=ai_from_policy(policy, env, ai_client), human_approved=approved)
 
     st = summary_thread(threads, bot_id)
     prev = render.parse_state(((st or {}).get("comments") or [{}])[0].get("content", "")) if st else {}
     d = result.decision
-    out = Outcome(pull_request_id, iteration, "unchanged", d.outcome, d.vote, d.status_state,
-                  requeue=(build.state in ("pending", "unknown") and policy["decision"]["require_build_green"]
-                           and d.outcome not in ("reject", "wait-for-author")),
-                  result=result.to_dict() if keep_result else None)
+    out = Outcome(
+        pull_request_id,
+        iteration,
+        "unchanged",
+        d.outcome,
+        d.vote,
+        d.status_state,
+        requeue=(build.state in ("pending", "unknown") and policy["decision"]["require_build_green"] and d.outcome not in ("reject", "wait-for-author")),
+        result=result.to_dict() if keep_result else None,
+    )
     if prev.get("inputs") == result.input_hash and prev.get("iteration") == str(iteration):
         log.info("review unchanged", extra={"pr": pull_request_id, "iteration": iteration, "outcome": d.outcome})
         # the vote/status may still need to follow (e.g. a human approval flips status) - publish is diff-based
@@ -102,6 +125,16 @@ def process(client: AdoClient, project_id: str, repository_id: str, pull_request
         raise AdoError(f"publish failed: {exc}", exc.status) from None
     out.actions = tuple(actions)
     out.state = "published" if actions else "unchanged"
-    log.info("review processed", extra={"pr": pull_request_id, "iteration": iteration, "outcome": d.outcome, "vote": d.vote,
-                                        "status": d.status_state, "actions": len(actions), "findings": len(result.findings)})
+    log.info(
+        "review processed",
+        extra={
+            "pr": pull_request_id,
+            "iteration": iteration,
+            "outcome": d.outcome,
+            "vote": d.vote,
+            "status": d.status_state,
+            "actions": len(actions),
+            "findings": len(result.findings),
+        },
+    )
     return out

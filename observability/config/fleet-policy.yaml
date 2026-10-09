@@ -1,0 +1,116 @@
+# Fleet collection policy of the observability package (schema: schemas/fleet-policy.v1.schema.json).
+#
+# One document decides, for every resource / workload type, HOW telemetry reaches Datadog: the log pipeline
+# (Datadog Observability Pipelines or Fluent Bit direct), the APM library (Datadog tracers or OpenTelemetry SDKs),
+# the Continuous Profiler, Data Streams Monitoring, DBM<->APM propagation, Agent fleet settings and RUM. The modules
+# read it through modules/fleet-policy (Terraform) and tools/tags/fleet_policy.py (Python); per-architecture and
+# per-environment overrides are merged in this order: defaults -> architectures.<arch> -> environments.<env> ->
+# the caller's per-workload overrides. The authoritative collection path per resource type is documented in
+# modules/README-transport.md and docs/guides/datadog-fleet-collection.md (source repository).
+apiVersion: observability/fleet-policy/v1
+kind: FleetPolicy
+metadata:
+  name: package-default
+  description: Datadog-native collection everywhere the Datadog Agent / tracers can run; Fluent Bit at the edge where they cannot.
+
+# Central log pipeline.
+#   observability_pipelines: every log source (Datadog Agents, Fluent Bit edge collectors, Azure Event Hubs) goes to
+#                            the Datadog Observability Pipelines Worker (parse, tag policy, redaction, dedupe, quotas)
+#                            and from there to Datadog Logs (+ optional Azure Storage archive).
+#   fluent_bit_direct:       2.x behaviour - Fluent Bit ships to the Datadog intake (aggregator for Event Hubs).
+log_pipeline: observability_pipelines
+
+logs:
+  # Where the Datadog Agent runs (AKS nodes, VMs/VMSS): agent = the Agent collects application logs and sends them to
+  # the OP Worker (Fluent Bit DaemonSet / host service not installed); fluent_bit = Fluent Bit collects (2.x).
+  # fluent_bit_direct implies fluent_bit.
+  node_collector: agent
+
+apm:
+  # datadog: Datadog tracing libraries (Single Step Instrumentation on AKS and Linux VMs; library in the image +
+  #          Datadog Agent APM gateway for Container Apps / ACI / App Service / Functions).
+  # otel:    OpenTelemetry SDKs -> OTLP -> node Agent / OTel gateway (2.x behaviour).
+  # none:    no traces.
+  mode: datadog
+  # Managed runtimes (no node Agent): agent_gateway = tracer -> the in-VNet Datadog Agent APM gateway of the
+  # telemetry transport (the API key stays in Delinea DSV); serverless_init = Datadog serverless-init sidecar
+  # (Container Apps only; needs DD_API_KEY as a platform secret - see the guide: not DSV-compliant, opt-in).
+  managed_runtime_path: agent_gateway
+  # null: sampling decided by the Agent (adaptive / remote configuration); 0..1: DD_TRACE_SAMPLE_RATE.
+  sample_rate: null
+  logs_injection: true
+  # full | service | disabled (applied only where the tracer + driver support it)
+  dbm_propagation: full
+  data_streams: true
+  # Datadog library majors for Single Step Instrumentation (language -> major version)
+  library_versions:
+    dotnet: "3"
+    python: "4"
+    js: "5"
+    java: "1"
+
+profiling:
+  enabled: true
+  dotnet:
+    cpu: true
+    walltime: true
+    exceptions: true
+    gc: true
+    lock: false
+    allocation: false   # preview; higher overhead
+    heap: false         # preview; higher overhead
+  python:
+    stack: true
+    lock: true
+    memory: true
+    heap: true
+    timeline: true
+  # Profiling with apm.mode = otel: unavailable (Datadog profiling needs a Datadog library) | python_preview
+  # (ddtrace profiler next to the OTel SDK, DD_PROFILING_PREVIEW_OTEL_CONTEXT_ENABLED - preview).
+  otel_mode: unavailable
+
+agent:
+  version: "7.84.2"
+  remote_configuration: true
+  # Fleet Automation remote Agent upgrades (DD_REMOTE_UPDATES on the installer). Off: versions are pinned by this policy.
+  remote_updates: false
+  process_collection: false
+  network_monitoring: false
+  universal_service_monitoring: false
+  # Optional managed upgrade window (modules/fleet-automation, datadog_fleet_schedule)
+  upgrade_schedule:
+    enabled: false
+    days_of_week: [Tue, Wed, Thu]
+    start: "02:00"
+    duration_minutes: 120
+    timezone: UTC
+    version_to_latest: 0
+
+op_worker:
+  version: "2.22.0"
+  min_replicas: 2
+  max_replicas: 6
+  cpu: 1
+  memory: 2Gi
+  disk_buffer_bytes: 1073741824   # per destination (persistent buffering on the worker data dir)
+
+rum:
+  session_sample_rate: 100
+  session_replay_sample_rate: 0
+  trace_sample_rate: 100
+  propagator_types: [datadog, tracecontext]
+  default_privacy_level: mask-user-input
+  track_user_interactions: true
+  track_resources: true
+  track_long_tasks: true
+
+# Per hosting architecture (aks | aca | aci | appservice | functions | logicapp | vm | vmss | swa).
+architectures:
+  functions:
+    profiling: {enabled: false}       # .NET profiler: Function Apps not supported; Python: preview only
+  logicapp:
+    apm: {mode: none}                 # workflow runtime; no tracer to configure
+    profiling: {enabled: false}
+
+# Per environment, e.g. prod: {apm: {sample_rate: 0.2}}.
+environments: {}

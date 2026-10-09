@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Callable, Optional, Protocol, Tuple
+from collections.abc import Callable
+from typing import Protocol
 
 from tools.review.ado import ADO_SCOPE, AdoClient, reviewer_id
 from tools.review.service import process
@@ -21,7 +22,7 @@ from .settings import Settings
 
 log = logging.getLogger("pr_reviewer")
 _replay = ReplayCache(ttl_seconds=3600)
-_reviewer_id: Optional[str] = None
+_reviewer_id: str | None = None
 
 
 class Queue(Protocol):
@@ -29,13 +30,13 @@ class Queue(Protocol):
 
 
 class Lease(Protocol):
-    def acquire(self, key: str) -> Optional[object]: ...
+    def acquire(self, key: str) -> object | None: ...
     def release(self, handle: object) -> None: ...
 
 
 # ------------------------------------------------------------------------------------------------ wiring
 def token_provider(settings: Settings) -> Callable[[], str]:
-    if settings.ado_auth == "static":            # local fake server / tests only
+    if settings.ado_auth == "static":  # local fake server / tests only
         tok = os.environ.get("ADO_STATIC_TOKEN", "")
         return lambda: tok
     from azure.identity import ManagedIdentityCredential
@@ -43,7 +44,7 @@ def token_provider(settings: Settings) -> Callable[[], str]:
     cred = ManagedIdentityCredential(client_id=settings.client_id) if settings.client_id else ManagedIdentityCredential()
 
     def get() -> str:
-        return cred.get_token(ADO_SCOPE).token   # azure-identity caches and refreshes the token
+        return cred.get_token(ADO_SCOPE).token  # azure-identity caches and refreshes the token
 
     return get
 
@@ -92,27 +93,33 @@ class BlobLease:
     def release(self, handle) -> None:
         try:
             handle.release()
-        except Exception:  # noqa: BLE001 - an expired lease is fine
+        except Exception:
             log.debug("lease release failed")
 
 
 # ------------------------------------------------------------------------------------------------ handlers
-def health() -> Tuple[int, dict]:
+def health() -> tuple[int, dict]:
     return 200, {"status": "ok"}
 
 
-def ready(settings: Settings) -> Tuple[int, dict]:
+def ready(settings: Settings) -> tuple[int, dict]:
     problems = settings.problems()
     return (503 if problems else 200), {"status": "not-ready" if problems else "ready", "problems": problems}
 
 
-def webhook(body: bytes, auth_header: Optional[str], settings: Settings, queue: Queue,
-            replay: ReplayCache = _replay) -> Tuple[int, dict]:
+def webhook(body: bytes, auth_header: str | None, settings: Settings, queue: Queue, replay: ReplayCache = _replay) -> tuple[int, dict]:
     try:
-        job = validate(body, auth_header, username=settings.webhook_username, secrets=settings.webhook_secrets,
-                       allow=settings.allow, replay=replay, window_seconds=settings.replay_window_seconds)
+        job = validate(
+            body,
+            auth_header,
+            username=settings.webhook_username,
+            secrets=settings.webhook_secrets,
+            allow=settings.allow,
+            replay=replay,
+            window_seconds=settings.replay_window_seconds,
+        )
     except WebhookRejected as exc:
-        if exc.status == 409:          # duplicate delivery: acknowledged, nothing to do
+        if exc.status == 409:  # duplicate delivery: acknowledged, nothing to do
             log.info("webhook duplicate ignored")
             return 200, {"status": "duplicate"}
         log.warning("webhook rejected", extra={"reason": exc.reason, "http_status": exc.status})
@@ -123,8 +130,9 @@ def webhook(body: bytes, auth_header: Optional[str], settings: Settings, queue: 
     return 202, {"status": "queued", "pullRequestId": job.pull_request_id}
 
 
-def process_message(text: str, settings: Settings, queue: Queue, lease: Optional[Lease] = None,
-                    client: Optional[AdoClient] = None, env: Optional[dict] = None, ai_client=None) -> dict:
+def process_message(  # noqa: PLR0917
+    text: str, settings: Settings, queue: Queue, lease: Lease | None = None, client: AdoClient | None = None, env: dict | None = None, ai_client=None
+) -> dict:
     global _reviewer_id
     msg = json.loads(text)
     job = ReviewJob.from_message(json.dumps(msg["job"]))
@@ -148,5 +156,12 @@ def process_message(text: str, settings: Settings, queue: Queue, lease: Optional
             lease.release(handle)
     if out.requeue and attempt < settings.max_rechecks:
         queue.send(json.dumps({"job": msg["job"], "attempt": attempt + 1}), delay_seconds=settings.recheck_seconds)
-    return {"state": out.state, "decision": out.decision, "vote": out.vote, "status": out.status, "iteration": out.iteration,
-            "requeued": bool(out.requeue and attempt < settings.max_rechecks), "actions": list(out.actions)}
+    return {
+        "state": out.state,
+        "decision": out.decision,
+        "vote": out.vote,
+        "status": out.status,
+        "iteration": out.iteration,
+        "requeued": bool(out.requeue and attempt < settings.max_rechecks),
+        "actions": list(out.actions),
+    }

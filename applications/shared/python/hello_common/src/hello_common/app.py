@@ -6,7 +6,7 @@
 * GET /version  - {"service","version","commit","build_time","runtime"}.
 * /admin/faults - fault injection (hello_common.faults), default disabled.
 * dsv:// environment values are resolved from Delinea DSV before anything else (hello_common.secrets).
-* W3C trace context in (FastAPI instrumentation) and out (``traceparent`` response header).
+* W3C trace context in (FastAPI OTel instrumentation, or ddtrace's fastapi integration when TELEMETRY_SDK=datadog) and out (``traceparent`` response header).
 * One structured access-log line per request (health probes logged at DEBUG only).
 """
 
@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from .apm import is_datadog_mode
 from .config import ServiceInfo, listen_port
 from .faults import FaultRegistry, install_faults
 from .logging import configure_logging
@@ -129,7 +130,7 @@ def create_app(
     async def version() -> dict[str, str]:
         return info.version_document()
 
-    if instrument:
+    if instrument and not is_datadog_mode():  # datadog mode: ddtrace's fastapi integration traces requests
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
         FastAPIInstrumentor.instrument_app(app, excluded_urls="healthz,readyz,version")

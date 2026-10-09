@@ -12,11 +12,11 @@ module "naming" {
 }
 
 module "tags" {
-  source      = "../modules/tags"
-  component   = "foundation-pr-reviewer"
-  layer       = "foundation"
-  domain      = "governance"
-  service     = "eh-pr-reviewer"
+  source    = "../modules/tags"
+  component = "foundation-pr-reviewer"
+  layer     = "foundation"
+  domain    = "governance"
+  service   = "eh-pr-reviewer"
   environment = {
     name        = var.environment.name
     location    = var.environment.location
@@ -145,15 +145,15 @@ resource "azurerm_role_assignment" "storage" {
 
 module "storage_pe" {
   source   = "../modules/private-endpoint"
-  for_each = local.vnet ? toset(["blob", "queue", "table"]) : toset([])
+  for_each = local.vnet && var.foundation_network != null ? toset(["blob", "queue", "table"]) : toset([])
 
   name                 = "${local.names.private_endpoint}-st-${each.key}"
   resource_group_name  = azurerm_resource_group.this.name
   location             = local.location
-  subnet_id            = var.foundation_network.subnets["private-endpoints"].id
+  subnet_id            = try(var.foundation_network.subnets["private-endpoints"].id, null)
   target_resource_id   = azurerm_storage_account.this.id
   subresource_names    = [each.key]
-  private_dns_zone_ids = contains(keys(var.foundation_network.private_dns_zones), each.key) ? [var.foundation_network.private_dns_zones[each.key].id] : []
+  private_dns_zone_ids = try([var.foundation_network.private_dns_zones[each.key].id], [])
   tags                 = local.tags
 }
 
@@ -196,7 +196,7 @@ resource "azurerm_function_app_flex_consumption" "this" {
 
   https_only                                     = true
   public_network_access_enabled                  = true
-  virtual_network_subnet_id                      = local.vnet ? var.foundation_network.subnets["flex-integration"].id : null
+  virtual_network_subnet_id                      = local.vnet ? try(var.foundation_network.subnets["flex-integration"].id, null) : null
   webdeploy_publish_basic_authentication_enabled = false
   client_certificate_mode                        = "Optional"
 

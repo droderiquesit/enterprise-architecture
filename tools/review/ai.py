@@ -23,7 +23,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from tools.changeset import globs
 
@@ -75,7 +75,7 @@ correctness risks, and missing tests. Use the head-side line number from the dif
 Report nothing that you cannot point at in the diff. Return an empty list when the change looks fine."""
 
 
-def build_excerpt(changes: List[FileChange], cfg: dict) -> Tuple[str, List[str], List[str]]:
+def build_excerpt(changes: list[FileChange], cfg: dict) -> tuple[str, list[str], list[str]]:
     """(redacted bounded diff text, included paths, skipped paths)."""
     budget = int(cfg["max_input_chars"])
     per_file = int(cfg["max_file_chars"])
@@ -96,16 +96,16 @@ def build_excerpt(changes: List[FileChange], cfg: dict) -> Tuple[str, List[str],
     return "\n\n".join(parts), included, skipped
 
 
-def _validate(payload: Any, changes: List[FileChange], cfg: dict) -> Tuple[List[Finding], List[str]]:
+def _validate(payload: Any, changes: list[FileChange], cfg: dict) -> tuple[list[Finding], list[str]]:
     import jsonschema
 
-    notes: List[str] = []
+    notes: list[str] = []
     try:
         jsonschema.Draft202012Validator(OUTPUT_SCHEMA).validate(payload)
     except jsonschema.ValidationError as exc:
         return [], [f"ai output rejected (schema: {exc.message[:120]})"]
     by_path = {c.path: c for c in changes}
-    out: List[Finding] = []
+    out: list[Finding] = []
     for item in payload["findings"][: int(cfg["max_findings"])]:
         path = item["file"].lstrip("/")[: LOCAL_LIMITS["file"]]
         ch = by_path.get(path)
@@ -120,9 +120,21 @@ def _validate(payload: Any, changes: List[FileChange], cfg: dict) -> Tuple[List[
         sug = " ".join(item["suggestion"].split())[: LOCAL_LIMITS["suggestion"]]
         if not msg:
             continue
-        out.append(Finding(rule=f"ai.{item['category']}", severity=item["severity"], kind="ai", category=item["category"],
-                           message=msg, suggestion=sug or None, file=path, line=line, source="ai", definite=False,
-                           evidence=f"{path}:{msg[:120]}"))
+        out.append(
+            Finding(
+                rule=f"ai.{item['category']}",
+                severity=item["severity"],
+                kind="ai",
+                category=item["category"],
+                message=msg,
+                suggestion=sug or None,
+                file=path,
+                line=line,
+                source="ai",
+                definite=False,
+                evidence=f"{path}:{msg[:120]}",
+            )
+        )
     if len(payload["findings"]) > int(cfg["max_findings"]):
         notes.append(f"ai findings capped at {cfg['max_findings']}")
     return out, notes
@@ -148,7 +160,7 @@ def _error_note(exc: Exception) -> str:
 
 
 class AiReviewer:
-    def __init__(self, cfg: dict, api_key: Optional[str] = None, client: Any = None, cache_dir: Optional[str] = None):
+    def __init__(self, cfg: dict, api_key: str | None = None, client: Any = None, cache_dir: str | None = None):
         self.cfg = cfg
         self._client = client
         self._api_key = api_key
@@ -158,8 +170,7 @@ class AiReviewer:
         if self._client is None:
             import anthropic
 
-            self._client = anthropic.Anthropic(api_key=self._api_key, timeout=float(self.cfg["timeout_seconds"]),
-                                               max_retries=int(self.cfg["max_retries"]))
+            self._client = anthropic.Anthropic(api_key=self._api_key, timeout=float(self.cfg["timeout_seconds"]), max_retries=int(self.cfg["max_retries"]))
         return self._client
 
     def request(self, excerpt: str) -> dict:
@@ -167,9 +178,14 @@ class AiReviewer:
             "model": self.cfg["model"],
             "max_tokens": int(self.cfg["max_output_tokens"]),
             "system": SYSTEM_PROMPT,
-            "messages": [{"role": "user", "content": (
-                "Review this pull request diff. Secrets were already redacted as <redacted>.\n\n"
-                f"<untrusted_diff>\n{excerpt}\n</untrusted_diff>")}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"Review this pull request diff. Secrets were already redacted as <redacted>.\n\n<untrusted_diff>\n{excerpt}\n</untrusted_diff>"
+                    ),
+                }
+            ],
             "output_config": {"effort": self.cfg["effort"], "format": {"type": "json_schema", "schema": OUTPUT_SCHEMA}},
         }
         if self.cfg.get("server_fallbacks", True):
@@ -180,10 +196,16 @@ class AiReviewer:
     def _cache_path(self, key: str) -> Path:
         return self.cache_dir / f"{key}.json"
 
-    def review(self, changes: List[FileChange], head: str, policy_hash: str) -> Tuple[List[Finding], dict]:
+    def review(self, changes: list[FileChange], head: str, policy_hash: str) -> tuple[list[Finding], dict]:
         excerpt, included, skipped = build_excerpt(changes, self.cfg)
-        meta: dict = {"enabled": True, "model": self.cfg["model"], "included": len(included), "skipped": skipped[:50],
-                      "excerpt_chars": len(excerpt), "notes": []}
+        meta: dict = {
+            "enabled": True,
+            "model": self.cfg["model"],
+            "included": len(included),
+            "skipped": skipped[:50],
+            "excerpt_chars": len(excerpt),
+            "notes": [],
+        }
         if not included:
             meta["notes"].append("nothing reviewable for the AI (all files excluded)")
             return [], meta
@@ -214,13 +236,13 @@ class AiReviewer:
         meta["findings"] = len(findings)
         return findings, meta
 
-    def _call(self, excerpt: str) -> Tuple[Optional[Any], Optional[dict], Optional[str]]:
+    def _call(self, excerpt: str) -> tuple[Any | None, dict | None, str | None]:
         kwargs = self.request(excerpt)
         try:
             client = self.client()
             api = client.beta.messages if "betas" in kwargs else client.messages
             resp = api.create(**kwargs)
-        except Exception as exc:  # noqa: BLE001 - classified below; AI failure only means "no AI findings"
+        except Exception as exc:
             return None, None, _error_note(exc)
         usage = getattr(resp, "usage", None)
         usage_d = {"input_tokens": getattr(usage, "input_tokens", None), "output_tokens": getattr(usage, "output_tokens", None)} if usage else None

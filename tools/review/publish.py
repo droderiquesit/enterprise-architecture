@@ -13,8 +13,6 @@ marker cannot hijack or resolve anything.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 from . import render
 from .ado import THREAD_ACTIVE, THREAD_FIXED, AdoClient, PrRef
 from .model import FileChange, ReviewResult
@@ -25,7 +23,7 @@ def _first(thread: dict) -> dict:
     return min(comments, key=lambda c: int(c.get("id", 0))) if comments else {}
 
 
-def bot_threads(threads: List[dict], bot_id: str) -> List[dict]:
+def bot_threads(threads: list[dict], bot_id: str) -> list[dict]:
     out = []
     for t in threads:
         if t.get("isDeleted"):
@@ -36,14 +34,14 @@ def bot_threads(threads: List[dict], bot_id: str) -> List[dict]:
     return out
 
 
-def summary_thread(threads: List[dict], bot_id: str) -> Optional[dict]:
+def summary_thread(threads: list[dict], bot_id: str) -> dict | None:
     for t in bot_threads(threads, bot_id):
         if render.SUMMARY_MARKER in (_first(t).get("content") or ""):
             return t
     return None
 
 
-def human_approved(reviewers: List[dict], bot_id: str, author_id: str) -> bool:
+def human_approved(reviewers: list[dict], bot_id: str, author_id: str) -> bool:
     """A non-author, non-bot, non-group reviewer voted approve / approve-with-suggestions (vote >= 5).
     Branch policy must reset votes on new pushes, so a vote present now applies to the latest iteration."""
     for r in reviewers:
@@ -54,9 +52,10 @@ def human_approved(reviewers: List[dict], bot_id: str, author_id: str) -> bool:
     return False
 
 
-def publish(client: AdoClient, ref: PrRef, result: ReviewResult, iteration: int, bot_id: str, policy,
-            changes: List[FileChange], threads: Optional[List[dict]] = None) -> List[str]:
-    actions: List[str] = []
+def publish(  # noqa: PLR0917
+    client: AdoClient, ref: PrRef, result: ReviewResult, iteration: int, bot_id: str, policy, changes: list[FileChange], threads: list[dict] | None = None
+) -> list[str]:
+    actions: list[str] = []
     b = ref.base
     if threads is None:
         threads = client.request("GET", f"{b}/threads").get("value", [])
@@ -67,8 +66,7 @@ def publish(client: AdoClient, ref: PrRef, result: ReviewResult, iteration: int,
     want_status = "closed" if result.decision.status_state == "succeeded" else THREAD_ACTIVE
     st = summary_thread(threads, bot_id)
     if st is None:
-        client.request("POST", f"{b}/threads", {"comments": [{"parentCommentId": 0, "content": text, "commentType": 1}],
-                                                "status": want_status})
+        client.request("POST", f"{b}/threads", {"comments": [{"parentCommentId": 0, "content": text, "commentType": 1}], "status": want_status})
         actions.append("summary:create")
     else:
         first = _first(st)
@@ -80,7 +78,7 @@ def publish(client: AdoClient, ref: PrRef, result: ReviewResult, iteration: int,
             actions.append(f"summary:status:{want_status}")
 
     # ---- inline findings
-    existing: Dict[str, dict] = {}
+    existing: dict[str, dict] = {}
     for t in mine:
         fp = render.finding_fp(_first(t).get("content") or "")
         if fp:
@@ -102,11 +100,12 @@ def publish(client: AdoClient, ref: PrRef, result: ReviewResult, iteration: int,
             side = "left" if f.file in deleted else "right"
             ctx[f"{side}FileStart"] = {"line": f.line, "offset": 1}
             ctx[f"{side}FileEnd"] = {"line": f.line, "offset": 1}
-        body = {"comments": [{"parentCommentId": 0, "content": render.finding_comment(f), "commentType": 1}],
-                "status": THREAD_ACTIVE, "threadContext": ctx}
+        body = {"comments": [{"parentCommentId": 0, "content": render.finding_comment(f), "commentType": 1}], "status": THREAD_ACTIVE, "threadContext": ctx}
         if tracking.get(f.file):
-            body["pullRequestThreadContext"] = {"changeTrackingId": tracking[f.file],
-                                                "iterationContext": {"firstComparingIteration": 1, "secondComparingIteration": iteration}}
+            body["pullRequestThreadContext"] = {
+                "changeTrackingId": tracking[f.file],
+                "iterationContext": {"firstComparingIteration": 1, "secondComparingIteration": iteration},
+            }
         client.request("POST", f"{b}/threads", body)
         actions.append(f"finding:create:{f.fingerprint}")
     for fp, t in existing.items():
@@ -117,13 +116,18 @@ def publish(client: AdoClient, ref: PrRef, result: ReviewResult, iteration: int,
     # ---- PR status (iteration-scoped)
     genre, name = policy["status"]["genre"], policy["status"]["name"]
     statuses = client.request("GET", f"{b}/statuses").get("value", [])
-    ours = [s for s in statuses if (s.get("context") or {}).get("genre") == genre and (s.get("context") or {}).get("name") == name
-            and (s.get("createdBy") or {}).get("id") in (bot_id, None) and s.get("iterationId") == iteration]
+    ours = [
+        s
+        for s in statuses
+        if (s.get("context") or {}).get("genre") == genre
+        and (s.get("context") or {}).get("name") == name
+        and (s.get("createdBy") or {}).get("id") in (bot_id, None)
+        and s.get("iterationId") == iteration
+    ]
     latest = max(ours, key=lambda s: int(s.get("id", 0)), default=None)
     d = result.decision
     if latest is None or latest.get("state") != d.status_state or latest.get("description") != d.status_description:
-        body = {"state": d.status_state, "description": d.status_description, "context": {"genre": genre, "name": name},
-                "iterationId": iteration}
+        body = {"state": d.status_state, "description": d.status_description, "context": {"genre": genre, "name": name}, "iterationId": iteration}
         if policy["status"].get("target_url"):
             body["targetUrl"] = policy["status"]["target_url"]
         client.request("POST", f"{b}/statuses", body)

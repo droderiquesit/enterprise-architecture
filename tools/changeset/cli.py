@@ -173,9 +173,51 @@ def cmd_select(args) -> int:
     return 0
 
 
+def explain_branch(repo: Path, ref: str) -> list:
+    """What the branching model (environments/branching.yaml) lets a run of `ref` do, one line per fact."""
+    from tools.config import branching
+    from tools.config.promotion import load as load_promotion
+
+    if not ref.startswith("refs/"):
+        ref = f"refs/heads/{ref}"
+    model = branching.load(repo)
+    k = branching.kind(model, ref)
+    envs = list(load_promotion(repo))
+    allowed = []
+    for env in envs:
+        for mode in ("auto", "manual", "promote", "hotfix", "heal", "drift", "reconcile", "retire"):
+            for dry in (False, True):
+                if not branching.check(repo, ref, "Manual", env, mode, dry):
+                    allowed.append((env, mode, "dry-run" if dry else "apply"))
+                    break
+    lines = [f"branch {ref[len('refs/heads/'):] if ref.startswith('refs/heads/') else ref}: {k}"]
+    applying = sorted({f"{m}@{e}" for e, m, d in allowed if d == "apply"})
+    dry_only = sorted({f"{m}@{e}" for e, m, d in allowed if d == "dry-run"} - set(applying))
+    lines.append("  may apply: " + (", ".join(applying) if applying else "nothing (PR validation / dryRun plans only)"))
+    if dry_only:
+        lines.append("  dry-run only: " + ", ".join(dry_only))
+    hint = {"trunk": f"pushes to {model.trunk} deploy dev; test/prod get the same build via mode promote",
+            "release": "prod hotfix branch: land the fix on main first, cherry-pick here, queue mode hotfix",
+            "short-lived": f"open a PR into {model.trunk}: build validation + required reviewers + eh-review/policy",
+            "other": f"rename to one of {model.short_lived} (branch-name policy) and open a PR into {model.trunk}"}
+    if k in hint:
+        lines.append("  next: " + hint[k])
+    return lines
+
+
+def _current_branch(repo: Path) -> str:
+    import subprocess
+
+    p = subprocess.run(["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True)
+    return p.stdout.strip() or "HEAD"
+
+
 def cmd_explain(args) -> int:
     """Preview a run for the local working tree (uncommitted changes included)."""
     repo = Path(args.repo)
+    if getattr(args, "branch", None) is not None:
+        for line in explain_branch(repo, args.branch or _current_branch(repo)):
+            print(line)
     args.worktree, args.head = True, "HEAD"
     args.components, args.with_consumers, args.artifact_digests = "", False, None
     args.records_url = getattr(args, "records_url", None)
@@ -287,6 +329,8 @@ def main(argv=None) -> int:
     x.add_argument("--contracts-dir")
     x.add_argument("--contracts-url")
     x.add_argument("--json", action="store_true")
+    x.add_argument("--branch", nargs="?", const="", default=None,
+                   help="also explain what the branching model allows for this branch (default: the current branch)")
     x.set_defaults(func=cmd_explain)
 
     a = sub.add_parser("apply-set")

@@ -137,3 +137,17 @@ def test_latest_run_is_a_superset_of_superseded_runs(tmp_path):
     c3 = commit_all(repo, "revert c2")
     run3 = select_deploy(repo, "dev", records, head=c3)
     assert "platform-db-cosmos" not in run3["summary"]["plan"]
+
+
+# -------------------------------------------------------------- DX: explain --branch
+def test_explain_branch_lines():
+    from tools.changeset.cli import explain_branch
+
+    root = Path(__file__).resolve().parents[2]
+    main = "\n".join(explain_branch(root, "main"))
+    assert "trunk" in main and "auto@dev" in main and "promote@prod" in main
+    feat = "\n".join(explain_branch(root, "feature/login"))
+    assert "short-lived" in feat and "may apply: nothing" in feat and "eh-review/policy" in feat
+    rel = "\n".join(explain_branch(root, "refs/heads/release/2026.10"))
+    assert "hotfix@prod" in rel and "auto@dev" not in rel
+    assert "rename" in "\n".join(explain_branch(root, "wip-stuff"))

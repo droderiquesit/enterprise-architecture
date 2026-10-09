@@ -19,7 +19,7 @@ owner_protected:
 
 bot:
   # Names of the reviewer identity in Azure DevOps (user-assigned managed identity `pr-reviewer` added as a user).
-  names: [eh-id-pr-reviewer, pr-reviewer, eh-pr-reviewer]
+  names: [eh-id-pr-reviewer-dev, eh-id-pr-reviewer-test, eh-id-pr-reviewer-prod, pr-reviewer, eh-pr-reviewer]
 
 # PR status posted on every iteration: genre/name = eh-review/policy (required by branch policy).
 status:

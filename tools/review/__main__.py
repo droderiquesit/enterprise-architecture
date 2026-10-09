@@ -37,8 +37,12 @@ def main(argv=None) -> int:
     ap.add_argument("--head", default="HEAD", help="head ref; 'WORKTREE' reviews uncommitted changes")
     ap.add_argument("--target", default="main", help="PR target branch (decision: release/* is never approved)")
     ap.add_argument("--author", default="", help="PR author (unique name) for owner / bot checks")
-    ap.add_argument("--build-status", default="unknown", choices=["green", "failed", "pending", "unknown"],
-                    help="PR build validation state (in Azure DevOps the reviewer reads it from policy evaluations)")
+    ap.add_argument(
+        "--build-status",
+        default="unknown",
+        choices=["green", "failed", "pending", "unknown"],
+        help="PR build validation state (in Azure DevOps the reviewer reads it from policy evaluations)",
+    )
     ap.add_argument("--policy-from", default="base", help="base | head | <path to policy.yaml>")
     ap.add_argument("--ai", action="store_true", help="run the optional AI review if the policy enables it and the key env var is set")
     ap.add_argument("--json", help="write the full review result JSON here")
@@ -67,8 +71,7 @@ def main(argv=None) -> int:
         return 2
     head_sha = rev_parse(repo, head) if head else "WORKTREE"
     changes = git_changes(repo, base_sha, head, int(policy["limits"]["max_file_bytes"]))
-    ctx = ReviewContext(author=args.author, target_branch=args.target, build=BuildStatus(args.build_status),
-                        head=head_sha, base=base_sha)
+    ctx = ReviewContext(author=args.author, target_branch=args.target, build=BuildStatus(args.build_status), head=head_sha, base=base_sha)
     result = review(changes, policy, TrustedBase(trusted_tree), ctx, ai_reviewer=ai_from_policy(policy) if args.ai else None)
     md = render.summary(result)
     if args.markdown:

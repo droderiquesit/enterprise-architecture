@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Optional, Tuple
 
 PEP440 = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?\s*==\s*([0-9][^\s;#]*)")
 TF_PROVIDER = re.compile(r'provider\s+"([^"]+)"\s*\{[^}]*?version\s*=\s*"([^"]+)"', re.S)
@@ -17,7 +16,7 @@ NUGET_PROPS = re.compile(r'<PackageVersion\s+Include="([^"]+)"\s+Version="([^"]+
 SEMVER = re.compile(r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)$")
 
 
-def _req(text: str) -> Dict[str, str]:
+def _req(text: str) -> dict[str, str]:
     out = {}
     for line in text.splitlines():
         m = PEP440.match(line)
@@ -26,7 +25,7 @@ def _req(text: str) -> Dict[str, str]:
     return out
 
 
-def _npm(text: str) -> Dict[str, str]:
+def _npm(text: str) -> dict[str, str]:
     try:
         doc = json.loads(text)
     except ValueError:
@@ -35,13 +34,13 @@ def _npm(text: str) -> Dict[str, str]:
     for path, meta in (doc.get("packages") or {}).items():
         if path and isinstance(meta, dict) and meta.get("version"):
             out[path] = str(meta["version"])
-    for name, meta in (doc.get("dependencies") or {}).items():   # lockfileVersion 1
+    for name, meta in (doc.get("dependencies") or {}).items():  # lockfileVersion 1
         if isinstance(meta, dict) and meta.get("version") and f"node_modules/{name}" not in out:
             out[f"node_modules/{name}"] = str(meta["version"])
     return out
 
 
-def _nuget_lock(text: str) -> Dict[str, str]:
+def _nuget_lock(text: str) -> dict[str, str]:
     try:
         doc = json.loads(text)
     except ValueError:
@@ -54,7 +53,7 @@ def _nuget_lock(text: str) -> Dict[str, str]:
     return out
 
 
-def parse(path: str, text: Optional[str]) -> Optional[Dict[str, str]]:
+def parse(path: str, text: str | None) -> dict[str, str] | None:
     if text is None:
         return {}
     name = path.rsplit("/", 1)[-1]
@@ -77,7 +76,7 @@ def bump(old: str, new: str) -> str:
         return "major"
     pa = [int(x or 0) for x in a.groups()[:3]]
     pb = [int(x or 0) for x in b.groups()[:3]]
-    if a.group(4) or b.group(4):      # pre-release / local versions: never "patch"
+    if a.group(4) or b.group(4):  # pre-release / local versions: never "patch"
         return "major" if pa[0] != pb[0] else "minor"
     if pb < pa:
         return "downgrade"
@@ -88,7 +87,7 @@ def bump(old: str, new: str) -> str:
     return "patch" if pa[2] != pb[2] else "same"
 
 
-def classify(path: str, base: Optional[str], head: Optional[str]) -> Optional[List[Tuple[str, str, Optional[str], Optional[str]]]]:
+def classify(path: str, base: str | None, head: str | None) -> list[tuple[str, str, str | None, str | None]] | None:
     """[(package, kind, old, new)] for changed entries, or None when the file format is not understood."""
     old, new = parse(path, base), parse(path, head)
     if old is None or new is None:

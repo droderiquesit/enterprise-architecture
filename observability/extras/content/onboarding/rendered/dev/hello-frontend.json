@@ -1,0 +1,213 @@
+{
+  "architecture": "swa",
+  "catalog": {
+    "component_of": [
+      "system:enterprise-hello"
+    ],
+    "enabled": true,
+    "lifecycle": "production",
+    "type": "web"
+  },
+  "dashboards": {
+    "enabled": true,
+    "workflow_metric_prefix": null
+  },
+  "enabled": true,
+  "endpoints": [
+    {
+      "browser_journey": true,
+      "browser_steps": [
+        {
+          "name": "Page renders",
+          "type": "assertPageContains",
+          "value": "Enterprise Hello"
+        }
+      ],
+      "health_path": "/",
+      "name": "site",
+      "required": false,
+      "synthetic": {
+        "enabled": true,
+        "locations": [
+          "aws:eu-central-1"
+        ],
+        "private_location": false,
+        "tick_every": 300
+      },
+      "url": "${contract:deploy-frontend.url}",
+      "visibility": "public"
+    }
+  ],
+  "env": "dev",
+  "generated_from": {
+    "layers": [
+      "global-defaults",
+      "profiles/frontend",
+      "manifest"
+    ],
+    "manifest": "dev/hello-frontend.yaml",
+    "sha256": "b8878656cac18b99905aaaf74e78b9a07beb077a522a79213359ce0401601d15"
+  },
+  "idle_behavior": {
+    "expected_quiet_hours": null,
+    "scale_to_zero": true
+  },
+  "metadata": {
+    "application": "enterprise-hello",
+    "contacts": [
+      {
+        "contact": "web@example.com",
+        "name": "web mailbox",
+        "type": "email"
+      }
+    ],
+    "depends_on": [
+      "service:hello-bff"
+    ],
+    "description": "React SPA (RUM).",
+    "display_name": "hello-frontend",
+    "domain": "storefront",
+    "languages": [
+      "js"
+    ],
+    "owner": "web@example.com",
+    "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md",
+    "team": "web",
+    "tier": "high"
+  },
+  "monitors": {
+    "rum.error_count": {
+      "evaluation_delay": null,
+      "key": "rum.error_count",
+      "message": "{{#is_alert}}**WARNING**: Users hit JavaScript or network errors.{{/is_alert}}\n{{#is_warning}}**WARNING**: Users hit JavaScript or network errors.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-frontend` | env: `dev` | team: `web` | owner: web@example.com | tier: high\n\nTroubleshooting:\n1. RUM -> Error Tracking for hello-frontend; group by @error.source (network vs source).\n2. Network errors on API calls: open the linked backend trace (resource -> APM).\n3. CORS failures: check CORS_ALLOWED_ORIGINS on the BFF includes the frontend origin.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md#rum-errors",
+      "name": "[dev] hello-frontend browser errors above 25 in 15m",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-web"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "rum(\"@type:error service:hello-frontend env:dev\").rollup(\"count\").last(\"15m\") > 25",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md#rum-errors",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:rum.error_count",
+        "service:hello-frontend",
+        "severity:warning",
+        "team:web",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 25
+      },
+      "type": "rum alert"
+    },
+    "rum.lcp_p75": {
+      "evaluation_delay": null,
+      "key": "rum.lcp_p75",
+      "message": "{{#is_alert}}**WARNING**: Page load performance (Largest Contentful Paint, nanoseconds) degraded.{{/is_alert}}\n{{#is_warning}}**WARNING**: Page load performance (Largest Contentful Paint, nanoseconds) degraded.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-frontend` | env: `dev` | team: `web` | owner: web@example.com | tier: high\n\nTroubleshooting:\n1. RUM view performance: compare by @view.url_path and @geo.country.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md#rum-performance",
+      "name": "[dev] hello-frontend LCP p75 above 4s",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-web"
+        ],
+        "warning": [
+          "team-web"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 4,
+      "query": "rum(\"@type:view service:hello-frontend env:dev\").rollup(\"pc75\", \"@view.largest_contentful_paint\").last(\"30m\") > 4000000000",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md#rum-performance",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:storefront",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:rum.lcp_p75",
+        "service:hello-frontend",
+        "severity:warning",
+        "team:web",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 4000000000
+      },
+      "type": "rum alert"
+    }
+  },
+  "notifications": {
+    "critical": [
+      "team-web",
+      "oncall"
+    ],
+    "default": [
+      "team-web"
+    ],
+    "warning": [
+      "team-web"
+    ]
+  },
+  "package_version": "2.0.0",
+  "presence_ref": "deploy-frontend.url",
+  "resources": [],
+  "runtime": "browser",
+  "schema": "rendered-service/v1",
+  "service": "hello-frontend",
+  "slos": [],
+  "synthetics_defaults": {
+    "min_failure_duration": 120,
+    "min_location_failed": 1,
+    "retry": {
+      "count": 1,
+      "interval": 300
+    }
+  },
+  "tags": [
+    "application:enterprise-hello",
+    "domain:storefront",
+    "env:dev",
+    "managed_by:observability-package",
+    "service:hello-frontend",
+    "team:web",
+    "tier:high"
+  ],
+  "telemetry": {
+    "dbm": {
+      "enabled": false
+    },
+    "logs": {
+      "route": "none"
+    },
+    "profile": "frontend",
+    "rum": {
+      "application_ref": "obs-prereqs.rum.applications.hello-frontend.application_id",
+      "enabled": true
+    },
+    "traces": {
+      "enabled": false,
+      "sample_rate": 1.0,
+      "server_operation": "http.server.request"
+    }
+  }
+}

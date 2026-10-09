@@ -1,0 +1,139 @@
+# Test suites that are NOT registry components (registry components get one generated suite each:
+# component:<id> = tools/validate/component.py, keyed by the changeset validation fingerprint).
+# Read by tools/ci (python3 -m tools.ci). Selection: a suite runs when a changed file matches its `inputs`, when a
+# component in its `covers` list is selected for validation (changed or a transitive consumer of a change), when
+# `global_inputs` change, or on a full run (nightly schedule / release branches / --all).
+# Fingerprint (test result cache key): sha256 of every file matching `inputs` + global_inputs + `tools` versions
+# from versions.yaml + the command. Sorted by id; keep it that way (tools/ci validates it).
+#
+#   tier      gate (cheap, runs first, cancels the run on failure) | unit | integration | e2e
+#   kind      pytest (paths, sharded by file with xdist inside each shard) | script (argv) | dotnet
+#   scope     platform | applications: the pipeline that owns the suite (both pipelines validate PRs; a suite
+#             runs in one of them only, so the work is not done twice)
+#   toolchain what the agent needs (python, terraform, dotnet, node, helm, docker); legs are grouped by toolchain
+#   needs_env opt-in environment for suites that need docker etc. (set by the leg; local runs skip without it)
+schema_version: 1
+global_inputs: [versions.yaml, tools/ci/**, pipelines/requirements-tools.txt]
+defaults:
+  timeout_minutes: 20
+  target_leg_seconds: 240        # pack legs of about 4 min (agent start + checkout + setup cost ~1 min per leg)
+  max_legs: {platform: 24, applications: 24}
+suites:
+  - id: docs-links
+    tier: gate
+    kind: script
+    scope: platform
+    toolchain: python
+    argv: [python3, tools/docs/check_links.py]
+    inputs: ['**/*.md', tools/docs/check_links.py]
+  - id: dotnet-hello-common
+    tier: unit
+    kind: dotnet
+    scope: applications
+    toolchain: dotnet
+    projects: [applications/shared/dotnet/Hello.Common.Tests]
+    inputs: [applications/shared/dotnet/**, applications/dotnet/**]
+    covers: [svc-bff, svc-orders-api, svc-inventory-api, svc-durable]
+  - id: e2e
+    tier: e2e
+    kind: pytest
+    scope: applications
+    toolchain: docker
+    paths: [tests/integration]
+    needs_env: {E2E: '1'}       # PRs: only when the vertical slice changed (inputs); always on full runs
+    inputs: [tests/integration/**, applications/services/**, applications/shared/**, applications/python/**,
+             applications/dotnet/**, observability/images/**]
+    cache: false                 # end-to-end behaviour depends on pulled images: never served from the cache
+    timeout_minutes: 45
+  - id: gates
+    tier: gate
+    kind: script
+    scope: platform
+    toolchain: terraform
+    argv: [python3, -m, tools.ci, gates]
+    inputs: ['**']
+    cache: false
+  - id: obs-content
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: python
+    paths: [observability/tests/content]
+    inputs: [observability/tests/content/**, observability/tools/**, observability/onboarding/**, observability/archetypes/**,
+             observability/schemas/**, observability/config/**]
+  - id: obs-portability
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: terraform
+    paths: [observability/tests/portability]
+    inputs: [observability/**]
+  - id: obs-transport
+    tier: integration
+    kind: pytest
+    scope: platform
+    toolchain: python
+    paths: [observability/tests/transport]
+    inputs: [observability/tests/transport/**, observability/images/**, observability/lab/telemetry-transport/**,
+             observability/config/**, observability/modules/**]
+    covers: [obs-telemetry-transport, obs-hosts, obs-dbm]
+  - id: py-catalog
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: python
+    paths: [tests/catalog]
+    inputs: [tests/catalog/**, catalog/**, tools/catalog/**, tools/docs/**]
+  - id: py-changeset
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: python
+    paths: [tests/changeset]
+    inputs: [tests/changeset/**, tools/changeset/**, tools/config/**, catalog/components.yaml, catalog/schemas/**,
+             catalog/contracts/**, environments/**]
+  - id: py-charts
+    tier: unit
+    kind: pytest
+    scope: applications
+    toolchain: helm
+    paths: [tests/charts]
+    inputs: [tests/charts/**, applications/charts/**, applications/deployments/**/*.yaml, applications/deployments/**/*.tf]
+  - id: py-hello-common
+    tier: unit
+    kind: pytest
+    scope: applications
+    toolchain: python
+    paths: [applications/shared/python/hello_common/tests]
+    inputs: [applications/shared/python/**]
+    covers: [svc-catalog-api, svc-dbadapter, svc-worker, svc-partner-sim, svc-functions, svc-jobs]
+  - id: py-pipeline
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: python
+    paths: [tests/pipeline]
+    inputs: [tests/pipeline/**, pipelines/**, azure-pipelines*.yml, tools/pipeline/**, tools/validate/**,
+             tools/changeset/**, catalog/components.yaml, environments/**]
+  - id: py-pr-reviewer
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: python
+    paths: [applications/services/pr-reviewer/tests]
+    inputs: [applications/services/pr-reviewer/**, tools/review/**]
+  - id: py-review
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: python
+    paths: [tests/review]
+    inputs: [tests/review/**, tools/review/**, .review/**]
+  - id: py-tools
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: terraform
+    paths: [tests/tools]
+    inputs: [tests/tools/**, tools/**, catalog/**, environments/**, pipelines/**, azure-pipelines*.yml,
+             applications/deployments/scripts/**, observability/tools/verify/**, .github/CODEOWNERS]

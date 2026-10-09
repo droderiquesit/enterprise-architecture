@@ -1,0 +1,121 @@
+# Fleet policy resolution (pure function, no providers): defaults -> architectures.<arch> -> environments.<env> ->
+# per-workload overrides, then the Datadog support matrix (verified against docs.datadoghq.com on 2026-10-09; see
+# docs/guides/datadog-fleet-collection.md in the source repository) decides the EFFECTIVE collection method.
+locals {
+  # (tuple + index: a conditional would force both policies to the same object type)
+  policy = [for p in [var.policy, yamldecode(file("${path.module}/../../config/fleet-policy.yaml"))] : p if p != null][0]
+  arch_o = try(local.policy.architectures[var.architecture], {})
+  env_o  = try(local.policy.environments[var.env], {})
+  o      = var.overrides == null ? {} : var.overrides
+
+  section = { for s in ["logs", "apm", "profiling", "agent", "rum", "op_worker"] : s => merge(
+    try(local.policy[s], {}), try(local.arch_o[s], {}), try(local.env_o[s], {}), try(local.o[s], {}),
+  ) }
+  log_pipeline = try(local.o.log_pipeline, try(local.env_o.log_pipeline, try(local.arch_o.log_pipeline, try(local.policy.log_pipeline, "observability_pipelines"))))
+
+  apm       = local.section.apm
+  prof      = local.section.profiling
+  arch      = var.architecture == null ? "" : var.architecture
+  runtime   = var.runtime == null ? "other" : var.runtime
+  requested = var.runtime == "browser" || var.runtime == null || var.runtime == "other" ? "none" : try(local.apm.mode, "datadog")
+  linux     = var.os_type == "linux"
+
+  managed            = contains(["aca", "aci", "appservice", "functions"], local.arch)
+  serverless_init_ok = local.arch == "aca" && try(local.apm.managed_runtime_path, "agent_gateway") == "serverless_init"
+
+  # Datadog-mode method per hosting type; null = Datadog tracer not configurable there (falls back to otel).
+  datadog_method = (
+    local.arch == "aks" ? "ssi_kubernetes" :
+    contains(["vm", "vmss"], local.arch) ? (local.linux ? "ssi_host" : null) :
+    local.managed ? (local.serverless_init_ok ? "serverless_init" : "agent_gateway") :
+    null
+  )
+  fallback_reason = local.requested != "datadog" || local.datadog_method != null ? null : (
+    contains(["vm", "vmss"], local.arch) ? "Windows hosts: Single Step Instrumentation is Linux / IIS only; the package keeps OpenTelemetry for Windows services" :
+    local.arch == "logicapp" ? "Logic Apps: no application tracer" : "no Datadog tracer path for architecture '${local.arch}'"
+  )
+  effective_mode = local.requested == "datadog" && local.datadog_method == null ? (local.arch == "logicapp" ? "none" : "otel") : local.requested
+  method = (
+    local.effective_mode == "datadog" ? local.datadog_method :
+    local.effective_mode == "otel" ? (contains(["aks", "vm", "vmss"], local.arch) ? "otlp_agent" : "otlp_gateway") :
+    "none"
+  )
+
+  # ------------------------------------------------------------------ Continuous Profiler support matrix
+  # .NET: Linux + Windows x64, App Service Web Apps yes, Function Apps NOT supported. Python: POSIX (CPU profile
+  # POSIX only); Azure Functions = preview only. Logic Apps / browser: none. OTel mode: Datadog library required.
+  profiler_supported = (
+    local.runtime == "dotnet" ? !contains(["functions", "logicapp"], local.arch) :
+    local.runtime == "python" ? local.linux && !contains(["functions", "logicapp"], local.arch) :
+    contains(["node", "java"], local.runtime) ? !contains(["logicapp"], local.arch) :
+    false
+  )
+  profiling_requested = try(local.prof.enabled, true)
+  otel_preview        = local.effective_mode == "otel" && try(local.prof.otel_mode, "unavailable") == "python_preview" && local.runtime == "python" && local.profiler_supported
+  profiling_enabled   = local.profiling_requested && local.profiler_supported && (local.effective_mode == "datadog" || local.otel_preview)
+  profiling_reason = local.profiling_enabled ? null : (
+    !local.profiler_supported ? "Datadog Continuous Profiler does not support ${local.runtime} on ${local.arch == "" ? "this platform" : local.arch}${local.linux ? "" : " (Windows)"}" :
+    !local.profiling_requested ? "disabled by the fleet policy" :
+    local.effective_mode == "otel" ? "apm.mode = otel: Datadog profiling needs the Datadog library (set profiling.otel_mode = python_preview for Python)" :
+    "apm.mode = none"
+  )
+
+  dn = try(local.prof.dotnet, {})
+  py = try(local.prof.python, {})
+  # SSI: "auto" profiles only eligible processes (Datadog recommendation for Single Step Instrumentation)
+  profiling_switch = contains(["ssi_kubernetes", "ssi_host"], coalesce(local.method, "none")) ? "auto" : "true"
+  profiling_env = !local.profiling_enabled ? {} : merge(
+    {
+      DD_PROFILING_ENABLED                     = local.profiling_switch
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED = "true"
+    },
+    local.runtime == "dotnet" ? {
+      DD_PROFILING_CPU_ENABLED          = tostring(try(local.dn.cpu, true))
+      DD_PROFILING_WALLTIME_ENABLED     = tostring(try(local.dn.walltime, true))
+      DD_PROFILING_EXCEPTION_ENABLED    = tostring(try(local.dn.exceptions, true))
+      DD_PROFILING_GC_ENABLED           = tostring(try(local.dn.gc, true))
+      DD_PROFILING_LOCK_ENABLED         = tostring(try(local.dn.lock, false))
+      DD_PROFILING_ALLOCATION_ENABLED   = tostring(try(local.dn.allocation, false))
+      DD_PROFILING_HEAP_ENABLED         = tostring(try(local.dn.heap, false))
+      DD_PROFILING_CODEHOTSPOTS_ENABLED = "true"
+    } : {},
+    local.runtime == "python" ? {
+      DD_PROFILING_STACK_ENABLED    = tostring(try(local.py.stack, true))
+      DD_PROFILING_LOCK_ENABLED     = tostring(try(local.py.lock, true))
+      DD_PROFILING_MEMORY_ENABLED   = tostring(try(local.py.memory, true))
+      DD_PROFILING_HEAP_ENABLED     = tostring(try(local.py.heap, true))
+      DD_PROFILING_TIMELINE_ENABLED = tostring(try(local.py.timeline, true))
+    } : {},
+    local.otel_preview ? { DD_PROFILING_PREVIEW_OTEL_CONTEXT_ENABLED = "true" } : {},
+  )
+
+  # ------------------------------------------------------------------ APM library settings (datadog mode)
+  dbm_mode = try(local.apm.dbm_propagation, "full")
+  # .NET: SqlClient / Npgsql / MySql full or service; Python: psycopg / asyncpg / mysql drivers (no SQL Server).
+  dbm_env = local.effective_mode == "datadog" && local.dbm_mode != "disabled" && contains(["dotnet", "python", "java", "node"], local.runtime) ? {
+    DD_DBM_PROPAGATION_MODE = local.dbm_mode
+  } : {}
+  # Data Streams Monitoring: Azure Service Bus is supported for .NET (Azure.Messaging.ServiceBus, tracer >= 2.53.0):
+  # activity source + OTel API bridge required. Python Service Bus is not a DSM technology.
+  dsm_env = local.effective_mode == "datadog" && try(local.apm.data_streams, true) && local.runtime == "dotnet" ? {
+    DD_DATA_STREAMS_ENABLED                   = "true"
+    DD_TRACE_OTEL_ENABLED                     = "true"
+    AZURE_EXPERIMENTAL_ENABLE_ACTIVITY_SOURCE = "true"
+  } : {}
+  sample_rate = try(local.apm.sample_rate, null)
+  apm_env = local.effective_mode != "datadog" ? {} : merge(
+    {
+      TELEMETRY_SDK              = "datadog"
+      DD_TRACE_ENABLED           = "true"
+      DD_LOGS_INJECTION          = tostring(try(local.apm.logs_injection, true))
+      DD_RUNTIME_METRICS_ENABLED = "true"
+      # never two tracers in one process: the OpenTelemetry SDK stays off (apps read TELEMETRY_SDK)
+      OTEL_SDK_DISABLED     = "true"
+      OTEL_TRACES_EXPORTER  = "none"
+      OTEL_METRICS_EXPORTER = "none"
+      OTEL_LOGS_EXPORTER    = "none"
+    },
+    local.sample_rate == null ? {} : { DD_TRACE_SAMPLE_RATE = tostring(local.sample_rate) },
+    local.dbm_env, local.dsm_env,
+  )
+}

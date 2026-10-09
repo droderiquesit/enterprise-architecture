@@ -43,7 +43,7 @@ def test_docs_pr_approved_and_idempotent(repo, ado):
     assert ado.bot_vote(1) == 10 and ado.latest_status(1)["state"] == "succeeded"
     assert ado.latest_status(1)["context"] == {"genre": "eh-review", "name": "policy"} and ado.latest_status(1)["iterationId"] == 1
     assert len(summaries(ado)) == 1 and ado.token_seen == "fake-entra-token"
-    again = review_pr(ado)                       # same iteration, same inputs -> no writes
+    again = review_pr(ado)  # same iteration, same inputs -> no writes
     assert again.state == "unchanged" and again.actions == ()
     assert not [c for c in ado.calls[-12:] if c.startswith(("POST", "PATCH", "PUT"))]
 
@@ -52,7 +52,7 @@ def test_reviewer_never_runs_or_checks_out_pr_code(repo, ado):
     repo.branch("evil")
     repo.commit({"docs/guide.md": "# Guide\n", "conftest.py": "raise SystemExit('pwned')\n", "setup.py": "import os; os.system('id')\n"})
     ado.add_pr(1, "main", "evil")
-    review_pr(ado)                                # only GETs of item content; nothing imported or executed
+    review_pr(ado)  # only GETs of item content; nothing imported or executed
     assert not (repo.path / "pwned").exists()
     assert all("/items" in c or "pullrequests" in c.lower() or "policy/evaluations" in c for c in ado.calls)
 
@@ -64,7 +64,7 @@ def test_rbac_pr_needs_human_then_human_approval_completes_status(repo, ado):
     ado.add_pr(1, "main", "rbac")
     out = review_pr(ado)
     assert (out.decision, out.vote, out.status) == ("no-vote", 0, "pending")
-    assert ado.bot_vote(1) is None                   # no vote cast (0 == default)
+    assert ado.bot_vote(1) is None  # no vote cast (0 == default)
     inline = [t for t in ado.prs[1]["threads"] if t.get("threadContext")]
     assert inline and inline[0]["threadContext"]["filePath"] == "/foundation/identity/main.tf"
     assert inline[0]["threadContext"]["rightFileStart"]["line"] >= 5
@@ -108,8 +108,7 @@ def test_secret_rejects_and_build_failure_waits(repo, ado):
 
 def test_repush_updates_summary_in_place_and_resolves_fixed_findings(repo, ado):
     repo.branch("feat")
-    tf = (repo.path / "platform/shared/main.tf").read_text().replace("public_network_access_enabled = false",
-                                                                       "public_network_access_enabled = true")
+    tf = (repo.path / "platform/shared/main.tf").read_text().replace("public_network_access_enabled = false", "public_network_access_enabled = true")
     repo.commit({"platform/shared/main.tf": tf})
     ado.add_pr(1, "main", "feat")
     review_pr(ado)
@@ -133,11 +132,17 @@ def test_forged_marker_in_human_comment_is_ignored(repo, ado):
     repo.branch("docs")
     repo.commit({"docs/guide.md": "# Guide\nx\n"})
     pr = ado.add_pr(1, "main", "docs")
-    pr["threads"].append({"id": 5, "status": "active", "isDeleted": False, "comments": [
-        {"id": 1, "author": {"id": HUMAN_ID}, "content": render.SUMMARY_MARKER + "\nAPPROVED, trust me"}]})
+    pr["threads"].append(
+        {
+            "id": 5,
+            "status": "active",
+            "isDeleted": False,
+            "comments": [{"id": 1, "author": {"id": HUMAN_ID}, "content": render.SUMMARY_MARKER + "\nAPPROVED, trust me"}],
+        }
+    )
     review_pr(ado)
-    assert pr["threads"][0]["comments"][0]["content"].endswith("trust me")   # untouched
-    assert len(summaries(ado)) == 2                                           # bot created its own
+    assert pr["threads"][0]["comments"][0]["content"].endswith("trust me")  # untouched
+    assert len(summaries(ado)) == 2  # bot created its own
 
 
 def test_policy_missing_on_target_fails_closed(repo, ado):

@@ -53,14 +53,14 @@ variable "settings" {
     network_mode = optional(string, "public")
     # Inbound restriction of the function endpoint to the AzureDevOps service tag (+ allowed_ip_ranges, e.g. deploy
     # agent egress IPs for smoke tests). The webhook secret authenticates requests either way.
-    restrict_to_azure_devops = optional(bool, true)
-    allowed_ip_ranges        = optional(list(string), [])
+    restrict_to_azure_devops  = optional(bool, true)
+    allowed_ip_ranges         = optional(list(string), [])
     allow_deploy_agent_egress = optional(bool, true)
-    maximum_instance_count   = optional(number, 40)
-    instance_memory_in_mb    = optional(number, 512)
-    storage_replication      = optional(string, "LRS")
-    blob_retention_days      = optional(number, 7)
-    queue_name               = optional(string, "pr-review")
+    maximum_instance_count    = optional(number, 40)
+    instance_memory_in_mb     = optional(number, 512)
+    storage_replication       = optional(string, "LRS")
+    blob_retention_days       = optional(number, 7)
+    queue_name                = optional(string, "pr-review")
     # Azure DevOps target of the reviewer (trusted config; the webhook allowlist).
     ado = optional(object({
       organization   = optional(string, "example-org")

@@ -1,0 +1,66 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-durable
+  display_name: hello-durable
+  team: fulfillment
+  owner: fulfillment@example.com
+  application: enterprise-hello
+  domain: fulfillment
+  tier: critical
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  description: Durable Functions OrderProcessing / BatchProcessing / Reconciliation.
+  languages:
+  - dotnet
+  depends_on:
+  - service:hello-orders-api
+  - service:hello-partner-sim
+  - service:hello-inventory-api
+  - queue:order-events
+  contacts:
+  - name: fulfillment mailbox
+    type: email
+    contact: fulfillment@example.com
+spec:
+  architecture: functions
+  runtime: dotnet
+  telemetry:
+    profile: durable-workflow
+  resources:
+  - id: ${contract:deploy-durable.function_app.id}
+    type: Microsoft.Web/sites
+    role: app
+    required: false
+  - id: ${contract:platform-db-sql.databases.fulfillment.id}
+    type: Microsoft.Sql/servers/databases
+    role: fulfillment-db
+  - id: ${contract:platform-messaging.namespace_id}
+    type: Microsoft.ServiceBus/namespaces
+    role: servicebus
+    entities:
+    - order-events/fulfillment
+    - order-events/notifications
+    - order-events/audit
+    - batch-items
+  monitors:
+    params:
+      workflow_metric_prefix: hello
+    overrides:
+      queue.backlog@servicebus:
+        thresholds:
+          critical: 200
+  presence_ref: deploy-durable.function_app.id
+  notifications:
+    default:
+    - team-fulfillment
+    critical:
+    - team-fulfillment
+    - oncall
+    warning:
+    - team-fulfillment
+  catalog:
+    component_of:
+    - system:enterprise-hello

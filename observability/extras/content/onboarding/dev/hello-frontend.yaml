@@ -1,0 +1,53 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-frontend
+  display_name: hello-frontend
+  team: web
+  owner: web@example.com
+  application: enterprise-hello
+  domain: storefront
+  tier: high
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  description: React SPA (RUM).
+  languages:
+  - js
+  depends_on:
+  - service:hello-bff
+  contacts:
+  - name: web mailbox
+    type: email
+    contact: web@example.com
+spec:
+  architecture: swa
+  runtime: browser
+  telemetry:
+    profile: frontend
+    rum:
+      enabled: true
+      application_ref: obs-prereqs.rum.applications.hello-frontend.application_id
+  endpoints:
+  - name: site
+    url: ${contract:deploy-frontend.url}
+    visibility: public
+    health_path: /
+    required: false
+    browser_journey: true
+  monitors:
+    params:
+      browser_assert_text: Enterprise Hello
+  presence_ref: deploy-frontend.url
+  notifications:
+    default:
+    - team-web
+    critical:
+    - team-web
+    - oncall
+    warning:
+    - team-web
+  catalog:
+    component_of:
+    - system:enterprise-hello

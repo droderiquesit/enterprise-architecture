@@ -1,3 +1,4 @@
 -r ../../shared/python/hello_common/requirements.in
+-r ../../shared/python/hello_common/requirements-datadog.in
 # must match the mcr.microsoft.com/playwright/python:v1.63.0-noble base image (bundled browsers)
 playwright==1.63.0

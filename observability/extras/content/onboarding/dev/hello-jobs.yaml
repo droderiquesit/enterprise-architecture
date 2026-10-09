@@ -1,0 +1,44 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-jobs
+  display_name: hello-jobs
+  team: fulfillment
+  owner: fulfillment@example.com
+  application: enterprise-hello
+  domain: fulfillment
+  tier: low
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  description: Seed / reconcile-trigger / batch-item jobs.
+  languages:
+  - python
+  depends_on:
+  - service:hello-durable
+  - queue:batch-items
+  contacts:
+  - name: fulfillment mailbox
+    type: email
+    contact: fulfillment@example.com
+spec:
+  architecture: aca
+  runtime: python
+  telemetry:
+    profile: job
+  monitors:
+    params:
+      expected_run_window: 1h
+  presence_ref: deploy-jobs.jobs.seed.id
+  notifications:
+    default:
+    - team-fulfillment
+    critical:
+    - team-fulfillment
+    - oncall
+    warning:
+    - team-fulfillment
+  catalog:
+    component_of:
+    - system:enterprise-hello

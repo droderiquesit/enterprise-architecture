@@ -1,0 +1,8 @@
+# Datadog APM for TELEMETRY_SDK=datadog (hello_common.apm / hello_common.telemetry), exact pins.
+# Installed in every service image but only imported in datadog mode:
+#   ddtrace  - Datadog Python tracer + Continuous Profiler (`import ddtrace.auto` when SSI/serverless-init did not
+#              inject it). 4.15.6: CPython 3.9-3.14 wheels incl. cp313 manylinux profiler extensions; OTel API
+#              support (DD_TRACE_OTEL_ENABLED), OTel metrics bridge (DD_METRICS_OTEL_ENABLED, >= 3.18).
+#   datadog  - official DogStatsD client (hello.* custom metrics -> Agent :8125 / DD_DOGSTATSD_URL).
+ddtrace==4.15.6
+datadog==0.55.0

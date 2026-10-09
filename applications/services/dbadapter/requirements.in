@@ -1,4 +1,5 @@
 -r ../../shared/python/hello_common/requirements.in
+-r ../../shared/python/hello_common/requirements-datadog.in
 # drivers (all in one image; imported lazily per DB_FAMILY)
 mssql-python==1.15.0
 psycopg[binary]==3.3.6

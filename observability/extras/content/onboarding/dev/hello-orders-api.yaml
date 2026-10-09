@@ -1,0 +1,71 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-orders-api
+  display_name: hello-orders-api
+  team: orders
+  owner: orders@example.com
+  application: enterprise-hello
+  domain: orders
+  tier: critical
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  description: Orders API; owns SQL db orders and publishes order-events.
+  languages:
+  - dotnet
+  depends_on:
+  - service:hello-catalog-api
+  - datastore:orders-sql
+  - queue:order-events
+  contacts:
+  - name: orders mailbox
+    type: email
+    contact: orders@example.com
+spec:
+  architecture: aca
+  runtime: dotnet
+  telemetry:
+    profile: http-api
+    dbm:
+      enabled: true
+      engine: sqlserver
+      endpoint_ref: platform-db-sql.server.fqdn
+  resources:
+  - id: ${contract:deploy-core-aca.apps.hello-orders-api.id}
+    type: Microsoft.App/containerApps
+    role: app
+    required: false
+  - id: ${contract:platform-db-sql.databases.orders.id}
+    type: Microsoft.Sql/servers/databases
+    role: orders-db
+  - id: ${contract:platform-messaging.namespace_id}
+    type: Microsoft.ServiceBus/namespaces
+    role: servicebus
+    entities:
+    - order-events/fulfillment
+    - order-events/notifications
+    - order-events/audit
+    - batch-items
+  endpoints:
+  - name: internal
+    url: ${contract:deploy-core-aca.apps.hello-orders-api.url}
+    visibility: private
+    health_path: /readyz
+    required: false
+  monitors:
+    disabled:
+    - queue.*
+  presence_ref: deploy-core-aca.apps.hello-orders-api.url
+  notifications:
+    default:
+    - team-orders
+    critical:
+    - team-orders
+    - oncall
+    warning:
+    - team-orders
+  catalog:
+    component_of:
+    - system:enterprise-hello

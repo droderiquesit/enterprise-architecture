@@ -102,3 +102,34 @@ output "rum_global_context" {
   description = "Browser RUM: global context properties (non-unified policy tags); env/service/version go to datadogRum.init."
   value       = module.tags.rum_global_context
 }
+
+output "apm" {
+  description = "Effective APM decision from the fleet policy: mode (datadog | otel | none), method (ssi_kubernetes | ssi_host | agent_gateway | serverless_init | otlp_agent | otlp_gateway | none), fallback reason, library versions; ready = false when agent_gateway lacks the contract's env.apm_gateway.DD_TRACE_AGENT_URL."
+  value       = merge(local.apm, { ready = local.gateway_ready })
+}
+
+output "profiling" {
+  description = "Effective Continuous Profiler decision {requested, enabled, supported, preview, reason, env}."
+  value       = local.profiling
+}
+
+output "log_collector" {
+  description = "Application-log collector of this workload: datadog-agent | fluent-bit | fluent-bit-sidecar | diagnostic-settings."
+  value       = local.log_collector
+}
+
+output "log_pipeline" {
+  description = "observability_pipelines | fluent_bit_direct (fleet policy)."
+  value       = module.fleet.log_pipeline
+}
+
+output "app_requirements" {
+  description = "What the application image / package must contain for the chosen path (hand to the application owner)."
+  value = compact([
+    local.dd_mode && var.runtime == "python" && !contains(["ssi_kubernetes", "ssi_host"], coalesce(local.apm.method, "none")) ? "Python: ddtrace in the image/package; the app starts it when TELEMETRY_SDK=datadog (import ddtrace.auto / ddtrace-run); OTel SDK init skipped" : "",
+    local.dd_mode && var.runtime == "dotnet" && contains(["agent_gateway", "serverless_init"], coalesce(local.apm.method, "none")) ? (contains(["appservice", "functions"], var.architecture) ? "dotnet: Datadog.Trace.Bundle NuGet package in the app (tracer + profiler under ${local.tracer_home})" : "dotnet: dd-trace-dotnet installed at ${local.tracer_home} in the image (tracer + continuous profiler)") : "",
+    local.dd_mode && contains(["ssi_kubernetes", "ssi_host"], coalesce(local.apm.method, "none")) ? "Single Step Instrumentation injects the Datadog library; the app must not initialise the OTel SDK when TELEMETRY_SDK=datadog" : "",
+    local.apm.method == "serverless_init" ? "ACA secret '${var.serverless_init.api_key_secret_name}' with the Datadog API key (owned by the application root; documented exception to the DSV-only rule)" : "",
+    local.otel_mode && var.runtime != "browser" ? "OpenTelemetry SDK (TELEMETRY_SDK=otel)" : "",
+  ])
+}

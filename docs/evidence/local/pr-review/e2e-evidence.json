@@ -1,0 +1,140 @@
+{
+  "kind": "pr-review-e2e",
+  "status": "locally-verified",
+  "generated_at": "2026-10-09T23:49:19Z",
+  "repository_commit": "831fe56d355dbe56b70a2d9fd472d81327baa07b",
+  "environment": "local: fake Azure DevOps REST server (tests/review/fake_ado.py) + real git branches; no Azure, no Azure DevOps",
+  "write_methods": [
+    "GET",
+    "POST",
+    "PUT"
+  ],
+  "results": [
+    {
+      "pull_request": 101,
+      "branch": "docs-only",
+      "expected": "approve",
+      "decision": "approve",
+      "vote": 10,
+      "status": "succeeded",
+      "human_required": false,
+      "auto_approvable": true,
+      "reasons": [],
+      "classes": {
+        "docs": [
+          "docs/guides/quick-start.md"
+        ]
+      },
+      "components": [
+        "docs"
+      ],
+      "consumers_affected": 0,
+      "findings": [],
+      "ado_state": {
+        "bot_vote": 10,
+        "status": {
+          "state": "succeeded",
+          "description": "Auto-approved by policy (docs)",
+          "context": {
+            "genre": "eh-review",
+            "name": "policy"
+          },
+          "iterationId": 1,
+          "id": 1,
+          "createdBy": {
+            "id": "99999999-9999-9999-9999-999999999999"
+          }
+        },
+        "threads": [
+          {
+            "status": "closed",
+            "file": null,
+            "first_line": "<!-- eh-review:summary -->"
+          }
+        ]
+      },
+      "actions": [
+        "summary:create",
+        "status:succeeded",
+        "vote:10"
+      ],
+      "rerun_actions": []
+    },
+    {
+      "pull_request": 102,
+      "branch": "rbac",
+      "expected": "human-required",
+      "decision": "no-vote",
+      "vote": 0,
+      "status": "pending",
+      "human_required": true,
+      "auto_approvable": false,
+      "reasons": [
+        "change classes need a human: identity-secrets",
+        "never bot-approved (governance/identity/prod): identity-secrets",
+        "1 finding(s) at blocking severity (high)"
+      ],
+      "classes": {
+        "identity-secrets": [
+          "foundation/identity/main.tf"
+        ]
+      },
+      "components": [
+        "foundation-identity"
+      ],
+      "consumers_affected": 50,
+      "findings": [
+        {
+          "rule": "terraform.sensitive-resource",
+          "severity": "high",
+          "kind": "risk",
+          "file": "foundation/identity/main.tf",
+          "line": 121,
+          "message": "Security-sensitive resource `azurerm_role_assignment.e2e_reader` changed (RBAC / identity / network perimeter)."
+        }
+      ],
+      "ado_state": {
+        "bot_vote": null,
+        "status": {
+          "state": "pending",
+          "description": "Human approval required: change classes need a human: identity-secrets; never bot-approved (governance/identity/prod): identity-secrets",
+          "context": {
+            "genre": "eh-review",
+            "name": "policy"
+          },
+          "iterationId": 1,
+          "id": 1,
+          "createdBy": {
+            "id": "99999999-9999-9999-9999-999999999999"
+          }
+        },
+        "threads": [
+          {
+            "status": "active",
+            "file": null,
+            "first_line": "<!-- eh-review:summary -->"
+          },
+          {
+            "status": "active",
+            "file": "/foundation/identity/main.tf",
+            "first_line": "<!-- eh-review:finding fp=5ad598d8ce742594 -->"
+          }
+        ]
+      },
+      "actions": [
+        "summary:create",
+        "finding:create:5ad598d8ce742594",
+        "status:pending"
+      ],
+      "rerun_actions": []
+    }
+  ],
+  "not_verified": [
+    "real Azure DevOps service hooks / REST",
+    "managed identity as an Azure DevOps user",
+    "vote permission",
+    "thread anchoring in the Azure DevOps UI",
+    "AzureDevOps service tag coverage",
+    "Claude API call (fake client in tests)"
+  ]
+}

@@ -31,7 +31,11 @@
         "squash_only": {"type": "boolean"},
         "build_validation": {"type": "array", "items": {"type": "object", "required": ["pipeline"],
                              "properties": {"pipeline": {"type": "string"}, "definition_id": {"type": "integer"}}}},
-        "release_minimum_reviewers": {"type": "integer", "minimum": 1}
+        "release_minimum_reviewers": {"type": "integer", "minimum": 1},
+        "required_statuses": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+          "required": ["genre", "name"],
+          "properties": {"genre": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}, "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+                         "author_id": {"type": "string"}, "blocking": {"type": "boolean"}}}}
       }
     },
     "owners_by_layer": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},

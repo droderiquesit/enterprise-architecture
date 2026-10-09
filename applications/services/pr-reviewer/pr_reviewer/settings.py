@@ -4,8 +4,8 @@ hello_common.secrets.resolve_env() resolves in-process at start-up with the Func
 from __future__ import annotations
 
 import os
+from collections.abc import MutableMapping
 from dataclasses import dataclass, field
-from typing import List, MutableMapping, Optional
 
 from tools.review.webhook import Allowlist
 
@@ -25,20 +25,20 @@ class Settings:
     project: str
     project_id: str
     allow: Allowlist
-    reviewer_id: Optional[str]
+    reviewer_id: str | None
     webhook_username: str
-    webhook_secrets: List[str] = field(repr=False)
+    webhook_secrets: list[str] = field(repr=False)
     replay_window_seconds: int = 600
     queue_name: str = "pr-review"
     queue_service_uri: str = ""
     lock_container_uri: str = ""
-    client_id: Optional[str] = None
+    client_id: str | None = None
     recheck_seconds: int = 120
     max_rechecks: int = 30
-    ado_auth: str = "managed_identity"      # managed_identity | static (tests/local fake server only)
+    ado_auth: str = "managed_identity"  # managed_identity | static (tests/local fake server only)
 
     @classmethod
-    def from_env(cls, env: Optional[MutableMapping[str, str]] = None) -> "Settings":
+    def from_env(cls, env: MutableMapping[str, str] | None = None) -> Settings:
         e = os.environ if env is None else env
         secrets = [s for s in (e.get("WEBHOOK_SECRET", ""), e.get("WEBHOOK_SECRET_PREVIOUS", "")) if s and not s.startswith("dsv://")]
         return cls(
@@ -60,7 +60,7 @@ class Settings:
             ado_auth=e.get("ADO_AUTH", "managed_identity"),
         )
 
-    def problems(self) -> List[str]:
+    def problems(self) -> list[str]:
         out = []
         for name, val in (("ADO_ORGANIZATION", self.organization), ("ADO_PROJECT", self.project), ("ADO_PROJECT_ID", self.project_id)):
             if not val:

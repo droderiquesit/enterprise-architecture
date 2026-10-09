@@ -17,6 +17,8 @@ azure-core-tracing-opentelemetry==1.0.0b13
     # via -r ../../shared/python/hello_common/requirements.in
 azure-identity==1.26.0
     # via -r ../../shared/python/hello_common/requirements.in
+bytecode==0.19.1
+    # via ddtrace
 certifi==2026.7.22
     # via
     #   httpcore
@@ -33,6 +35,14 @@ cryptography==50.0.2
     #   azure-identity
     #   msal
     #   pyjwt
+datadog==0.55.0
+    # via -r ../../shared/python/hello_common/requirements-datadog.in
+ddtrace==4.15.6
+    # via -r ../../shared/python/hello_common/requirements-datadog.in
+ddtrace-internal==0.1.0
+    # via ddtrace
+envier==0.6.1
+    # via ddtrace
 fastapi==0.143.0
     # via -r ../../shared/python/hello_common/requirements.in
 googleapis-common-protos==1.75.5
@@ -64,6 +74,7 @@ opentelemetry-api==1.45.1
     # via
     #   -r ../../shared/python/hello_common/requirements.in
     #   azure-core-tracing-opentelemetry
+    #   ddtrace
     #   fastapi
     #   opentelemetry-exporter-http-transport
     #   opentelemetry-exporter-otlp-proto-grpc
@@ -146,6 +157,7 @@ pyjwt==2.15.1
 requests==2.34.2
     # via
     #   azure-core
+    #   datadog
     #   msal
     #   opentelemetry-exporter-http-transport
     #   opentelemetry-exporter-otlp-proto-http
@@ -176,5 +188,6 @@ uvicorn==0.54.0
     # via -r ../../shared/python/hello_common/requirements.in
 wrapt==2.5.0
     # via
+    #   ddtrace
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-httpx

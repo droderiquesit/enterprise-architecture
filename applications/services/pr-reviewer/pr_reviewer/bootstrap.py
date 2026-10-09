@@ -34,7 +34,7 @@ def configure() -> None:
     if _done:
         return
     ensure_path()
-    resolve_env()                      # WEBHOOK_SECRET, ANTHROPIC_API_KEY: dsv://<prefix>/<env>/<name>#value
+    resolve_env()  # WEBHOOK_SECRET, ANTHROPIC_API_KEY: dsv://<prefix>/<env>/<name>#value
     info = service_info(SERVICE)
     configure_logging(info, keep_existing_handlers=True)
     setup_telemetry(info)

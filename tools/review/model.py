@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Optional
 
 SEVERITIES = ("critical", "high", "medium", "low", "info")
 SEVERITY_RANK = {s: i for i, s in enumerate(SEVERITIES)}  # lower = worse
@@ -25,16 +24,16 @@ class FileChange:
     """One changed path between base and head. Texts are None when absent (add/delete) or binary/too large."""
 
     path: str
-    status: str                       # A M D R (rename) T
-    old_path: Optional[str] = None
-    base_text: Optional[str] = None
-    head_text: Optional[str] = None
+    status: str  # A M D R (rename) T
+    old_path: str | None = None
+    base_text: str | None = None
+    head_text: str | None = None
     binary: bool = False
     too_large: bool = False
-    change_tracking_id: Optional[int] = None   # Azure DevOps iteration change id (inline thread anchoring)
+    change_tracking_id: int | None = None  # Azure DevOps iteration change id (inline thread anchoring)
 
     @property
-    def paths(self) -> List[str]:
+    def paths(self) -> list[str]:
         return [p for p in (self.old_path, self.path) if p]
 
 
@@ -45,12 +44,12 @@ class Finding:
     kind: str
     category: str
     message: str
-    file: Optional[str] = None
-    line: Optional[int] = None
-    suggestion: Optional[str] = None
-    evidence: str = ""          # normalised text the fingerprint is computed from (never a secret value)
-    definite: bool = False      # a definite policy violation (committed secret, policy tamper) -> reject
-    source: str = "rule"        # rule | ai
+    file: str | None = None
+    line: int | None = None
+    suggestion: str | None = None
+    evidence: str = ""  # normalised text the fingerprint is computed from (never a secret value)
+    definite: bool = False  # a definite policy violation (committed secret, policy tamper) -> reject
+    source: str = "rule"  # rule | ai
     fingerprint: str = ""
 
     def __post_init__(self) -> None:
@@ -70,21 +69,21 @@ class Finding:
 class BuildStatus:
     """PR build validation state on the latest iteration (Policy Evaluations API, read by the reviewer)."""
 
-    state: str = "unknown"            # green | failed | pending | unknown
-    details: List[dict] = field(default_factory=list)
+    state: str = "unknown"  # green | failed | pending | unknown
+    details: list[dict] = field(default_factory=list)
 
 
 @dataclass
 class ReviewContext:
-    author: str = ""                  # unique name / id of the PR author
+    author: str = ""  # unique name / id of the PR author
     author_id: str = ""
-    bot_ids: List[str] = field(default_factory=list)
+    bot_ids: list[str] = field(default_factory=list)
     target_branch: str = "main"
     build: BuildStatus = field(default_factory=BuildStatus)
     head: str = ""
     base: str = ""
-    pr_id: Optional[int] = None
-    iteration: Optional[int] = None
+    pr_id: int | None = None
+    iteration: int | None = None
     title: str = ""
 
 
@@ -92,11 +91,11 @@ class ReviewContext:
 class Decision:
     outcome: str
     vote: int
-    status_state: str                 # succeeded | failed | pending
+    status_state: str  # succeeded | failed | pending
     status_description: str
     auto_approvable: bool
     human_required: bool
-    reasons: List[str] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -104,16 +103,16 @@ class ReviewResult:
     head: str
     base: str
     policy_hash: str
-    files: List[dict]
-    components: List[dict]
-    consumers: List[str]
-    layers: List[str]
-    classes: Dict[str, List[str]]
-    findings: List[Finding]
+    files: list[dict]
+    components: list[dict]
+    consumers: list[str]
+    layers: list[str]
+    classes: dict[str, list[str]]
+    findings: list[Finding]
     decision: Decision
     stats: dict
     ai: dict
-    notes: List[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -123,6 +122,7 @@ class ReviewResult:
     @property
     def input_hash(self) -> str:
         """Identity of the review for idempotency (same head + policy + findings + decision => same outputs)."""
-        basis = "|".join([self.head, self.policy_hash, self.decision.outcome, self.decision.status_state,
-                          ",".join(sorted(f.fingerprint for f in self.findings))])
+        basis = "|".join(
+            [self.head, self.policy_hash, self.decision.outcome, self.decision.status_state, ",".join(sorted(f.fingerprint for f in self.findings))]
+        )
         return hashlib.sha256(basis.encode()).hexdigest()[:20]

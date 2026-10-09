@@ -4,7 +4,6 @@ threads so they are updated in place (summary) or deduplicated/resolved by finge
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from .model import Finding, ReviewResult
 
@@ -21,15 +20,14 @@ OUTCOME_TEXT = {
 }
 
 
-def _esc(text: Optional[str]) -> str:
+def _esc(text: str | None) -> str:
     """Neutralise markdown/HTML in untrusted text (file names, AI messages) so it cannot forge markers or links."""
     if not text:
         return ""
-    return (text.replace("<", "&lt;").replace(">", "&gt;").replace("[", "&#91;").replace("]", "&#93;")
-            .replace("`", "'").replace("\r", " "))[:1200]
+    return (text.replace("<", "&lt;").replace(">", "&gt;").replace("[", "&#91;").replace("]", "&#93;").replace("`", "'").replace("\r", " "))[:1200]
 
 
-def state_marker(iteration: Optional[int], head: str, input_hash: str) -> str:
+def state_marker(iteration: int | None, head: str, input_hash: str) -> str:
     return f"<!-- eh-review:state iteration={iteration or 0} head={head[:40]} inputs={input_hash} -->"
 
 
@@ -40,11 +38,17 @@ def parse_state(content: str) -> dict:
     return dict(kv.split("=", 1) for kv in m.group("body").split() if "=" in kv)
 
 
-def summary(result: ReviewResult, iteration: Optional[int] = None) -> str:
+def summary(result: ReviewResult, iteration: int | None = None) -> str:
     d = result.decision
-    lines = [SUMMARY_MARKER, state_marker(iteration, result.head, result.input_hash), "",
-             f"## eh-review: {OUTCOME_TEXT[d.outcome]}", "",
-             f"**Status `eh-review/policy`:** {d.status_state} - {_esc(d.status_description)}", ""]
+    lines = [
+        SUMMARY_MARKER,
+        state_marker(iteration, result.head, result.input_hash),
+        "",
+        f"## eh-review: {OUTCOME_TEXT[d.outcome]}",
+        "",
+        f"**Status `eh-review/policy`:** {d.status_state} - {_esc(d.status_description)}",
+        "",
+    ]
     if d.human_required and d.outcome not in ("reject", "wait-for-author"):
         lines += ["> A human reviewer must approve this PR (branch policy). The bot's vote is advisory.", ""]
     if d.reasons:
@@ -57,8 +61,11 @@ def summary(result: ReviewResult, iteration: Optional[int] = None) -> str:
     if result.components:
         lines.append("**Components:** " + ", ".join(f"`{c['id']}` ({c['layer']})" for c in result.components))
     if result.consumers:
-        lines.append("**Consumers affected:** " + ", ".join(f"`{c}`" for c in result.consumers[:25])
-                     + (f" (+{len(result.consumers) - 25})" if len(result.consumers) > 25 else ""))
+        lines.append(
+            "**Consumers affected:** "
+            + ", ".join(f"`{c}`" for c in result.consumers[:25])
+            + (f" (+{len(result.consumers) - 25})" if len(result.consumers) > 25 else "")
+        )
     s = result.stats
     lines += [f"**Size:** {s['files']} files, {s['changed_lines']} changed lines", ""]
     if result.findings:
@@ -73,21 +80,27 @@ def summary(result: ReviewResult, iteration: Optional[int] = None) -> str:
     else:
         lines += ["No findings.", ""]
     if result.ai.get("enabled"):
-        lines.append(f"_AI review ({_esc(result.ai.get('model'))}): {result.ai.get('findings', 0)} finding(s); AI findings can only add comments or "
-                     "block - they never approve._")
+        lines.append(
+            f"_AI review ({_esc(result.ai.get('model'))}): {result.ai.get('findings', 0)} finding(s); AI findings can only add comments or "
+            "block - they never approve._"
+        )
     lines.append(f"_Policy {result.policy_hash} (target branch) - head {result.head[:12]} - tools/review. The reviewer never runs PR code._")
     return "\n".join(lines)
 
 
 def finding_comment(f: Finding) -> str:
-    out = [f"<!-- eh-review:finding fp={f.fingerprint} -->",
-           f"**{ICON[f.severity]} {f.rule}**{' (AI, untrusted)' if f.source == 'ai' else ''}", "", _esc(f.message)]
+    out = [
+        f"<!-- eh-review:finding fp={f.fingerprint} -->",
+        f"**{ICON[f.severity]} {f.rule}**{' (AI, untrusted)' if f.source == 'ai' else ''}",
+        "",
+        _esc(f.message),
+    ]
     if f.suggestion:
         out += ["", f"**Suggested fix:** {_esc(f.suggestion)}"]
     out += ["", "_Resolved automatically when a later iteration no longer produces this finding._"]
     return "\n".join(out)
 
 
-def finding_fp(content: str) -> Optional[str]:
+def finding_fp(content: str) -> str | None:
     m = FINDING_MARKER_RE.search(content or "")
     return m.group(1) if m else None

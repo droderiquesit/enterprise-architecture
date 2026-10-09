@@ -1,5 +1,5 @@
 """Runs `terraform fmt -check`, `init -backend=false`, `validate` and `terraform test` (mock providers) for every
-package module and lab root owned by the content builder. Skipped when terraform is not installed."""
+OPTIONAL content module (extras/content) and the extras lab root. Skipped when terraform is not installed."""
 import shutil
 import subprocess
 from pathlib import Path
@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 PKG = Path(__file__).resolve().parents[2]
-ROOTS = [PKG / "modules" / m for m in ("rum", "service-catalog", "monitors", "dashboards", "slos", "synthetics",
-                                       "deployment-markers", "notification-routing", "onboarding")]
-ROOTS += [PKG / "lab" / "prereqs", PKG / "lab" / "monitoring"]
+ROOTS = [PKG / "modules" / m for m in ("service-catalog", "monitors", "dashboards", "slos", "synthetics",
+                                       "notification-routing", "onboarding", "log-management")]
+ROOTS += [PKG / "lab" / "monitoring"]
 
 pytestmark = pytest.mark.skipif(shutil.which("terraform") is None, reason="terraform not installed")
 
@@ -29,4 +29,4 @@ def test_terraform_root(root):
     if (root / "tests").exists():
         r = tf(root, "test", "-no-color")
         assert r.returncode == 0, r.stdout + r.stderr
-    assert (root / ".terraform.lock.hcl").exists() or not list(root.glob("*.tf")) or root.name == "deployment-markers"
+    assert (root / ".terraform.lock.hcl").exists() or not list(root.glob("*.tf")) 

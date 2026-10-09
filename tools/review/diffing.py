@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import difflib
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 from .model import FileChange
 
 
 @dataclass
 class LineDiff:
-    added: List[Tuple[int, str]] = field(default_factory=list)     # (head line number, text)
-    removed: List[Tuple[int, str]] = field(default_factory=list)   # (base line number, text)
+    added: list[tuple[int, str]] = field(default_factory=list)  # (head line number, text)
+    removed: list[tuple[int, str]] = field(default_factory=list)  # (base line number, text)
 
     @property
     def changed_lines(self) -> int:
         return len(self.added) + len(self.removed)
 
 
-def _lines(text: Optional[str]) -> List[str]:
+def _lines(text: str | None) -> list[str]:
     return [] if not text else text.splitlines()
 
 

@@ -7,16 +7,13 @@ stricter, never looser (there is no input through which model output can add an 
 
 from __future__ import annotations
 
-from typing import Dict, List
-
 from .model import OUTCOMES, Decision, Finding, ReviewContext
 from .policy import Policy
 
 
-def decide(policy: Policy, classes: Dict[str, List[str]], findings: List[Finding], ctx: ReviewContext,
-           stats: dict, human_approved: bool = False) -> Decision:
+def decide(policy: Policy, classes: dict[str, list[str]], findings: list[Finding], ctx: ReviewContext, stats: dict, human_approved: bool = False) -> Decision:  # noqa: PLR0917
     dec = policy["decision"]
-    reasons: List[str] = []
+    reasons: list[str] = []
     blocking = set(dec["blocking_severities"])
     wait_sev = set(dec["wait_for_author_severities"])
     ai_wait_sev = set(policy["ai"]["blocking_severities"])
@@ -57,8 +54,15 @@ def decide(policy: Policy, classes: Dict[str, List[str]], findings: List[Finding
         reasons.append(f"PR build validation is {build}")
 
     def make(outcome: str, state: str, desc: str, auto_ok: bool, human: bool) -> Decision:
-        return Decision(outcome=outcome, vote=OUTCOMES[outcome], status_state=state, status_description=desc[:250],
-                        auto_approvable=auto_ok, human_required=human, reasons=reasons)
+        return Decision(
+            outcome=outcome,
+            vote=OUTCOMES[outcome],
+            status_state=state,
+            status_description=desc[:250],
+            auto_approvable=auto_ok,
+            human_required=human,
+            reasons=reasons,
+        )
 
     # ---- outcome (strictest first)
     if definite:

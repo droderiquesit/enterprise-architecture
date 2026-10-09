@@ -31,6 +31,8 @@ policies:                         # tools/ado/branch_policies.py (Azure Repos br
     - pipeline: lab-platform
     - pipeline: lab-applications
   release_minimum_reviewers: 2
+  required_statuses:              # PR statuses that must be `succeeded` (Status policy); posted by external services
+    - {genre: eh-review, name: policy}   # automated PR reviewer verdict (tools/review, foundation/pr-reviewer)
 owners_by_layer:                  # default `owners` of a registry component (catalog/components.yaml `owners`)
   bootstrap: [platform-team]
   foundation: [platform-team]

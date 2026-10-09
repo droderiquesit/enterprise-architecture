@@ -1,0 +1,56 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-inventory-api
+  display_name: hello-inventory-api
+  team: orders
+  owner: orders@example.com
+  application: enterprise-hello
+  domain: inventory
+  tier: high
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  description: Inventory API (Cosmos DB NoSQL), App Service Windows.
+  languages:
+  - dotnet
+  depends_on:
+  - datastore:inventory-cosmos
+  contacts:
+  - name: orders mailbox
+    type: email
+    contact: orders@example.com
+spec:
+  architecture: appservice
+  runtime: dotnet
+  telemetry:
+    profile: http-api
+  resources:
+  - id: ${contract:deploy-appservice.apps.hello-inventory-api.id}
+    type: Microsoft.Web/sites
+    role: app
+    required: false
+  - id: ${contract:platform-db-cosmos-nosql.account.id}
+    type: Microsoft.DocumentDB/databaseAccounts
+    role: inventory-db
+    required: false
+  endpoints:
+  - name: internal
+    url: ${contract:deploy-appservice.apps.hello-inventory-api.url}
+    visibility: private
+    health_path: /readyz
+    required: false
+  presence_ref: deploy-appservice.apps.hello-inventory-api.url
+  notifications:
+    default:
+    - team-orders
+    critical:
+    - team-orders
+    - oncall
+    warning:
+    - team-orders
+  catalog:
+    component_of:
+    - system:enterprise-hello
+  enabled: true

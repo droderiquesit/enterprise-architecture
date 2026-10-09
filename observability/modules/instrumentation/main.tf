@@ -25,8 +25,37 @@ module "tags" {
   extra_tags = var.extra_tags
 }
 
+# Fleet policy (config/fleet-policy.yaml unless overridden): APM library, profiler, DSM, DBM propagation, log pipeline.
+# Lab-wide switches may arrive through the transport contract's env map "fleet" (EH_LOG_PIPELINE, EH_APM_MODE,
+# EH_PROFILING_ENABLED); explicit module inputs win.
+module "fleet" {
+  source       = "../fleet-policy"
+  policy       = var.fleet_policy
+  architecture = var.architecture
+  runtime      = var.runtime
+  os_type      = var.os_type
+  env          = module.tags.unified.env
+  overrides = merge(
+    local.contract_fleet,
+    var.apm == null ? {} : { apm = var.apm },
+    var.profiling == null ? {} : { profiling = var.profiling },
+  )
+}
+
 locals {
   container = coalesce(var.container_name, var.service.service)
+
+  fleet_env = lookup(var.telemetry.env, "fleet", {})
+  contract_fleet = merge(
+    lookup(local.fleet_env, "EH_LOG_PIPELINE", "") == "" ? {} : { log_pipeline = local.fleet_env["EH_LOG_PIPELINE"] },
+    lookup(local.fleet_env, "EH_APM_MODE", "") == "" ? {} : { apm = { mode = local.fleet_env["EH_APM_MODE"] } },
+    lookup(local.fleet_env, "EH_PROFILING_ENABLED", "") == "" ? {} : { profiling = { enabled = local.fleet_env["EH_PROFILING_ENABLED"] == "true" } },
+  )
+
+  apm       = module.fleet.apm
+  profiling = module.fleet.profiling
+  dd_mode   = local.apm.mode == "datadog"
+  otel_mode = local.apm.mode == "otel"
 
   log_route = {
     aks        = "daemonset"
@@ -38,8 +67,12 @@ locals {
     functions  = "eventhub"
     logicapp   = "eventhub"
   }[var.architecture]
+  # daemonset / host routes: the node Datadog Agent (Observability Pipelines mode) or Fluent Bit collects
+  log_collector = contains(["daemonset", "host"], local.log_route) ? (module.fleet.node_collector == "agent" ? "datadog-agent" : "fluent-bit") : (
+    local.log_route == "sidecar" ? "fluent-bit-sidecar" : "diagnostic-settings"
+  )
 
-  # where OTLP goes: node-local Agent (AKS DaemonSet hostPort / VM agent) or the OTel gateway
+  # where OTLP goes (otel mode): node-local Agent (AKS DaemonSet hostPort / VM agent) or the OTel gateway
   otlp_target = contains(["aks", "vm", "vmss"], var.architecture) ? "agent" : "gateway"
 
   default_protocol = local.otlp_target == "agent" ? "grpc" : var.telemetry.otlp.default_protocol
@@ -99,29 +132,70 @@ locals {
   # Contract-provided defaults (per runtime) first, module computed values win.
   contract_env = merge(lookup(var.telemetry.env, "common", {}), lookup(var.telemetry.env, var.runtime, {}))
 
+  # ---------------------------------------------------------------- Datadog tracer (apm.mode = datadog)
+  # agent_gateway: the tracer in the image sends to the telemetry transport's in-VNet Datadog Agent APM gateway
+  # (contract env.apm_gateway.DD_TRACE_AGENT_URL); the API key never reaches the workload.
+  gateway_url   = lookup(lookup(var.telemetry.env, "apm_gateway", {}), "DD_TRACE_AGENT_URL", "")
+  gateway_ready = local.apm.method != "agent_gateway" || local.gateway_url != ""
+  # .NET tracer location: SSI injects it; containers install the dd-trace-dotnet tarball at /opt/datadog; App Service
+  # and Functions ship the Datadog.Trace.Bundle NuGet package in the app (<wwwroot>/datadog).
+  tracer_home = coalesce(var.dotnet_tracer_home, contains(["appservice", "functions"], var.architecture) ? (
+    var.os_type == "windows" ? "C:\\home\\site\\wwwroot\\datadog" : "/home/site/wwwroot/datadog"
+  ) : "/opt/datadog")
+  clr_env = var.runtime != "dotnet" || !contains(["agent_gateway", "serverless_init"], coalesce(local.apm.method, "none")) ? {} : (
+    var.os_type == "windows" ? {
+      CORECLR_ENABLE_PROFILING = "1"
+      CORECLR_PROFILER         = "{846F5F1C-F9AE-4B07-969E-05C26BC060D8}"
+      CORECLR_PROFILER_PATH_64 = "${local.tracer_home}\\win-x64\\Datadog.Trace.ClrProfiler.Native.dll"
+      DD_DOTNET_TRACER_HOME    = local.tracer_home
+      } : {
+      CORECLR_ENABLE_PROFILING = "1"
+      CORECLR_PROFILER         = "{846F5F1C-F9AE-4B07-969E-05C26BC060D8}"
+      CORECLR_PROFILER_PATH    = "${local.tracer_home}/linux-x64/Datadog.Trace.ClrProfiler.Native.so"
+      DD_DOTNET_TRACER_HOME    = local.tracer_home
+      LD_PRELOAD               = "${local.tracer_home}/linux-x64/Datadog.Linux.ApiWrapper.x64.so"
+    }
+  )
+  datadog_env = !local.dd_mode ? {} : merge(
+    module.fleet.apm_env,
+    local.clr_env,
+    local.apm.method == "agent_gateway" && local.gateway_url != "" ? { DD_TRACE_AGENT_URL = local.gateway_url } : {},
+    var.architecture == "aks" ? {} : { DD_SITE = var.telemetry.datadog_site },
+  )
+
+  # ---------------------------------------------------------------- OpenTelemetry SDK (apm.mode = otel)
+  otel_env = !local.otel_mode ? {} : merge(local.runtime_env[var.runtime], {
+    TELEMETRY_SDK               = "otel"
+    OTEL_EXPORTER_OTLP_ENDPOINT = local.otlp_endpoint
+    OTEL_EXPORTER_OTLP_PROTOCOL = local.protocol
+    OTEL_TRACES_SAMPLER         = "parentbased_traceidratio"
+    OTEL_TRACES_SAMPLER_ARG     = tostring(var.trace_sample_ratio)
+    OTEL_TRACES_EXPORTER        = "otlp"
+    OTEL_METRICS_EXPORTER       = "otlp"
+    # application logs travel through the log pipeline only (no OTLP logs -> no duplicates)
+    OTEL_LOGS_EXPORTER = "none"
+    OTEL_PROPAGATORS   = "tracecontext,baggage"
+  })
+  none_env = local.apm.mode == "none" && var.runtime != "browser" ? {
+    TELEMETRY_SDK      = "none"
+    OTEL_SDK_DISABLED  = "true"
+    OTEL_LOGS_EXPORTER = "none"
+  } : {}
+
   base_env = var.runtime == "browser" ? {
     DD_SITE    = var.telemetry.datadog_site
     DD_ENV     = local.u.env
     DD_SERVICE = local.u.service
     DD_VERSION = local.u.version
-    } : merge(local.contract_env, local.runtime_env[var.runtime], {
+    } : merge(local.contract_env, {
       DD_ENV     = local.u.env
       DD_SERVICE = local.u.service
       DD_VERSION = local.u.version
-      # extra policy tags for Datadog-native tracers/SDKs (OTel SDKs read OTEL_RESOURCE_ATTRIBUTES)
-      DD_TAGS                     = module.tags.dd_tags_extra
-      OTEL_SERVICE_NAME           = local.u.service
-      OTEL_RESOURCE_ATTRIBUTES    = local.otel_resource_attributes
-      OTEL_EXPORTER_OTLP_ENDPOINT = local.otlp_endpoint
-      OTEL_EXPORTER_OTLP_PROTOCOL = local.protocol
-      OTEL_TRACES_SAMPLER         = "parentbased_traceidratio"
-      OTEL_TRACES_SAMPLER_ARG     = tostring(var.trace_sample_ratio)
-      OTEL_TRACES_EXPORTER        = "otlp"
-      OTEL_METRICS_EXPORTER       = "otlp"
-      # application logs travel through Fluent Bit only (no OTLP logs -> no duplicates)
-      OTEL_LOGS_EXPORTER = "none"
-      OTEL_PROPAGATORS   = "tracecontext,baggage"
-  })
+      # extra policy tags (DD_TAGS for Datadog tracers/profilers, OTEL_RESOURCE_ATTRIBUTES for OTel SDKs)
+      DD_TAGS                  = module.tags.dd_tags_extra
+      OTEL_SERVICE_NAME        = local.u.service
+      OTEL_RESOURCE_ATTRIBUTES = local.otel_resource_attributes
+  }, local.otel_env, local.datadog_env, local.none_env, local.profiling.env)
 
   # DSV runtime env contract (ADR-0001 section 14): how our app code and dsv-fetch reach DSV.
   dsv_env = merge(
@@ -135,7 +209,7 @@ locals {
   )
 
   # env vars whose VALUE is a DSV reference, resolved by the application at start-up (name -> dsv:// ref)
-  secret_env = var.runtime != "browser" && local.otlp_target == "gateway" && var.telemetry.otlp.headers_ref != null ? {
+  secret_env = var.runtime != "browser" && local.otel_mode && local.otlp_target == "gateway" && var.telemetry.otlp.headers_ref != null ? {
     OTEL_EXPORTER_OTLP_HEADERS = var.telemetry.otlp.headers_ref
   } : {}
 
@@ -247,7 +321,7 @@ locals {
       env           = [for k in sort(keys(local.env)) : { name = k, value = local.env[k], secret_name = null }]
       volume_mounts = local.uses_sidecar ? [{ name = "app-logs", path = local.log_dir, sub_path = null }] : []
     }
-    sidecars = local.uses_sidecar ? [{
+    sidecars = concat(local.uses_sidecar ? [{
       name   = "fluent-bit"
       image  = var.telemetry.fluentbit.sidecar_image
       cpu    = var.sidecar_resources.cpu
@@ -264,7 +338,7 @@ locals {
         local.needs_fetch ? [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }] : [],
       )
       liveness_probe = { transport = "HTTP", port = 2020, path = "/api/v1/health" }
-    }] : []
+    }] : [], local.serverless_init_sidecar)
   }
 
   # App Service / Functions / Logic Apps Standard: plain app settings. Secret settings carry the dsv://
@@ -313,9 +387,46 @@ locals {
     app_volume_mounts = [{ name = "app-logs", mount_path = local.log_dir }]
   } : null
 
-  # Kubernetes Deployment strategic-merge patch (AKS: Fluent Bit DaemonSet collects stdout; OTLP to node agent)
-  k8s_labels      = merge(module.tags.k8s_labels, { "logs.datadoghq.com/source" = local.dd_source })
-  k8s_annotations = module.tags.k8s_annotations
+  # Kubernetes Deployment strategic-merge patch. Logs: the node Datadog Agent (-> Observability Pipelines Worker) or
+  # the Fluent Bit DaemonSet collects stdout. Traces: SSI-injected Datadog tracer (admission controller) or OTLP.
+  k8s_labels = merge(
+    module.tags.k8s_labels,
+    { "logs.datadoghq.com/source" = local.dd_source },
+    local.apm.method == "ssi_kubernetes" ? { "admission.datadoghq.com/enabled" = "true" } : {},
+  )
+  k8s_annotations = merge(
+    module.tags.k8s_annotations,
+    # Agent log collection: source/service of the container's stdout (the Agent then ships to the OP Worker)
+    local.log_collector == "datadog-agent" ? { "ad.datadoghq.com/${local.container}.logs" = jsonencode([{ source = local.dd_source, service = local.u.service }]) } : {},
+  )
+
+  # ---------------------------------------------------------------- Datadog serverless-init sidecar (ACA, opt-in)
+  # Datadog's Container Apps sidecar pattern. serverless-init 1.10.4 reads DD_API_KEY only as a plain value (it does
+  # not resolve ENC[] secret backends - verified locally), so the key must be an ACA secret the application owner
+  # maintains (var.serverless_init.api_key_secret_name): a documented exception to the DSV-only rule. Logs stay on
+  # the Fluent Bit sidecar (DD_LOGS_ENABLED=false) - no double collection.
+  serverless_init_sidecar = local.apm.method == "serverless_init" && var.runtime != "browser" ? [{
+    name   = "datadog"
+    image  = var.serverless_init.image
+    cpu    = var.serverless_init.cpu
+    memory = var.serverless_init.memory
+    args   = []
+    env = concat(
+      [for k, v in {
+        DD_SITE                  = var.telemetry.datadog_site
+        DD_ENV                   = local.u.env
+        DD_SERVICE               = local.u.service
+        DD_VERSION               = local.u.version
+        DD_TAGS                  = module.tags.dd_tags_extra
+        DD_LOGS_ENABLED          = "false"
+        DD_AZURE_SUBSCRIPTION_ID = coalesce(var.serverless_init.subscription_id, "unset")
+        DD_AZURE_RESOURCE_GROUP  = coalesce(var.serverless_init.resource_group, "unset")
+      } : { name = k, value = v, secret_name = null }],
+      [{ name = "DD_API_KEY", value = null, secret_name = var.serverless_init.api_key_secret_name }],
+    )
+    volume_mounts  = []
+    liveness_probe = null
+  }] : []
   k8s_env = concat(
     var.architecture == "aks" ? [{ name = "DD_AGENT_HOST", valueFrom = { fieldRef = { fieldPath = "status.hostIP" } } }] : [],
     [for k in sort(keys(local.env)) : { name = k, value = local.env[k] }],

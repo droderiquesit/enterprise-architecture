@@ -21,8 +21,8 @@ import re
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 ALLOWED_EVENTS = ("git.pullrequest.created", "git.pullrequest.updated", "ms.vss-code.git-pullrequest-comment-event")
 MAX_BODY = 256 * 1024
@@ -34,7 +34,7 @@ class WebhookRejected(Exception):
     def __init__(self, status: int, reason: str):
         super().__init__(reason)
         self.status = status
-        self.reason = reason            # safe to log: never contains header or body content
+        self.reason = reason  # safe to log: never contains header or body content
 
 
 @dataclass(frozen=True)
@@ -44,9 +44,10 @@ class Allowlist:
     account_ids: frozenset = frozenset()
 
     @classmethod
-    def from_settings(cls, projects: str, repositories: str, accounts: str = "") -> "Allowlist":
+    def from_settings(cls, projects: str, repositories: str, accounts: str = "") -> Allowlist:
         def split(v: str) -> frozenset:
             return frozenset(x.strip().lower() for x in (v or "").split(",") if x.strip())
+
         return cls(split(projects), split(repositories), split(accounts))
 
 
@@ -63,17 +64,23 @@ class ReviewJob:
         return json.dumps(self.__dict__, sort_keys=True)
 
     @classmethod
-    def from_message(cls, text: str) -> "ReviewJob":
+    def from_message(cls, text: str) -> ReviewJob:
         d = json.loads(text)
-        return cls(str(d["event_id"]), str(d["event_type"]), str(d["project_id"]).lower(), str(d["repository_id"]).lower(),
-                   int(d["pull_request_id"]), str(d.get("created", "")))
+        return cls(
+            str(d["event_id"]),
+            str(d["event_type"]),
+            str(d["project_id"]).lower(),
+            str(d["repository_id"]).lower(),
+            int(d["pull_request_id"]),
+            str(d.get("created", "")),
+        )
 
 
 class ReplayCache:
     def __init__(self, ttl_seconds: float = 900, max_entries: int = 10000):
         self.ttl = ttl_seconds
         self.max = max_entries
-        self._seen: "OrderedDict[str, float]" = OrderedDict()
+        self._seen: OrderedDict[str, float] = OrderedDict()
         self._lock = threading.Lock()
 
     def seen(self, key: str) -> bool:
@@ -95,13 +102,13 @@ def expected_headers(username: str, secrets: Iterable[str]) -> list:
     return [b"Basic " + base64.b64encode(f"{username}:{s}".encode()) for s in secrets if s]
 
 
-def check_auth(header: Optional[str], username: str, secrets: Iterable[str]) -> None:
+def check_auth(header: str | None, username: str, secrets: Iterable[str]) -> None:
     candidates = expected_headers(username, secrets)
     if not candidates:
         raise WebhookRejected(503, "webhook secret not configured")
     got = (header or "").strip().encode()
     ok = False
-    for exp in candidates:           # compare against every candidate: no early exit on the first match
+    for exp in candidates:  # compare against every candidate: no early exit on the first match
         ok |= hmac.compare_digest(got, exp)
     if not ok:
         raise WebhookRejected(401, "invalid webhook credentials")
@@ -109,16 +116,25 @@ def check_auth(header: Optional[str], username: str, secrets: Iterable[str]) -> 
 
 def _parse_time(s: str) -> dt.datetime:
     s = s.strip().replace("Z", "+00:00")
-    m = re.match(r"^(.*\.\d{6})\d*(.*)$", s)     # ADO uses 7 fractional digits
+    m = re.match(r"^(.*\.\d{6})\d*(.*)$", s)  # ADO uses 7 fractional digits
     if m:
         s = m.group(1) + m.group(2)
     t = dt.datetime.fromisoformat(s)
     return t if t.tzinfo else t.replace(tzinfo=dt.UTC)
 
 
-def validate(body: bytes, auth_header: Optional[str], *, username: str, secrets: Iterable[str], allow: Allowlist,
-             replay: ReplayCache, window_seconds: int = 600, skew_seconds: int = 120,
-             now: Optional[dt.datetime] = None) -> ReviewJob:
+def validate(
+    body: bytes,
+    auth_header: str | None,
+    *,
+    username: str,
+    secrets: Iterable[str],
+    allow: Allowlist,
+    replay: ReplayCache,
+    window_seconds: int = 600,
+    skew_seconds: int = 120,
+    now: dt.datetime | None = None,
+) -> ReviewJob:
     if len(body) > MAX_BODY:
         raise WebhookRejected(413, "payload too large")
     check_auth(auth_header, username, secrets)

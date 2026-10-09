@@ -26,6 +26,10 @@ dependencies = [
   "azure-core-tracing-opentelemetry>=1.0.0b13",
 ]
 
+[project.optional-dependencies]
+# TELEMETRY_SDK=datadog (exact pins: requirements-datadog.in, included by every service's requirements.in)
+datadog = ["ddtrace>=4.15.6", "datadog>=0.55.0"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

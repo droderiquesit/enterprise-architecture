@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "foundation-pr-reviewer contract v1",
+  "description": "Output of foundation/pr-reviewer: the trusted automated PR reviewer (eh-pr-reviewer Flex Consumption app, its user-assigned identity and runtime storage). No secrets: the webhook secret is a Delinea DSV reference.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "resource_group_name",
+    "function_app_id",
+    "function_app_name",
+    "function_url",
+    "webhook_path",
+    "webhook_url",
+    "webhook_username",
+    "webhook_secret_ref",
+    "deployment_container",
+    "storage_account_name",
+    "queue_name",
+    "identity_id",
+    "identity_name",
+    "identity_client_id",
+    "identity_principal_id",
+    "network_mode",
+    "status_context"
+  ],
+  "properties": {
+    "resource_group_name": {
+      "type": "string"
+    },
+    "function_app_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "function_app_name": {
+      "type": "string"
+    },
+    "function_url": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "webhook_path": {
+      "const": "/api/ado-webhook"
+    },
+    "webhook_url": {
+      "type": "string",
+      "pattern": "^https://.+/api/ado-webhook$"
+    },
+    "webhook_username": {
+      "type": "string",
+      "minLength": 1
+    },
+    "webhook_secret_ref": {
+      "type": "string",
+      "pattern": "^dsv://[a-z0-9/._-]+#[A-Za-z0-9_.-]+$",
+      "description": "DSV reference (never the value)"
+    },
+    "deployment_container": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "storage_account_name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{3,24}$"
+    },
+    "queue_name": {
+      "type": "string"
+    },
+    "identity_id": {
+      "type": "string",
+      "pattern": "^/subscriptions/[^/]+/"
+    },
+    "identity_name": {
+      "type": "string"
+    },
+    "identity_client_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F-]{36}$"
+    },
+    "identity_principal_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F-]{36}$"
+    },
+    "network_mode": {
+      "enum": [
+        "public",
+        "vnet"
+      ]
+    },
+    "inbound_service_tag": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status_context": {
+      "const": "eh-review/policy"
+    }
+  }
+}

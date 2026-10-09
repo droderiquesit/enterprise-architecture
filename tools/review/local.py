@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
 
 from tools.changeset.gitdiff import diff, rev_parse
 from tools.changeset.trees import GitTree, WorkTree
@@ -27,7 +26,7 @@ def _text(tree, path: str, max_bytes: int):
         return None, True, False
 
 
-def git_changes(repo: Path, base: str, head: Optional[str], max_file_bytes: int = 512000) -> List[FileChange]:
+def git_changes(repo: Path, base: str, head: str | None, max_file_bytes: int = 512000) -> list[FileChange]:
     """head=None compares base with the working tree."""
     base_sha = rev_parse(repo, base)
     head_sha = rev_parse(repo, head) if head else None

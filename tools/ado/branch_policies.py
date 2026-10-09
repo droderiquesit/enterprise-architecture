@@ -19,6 +19,8 @@ Policies on the trunk (and release/* prefix), policy type ids from the Policy Co
                                validDuration: 0 = "expire immediately when main is updated": every PR is re-validated
                                against the newest main before it can complete (the Azure Repos substitute for a merge
                                queue; auto-complete re-queues expired builds)
+  Status (required PR status)  resolved by display name "Status"; `policies.required_statuses` (eh-review/policy =
+                               the automated PR reviewer's verdict), reset on every push, applies by default
   Required reviewers           fd2167ab-b0be-447a-8ec8-39368250530e  one per owner group, path filtered by the
                                component paths (same map as .github/CODEOWNERS); group ids from `identities` in
                                environments/branching.yaml or the Identities API
@@ -57,7 +59,9 @@ TYPES = {
     "build": "0609b952-1397-4640-95ec-e00a01b2c241",
     "required-reviewers": "fd2167ab-b0be-447a-8ec8-39368250530e",
     "comments": None,  # "Comment requirements": resolved from _apis/policy/types at plan time
+    "status": None,    # "Status" (required PR status from an external service): resolved from _apis/policy/types
 }
+TYPE_NAMES = {"comments": "comment requirements", "status": "status"}
 MARK = "[lab-policy:{}]"
 SHORT_LIVED_ALLOWED = ("feature", "fix", "chore", "docs")
 
@@ -98,6 +102,14 @@ def desired(repo: Path = REPO, repo_id: Optional[str] = None, definitions: Optio
             add(f"work-item{sfx}", "work-item", {}, ref=ref, kind=kind)
         if pol.get("comment_resolution", True):
             add(f"comments{sfx}", "comments", {}, ref=ref, kind=kind)
+        # required PR statuses posted by external services (the automated PR reviewer posts eh-review/policy);
+        # apply by default (pending until posted), reset on every push, any poster unless author_id is set
+        for st in pol.get("required_statuses") or []:
+            sk = f"status-{st['genre']}-{st['name']}{sfx}"
+            add(sk, "status", {"statusGenre": st["genre"], "statusName": st["name"], "authorId": st.get("author_id"),
+                               "invalidateOnSourceUpdate": True, "policyApplicability": None,
+                               "defaultDisplayName": f"{st['genre']}/{st['name']} {MARK.format(sk)}"},
+                blocking=bool(st.get("blocking", True)), ref=ref, kind=kind)
     # path-filtered required reviewers per owner group (same map as CODEOWNERS)
     by_group: Dict[str, List[str]] = {}
     for path, owners, _src in ownership(load_registry(WorkTree(repo)), doc):
@@ -159,7 +171,7 @@ def make_http() -> Http:
 
 def _managed_key(cfg: dict) -> Optional[str]:
     s = cfg.get("settings") or {}
-    for text in (s.get("displayName") or "", s.get("message") or ""):
+    for text in (s.get("displayName") or "", s.get("message") or "", s.get("defaultDisplayName") or ""):
         if "[lab-policy:" in text:
             return text.split("[lab-policy:", 1)[1].split("]", 1)[0]
     return None
@@ -233,8 +245,9 @@ def resolve_types(http: Http, base: str) -> Dict[str, str]:
     types = {k: v for k, v in TYPES.items() if v}
     listed = http("GET", f"{base}/_apis/policy/types?api-version={API}", None) or {}
     for t in listed.get("value") or []:
-        if str(t.get("displayName", "")).lower() == "comment requirements":
-            types["comments"] = t["id"]
+        for key, name in TYPE_NAMES.items():
+            if str(t.get("displayName", "")).lower() == name:
+                types[key] = t["id"]
     return types
 
 

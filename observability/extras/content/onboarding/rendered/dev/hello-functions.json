@@ -1,0 +1,238 @@
+{
+  "architecture": "functions",
+  "catalog": {
+    "component_of": [
+      "system:enterprise-hello"
+    ],
+    "enabled": true,
+    "lifecycle": "production",
+    "type": "queue-consumer"
+  },
+  "dashboards": {
+    "enabled": true,
+    "workflow_metric_prefix": null
+  },
+  "enabled": true,
+  "endpoints": [],
+  "env": "dev",
+  "generated_from": {
+    "layers": [
+      "global-defaults",
+      "platform/functions",
+      "profiles/worker",
+      "manifest"
+    ],
+    "manifest": "dev/hello-functions.yaml",
+    "sha256": "28e2e1f847f01e24dab39f1228ddb05f709b6a1b967b75d21631a04a3fda3abf"
+  },
+  "idle_behavior": {
+    "expected_quiet_hours": null,
+    "scale_to_zero": true
+  },
+  "metadata": {
+    "application": "enterprise-hello",
+    "contacts": [
+      {
+        "contact": "platform-engineering@example.com",
+        "name": "platform-engineering mailbox",
+        "type": "email"
+      }
+    ],
+    "depends_on": [
+      "queue:order-events"
+    ],
+    "description": "Audit (Service Bus trigger), cache-warmer (timer), quote (HTTP).",
+    "display_name": "hello-functions",
+    "domain": "audit",
+    "languages": [
+      "python"
+    ],
+    "owner": "platform-engineering@example.com",
+    "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md",
+    "team": "platform-engineering",
+    "tier": "medium"
+  },
+  "monitors": {
+    "apm.consumer_error_rate": {
+      "evaluation_delay": null,
+      "key": "apm.consumer_error_rate",
+      "message": "{{#is_alert}}**CRITICAL**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\n\nTroubleshooting:\n1. APM consumer spans for hello-functions; follow the span link to the producer trace.\n2. Check the dead-letter monitor of the Service Bus namespace.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#consumer-errors",
+      "name": "[dev] hello-functions message processing failure rate above 10%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-platform-engineering",
+          "oncall"
+        ],
+        "warning": [
+          "team-platform-engineering"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_15m):( sum:trace.servicebus.process.errors{service:hello-functions,env:dev}.as_count() / clamp_min(sum:trace.servicebus.process.hits{service:hello-functions,env:dev}.as_count(), 5) ) * 100 > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#consumer-errors",
+      "severity": "critical",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:audit",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:apm.consumer_error_rate",
+        "service:hello-functions",
+        "severity:critical",
+        "team:platform-engineering",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 10
+      },
+      "type": "query alert"
+    },
+    "func.http_5xx_ratio@app": {
+      "evaluation_delay": 900,
+      "key": "func.http_5xx_ratio@app",
+      "message": "{{#is_alert}}**WARNING**: HTTP-triggered functions return server errors.{{/is_alert}}\n{{#is_warning}}**WARNING**: HTTP-triggered functions return server errors.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.\n2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#functions-5xx",
+      "name": "[dev] hello-functions Function App [[resource.name]] 5xx ratio above 5%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-platform-engineering"
+        ],
+        "warning": [
+          "team-platform-engineering"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "sum(last_15m):sum:azure.functions.http5xx{[[resource.scope]]}.as_count() / sum:azure.functions.requests{[[resource.scope]]}.as_count() * 100 > 5",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "app",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#functions-5xx",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:audit",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:func.http_5xx_ratio",
+        "service:hello-functions",
+        "severity:warning",
+        "team:platform-engineering",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 5
+      },
+      "type": "query alert"
+    },
+    "logs.error_spike": {
+      "evaluation_delay": null,
+      "key": "logs.error_spike",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\n\nTroubleshooting:\n1. Open Logs for service:hello-functions env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-functions in the last hour (a new version is the usual cause).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#error-logs",
+      "name": "[dev] hello-functions error log volume above 50 in 10m",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "team-platform-engineering"
+        ],
+        "warning": [
+          "team-platform-engineering"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"service:hello-functions env:dev status:error\").index(\"*\").rollup(\"count\").last(\"10m\") > 50",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#error-logs",
+      "severity": "warning",
+      "tags": [
+        "application:enterprise-hello",
+        "domain:audit",
+        "env:dev",
+        "managed_by:observability-package",
+        "monitor:logs.error_spike",
+        "service:hello-functions",
+        "severity:warning",
+        "team:platform-engineering",
+        "tier:medium"
+      ],
+      "thresholds": {
+        "critical": 50
+      },
+      "type": "log alert"
+    }
+  },
+  "notifications": {
+    "critical": [
+      "team-platform-engineering",
+      "oncall"
+    ],
+    "default": [
+      "team-platform-engineering"
+    ],
+    "warning": [
+      "team-platform-engineering"
+    ]
+  },
+  "package_version": "2.0.0",
+  "presence_ref": "deploy-functions.function_apps.premium.id",
+  "resources": [
+    {
+      "entities": [],
+      "id": "${contract:deploy-functions.function_apps.premium.id}",
+      "required": false,
+      "role": "app",
+      "tags": {},
+      "type": "Microsoft.Web/sites"
+    }
+  ],
+  "runtime": "python",
+  "schema": "rendered-service/v1",
+  "service": "hello-functions",
+  "slos": [],
+  "synthetics_defaults": {
+    "min_failure_duration": 120,
+    "min_location_failed": 1,
+    "retry": {
+      "count": 1,
+      "interval": 300
+    }
+  },
+  "tags": [
+    "application:enterprise-hello",
+    "domain:audit",
+    "env:dev",
+    "managed_by:observability-package",
+    "service:hello-functions",
+    "team:platform-engineering",
+    "tier:medium"
+  ],
+  "telemetry": {
+    "dbm": {
+      "enabled": false
+    },
+    "logs": {
+      "route": "eventhub"
+    },
+    "profile": "worker",
+    "rum": {
+      "enabled": false
+    },
+    "traces": {
+      "enabled": true,
+      "sample_rate": 1.0,
+      "server_operation": "servicebus.process"
+    }
+  }
+}

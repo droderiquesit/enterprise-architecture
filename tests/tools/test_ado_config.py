@@ -62,6 +62,11 @@ def test_desired_policies():
     owners = want["owners-platform-team"]["settings"]
     assert owners["requiredReviewerIds"] == ["g-plat"] and "/pipelines/*" in owners["filenamePatterns"]
     assert want["owners-security-team"]["settings"]["unresolvedGroup"] == "security-team"
+    # automated PR reviewer verdict is a required status on main and release/*
+    st = want["status-eh-review-policy"]
+    assert st["type"] == "status" and st["isBlocking"]
+    assert (st["settings"]["statusGenre"], st["settings"]["statusName"]) == ("eh-review", "policy")
+    assert st["settings"]["invalidateOnSourceUpdate"] is True and "status-eh-review-policy-release" in want
 
 
 class FakeAdo:
@@ -78,7 +83,8 @@ class FakeAdo:
         if "/_apis/build/definitions" in path:
             return {"value": [{"id": 11 if "platform" in url else 12}]}
         if path.endswith("/_apis/policy/types"):
-            return {"value": [{"id": "c6a1889d-b943-4856-b76f-9e46bb6b0df2", "displayName": "Comment requirements"}]}
+            return {"value": [{"id": "c6a1889d-b943-4856-b76f-9e46bb6b0df2", "displayName": "Comment requirements"},
+                              {"id": "cbdc66da-9728-4af8-aada-9a5a32e4a226", "displayName": "Status"}]}
         if path.endswith("/_apis/policy/configurations") and method == "GET":
             return {"value": list(self.configs.values())}
         if method == "POST":
@@ -103,7 +109,7 @@ def test_apply_is_idempotent_and_never_touches_unmanaged(monkeypatch):
                  "settings": {"scope": [{"repositoryId": "repo-1", "refName": "refs/heads/main", "matchKind": "exact"}]}}
     fake = FakeAdo([unmanaged])
     first = bp.run("apply", "https://dev.azure.com/org", "lab", "enterprise-architecture", fake)
-    assert {a["action"] for a in first} == {"create"} and len(first) == 17
+    assert {a["action"] for a in first} == {"create"} and len(first) == 19
     second = bp.run("apply", "https://dev.azure.com/org", "lab", "enterprise-architecture", fake)
     assert {a["action"] for a in second} == {"unchanged"}
     assert 1 in fake.configs                                         # unmanaged policy untouched

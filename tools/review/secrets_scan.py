@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from typing import Iterable, List, Tuple
+from collections.abc import Iterable
 
 from tools.changeset import globs
 
@@ -30,11 +30,25 @@ DEFINITE = [
 ]
 ASSIGNMENT = re.compile(
     r"""(?ix)(?P<key>[a-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|client[_-]?secret|access[_-]?key|connection[_-]?string)[a-z0-9_.-]*)
-        ["']?\s*[:=]\s*(?:"(?P<dq>[^"]{8,200})"|'(?P<sq>[^']{8,200})'|(?P<bare>[^\s"'#,;]{8,}))""")
+        ["']?\s*[:=]\s*(?:"(?P<dq>[^"]{8,200})"|'(?P<sq>[^']{8,200})'|(?P<bare>[^\s"'#,;]{8,}))"""
+)
 TOKEN = re.compile(r"[A-Za-z0-9+/=_-]{20,}")
 PLACEHOLDER = re.compile(r"^(?:\$\{.*\}|\[\[.*\]\]|<.*>|\{\{.*\}\}|%\(.*\)s|\$\(.*\)|dsv://.*|ENC\[.*\]|var\..*|local\..*|each\..*|module\..*|data\..*)$")
-EXAMPLE_WORDS = ("example", "changeme", "placeholder", "dummy", "redacted", "xxxxxxxx", "your-", "fake", "sample", "test-fixture",
-                 "not-a-secret", "localdev", "password123")
+EXAMPLE_WORDS = (
+    "example",
+    "changeme",
+    "placeholder",
+    "dummy",
+    "redacted",
+    "xxxxxxxx",
+    "your-",
+    "fake",
+    "sample",
+    "test-fixture",
+    "not-a-secret",
+    "localdev",
+    "password123",
+)
 HEX = re.compile(r"^[0-9a-fA-F]+$")
 UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
@@ -60,7 +74,7 @@ def _benign(value: str) -> bool:
     return v.lower() in ("true", "false", "null", "none") or v.isdigit()
 
 
-def _masked(line: str, spans: Iterable[Tuple[int, int]], limit: int = 200) -> str:
+def _masked(line: str, spans: Iterable[tuple[int, int]], limit: int = 200) -> str:
     out, last = [], 0
     for a, b in sorted(spans):
         out.append(line[last:a])
@@ -73,6 +87,7 @@ def _masked(line: str, spans: Iterable[Tuple[int, int]], limit: int = 200) -> st
 
 def redact(text: str) -> str:
     """Replace anything secret-looking (definite patterns, credential assignments, high-entropy tokens)."""
+
     def line_redact(line: str) -> str:
         spans = [m.span() for _, rx in DEFINITE for m in rx.finditer(line)]
         for m in ASSIGNMENT.finditer(line):
@@ -85,37 +100,46 @@ def redact(text: str) -> str:
                 spans.append(m.span())
         if not spans:
             return line
-        merged: List[Tuple[int, int]] = []
+        merged: list[tuple[int, int]] = []
         for a, b in sorted(spans):
             if merged and a <= merged[-1][1]:
                 merged[-1] = (merged[-1][0], max(b, merged[-1][1]))
             else:
                 merged.append((a, b))
         return _masked(line, merged, limit=0)
+
     return "\n".join(line_redact(x) for x in text.splitlines())
 
 
-def scan(path: str, added: List[Tuple[int, str]], cfg: dict) -> List[Finding]:
+def scan(path: str, added: list[tuple[int, str]], cfg: dict) -> list[Finding]:
     if globs.match_any(cfg.get("skip_paths", []), path):
         return []
     fixture = globs.match_any(cfg.get("fixture_paths", []), path)
     min_len = int(cfg.get("entropy_min_length", 32))
     th_b64 = float(cfg.get("entropy_threshold_base64", 4.3))
     th_hex = float(cfg.get("entropy_threshold_hex", 3.2))
-    out: List[Finding] = []
+    out: list[Finding] = []
     for lineno, line in added:
         hit = False
         for name, rx in DEFINITE:
             m = rx.search(line)
             if m and not _benign(m.group(0)):
                 hit = True
-                out.append(Finding(
-                    rule=f"secret.{name}", severity="high" if fixture else "critical", kind="violation", category="secret",
-                    message=f"Committed credential ({name}) in an added line." + (" Test fixture path: still blocks approval." if fixture else ""),
-                    file=path, line=lineno, definite=not fixture,
-                    suggestion="Remove the value from the change (and from history), rotate it, store it in Delinea DSV and "
-                               "reference it as dsv://<prefix>/<env>/<name>#value (ADR-0001 section 14).",
-                    evidence=f"{name}:{_masked(line, [m.span()])}"))
+                out.append(
+                    Finding(
+                        rule=f"secret.{name}",
+                        severity="high" if fixture else "critical",
+                        kind="violation",
+                        category="secret",
+                        message=f"Committed credential ({name}) in an added line." + (" Test fixture path: still blocks approval." if fixture else ""),
+                        file=path,
+                        line=lineno,
+                        definite=not fixture,
+                        suggestion="Remove the value from the change (and from history), rotate it, store it in Delinea DSV and "
+                        "reference it as dsv://<prefix>/<env>/<name>#value (ADR-0001 section 14).",
+                        evidence=f"{name}:{_masked(line, [m.span()])}",
+                    )
+                )
                 break
         if hit:
             continue
@@ -125,12 +149,19 @@ def scan(path: str, added: List[Tuple[int, str]], cfg: dict) -> List[Finding]:
             if _benign(value) or len(value) < 12 or shannon(value) < 3.0:
                 continue
             hit = True
-            out.append(Finding(
-                rule="secret.assignment", severity="high", kind="violation", category="secret",
-                message=f"`{m.group('key')}` is assigned a literal value that looks like a credential.",
-                file=path, line=lineno,
-                suggestion="Use a dsv:// reference (resolved at runtime by hello_common / Hello.Common / dsv-fetch) instead of a literal.",
-                evidence=f"assignment:{_masked(line, [m.span(g)])}"))
+            out.append(
+                Finding(
+                    rule="secret.assignment",
+                    severity="high",
+                    kind="violation",
+                    category="secret",
+                    message=f"`{m.group('key')}` is assigned a literal value that looks like a credential.",
+                    file=path,
+                    line=lineno,
+                    suggestion="Use a dsv:// reference (resolved at runtime by hello_common / Hello.Common / dsv-fetch) instead of a literal.",
+                    evidence=f"assignment:{_masked(line, [m.span(g)])}",
+                )
+            )
             break
         if hit:
             continue
@@ -140,11 +171,18 @@ def scan(path: str, added: List[Tuple[int, str]], cfg: dict) -> List[Finding]:
                 continue
             ent = shannon(tok)
             if (HEX.match(tok) and ent >= th_hex and len(tok) not in (40, 64)) or (not HEX.match(tok) and ent >= th_b64):
-                out.append(Finding(
-                    rule="secret.high-entropy", severity="medium", kind="violation", category="secret",
-                    message=f"High-entropy string ({len(tok)} chars, entropy {ent:.2f}) in an added line - possible secret.",
-                    file=path, line=lineno,
-                    suggestion="If this is a credential, move it to DSV; if it is a hash/identifier, mention it in the PR description.",
-                    evidence=f"entropy:{_masked(line, [m.span()])}"))
+                out.append(
+                    Finding(
+                        rule="secret.high-entropy",
+                        severity="medium",
+                        kind="violation",
+                        category="secret",
+                        message=f"High-entropy string ({len(tok)} chars, entropy {ent:.2f}) in an added line - possible secret.",
+                        file=path,
+                        line=lineno,
+                        suggestion="If this is a credential, move it to DSV; if it is a hash/identifier, mention it in the PR description.",
+                        evidence=f"entropy:{_masked(line, [m.span()])}",
+                    )
+                )
                 break
     return out

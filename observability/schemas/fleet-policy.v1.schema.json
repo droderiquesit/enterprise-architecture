@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fleet-policy.v1.schema.json",
+  "title": "Datadog fleet collection policy v1 (observability package)",
+  "description": "How every resource / workload type sends telemetry to Datadog: log pipeline, APM library, Continuous Profiler, Data Streams Monitoring, DBM propagation, Agent fleet settings, Observability Pipelines Worker sizing and RUM. Resolved by modules/fleet-policy and tools/tags/fleet_policy.py with the precedence defaults -> architectures.<arch> -> environments.<env> -> per-workload overrides (shallow merge per section).",
+  "type": "object",
+  "required": ["apiVersion", "kind"],
+  "additionalProperties": false,
+  "$defs": {
+    "logs": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"node_collector": {"enum": ["agent", "fluent_bit"]}}
+    },
+    "apm": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["datadog", "otel", "none"]},
+        "managed_runtime_path": {"enum": ["agent_gateway", "serverless_init"]},
+        "sample_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "logs_injection": {"type": "boolean"},
+        "dbm_propagation": {"enum": ["full", "service", "disabled"]},
+        "data_streams": {"type": "boolean"},
+        "library_versions": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"}}
+      }
+    },
+    "profiling": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "dotnet": {"type": "object", "additionalProperties": false, "properties": {
+          "cpu": {"type": "boolean"}, "walltime": {"type": "boolean"}, "exceptions": {"type": "boolean"}, "gc": {"type": "boolean"},
+          "lock": {"type": "boolean"}, "allocation": {"type": "boolean"}, "heap": {"type": "boolean"}}},
+        "python": {"type": "object", "additionalProperties": false, "properties": {
+          "stack": {"type": "boolean"}, "lock": {"type": "boolean"}, "memory": {"type": "boolean"}, "heap": {"type": "boolean"}, "timeline": {"type": "boolean"}}},
+        "otel_mode": {"enum": ["unavailable", "python_preview"]}
+      }
+    },
+    "agent": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "version": {"type": "string", "pattern": "^7\\.[0-9]+\\.[0-9]+$"},
+        "remote_configuration": {"type": "boolean"},
+        "remote_updates": {"type": "boolean"},
+        "process_collection": {"type": "boolean"},
+        "network_monitoring": {"type": "boolean"},
+        "universal_service_monitoring": {"type": "boolean"},
+        "upgrade_schedule": {"type": "object", "additionalProperties": false, "properties": {
+          "enabled": {"type": "boolean"},
+          "days_of_week": {"type": "array", "items": {"enum": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}, "minItems": 1, "uniqueItems": true},
+          "start": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+          "duration_minutes": {"type": "integer", "minimum": 1},
+          "timezone": {"type": "string"},
+          "version_to_latest": {"type": "integer", "minimum": 0, "maximum": 2}}}
+      }
+    },
+    "op_worker": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "min_replicas": {"type": "integer", "minimum": 1},
+        "max_replicas": {"type": "integer", "minimum": 1, "maximum": 30},
+        "cpu": {"type": "number", "exclusiveMinimum": 0},
+        "memory": {"type": "string", "pattern": "^[0-9.]+(Gi|Mi)$"},
+        "disk_buffer_bytes": {"type": "integer", "minimum": 268435456}
+      }
+    },
+    "rum": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "session_sample_rate": {"type": "number", "minimum": 0, "maximum": 100},
+        "session_replay_sample_rate": {"type": "number", "minimum": 0, "maximum": 100},
+        "trace_sample_rate": {"type": "number", "minimum": 0, "maximum": 100},
+        "propagator_types": {"type": "array", "items": {"enum": ["datadog", "tracecontext", "b3", "b3multi"]}, "minItems": 1, "uniqueItems": true},
+        "default_privacy_level": {"enum": ["mask", "mask-user-input", "allow"]},
+        "track_user_interactions": {"type": "boolean"},
+        "track_resources": {"type": "boolean"},
+        "track_long_tasks": {"type": "boolean"}
+      }
+    },
+    "override": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "log_pipeline": {"enum": ["observability_pipelines", "fluent_bit_direct"]},
+        "logs": {"$ref": "#/$defs/logs"},
+        "apm": {"$ref": "#/$defs/apm"},
+        "profiling": {"$ref": "#/$defs/profiling"},
+        "agent": {"$ref": "#/$defs/agent"},
+        "op_worker": {"$ref": "#/$defs/op_worker"},
+        "rum": {"$ref": "#/$defs/rum"}
+      }
+    }
+  },
+  "properties": {
+    "apiVersion": {"const": "observability/fleet-policy/v1"},
+    "kind": {"const": "FleetPolicy"},
+    "metadata": {"type": "object", "additionalProperties": false, "properties": {"name": {"type": "string"}, "description": {"type": "string"}}},
+    "log_pipeline": {"enum": ["observability_pipelines", "fluent_bit_direct"]},
+    "logs": {"$ref": "#/$defs/logs"},
+    "apm": {"$ref": "#/$defs/apm"},
+    "profiling": {"$ref": "#/$defs/profiling"},
+    "agent": {"$ref": "#/$defs/agent"},
+    "op_worker": {"$ref": "#/$defs/op_worker"},
+    "rum": {"$ref": "#/$defs/rum"},
+    "architectures": {
+      "type": "object",
+      "propertyNames": {"enum": ["aks", "aca", "aci", "appservice", "functions", "logicapp", "vm", "vmss", "swa", "batch"]},
+      "additionalProperties": {"$ref": "#/$defs/override"}
+    },
+    "environments": {"type": "object", "additionalProperties": {"$ref": "#/$defs/override"}}
+  }
+}

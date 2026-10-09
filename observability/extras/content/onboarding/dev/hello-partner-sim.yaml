@@ -1,0 +1,55 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: hello-partner-sim
+  display_name: hello-partner-sim
+  team: fulfillment
+  owner: fulfillment@example.com
+  application: enterprise-hello
+  domain: payments
+  tier: low
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  description: Simulated external payment API.
+  languages:
+  - python
+  depends_on: []
+  contacts:
+  - name: fulfillment mailbox
+    type: email
+    contact: fulfillment@example.com
+spec:
+  architecture: aci
+  runtime: python
+  telemetry:
+    profile: http-api
+  resources:
+  - id: ${contract:deploy-partner-sim.container_group.id}
+    type: Microsoft.ContainerInstance/containerGroups
+    role: group
+    required: false
+  endpoints:
+  - name: internal
+    url: ${contract:deploy-partner-sim.url}
+    visibility: private
+    health_path: /healthz
+    required: false
+  slos:
+  - name: availability
+    type: availability
+    target: 99.0
+    timeframe: 7d
+  presence_ref: deploy-partner-sim.url
+  notifications:
+    default:
+    - team-fulfillment
+    critical:
+    - team-fulfillment
+    - oncall
+    warning:
+    - team-fulfillment
+  catalog:
+    component_of:
+    - system:enterprise-hello

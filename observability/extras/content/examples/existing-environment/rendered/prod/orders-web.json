@@ -1,0 +1,458 @@
+{
+  "architecture": "appservice",
+  "catalog": {
+    "component_of": [],
+    "enabled": true,
+    "lifecycle": "production",
+    "type": "web"
+  },
+  "dashboards": {
+    "enabled": true,
+    "workflow_metric_prefix": null
+  },
+  "enabled": true,
+  "endpoints": [
+    {
+      "browser_journey": false,
+      "browser_steps": [],
+      "health_path": "/healthz",
+      "name": "site",
+      "required": true,
+      "synthetic": {
+        "enabled": true,
+        "locations": [
+          "aws:eu-central-1"
+        ],
+        "private_location": false,
+        "tick_every": 300
+      },
+      "url": "https://orders.contoso.example",
+      "visibility": "public"
+    }
+  ],
+  "env": "prod",
+  "generated_from": {
+    "layers": [
+      "global-defaults",
+      "platform/appservice",
+      "profiles/http-api",
+      "manifest"
+    ],
+    "manifest": "prod/orders-web.yaml",
+    "sha256": "0216adfcec9bb14172defc4f5bee333b614e420a98179af938588a71e6f16db9"
+  },
+  "idle_behavior": {
+    "expected_quiet_hours": null,
+    "scale_to_zero": false
+  },
+  "metadata": {
+    "application": "orders",
+    "contacts": [
+      {
+        "contact": "orders-team@contoso.example",
+        "type": "email"
+      }
+    ],
+    "depends_on": [
+      "service:orders-api"
+    ],
+    "description": "",
+    "display_name": "Orders web",
+    "domain": "commerce",
+    "languages": [
+      "dotnet"
+    ],
+    "owner": "orders-team@contoso.example",
+    "repository": "https://dev.azure.com/contoso/orders/_git/orders-web",
+    "runbook_url": "https://wiki.contoso.example/runbooks/orders-web",
+    "team": "orders",
+    "tier": "high"
+  },
+  "monitors": {
+    "apm.error_rate": {
+      "evaluation_delay": null,
+      "key": "apm.error_rate",
+      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders` | owner: orders-team@contoso.example | tier: high\n\nTroubleshooting:\n1. APM -> Service orders-web -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#error-rate",
+      "name": "[prod] orders-web error rate above 5%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "orders-pager"
+        ],
+        "warning": [
+          "orders"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_10m):( sum:trace.http.server.request.errors{service:orders-web,env:prod}.as_count() / clamp_min(sum:trace.http.server.request.hits{service:orders-web,env:prod}.as_count(), 20) ) * 100 > 5",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#error-rate",
+      "severity": "critical",
+      "tags": [
+        "application:orders",
+        "domain:commerce",
+        "env:prod",
+        "managed_by:observability-package",
+        "monitor:apm.error_rate",
+        "service:orders-web",
+        "severity:critical",
+        "team:orders",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 5,
+        "warning": 2
+      },
+      "type": "query alert"
+    },
+    "apm.http_5xx": {
+      "evaluation_delay": null,
+      "key": "apm.http_5xx",
+      "message": "{{#is_alert}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders` | owner: orders-team@contoso.example | tier: high\n\nTroubleshooting:\n1. Filter traces by http.status_code:5* for orders-web; open the error span.\n2. 503 from /readyz-gated dependencies means a dependency is down; 500 means an unhandled exception.\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#http-5xx",
+      "name": "[prod] orders-web returning HTTP 5xx",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "orders"
+        ],
+        "warning": [
+          "orders"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "sum(last_10m):sum:trace.http.server.request.hits.by_http_status{service:orders-web,env:prod,http.status_class:5xx}.as_count() > 10",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#http-5xx",
+      "severity": "warning",
+      "tags": [
+        "application:orders",
+        "domain:commerce",
+        "env:prod",
+        "managed_by:observability-package",
+        "monitor:apm.http_5xx",
+        "service:orders-web",
+        "severity:warning",
+        "team:orders",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 10,
+        "warning": 3
+      },
+      "type": "query alert"
+    },
+    "apm.latency_p95": {
+      "evaluation_delay": null,
+      "key": "apm.latency_p95",
+      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders` | owner: orders-team@contoso.example | tier: high\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#latency",
+      "name": "[prod] orders-web p95 latency above 1.5s",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "orders"
+        ],
+        "warning": [
+          "orders"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "percentile(last_15m):p95:trace.http.server.request{service:orders-web,env:prod} > 1.5",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#latency",
+      "severity": "warning",
+      "tags": [
+        "application:orders",
+        "domain:commerce",
+        "env:prod",
+        "managed_by:observability-package",
+        "monitor:apm.latency_p95",
+        "service:orders-web",
+        "severity:warning",
+        "team:orders",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 1.5,
+        "warning": 0.75
+      },
+      "type": "query alert"
+    },
+    "apm.no_traffic": {
+      "evaluation_delay": null,
+      "key": "apm.no_traffic",
+      "message": "{{#is_alert}}**CRITICAL**: No server spans were received although this service is declared always-on.{{/is_alert}}\n{{#is_warning}}**WARNING**: No server spans were received although this service is declared always-on.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders` | owner: orders-team@contoso.example | tier: high\n\nTroubleshooting:\n1. Is the pipeline healthy? Check the \"telemetry pipeline canary\" monitor first - if it is also alerting, the problem is the collector/agent, not the service.\n2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?\n3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#missing-telemetry",
+      "name": "[prod] orders-web stopped reporting traces",
+      "new_group_delay": 60,
+      "no_data_timeframe": 30,
+      "notify": {
+        "alert": [
+          "orders-pager"
+        ],
+        "warning": [
+          "orders"
+        ]
+      },
+      "notify_no_data": true,
+      "priority": 2,
+      "query": "sum(last_30m):sum:trace.http.server.request.hits{service:orders-web,env:prod}.as_count() < 1",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#missing-telemetry",
+      "severity": "critical",
+      "tags": [
+        "application:orders",
+        "domain:commerce",
+        "env:prod",
+        "managed_by:observability-package",
+        "monitor:apm.no_traffic",
+        "service:orders-web",
+        "severity:critical",
+        "team:orders",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 1
+      },
+      "type": "query alert"
+    },
+    "appsvc.http_5xx_ratio@app": {
+      "evaluation_delay": 900,
+      "key": "appsvc.http_5xx_ratio@app",
+      "message": "{{#is_alert}}**CRITICAL**: The App Service front end reports a high share of HTTP 5xx responses.{{/is_alert}}\n{{#is_warning}}**WARNING**: The App Service front end reports a high share of HTTP 5xx responses.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders` | owner: orders-team@contoso.example | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Compare with APM: platform-only 5xx (APM healthy) usually means worker crash/restart or 502/503 from the front end.\n2. Check AppServiceConsoleLogs and AppServiceHTTPLogs in the log pipeline.\n3. az webapp log tail -n <app> -g <rg>.\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#appservice-5xx",
+      "name": "[prod] orders-web App Service [[resource.name]] 5xx ratio above 5%",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "orders-pager"
+        ],
+        "warning": [
+          "orders"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 2,
+      "query": "sum(last_15m):sum:azure.app_services.http5xx{[[resource.scope]]}.as_count() / sum:azure.app_services.requests{[[resource.scope]]}.as_count() * 100 > 5",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "app",
+      "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#appservice-5xx",
+      "severity": "critical",
+      "tags": [
+        "application:orders",
+        "domain:commerce",
+        "env:prod",
+        "managed_by:observability-package",
+        "monitor:appsvc.http_5xx_ratio",
+        "service:orders-web",
+        "severity:critical",
+        "team:orders",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 5
+      },
+      "type": "query alert"
+    },
+    "appsvc.response_time@app": {
+      "evaluation_delay": 900,
+      "key": "appsvc.response_time@app",
+      "message": "{{#is_alert}}**WARNING**: Average platform response time is high.{{/is_alert}}\n{{#is_warning}}**WARNING**: Average platform response time is high.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders` | owner: orders-team@contoso.example | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check the plan CPU/memory (azure.web_serverfarms.cpu_percentage / memory_percentage).\n2. Check downstream latency in the APM service map.\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#appservice-latency",
+      "name": "[prod] orders-web App Service [[resource.name]] response time above 4s",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "orders"
+        ],
+        "warning": [
+          "orders"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "avg(last_15m):avg:azure.app_services.response_time{[[resource.scope]]} > 4",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": "app",
+      "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#appservice-latency",
+      "severity": "warning",
+      "tags": [
+        "application:orders",
+        "domain:commerce",
+        "env:prod",
+        "managed_by:observability-package",
+        "monitor:appsvc.response_time",
+        "service:orders-web",
+        "severity:warning",
+        "team:orders",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 4
+      },
+      "type": "query alert"
+    },
+    "logs.error_spike": {
+      "evaluation_delay": null,
+      "key": "logs.error_spike",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders` | owner: orders-team@contoso.example | tier: high\n\nTroubleshooting:\n1. Open Logs for service:orders-web env:prod status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for orders-web in the last hour (a new version is the usual cause).\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#error-logs",
+      "name": "[prod] orders-web error log volume above 50 in 10m",
+      "new_group_delay": 60,
+      "no_data_timeframe": null,
+      "notify": {
+        "alert": [
+          "orders"
+        ],
+        "warning": [
+          "orders"
+        ]
+      },
+      "notify_no_data": false,
+      "priority": 3,
+      "query": "logs(\"service:orders-web env:prod status:error\").index(\"*\").rollup(\"count\").last(\"10m\") > 50",
+      "renotify_interval": 0,
+      "require_full_window": false,
+      "resource_role": null,
+      "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#error-logs",
+      "severity": "warning",
+      "tags": [
+        "application:orders",
+        "domain:commerce",
+        "env:prod",
+        "managed_by:observability-package",
+        "monitor:logs.error_spike",
+        "service:orders-web",
+        "severity:warning",
+        "team:orders",
+        "tier:high"
+      ],
+      "thresholds": {
+        "critical": 50
+      },
+      "type": "log alert"
+    }
+  },
+  "notifications": {
+    "critical": [
+      "orders-pager"
+    ],
+    "default": [
+      "orders"
+    ]
+  },
+  "package_version": "2.0.0",
+  "presence_ref": null,
+  "resources": [
+    {
+      "entities": [],
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-orders-prod/providers/Microsoft.Web/sites/app-orders-web-prod",
+      "required": true,
+      "role": "app",
+      "tags": {},
+      "type": "Microsoft.Web/sites"
+    }
+  ],
+  "runtime": "dotnet",
+  "schema": "rendered-service/v1",
+  "service": "orders-web",
+  "slos": [
+    {
+      "burn_rate_alerts": [
+        {
+          "long_window": "1h",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#slo-burn-rate",
+          "name": "[prod] orders-web availability SLO burn rate critical (1h/5m)",
+          "notify": {
+            "alert": [
+              "orders-pager"
+            ]
+          },
+          "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#slo-burn-rate",
+          "severity": "critical",
+          "short_window": "5m",
+          "threshold": 14.4
+        },
+        {
+          "long_window": "6h",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `orders-web` | env: `prod` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://wiki.contoso.example/runbooks/orders-web#slo-burn-rate",
+          "name": "[prod] orders-web availability SLO burn rate warning (6h/30m)",
+          "notify": {
+            "alert": [
+              "orders"
+            ]
+          },
+          "runbook_url": "https://wiki.contoso.example/runbooks/orders-web#slo-burn-rate",
+          "severity": "warning",
+          "short_window": "30m",
+          "threshold": 6.0
+        }
+      ],
+      "denominator": "sum:trace.http.server.request.hits{service:orders-web,env:prod}.as_count()",
+      "description": "availability SLO for orders-web (prod). Runbook: https://wiki.contoso.example/runbooks/orders-web#slo-availability",
+      "display_name": "[prod] orders-web availability",
+      "name": "availability",
+      "numerator": "sum:trace.http.server.request.hits{service:orders-web,env:prod}.as_count() - sum:trace.http.server.request.errors{service:orders-web,env:prod}.as_count()",
+      "tags": [
+        "application:orders",
+        "domain:commerce",
+        "env:prod",
+        "managed_by:observability-package",
+        "service:orders-web",
+        "team:orders",
+        "tier:high"
+      ],
+      "target": 99.9,
+      "timeframe": "30d",
+      "type": "availability",
+      "warning": 99.95
+    }
+  ],
+  "synthetics_defaults": {
+    "min_failure_duration": 120,
+    "min_location_failed": 1,
+    "retry": {
+      "count": 1,
+      "interval": 300
+    }
+  },
+  "tags": [
+    "application:orders",
+    "domain:commerce",
+    "env:prod",
+    "managed_by:observability-package",
+    "service:orders-web",
+    "team:orders",
+    "tier:high"
+  ],
+  "telemetry": {
+    "dbm": {
+      "enabled": false
+    },
+    "logs": {
+      "route": "eventhub"
+    },
+    "profile": "http-api",
+    "rum": {
+      "enabled": false
+    },
+    "traces": {
+      "enabled": true,
+      "sample_rate": 1.0,
+      "server_operation": "http.server.request"
+    }
+  }
+}

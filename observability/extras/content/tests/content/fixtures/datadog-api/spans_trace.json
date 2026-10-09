@@ -1,0 +1,10 @@
+{"data": [
+  {"id": "s1", "type": "spans", "attributes": {"trace_id": "9530131215405227164", "span_id": "1", "service": "hello-bff", "env": "dev", "resource_name": "POST /api/orders", "type": "web",
+    "tags": ["env:dev", "service:hello-bff", "version:1.4.0", "team:web"], "attributes": {"http.request.method": "POST"}}},
+  {"id": "s2", "type": "spans", "attributes": {"trace_id": "9530131215405227164", "span_id": "2", "service": "hello-orders-api", "env": "dev", "resource_name": "POST /orders", "type": "web",
+    "tags": ["env:dev", "service:hello-orders-api", "version:1.4.0", "team:orders"], "attributes": {}}},
+  {"id": "s3", "type": "spans", "attributes": {"trace_id": "9530131215405227164", "span_id": "3", "service": "hello-catalog-api", "env": "dev", "resource_name": "GET /products/{sku}", "type": "web",
+    "tags": ["env:dev", "service:hello-catalog-api", "version:2.0.1", "team:catalog"], "attributes": {}}},
+  {"id": "s4", "type": "spans", "attributes": {"trace_id": "9530131215405227164", "span_id": "4", "service": "hello-orders-api", "env": "dev", "resource_name": "INSERT orders.orders", "type": "sql",
+    "tags": ["env:dev", "service:hello-orders-api", "version:1.4.0", "team:orders"], "attributes": {"db.system": "mssql"}}}
+ ], "meta": {"status": "done"}}

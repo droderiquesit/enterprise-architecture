@@ -16,7 +16,6 @@ import logging
 import os
 
 import azure.functions as func
-
 from pr_reviewer import bootstrap
 
 bootstrap.configure()
@@ -78,5 +77,12 @@ def readyz(req: func.HttpRequest) -> func.HttpResponse:
 @app.function_name(name="version")
 @app.route(route="version", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def version(req: func.HttpRequest) -> func.HttpResponse:
-    return _json(200, {"service": bootstrap.SERVICE, "version": os.environ.get("DD_VERSION", "0.0.0-dev"),
-                       "commit": os.environ.get("GIT_COMMIT", "unknown"), "build_time": os.environ.get("BUILD_TIME", "unknown")})
+    return _json(
+        200,
+        {
+            "service": bootstrap.SERVICE,
+            "version": os.environ.get("DD_VERSION", "0.0.0-dev"),
+            "commit": os.environ.get("GIT_COMMIT", "unknown"),
+            "build_time": os.environ.get("BUILD_TIME", "unknown"),
+        },
+    )

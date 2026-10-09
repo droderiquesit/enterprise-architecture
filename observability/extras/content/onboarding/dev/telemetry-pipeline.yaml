@@ -1,0 +1,45 @@
+# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# time from contracts (render.py references -> contract_references). See observability/README.md.
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: telemetry-pipeline
+  display_name: telemetry-pipeline
+  team: observability
+  owner: observability@example.com
+  application: enterprise-hello
+  domain: observability
+  tier: critical
+  env: dev
+  repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
+  description: Fluent Bit aggregator + OTel gateway (transport) health and the pipeline canary.
+  languages: []
+  depends_on: []
+  contacts:
+  - name: observability mailbox
+    type: email
+    contact: observability@example.com
+spec:
+  architecture: aca
+  runtime: other
+  telemetry:
+    profile: telemetry-pipeline
+  resources:
+  - id: ${contract:obs-telemetry-transport.event_hub.namespace_id}
+    type: Microsoft.EventHub/namespaces
+    role: log-export
+    required: false
+  idle_behavior:
+    scale_to_zero: false
+  presence_ref: obs-telemetry-transport.otlp.grpc_endpoint
+  notifications:
+    default:
+    - team-observability
+    critical:
+    - team-observability
+    - oncall
+    warning:
+    - team-observability
+  catalog:
+    component_of:
+    - system:enterprise-hello
