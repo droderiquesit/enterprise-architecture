@@ -44,7 +44,7 @@ module "env" {
   }
   runtime            = "python"
   architecture       = local.arch[local.hosting[each.key]]
-  telemetry          = var.obs_telemetry_transport
+  telemetry          = local.telemetry
   identity_client_id = local.identity.client_id
   faults = {
     enabled   = var.settings.faults_enabled
@@ -155,4 +155,14 @@ check "dbadapter_artifact" {
     condition     = length(local.aca_families) == 0 || can(regex("@sha256:[a-f0-9]{64}$", var.artifacts[local.artifact].image))
     error_message = "svc-dbadapter image (digest-pinned) is required for Container Apps families."
   }
+}
+
+# dsv-fetch (sidecar key init/refresher container): this root's registry artifact img-dsv-fetch (digest-pinned) wins
+# over the image published in the transport contract (ADR-0001 section 14).
+locals {
+  telemetry = merge(var.obs_telemetry_transport, {
+    secrets = merge(var.obs_telemetry_transport.secrets, {
+      fetch_image = try(coalesce(try(var.artifacts["img-dsv-fetch"].image, null), var.obs_telemetry_transport.secrets.fetch_image), null)
+    })
+  })
 }

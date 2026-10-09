@@ -44,7 +44,7 @@ module "env" {
   }
   runtime            = "python"
   architecture       = "aci"
-  telemetry          = var.obs_telemetry_transport
+  telemetry          = local.telemetry
   identity_client_id = local.identity.client_id
   faults = {
     enabled   = var.settings.faults_enabled
@@ -170,4 +170,14 @@ resource "azurerm_private_dns_a_record" "this" {
   ttl                 = 60
   records             = [azurerm_container_group.this.ip_address]
   tags                = local.tags
+}
+
+# dsv-fetch (sidecar key init/refresher container): this root's registry artifact img-dsv-fetch (digest-pinned) wins
+# over the image published in the transport contract (ADR-0001 section 14).
+locals {
+  telemetry = merge(var.obs_telemetry_transport, {
+    secrets = merge(var.obs_telemetry_transport.secrets, {
+      fetch_image = try(coalesce(try(var.artifacts["img-dsv-fetch"].image, null), var.obs_telemetry_transport.secrets.fetch_image), null)
+    })
+  })
 }

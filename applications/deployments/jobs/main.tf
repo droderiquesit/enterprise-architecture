@@ -88,7 +88,7 @@ module "env" {
   }
   runtime            = "python"
   architecture       = "aca"
-  telemetry          = var.obs_telemetry_transport
+  telemetry          = local.telemetry
   identity_client_id = local.ids[each.value.svc].client_id
   faults             = { enabled = false }
   port               = null
@@ -204,4 +204,14 @@ resource "azurerm_container_app_job" "this" {
       error_message = "Job images must be digest-pinned (svc-jobs / svc-traffic)."
     }
   }
+}
+
+# dsv-fetch (sidecar key init/refresher container): this root's registry artifact img-dsv-fetch (digest-pinned) wins
+# over the image published in the transport contract (ADR-0001 section 14).
+locals {
+  telemetry = merge(var.obs_telemetry_transport, {
+    secrets = merge(var.obs_telemetry_transport.secrets, {
+      fetch_image = try(coalesce(try(var.artifacts["img-dsv-fetch"].image, null), var.obs_telemetry_transport.secrets.fetch_image), null)
+    })
+  })
 }

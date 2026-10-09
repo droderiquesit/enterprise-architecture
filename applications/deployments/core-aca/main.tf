@@ -82,7 +82,7 @@ module "env" {
   }
   runtime            = local.meta[each.key].runtime
   architecture       = "aca"
-  telemetry          = var.obs_telemetry_transport
+  telemetry          = local.telemetry
   identity_client_id = local.ids[each.key].client_id
   faults = {
     enabled   = var.settings.faults_enabled
@@ -135,4 +135,14 @@ check "artifacts_present" {
     condition     = alltrue([for k in keys(local.apps) : try(var.artifacts[local.meta[k].artifact].image != null, false)])
     error_message = "Every enabled app needs a digest-pinned image in var.artifacts (svc-bff, svc-orders-api, svc-catalog-api)."
   }
+}
+
+# dsv-fetch (sidecar key init/refresher container): this root's registry artifact img-dsv-fetch (digest-pinned) wins
+# over the image published in the transport contract (ADR-0001 section 14).
+locals {
+  telemetry = merge(var.obs_telemetry_transport, {
+    secrets = merge(var.obs_telemetry_transport.secrets, {
+      fetch_image = try(coalesce(try(var.artifacts["img-dsv-fetch"].image, null), var.obs_telemetry_transport.secrets.fetch_image), null)
+    })
+  })
 }
