@@ -741,3 +741,83 @@ services:
   references:
   - https://learn.microsoft.com/en-us/fabric/data-engineering/spark-compute
   - https://learn.microsoft.com/en-us/fabric/admin/region-availability
+- id: delinea-dsv
+  family: secrets-management
+  hosting_variant: Delinea DevOps Secrets Vault (SaaS tenant <tenant>.secretsvaultcloud.<tld>), Azure auth provider
+  category: partner
+  display_name: Delinea DevOps Secrets Vault (DSV)
+  lifecycle:
+    status: ga
+    notes: Generally available SaaS (Delinea). System of record for every lab key and secret (ADR-0001 section 14).
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: unknown
+      westeurope: unknown
+    region_notes: SaaS outside Azure regions; tenant regions by TLD secretsvaultcloud.com / .eu / .com.au / .ca (dsv-cli v1.41.1 constants). Choose .eu for EU data residency.
+    quotas: []
+    registrations: []
+    licensing:
+    - Delinea DevOps Secrets Vault subscription (tenant)
+  networking:
+    private_support: none
+    notes: public HTTPS API only; every reader needs egress to <tenant>.secretsvaultcloud.<tld>:443 (foundation-edge Azure Firewall default allow-list includes *.secretsvaultcloud.*). Authentication by user-assigned managed identity (no bootstrap secret).
+  iac:
+    terraform_resources: []
+    azapi: []
+    component: foundation-secrets
+    implemented: true
+    notes: 'DelineaXPM/dsv Terraform provider 1.13.0 has data sources (client, role, secret) and resource dsv_client only - no users, policies or auth providers - so foundation-secrets renders the desired state (Azure auth provider, one DSV user per managed identity mapped by resource id, one least-privilege permission per user) and tools/secrets/dsv_apply.py converges it via the DSV REST API (plan = diff, apply = converge; never deletes). Values: operators (dsv CLI) or tools/secrets/publish.py for Azure-generated values; tools/secrets/check.py verifies paths without reading values.'
+  workload:
+    exercised_by:
+    - all services (hello_common / Hello.Common resolve dsv:// environment variables)
+    - Fluent Bit, OTel gateway, Datadog Agent (dsv-fetch init container / secret_backend_command)
+    - pipelines (tools/secrets/fetch.py on the self-hosted deploy pool)
+    operations:
+    - POST /v1/token (grant_type azure, managed identity Entra token)
+    - GET /v1/secrets/<prefix>/<env>/<name>
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: 'no'
+        method: no Datadog integration for DSV verified; readers emit client spans/log lines for resolution failures (names only)
+      logs:
+        supported: 'no'
+        method: DSV audit log stays in the DSV tenant (not exported by the lab)
+      traces:
+        supported: partial
+        method: outbound HTTP spans of hello_common / Hello.Common token + secret calls (no values in attributes)
+      dbm:
+        supported: n/a
+        method: n/a
+      rum:
+        supported: n/a
+        method: n/a
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - no Datadog integration tile for Delinea DSV verified (2026-10-09); DSV audit events are not forwarded
+  cost:
+    profile: low
+    approx_monthly_usd_default: null
+    assumptions: Delinea subscription pricing (not public); the lab adds only API calls (one token per reader per hour, cached secret reads)
+    teardown: foundation-secrets destroy removes only Terraform state; DSV users/permissions/secrets remain (dsv_apply never deletes) - remove them with the dsv CLI (docs/runbooks/teardown.md)
+    data_retention: per DSV tenant (secret versions kept by DSV)
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+    - minimal
+    - specialized
+  references:
+  - https://docs.delinea.com/dsv/current/usage/auth-general/authazure
+  - https://docs.delinea.com/online-help/devops-secrets-vault/tutorials/policy.htm
+  - https://docs.delinea.com/online-help/devops-secrets-vault/quickstart/policies.htm
+  - https://github.com/DelineaXPM/dsv-cli
+  - https://github.com/DelineaXPM/dsv-sdk-go
+  - https://registry.terraform.io/providers/DelineaXPM/dsv/latest/docs

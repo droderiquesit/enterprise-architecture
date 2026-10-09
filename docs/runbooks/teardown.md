@@ -74,7 +74,7 @@ Same order as above. Disable the component in the profile in the same change, or
 | Item | Why | How to remove (full teardown only) |
 |---|---|---|
 | State storage account + containers (`tfstate`, `contracts`, `plans`, `deployments`, `evidence`, `packages`) | `prevent_destroy`, CanNotDelete lock, blob versioning + 30-day soft delete | bootstrap README "Removing the state account": delete the lock, `lock_enabled = false`, remove `prevent_destroy` locally, `terraform destroy`; soft-deleted blobs recoverable for 30 days unless purged |
-| Key Vault | purge protection: soft-deleted for 7 days, **cannot be purged**; deterministic name blocks re-creation of the same env for 7 days | wait, or use another `name_prefix`/env name |
+| Delinea DSV objects | `foundation-secrets` destroy and `dsv_apply.py` never delete DSV users, permissions or secrets | after the environment is gone: `dsv user delete` for `<prefix>-<env>-*` users, remove the managed permissions (`dsv policy edit secrets:<prefix>:<env>`) and the secrets under `<prefix>/<env>/` |
 | APIM v2 | soft-deleted 48 h | `az apim deletedservice purge` |
 | Log Analytics workspace | soft delete 14 days | `az monitor log-analytics workspace delete --force` if needed |
 | Deleted SQL databases | restorable from backup until the server is deleted | delete the server |

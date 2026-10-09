@@ -104,8 +104,8 @@ variable "settings" {
     image_cleaner_enabled              = optional(bool, true)
     defender_enabled                   = optional(bool, false) # Defender sensor uses the platform-shared workspace
     host_encryption_enabled            = optional(bool, false) # needs Microsoft.Compute/EncryptionAtHost registration
-    key_vault_secrets_provider_enabled = optional(bool, true)
-    # Application routing add-on (managed NGINX ingress). Internal controller by default; TLS certs from Key Vault.
+    key_vault_secrets_provider_enabled = optional(bool, false) # Key Vault CSI add-on: not used (secrets in Delinea DSV)
+    # Application routing add-on (managed NGINX ingress). Internal controller by default.
     app_routing = optional(object({
       enabled            = optional(bool, true)
       default_controller = optional(string, "Internal") # AnnotationControlled | External | Internal | None

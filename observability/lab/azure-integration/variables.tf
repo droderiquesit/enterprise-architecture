@@ -5,9 +5,9 @@ variable "settings" {
     # null = app_registration when app_client_id is set, else none (nothing deployed until bootstrap created the app)
     mode                        = optional(string)
     app_client_id               = optional(string)
-    app_auth                    = optional(string, "secret") # secret | secretless
+    app_auth                    = optional(string, "secretless") # secretless (default, no secret) | secret
     app_service_principal_id    = optional(string)
-    client_secret_name          = optional(string, "datadog-azure-integration-client-secret")
+    client_secret_name          = optional(string, "datadog-azure-integration-client-secret") # DSV secret the pipeline fetches (app_auth = secret)
     extra_subscription_ids      = optional(list(string), [])
     metric_tag_filters          = optional(list(object({ name = string, value = string, action = optional(string, "Include") })), [])
     custom_metrics_enabled      = optional(bool, false)
@@ -50,10 +50,9 @@ variable "settings" {
   }
 }
 
-variable "foundation_identity" {
-  description = "foundation-identity contract (fields used); optional - only needed for the client secret read."
-  type = object({
-    key_vault_id = string
-  })
-  default = null
+variable "datadog_azure_client_secret" {
+  description = "App registration client secret, ONLY for settings.app_auth = secret: TF_VAR_datadog_azure_client_secret set by the pipeline from Delinea DSV (tools/secrets/fetch.py, masked). Never in tfvars."
+  type        = string
+  default     = null
+  sensitive   = true
 }

@@ -115,3 +115,43 @@ def test_cli_exit_codes(tmp_path):
     assert bad.returncode == 1 and '"error.kind":"JobFailed"' in bad.stdout
     usage = subprocess.run([sys.executable, "-m", "hello_jobs", "nope"], env=env, capture_output=True, text=True, timeout=60)
     assert usage.returncode == 2
+
+
+def test_cli_resolves_dsv_reference_from_mock_dsv():
+    """DURABLE_FUNCTION_KEY=dsv://... is resolved at start-up (client_credentials against tools/secrets/mock_dsv.py)."""
+    import pathlib
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[4] / "tools" / "secrets"))
+    mock_dsv = pytest.importorskip("mock_dsv")
+    value = "durable-key-VALUE-41c9"
+    cfg = {
+        "users": {"jobs": {"read": ["eh/dev/jobs/*"]}},
+        "clients": {"jobs-local": {"secret": "cs-local", "identity": "jobs"}},
+        "secrets": {"eh/dev/jobs/durable-function-key": {"value": value}},
+    }
+    httpd, state = mock_dsv.serve(cfg)
+    try:
+        base = f"http://127.0.0.1:{httpd.server_address[1]}/v1"
+        env = {
+            **os.environ,
+            "MESSAGING_MODE": "memory",
+            "RESULT_SINK": "memory",
+            "BATCH_MAX_SECONDS": "1",
+            "DSV_AUTH": "client_credentials",
+            "DSV_BASE_URL": base,
+            "DSV_CLIENT_ID": "jobs-local",
+            "DSV_CLIENT_SECRET": "cs-local",
+            "DURABLE_FUNCTION_KEY": "dsv://eh/dev/jobs/durable-function-key",
+        }
+        ok = subprocess.run([sys.executable, "-m", "hello_jobs", "process-batch-items"], env=env, capture_output=True, text=True, timeout=60)
+        assert ok.returncode == 0, ok.stdout + ok.stderr
+        assert value not in ok.stdout + ok.stderr
+        assert [c["path"] for c in state.calls] == ["/v1/token", "eh/dev/jobs/durable-function-key"]
+        env["DURABLE_FUNCTION_KEY"] = "dsv://eh/dev/jobs/missing"
+        bad = subprocess.run([sys.executable, "-m", "hello_jobs", "process-batch-items"], env=env, capture_output=True, text=True, timeout=60)
+        assert bad.returncode == 1 and "DURABLE_FUNCTION_KEY (DSV secret read failed (not found, HTTP 404))" in bad.stderr
+        env.update({"DSV_AUTH": "none", "DURABLE_FUNCTION_KEY": "dsv://eh/dev/jobs/durable-function-key"})
+        none = subprocess.run([sys.executable, "-m", "hello_jobs", "process-batch-items"], env=env, capture_output=True, text=True, timeout=60)
+        assert none.returncode == 1 and "DSV_AUTH=none" in none.stderr
+    finally:
+        httpd.shutdown()

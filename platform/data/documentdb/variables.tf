@@ -32,18 +32,20 @@ variable "foundation_network" {
   })
 }
 
-# Upstream contract: catalog/contracts/foundation-identity.v1.schema.json (only the fields used here).
+# Upstream contract: catalog/contracts/foundation-identity.v2.schema.json (only the fields used here).
 variable "foundation_identity" {
   type = object({
-    key_vault_id  = string
-    key_vault_uri = string
-    secret_ids    = optional(map(string), {}) # versionless Key Vault secret IDs (values set out-of-band)
     identities = map(object({
       id           = string
       principal_id = string
       client_id    = string
       name         = string
     }))
+    # Delinea DSV references (ADR-0001 section 14): dsv://<base_path>/<name>#value - never values.
+    secrets = object({
+      base_path = string
+      refs      = optional(map(string), {})
+    })
   })
 }
 
@@ -56,11 +58,22 @@ variable "settings" {
     server_version           = optional(string, "8.0")
     private_endpoint_enabled = optional(bool, true)
     admin_secret_name        = optional(string, "documentdb-admin-password")
-    secret_version           = optional(number, 1)
   })
   default = {}
   validation {
     condition     = var.settings.compute_tier != "Free"
     error_message = "The Free tier does not support Microsoft Entra ID authentication; use M10 or higher."
+  }
+}
+
+# Secret input from Delinea DSV (pipeline: tools/secrets/fetch.py -> TF_VAR_admin_password). Not ephemeral: the
+# argument has no write-only form, so the value is stored in state.
+variable "admin_password" {
+  description = "Native administrator password (DSV documentdb-admin-password)."
+  type        = string
+  sensitive   = true
+  validation {
+    condition     = length(var.admin_password) >= 8 && length(var.admin_password) <= 256
+    error_message = "admin_password must be 8-256 characters (DSV documentdb-admin-password)."
   }
 }

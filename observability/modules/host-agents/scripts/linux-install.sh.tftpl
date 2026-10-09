@@ -1,27 +1,111 @@
 #!/usr/bin/env bash
 # Enterprise Hello / portable Datadog package: host log + OTLP setup (idempotent; safe to re-run).
-#  1. Datadog Agent (installed by the DatadogLinuxAgent VM extension): OTLP receiver on localhost,
-#     Agent log collection OFF (application logs are shipped by Fluent Bit only).
-#  2. Fluent Bit ${fb_version} from packages.fluentbit.io (pinned, apt-mark hold / versionlock),
-#     config in /etc/fluent-bit-eh, unit fluent-bit-eh.service (the packaged fluent-bit.service is disabled).
-#  3. Datadog API key for Fluent Bit read from Key Vault with the VM's user-assigned identity (IMDS),
-#     or from the protected run-command parameter DD_API_KEY.
+# Secrets come from Delinea DSV at run time with the host's user-assigned managed identity (IMDS) - nothing
+# secret is rendered into this script, the run command / extension settings or Terraform state (ADR-0001 §14).
+#  1. dsv-fetch (observability/images/dsv-fetch, stdlib Python) installed twice:
+#       /opt/eh-dsv-fetch/dsv-fetch        root, 0500  - Fluent Bit ExecStartPre (env-yaml into tmpfs)
+#       /opt/eh-dsv-fetch/agent/dsv-fetch  dd-agent, 0500 - Datadog Agent secret_backend_command (owner = Agent
+#                                          user, no group/other rights, as the Agent requires)
+#     non-secret DSV settings in /etc/eh-dsv/dsv.json (tenant/base URL/auth/identity client id).
+#  2. Datadog Agent ${agent_version} (pinned) via the official install script in DD_INSTALL_ONLY mode, AFTER this
+#     script wrote datadog.yaml with api_key: ENC[<dsv ref>] + secret_backend_command (the install script then
+#     keeps the file and needs no DD_API_KEY). OTLP receiver on localhost, Agent log collection OFF.
+#  3. Fluent Bit ${fb_version} (pinned), config in /etc/fluent-bit-eh, unit fluent-bit-eh.service whose
+#     ExecStartPre writes /run/fluent-bit-eh/fluentbit-env.yaml (RuntimeDirectory, tmpfs, 0700 dir / 0400 file)
+#     that the config includes for ${"$"}{DD_API_KEY}.
+# setup revision: ${setup_revision} (bump modules/host-agents var.setup_revision to force a re-run)
 set -euo pipefail
 FB_VERSION='${fb_version}'
+AGENT_VERSION='${agent_version}'
+DD_SITE_VALUE='${site}'
+API_KEY_REF='${api_key_ref}'
 CONF_DIR=/etc/fluent-bit-eh
 STATE_DIR=/var/lib/fluent-bit-eh
 ENV_FILE=/etc/default/fluent-bit-eh
-API_KEY_SECRET_ID='${api_key_secret_id}'
+DSV_DIR=/opt/eh-dsv-fetch
+DSV_CONF=/etc/eh-dsv/dsv.json
 IDENTITY_CLIENT_ID='${identity_client_id}'
 CONFIGURE_AGENT='${configure_agent}'
+INSTALL_AGENT='${install_agent}'
 # Runtime overrides for hosts whose identity / log paths are only known on the node (Azure Batch job
 # preparation task: EH_IDENTITY_CLIENT_ID = pool identity, EH_LOG_PATHS under $AZ_BATCH_NODE_ROOT_DIR).
 IDENTITY_CLIENT_ID="$${EH_IDENTITY_CLIENT_ID:-$IDENTITY_CLIENT_ID}"
 log() { echo "[eh-host-setup] $*"; }
 
-# ------------------------------------------------------------------ Datadog Agent: OTLP on, logs off
+if [ -z "$IDENTITY_CLIENT_ID" ]; then log "no managed identity client id (hosts[*].identity_client_id / EH_IDENTITY_CLIENT_ID): DSV cannot be read"; exit 3; fi
+
+# ------------------------------------------------------------------ Datadog Agent (pinned, no key on disk)
+agent_installed() {
+  local v=""
+  if command -v dpkg-query >/dev/null 2>&1; then v=$(dpkg-query -W -f='$${Version}' datadog-agent 2>/dev/null || true); fi
+  if [ -z "$v" ] && command -v rpm >/dev/null 2>&1; then v=$(rpm -q --qf '%%{VERSION}' datadog-agent 2>/dev/null || true); fi
+  case "$v" in *"$AGENT_VERSION"*) return 0 ;; *) return 1 ;; esac
+}
+agent_cfg_changed=0
+if [ "$INSTALL_AGENT" = "true" ]; then
+  install -d -m 0755 /etc/datadog-agent
+  tmp=$(mktemp)
+  cat > "$tmp" <<DDYAML
+# Managed by the portable Datadog package (modules/host-agents). The API key is a Delinea DSV reference resolved by
+# the Agent's secret backend (dsv-fetch agent-backend) with this host's managed identity; no key is stored here.
+api_key: ENC[$API_KEY_REF]
+site: $DD_SITE_VALUE
+secret_backend_command: $DSV_DIR/agent/dsv-fetch
+secret_backend_arguments:
+  - agent-backend
+  - --config
+  - $DSV_CONF
+secret_backend_timeout: 30
+DDYAML
+  if ! cmp -s "$tmp" /etc/datadog-agent/datadog.yaml; then
+    # replaces any previous datadog.yaml (e.g. one written by the Datadog VM extension with a literal key)
+    install -m 0640 "$tmp" /etc/datadog-agent/datadog.yaml; agent_cfg_changed=1
+  fi
+  rm -f "$tmp"
+  if ! agent_installed; then
+    curl -fsSL --retry 5 -o /tmp/eh-dd-install.sh https://install.datadoghq.com/scripts/install_script_agent7.sh
+    DD_INSTALL_ONLY=true DD_AGENT_MAJOR_VERSION=7 DD_AGENT_MINOR_VERSION="$${AGENT_VERSION#7.}" DD_SITE="$DD_SITE_VALUE" bash /tmp/eh-dd-install.sh
+    rm -f /tmp/eh-dd-install.sh
+    agent_cfg_changed=1
+    log "datadog-agent $AGENT_VERSION installed (install-only; api_key is an ENC[] DSV reference)"
+  fi
+  if getent group dd-agent >/dev/null; then chown root:dd-agent /etc/datadog-agent/datadog.yaml; fi
+fi
+
+# ------------------------------------------------------------------ dsv-fetch (Delinea DSV reader)
+PY=""
+for c in /opt/datadog-agent/embedded/bin/python3 /usr/bin/python3 /usr/local/bin/python3; do
+  if [ -x "$c" ] && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then PY=$c; break; fi
+done
+if [ -z "$PY" ]; then log "dsv-fetch needs Python >= 3.11 (Datadog Agent embedded python3 or the distribution's python3)"; exit 5; fi
+stage_dsv=$(mktemp -d)
+echo '${dsv_fetch_gz}' | base64 -d | gunzip > "$stage_dsv/dsv_fetch.py"
+install -d -m 0755 "$DSV_DIR" "$DSV_DIR/agent" /etc/eh-dsv
+"$PY" -I "$stage_dsv/dsv_fetch.py" install --dest "$DSV_DIR/dsv-fetch" --python "$PY"
+if getent passwd dd-agent >/dev/null; then
+  "$PY" -I "$stage_dsv/dsv_fetch.py" install --dest "$DSV_DIR/agent/dsv-fetch" --python "$PY" --owner dd-agent
+fi
+rm -rf "$stage_dsv"
+EH_CLIENT_ID="$IDENTITY_CLIENT_ID" "$PY" -I - "$DSV_CONF" <<'PYEOF'
+import json, os, sys
+cfg = json.loads('${dsv_config_json}')
+cfg["AZURE_CLIENT_ID"] = os.environ["EH_CLIENT_ID"]
+data = json.dumps(cfg, indent=2, sort_keys=True) + "\n"
+path = sys.argv[1]
+try:
+    old = open(path, encoding="utf-8").read()
+except OSError:
+    old = None
+if old != data:
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(data)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+PYEOF
+
 if [ "$CONFIGURE_AGENT" = "true" ]; then
-  changed=0
+  changed=$agent_cfg_changed
   for unit in datadog-agent datadog-agent-trace; do
     d=/etc/systemd/system/$unit.service.d
     install -d -m 0755 "$d"
@@ -37,10 +121,13 @@ Environment="DD_TAGS=${agent_tags}"
 UNIT
     if ! cmp -s "$tmp" "$d/eh-observability.conf"; then mv "$tmp" "$d/eh-observability.conf"; chmod 0644 "$d/eh-observability.conf"; changed=1; else rm -f "$tmp"; fi
   done
-  if [ $changed -eq 1 ] && systemctl list-unit-files datadog-agent.service >/dev/null 2>&1; then
+  if systemctl list-unit-files datadog-agent.service >/dev/null 2>&1; then
     systemctl daemon-reload
-    systemctl restart datadog-agent || log "datadog-agent restart failed (extension still installing?)"
-    log "datadog-agent reconfigured (OTLP localhost:4317/4318, logs disabled)"
+    systemctl enable datadog-agent >/dev/null 2>&1 || true
+    if [ $changed -eq 1 ] || ! systemctl is-active --quiet datadog-agent; then
+      systemctl restart datadog-agent || log "datadog-agent restart failed (check: datadog-agent secret)"
+      log "datadog-agent (re)configured (secret backend dsv-fetch, OTLP localhost:4317/4318, logs disabled)"
+    fi
   fi
 fi
 
@@ -74,30 +161,29 @@ if [ "$installed" != "$FB_VERSION" ]; then
 fi
 systemctl disable --now fluent-bit.service >/dev/null 2>&1 || true
 
-# ------------------------------------------------------------------ API key (never in this script)
-DD_API_KEY_VALUE="$${DD_API_KEY:-}"
-if [ -n "$API_KEY_SECRET_ID" ] && [ -n "$IDENTITY_CLIENT_ID" ]; then
-  token=$(curl -fsS --retry 5 -H Metadata:true "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net&client_id=$IDENTITY_CLIENT_ID" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
-  DD_API_KEY_VALUE=$(curl -fsS --retry 5 -H "Authorization: Bearer $token" "$API_KEY_SECRET_ID?api-version=7.4" | sed -n 's/.*"value":"\([^"]*\)".*/\1/p')
-fi
-if [ -z "$DD_API_KEY_VALUE" ]; then log "no Datadog API key available (Key Vault or protected parameter)"; exit 3; fi
-
 # ------------------------------------------------------------------ config (staged, dry-run, then swapped)
+SECRETS_FILE='${secrets_file}'
 stage=$(mktemp -d)
 install -d -m 0755 "$stage/lua"
 %{ for path, gz in files ~}
 echo '${gz}' | base64 -d | gunzip > "$stage/${path}"
 %{ endfor ~}
 umask 077
+# non-secret env only: the API key is written at service start by ExecStartPre into $SECRETS_FILE
 cat > "$stage/env" <<ENVEOF
 %{ for k, v in env ~}
 ${k}=${v}
 %{ endfor ~}
-DD_API_KEY=$DD_API_KEY_VALUE
 ENVEOF
 if [ -n "$${EH_LOG_PATHS:-}" ]; then sed -i "s|^FLB_LOG_PATHS=.*|FLB_LOG_PATHS=$EH_LOG_PATHS|" "$stage/env"; fi
 install -d -m 0750 "$STATE_DIR"
-(set -a; . "$stage/env"; set +a; cd "$stage" && /opt/fluent-bit/bin/fluent-bit -c "$stage/fluent-bit.yaml" --dry-run >/dev/null) || { log "fluent-bit dry-run failed; keeping previous config"; rm -rf "$stage"; exit 4; }
+# dry-run against a placeholder env file (the real one exists only while the service runs); the dry config sits in
+# the staging dir so relative includes (parsers.yaml, lua/) resolve the same way
+dry=$(mktemp -d)
+printf 'env:\n  DD_API_KEY: dry-run-placeholder\n' > "$dry/fluentbit-env.yaml"
+sed "s|$SECRETS_FILE|$dry/fluentbit-env.yaml|" "$stage/fluent-bit.yaml" > "$stage/.dry-run.yaml"
+(set -a; . "$stage/env"; set +a; cd "$stage" && /opt/fluent-bit/bin/fluent-bit -c "$stage/.dry-run.yaml" --dry-run >/dev/null) || { log "fluent-bit dry-run failed; keeping previous config"; rm -rf "$stage" "$dry"; exit 4; }
+rm -rf "$dry" "$stage/.dry-run.yaml"
 
 restart=0
 if ! cmp -s "$stage/env" "$ENV_FILE"; then install -m 0600 "$stage/env" "$ENV_FILE"; restart=1; fi
@@ -112,7 +198,7 @@ fi
 chmod -R go-w "$CONF_DIR"
 
 unit=/etc/systemd/system/fluent-bit-eh.service
-cat > "$unit.tmp" <<'UNIT'
+cat > "$unit.tmp" <<UNIT
 [Unit]
 Description=Fluent Bit (application logs -> Datadog, portable Datadog package)
 After=network-online.target
@@ -121,9 +207,13 @@ Wants=network-online.target
 [Service]
 EnvironmentFile=/etc/default/fluent-bit-eh
 WorkingDirectory=/etc/fluent-bit-eh
+# tmpfs /run/fluent-bit-eh (0700, removed on stop); dsv-fetch writes the Fluent Bit env-yaml (0400) from DSV
+RuntimeDirectory=fluent-bit-eh
+RuntimeDirectoryMode=0700
+ExecStartPre=$DSV_DIR/dsv-fetch init --config $DSV_CONF --out /run/fluent-bit-eh --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=$API_KEY_REF
 ExecStart=/opt/fluent-bit/bin/fluent-bit -c /etc/fluent-bit-eh/fluent-bit.yaml
 Restart=always
-RestartSec=5
+RestartSec=10
 LimitNOFILE=65536
 MemoryMax=512M
 

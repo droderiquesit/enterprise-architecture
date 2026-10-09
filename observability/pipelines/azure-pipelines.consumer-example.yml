@@ -12,12 +12,12 @@ resources:
     - repository: obs
       type: git
       name: Platform/observability-package          # <project>/<repo> hosting the package
-      ref: refs/tags/observability-v1.0.0
+      ref: refs/tags/observability-v2.0.0
 
 variables:
   environment: prod
   rootDir: $(Build.SourcesDirectory)/monitoring
-  packageDir: $(Build.SourcesDirectory)/monitoring/.vendor/observability-1.0.0
+  packageDir: $(Build.SourcesDirectory)/monitoring/.vendor/observability-2.0.0
 
 stages:
   - stage: validate
@@ -46,7 +46,11 @@ stages:
           rootDir: $(rootDir)
           environment: prod
           azureServiceConnection: sc-monitoring-prod
-          keyVaultName: kv-monitoring-prod
+          dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}   # self-hosted agent identity (DSV user)
+          datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
+          datadogAppKeyRef: dsv://monitoring/prod/datadog-app-key#value
+          dsvFetchPath: $(packageDir)/images/dsv-fetch/dsv_fetch.py
+          pool: {name: self-hosted-monitoring}                    # managed identity required for DSV
           backendConfig:
             resource_group_name: rg-tfstate
             storage_account_name: sttfstateprod
@@ -64,14 +68,19 @@ stages:
           adoEnvironment: monitoring-prod
           rootDir: $(rootDir)
           azureServiceConnection: sc-monitoring-prod
-          keyVaultName: kv-monitoring-prod
+          dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}   # self-hosted agent identity (DSV user)
+          datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
+          datadogAppKeyRef: dsv://monitoring/prod/datadog-app-key#value
+          # the plan artifact contains the root incl. its vendored package
+          dsvFetchPath: $(Pipeline.Workspace)/tfplan-prod/.vendor/observability-2.0.0/images/dsv-fetch/dsv_fetch.py
+          pool: {name: self-hosted-monitoring}
 
   - stage: verify
     dependsOn: deploy
     jobs:
       - job: telemetry
         pool:
-          vmImage: ubuntu-latest
+          name: self-hosted-monitoring           # managed identity mapped to a DSV user (reads the Datadog keys)
         steps:
           - checkout: self
           - bash: ./vendor.sh
@@ -82,7 +91,8 @@ stages:
               environment: prod
               startedAt: $(System.PipelineStartTime)
               azureServiceConnection: sc-monitoring-prod
-              keyVaultName: kv-monitoring-prod
+              dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}
+              datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
               services:
                 - {name: monitoring-config, version: $(Build.BuildNumber), team: platform}
           - template: pipelines/templates/telemetry-verify.yml@obs
@@ -92,4 +102,6 @@ stages:
               journeyServices: [orders-web, orders-api]
               infraMetrics: ['avg:azure.app_services.requests{*}']
               azureServiceConnection: sc-monitoring-prod
-              keyVaultName: kv-monitoring-prod
+              dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}
+              datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
+              datadogAppKeyRef: dsv://monitoring/prod/datadog-app-key#value

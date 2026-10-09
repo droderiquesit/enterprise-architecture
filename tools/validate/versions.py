@@ -7,7 +7,8 @@ For every Terraform root in the registry (that exists on disk) and every module 
   - `required_version` equals versions.yaml terraform.required_version (roots: mandatory; modules: if set)
   - every `required_providers` entry with a source listed in versions.yaml uses exactly its constraint
   - providers not listed in versions.yaml are errors (except hashicorp/azuread in bootstrap, ADR §2)
-  - roots have a committed .terraform.lock.hcl whose provider versions equal versions.yaml versions
+  - roots have a committed .terraform.lock.hcl whose provider versions equal versions.yaml versions (roots without
+    providers, e.g. foundation/secrets, have none: terraform init creates no lock file for built-ins)
 Registry roots that do not exist yet are reported (failure only with --strict).
 """
 
@@ -69,7 +70,9 @@ def check_dir(repo: Path, rel: str, pins: dict, is_root: bool, owner: str) -> tu
             continue
         if constraint != pinned[source]["constraint"]:
             errors.append(f"{rel}: {source} constraint '{constraint}' != '{pinned[source]['constraint']}'")
-    if is_root:
+    if is_root and not providers and not (d / ".terraform.lock.hcl").exists():
+        notes.append(f"{rel}: no providers (built-ins only) - no lock file needed")
+    elif is_root:
         lock = d / ".terraform.lock.hcl"
         if not lock.exists():
             errors.append(f"{rel}: missing committed .terraform.lock.hcl")

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Rebuild every Enterprise Hello image used by the local e2e run from the CURRENT source tree, with the
-# repository Dockerfiles (build context = applications/, exactly as applications/dotnet/build.sh `images` and
+# repository Dockerfiles (build context = applications/; dsv-fetch: observability/images/dsv-fetch; exactly as applications/dotnet/build.sh `images` and
 # applications/python/build.sh `image` do). Tags: hello-<svc>:${E2E_VERSION:-0.1.0-e2e}.
 #
 #   tests/integration/build_images.sh [svc ...]     (default: all services the compose file uses)
@@ -17,7 +17,7 @@ GIT_COMMIT="${GIT_COMMIT:-$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null ||
 if [[ -n "$(git -C "$REPO" status --porcelain -- applications/services applications/shared 2>/dev/null)" ]]; then GIT_COMMIT="${GIT_COMMIT}-dirty"; fi
 BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 SERVICES=("$@")
-[[ ${#SERVICES[@]} -eq 0 ]] && SERVICES=(bff orders-api inventory-api durable catalog-api dbadapter worker partner-sim frontend)
+[[ ${#SERVICES[@]} -eq 0 ]] && SERVICES=(bff orders-api inventory-api durable catalog-api dbadapter worker partner-sim frontend dsv-fetch)
 
 common=(--build-arg VERSION="$VERSION" --build-arg GIT_COMMIT="$GIT_COMMIT" --build-arg BUILD_TIME="$BUILD_TIME")
 if [[ -n "${HTTPS_PROXY:-}" ]]; then
@@ -28,6 +28,12 @@ CA_BUNDLE="${CA_BUNDLE:-}"
 [[ -z "$CA_BUNDLE" && -f /root/.ccr/ca-bundle.crt ]] && CA_BUNDLE=/root/.ccr/ca-bundle.crt
 
 for svc in "${SERVICES[@]}"; do
+  if [[ "$svc" == dsv-fetch ]]; then
+    # observability/images/dsv-fetch (stdlib-only, distroless): no proxy/CA needed, nothing is downloaded at build time
+    echo "== docker build dsv-fetch:$VERSION ($GIT_COMMIT)"
+    docker build -q --build-arg VERSION="$VERSION" --build-arg GIT_COMMIT="$GIT_COMMIT" -t "dsv-fetch:$VERSION" "$REPO/observability/images/dsv-fetch"
+    continue
+  fi
   secret=()
   case "$svc" in
     bff|orders-api|inventory-api|durable) [[ -n "$CA_BUNDLE" ]] && secret=(--secret "id=ca_bundle,src=$CA_BUNDLE") ;;

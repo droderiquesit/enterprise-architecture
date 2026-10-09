@@ -1,10 +1,9 @@
 locals {
-  component   = "platform-db-cassandra-mi"
-  workload    = "data-cassmi"
-  enabled     = var.settings.enabled
-  subnet_id   = try(var.foundation_network.subnets["cassandra-mi"].id, null)
-  role_scope  = var.settings.network_contributor_scope == "vnet" ? var.foundation_network.spoke_vnet_id : local.subnet_id
-  secret_tags = { for k, v in module.tags.tags : k => v if contains(["env", "application", "component", "layer", "owner", "team", "managed_by", "expires_on", "data_classification", "repository"], k) }
+  component  = "platform-db-cassandra-mi"
+  workload   = "data-cassmi"
+  enabled    = var.settings.enabled
+  subnet_id  = try(var.foundation_network.subnets["cassandra-mi"].id, null)
+  role_scope = var.settings.network_contributor_scope == "vnet" ? var.foundation_network.spoke_vnet_id : local.subnet_id
 }
 
 module "naming" {
@@ -25,16 +24,8 @@ module "tags" {
   tier        = "database"
 }
 
-# Required by the cluster resource (no write-only variant): kept in state and copied write-only to Key Vault.
-resource "random_password" "admin" {
-  count            = local.enabled ? 1 : 0
-  length           = 32
-  min_lower        = 2
-  min_upper        = 2
-  min_numeric      = 2
-  min_special      = 2
-  override_special = "!#%*-_+=?"
-}
+# default_admin_password is required by the cluster resource and has no write-only variant: the value comes from
+# Delinea DSV (cassandra-mi-admin-password) as a pipeline input (var.admin_password) and is stored in state.
 
 resource "azurerm_resource_group" "this" {
   count    = local.enabled ? 1 : 0
@@ -59,7 +50,7 @@ resource "azurerm_cosmosdb_cassandra_cluster" "this" {
   resource_group_name            = azurerm_resource_group.this[0].name
   location                       = azurerm_resource_group.this[0].location
   delegated_management_subnet_id = local.subnet_id
-  default_admin_password         = random_password.admin[0].result
+  default_admin_password         = var.admin_password
   version                        = var.settings.cassandra_version
   authentication_method          = "Cassandra"
   repair_enabled                 = true
@@ -73,6 +64,10 @@ resource "azurerm_cosmosdb_cassandra_cluster" "this" {
   depends_on = [azurerm_role_assignment.cosmosdb_network]
 
   lifecycle {
+    precondition {
+      condition     = var.admin_password != null
+      error_message = "admin_password (DSV cassandra-mi-admin-password, TF_VAR_admin_password) is required when enabled."
+    }
     precondition {
       condition     = local.subnet_id != null
       error_message = "foundation_network.subnets.cassandra-mi is required."
@@ -90,15 +85,4 @@ resource "azurerm_cosmosdb_cassandra_datacenter" "dc1" {
   sku_name                       = var.settings.sku_name
   disk_count                     = var.settings.disk_count
   availability_zones_enabled     = false
-}
-
-resource "azurerm_key_vault_secret" "admin" {
-  count            = local.enabled ? 1 : 0
-  name             = var.settings.admin_secret_name
-  key_vault_id     = var.foundation_identity.key_vault_id
-  value_wo         = random_password.admin[0].result
-  value_wo_version = var.settings.secret_version
-  content_type     = "password"
-  expiration_date  = "${var.environment.expires_on}T00:00:00Z"
-  tags             = local.secret_tags
 }

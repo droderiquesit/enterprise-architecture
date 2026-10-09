@@ -74,13 +74,41 @@ def test_scopes_match_the_brief(reg):
     assert "obs-hosts" in apps
 
 
-def test_build_stage_only_in_applications_pipeline(generated, reg):
-    assert "Build" not in stage_map(generated["platform"])
-    jobs = stage_map(generated["applications"])["Build"]["jobs"]
-    comps = [j["parameters"]["component"] for j in jobs if "component" in j["parameters"]]
-    assert sorted(comps) == sorted(c.id for c in reg if c.is_artifact)
-    assert any(j["template"].endswith("helm-charts.yml") for j in jobs)
+def test_build_stage_per_scope(generated, reg):
+    """Each pipeline builds exactly the artifacts of its own scope; only applications publishes Helm charts."""
+    for scope in ("platform", "applications"):
+        jobs = stage_map(generated[scope])["Build"]["jobs"]
+        comps = [j["parameters"]["component"] for j in jobs if "component" in j["parameters"]]
+        assert sorted(comps) == sorted(c.id for c in reg if c.is_artifact and c.scope == scope)
+    assert [j["parameters"]["component"] for j in stage_map(generated["platform"])["Build"]["jobs"]] == ["img-dsv-fetch"]
+    assert any(j["template"].endswith("helm-charts.yml") for j in stage_map(generated["applications"])["Build"]["jobs"])
+    assert not any(j["template"].endswith("helm-charts.yml") for j in stage_map(generated["platform"])["Build"]["jobs"])
     assert "Verify" in stage_map(generated["applications"]) and "Verify" not in stage_map(generated["platform"])
+
+
+def test_cross_scope_artifact_uses_recorded_digest(generated, reg):
+    """deploy-core-aca (applications) consumes img-dsv-fetch (platform): no Build job/readiness term in the
+    applications pipeline; the plan/apply jobs read it from its deployment record (recordedArtifacts)."""
+    apps = stage_map(generated["applications"])
+    p = apps["P_deploy_core_aca"]
+    assert "B_img_dsv_fetch" not in p["condition"]
+    params = p["jobs"][0]["parameters"]
+    assert "img-dsv-fetch" not in params["artifacts"] and params["recordedArtifacts"] == ["img-dsv-fetch"]
+    assert apps["C_deploy_core_aca"]["jobs"][0]["parameters"]["recordedArtifacts"] == ["img-dsv-fetch"]
+    plat = stage_map(generated["platform"])
+    t = plat["P_obs_telemetry_transport"]
+    assert "Build" in t["dependsOn"] and "B_img_dsv_fetch.ready.ready" in t["condition"]
+    assert "recordedArtifacts" not in t["jobs"][0]["parameters"]
+
+
+def test_secret_env_components_fetch_from_dsv(generated, reg):
+    plat = stage_map(generated["platform"])
+    for c in reg:
+        if c.deployable and c.scope == "platform":
+            assert plat[f"P_{c.var_id}"]["jobs"][0]["parameters"]["secretEnv"] is bool(c.secret_env)
+    assert plat["P_obs_prereqs"]["jobs"][0]["parameters"]["secretEnv"] is True
+    assert plat["P_platform_db_sqlvm"]["jobs"][0]["parameters"]["secretEnv"] is True
+    assert plat["P_foundation_network"]["jobs"][0]["parameters"]["secretEnv"] is False
 
 
 def test_generated_files_are_up_to_date():
@@ -181,23 +209,31 @@ def _sel(**kw):
 
 
 def test_simulated_platform_run_failed_upstream_blocks_downstream(generated):
+    # foundation-identity -> foundation-secrets (consumes the identity contract); platform-shared consumes both
+    # foundation-network and foundation-identity. foundation-identity itself has no upstream (contract v2: no Key Vault).
     sel = _sel(sel_foundation_network="true", apply_foundation_network="true",
                sel_foundation_identity="true", apply_foundation_identity="true",
+               sel_foundation_secrets="true", apply_foundation_secrets="true",
                sel_platform_shared="true", apply_platform_shared="true")
-    plan = {"foundation-network": 1, "foundation-identity": 2, "platform-shared": 2}
+    plan = {"foundation-network": 1, "foundation-identity": 1, "foundation-secrets": 2, "platform-shared": 2}
     res = simulate(generated["platform"], sel, plan)
-    assert res["results"]["P_foundation_network"] == "Failed"
-    assert res["results"]["P_foundation_identity"] == "Skipped"
-    assert res["results"]["P_platform_shared"] == "Skipped"     # identity selected but skipped -> blocks
+    assert res["results"]["P_foundation_network"] == "Failed" and res["results"]["P_foundation_identity"] == "Failed"
+    assert res["results"]["P_foundation_secrets"] == "Skipped"
+    assert res["results"]["P_platform_shared"] == "Skipped"
     assert res["applied"] == []
     assert res["results"]["Retire"] == "Skipped"
-    res = simulate(generated["platform"], sel, {"foundation-network": 2, "foundation-identity": 0, "platform-shared": 0})
+    res = simulate(generated["platform"], sel, {"foundation-network": 2, "foundation-identity": 0, "foundation-secrets": 0,
+                                                "platform-shared": 0})
     assert res["applied"] == ["foundation-network"]
     assert res["results"]["C_foundation_identity"] == "Skipped" and res["results"]["P_platform_shared"] == "Succeeded"
+    # identity planned but skipped because ITS plan failed blocks foundation-secrets; network unaffected
+    res = simulate(generated["platform"], sel, {"foundation-network": 2, "foundation-identity": 1, "foundation-secrets": 2,
+                                                "platform-shared": 2})
+    assert res["applied"] == ["foundation-network"] and res["results"]["P_foundation_secrets"] == "Skipped"
     # approval rejected on the network apply blocks consumers
-    res = simulate(generated["platform"], sel, {"foundation-network": 2, "foundation-identity": 2, "platform-shared": 2},
-                   apply_rejected={"foundation-network"})
-    assert res["results"]["P_foundation_identity"] == "Skipped" and res["applied"] == []
+    res = simulate(generated["platform"], sel, {"foundation-network": 2, "foundation-identity": 2, "foundation-secrets": 2,
+                                                "platform-shared": 2}, apply_rejected={"foundation-network"})
+    assert res["results"]["P_platform_shared"] == "Skipped" and "foundation-network" not in res["applied"]
     # dry run: plans run, nothing applies, no apply stage starts (no approvals requested)
     res = simulate(generated["platform"], sel, {"foundation-network": 2}, dry_run=True)
     assert res["results"]["P_foundation_network"] == "Succeeded" and res["results"]["C_foundation_network"] == "Skipped"

@@ -16,23 +16,24 @@ parameters:
     default: datadoghq.com
   - name: azureServiceConnection
     type: string
-  - name: keyVaultName
+  - name: dsv                    # Delinea DSV: {tenant, tld?, base_url?, identity_client_id?, auth?} (templates/dsv-secrets.yml)
+    type: object
+  - name: datadogApiKeyRef
     type: string
-  - name: datadogApiKeySecret
+    default: dsv://observability/prod/datadog-api-key#value
+  - name: dsvFetchPath           # dsv_fetch.py of the vendored package (default: <packageDir>/images/dsv-fetch/dsv_fetch.py)
     type: string
-    default: datadog-api-key
+    default: ''
   - name: failOnError            # markers are informational by default
     type: boolean
     default: false
 
 steps:
-  - task: AzureKeyVault@2
-    displayName: Read Datadog API key
-    inputs:
-      azureSubscription: ${{ parameters.azureServiceConnection }}
-      KeyVaultName: ${{ parameters.keyVaultName }}
-      SecretsFilter: ${{ parameters.datadogApiKeySecret }}
-      RunAsPreJob: false
+  - template: dsv-secrets.yml
+    parameters:
+      dsv: ${{ parameters.dsv }}
+      dsvFetchPath: ${{ coalesce(parameters.dsvFetchPath, format('{0}/images/dsv-fetch/dsv_fetch.py', parameters.packageDir)) }}
+      secrets: {DD_API_KEY: '${{ parameters.datadogApiKeyRef }}'}
   - ${{ each svc in parameters.services }}:
       - bash: |
           python3 "${{ parameters.packageDir }}/tools/markers/send_deployment_event.py" \
@@ -44,4 +45,4 @@ steps:
         displayName: Deployment marker ${{ svc.name }}
         continueOnError: ${{ not(parameters.failOnError) }}
         env:
-          DD_API_KEY: $(${{ parameters.datadogApiKeySecret }})
+          DD_API_KEY: $(DD_API_KEY)

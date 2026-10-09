@@ -65,7 +65,14 @@ locals {
     } : {},
   )
 
-  # env vars that must be injected from a secret store by the host platform
+  # Secret env vars: written by dsv-fetch (Delinea DSV) into the env-yaml file the config includes
+  # (never container env / platform secrets). Path per role (container roles share /dsv-secrets).
+  secrets_env_file = {
+    "linux-host"   = "/run/fluent-bit-eh/fluentbit-env.yaml"
+    "windows-host" = "C:/ProgramData/fluent-bit-eh/secrets/fluentbit-env.yaml"
+  }
+  secrets_file = lookup(local.secrets_env_file, var.role, "/dsv-secrets/fluentbit-env.yaml")
+
   secret_env = concat(
     contains(["sidecar-forward"], var.role) ? ["FLB_FORWARD_SHARED_KEY"] : ["DD_API_KEY"],
     contains(["aggregator", "aggregator-forward"], var.role) ? ["FLB_FORWARD_SHARED_KEY"] : [],

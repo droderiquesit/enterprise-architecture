@@ -53,6 +53,9 @@ class Component:
     after_deployments: bool = False
     timeout_minutes: int = DEFAULT_TIMEOUT_MINUTES
     scope: str = "platform"
+    secret_env: Dict[str, str] = field(default_factory=dict)
+    dsv_state_output: Optional[str] = None
+    secret_outputs: Optional[str] = None
     raw: dict = field(default_factory=dict)
 
     @property
@@ -180,6 +183,9 @@ def load_registry(tree: Tree, path: str = REGISTRY_PATH) -> Registry:
             after_deployments=bool(raw.get("after_deployments", False)),
             timeout_minutes=int(raw.get("timeout_minutes", DEFAULT_TIMEOUT_MINUTES)),
             scope=derive_scope(raw),
+            secret_env=dict(raw.get("secret_env") or {}),
+            dsv_state_output=raw.get("dsv_state_output"),
+            secret_outputs=raw.get("secret_outputs"),
             raw=raw,
         )
         if c.id in components:
@@ -207,6 +213,8 @@ def load_registry(tree: Tree, path: str = REGISTRY_PATH) -> Registry:
                 errors.append(f"{c.id}: artifacts references unknown component '{art}'")
             elif components[art].kind != "artifact":
                 errors.append(f"{c.id}: artifacts entry '{art}' is not an artifact component")
+        if (c.secret_env or c.dsv_state_output or c.secret_outputs) and c.kind != "terraform":
+            errors.append(f"{c.id}: secret_env / dsv_state_output / secret_outputs are only valid on terraform components")
         if c.artifacts and c.kind != "terraform":
             errors.append(f"{c.id}: only terraform components can declare artifacts")
     if errors:

@@ -3,13 +3,15 @@
 # protected `plans` container and set output variables has_changes / plan_exit.
 # Usage: tf-plan.sh <component-id> <root-path>
 # Env: LAB_ENV, BINDING_FILE, OUT_DIR (published summary dir), PLANS_URL, RECORDS_URL, CONTRACTS_URL,
-#      APPLY_CANDIDATE ('true'/'false'), DRY_RUN ('True'/'False'), BUILD_BUILDID, SYSTEM_JOBATTEMPT, BUILD_SOURCEVERSION
+#      APPLY_CANDIDATE ('true'/'false'), DRY_RUN ('True'/'False'), BUILD_BUILDID, SYSTEM_JOBATTEMPT, BUILD_SOURCEVERSION,
+#      TF_SECRET_ENV ('true': terraform runs through tools/secrets/fetch.py exec with the registry secret_env)
 set -euo pipefail
 component="$1"; root="$2"
+source pipelines/scripts/tf-secrets.sh
 mkdir -p "$OUT_DIR"
 work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 set +e
-terraform -chdir="$root" plan -input=false -no-color -lock-timeout=10m -detailed-exitcode -out="$work/tfplan" | tee "$OUT_DIR/plan.log"
+tf_secret terraform -chdir="$root" plan -input=false -no-color -lock-timeout=10m -detailed-exitcode -out="$work/tfplan" | tee "$OUT_DIR/plan.log"
 rc=${PIPESTATUS[0]}
 set -e
 if [[ $rc -eq 1 ]]; then echo "##vso[task.logissue type=error]terraform plan failed for $component"; exit 1; fi
@@ -20,9 +22,15 @@ key="${LAB_ENV}/${component}/${BUILD_BUILDID}-${SYSTEM_JOBATTEMPT}.tfplan"
 python3 tools/deploy/plan_manifest.py create --component "$component" --env "$LAB_ENV" --root "$root" \
   --plan "$work/tfplan" --binding "$BINDING_FILE" --plan-key "$key" --exit-code "$rc" --out "$OUT_DIR/manifest.json"
 python3 tools/deploy/storecp.py put --store "$PLANS_URL" --key "$key" --file "$work/tfplan"
+# Secret hooks (registry dsv_state_output): DSV desired-state diff in the summary; a DSV diff forces the apply stage.
+python3 tools/secrets/hooks.py post-plan --env "$LAB_ENV" --component "$component" --root "$root" \
+  --plan-json "$work/plan.json" --summary-md "$OUT_DIR/summary.md" | tee "$work/hooks.out"
+dsv_changes="$(tail -1 "$work/hooks.out")"
 has_changes=false
 if [[ $rc -eq 2 ]]; then
   has_changes=true
+elif [[ "$dsv_changes" == "dsv_changes=true" ]]; then
+  echo "DSV configuration differs from the desired state: forcing the Apply job"; has_changes=true
 elif ! python3 tools/contracts/publish.py check --component "$component" --env "$LAB_ENV" --store "$CONTRACTS_URL"; then
   echo "contract envelope missing: forcing the Apply job to publish it"; has_changes=true
 elif [[ "${APPLY_CANDIDATE}" == "true" && "${DRY_RUN,,}" != "true" ]]; then

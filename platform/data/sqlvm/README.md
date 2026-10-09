@@ -15,7 +15,7 @@ separate data (F:) and log (G:) disks, daily auto-shutdown, and database `adapte
 | Contract | Fields used |
 |---|---|
 | `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v1 | `key_vault_id`, `key_vault_uri`, `secret_ids` (optional), `identities[<name>].{principal_id, client_id, name}` |
+| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}`, `secrets.{base_path, refs}` (Delinea DSV references) |
 
 ## Produced contract
 `platform-db-sqlvm` v1 — schema `catalog/contracts/platform-db-sqlvm.v1.schema.json` (output `contract`, no secrets).
@@ -41,12 +41,16 @@ NIC in subnet `compute`, no public IP; `sql_connectivity_type = PRIVATE` (port 1
 VMs is supported through the SQL IaaS Agent extension, but azurerm 5.9 does not expose it
 (`azurerm_mssql_virtual_machine` has no Entra settings) and it additionally needs Graph permissions for the VM
 identity; it is left as a documented follow-up (AzAPI `Microsoft.SqlVirtualMachine/sqlVirtualMachines`) rather than
-implemented. Passwords are generated with `random_password` (stored in encrypted, RBAC-restricted state because the
-VM/SQL VM arguments have no write-only variant) and written **write-only** to Key Vault; the contract carries only
-versionless secret IDs. The apply identity needs *Key Vault Secrets Officer* on the foundation vault.
+implemented. Passwords live in **Delinea DSV** (system of record, ADR-0001 section 14): `sqlvm-admin-password` and
+`sqlvm-dbadapter-password`, created/rotated by operators. The pipeline passes them as `TF_VAR_admin_password` /
+`TF_VAR_dbadapter_password` (registry `secret_env`, `tools/secrets/fetch.py`, only inside the terraform process).
+`admin_password`, `sql_connectivity_update_password` and run-command protected parameters have **no write-only
+variant** in azurerm 5.9, so the values are stored in Terraform state and the saved plan (encrypted, RBAC-restricted
+containers; `docs/known-limitations.md`). The contract carries only `dsv://` references. Rotation procedure:
+[docs/runbooks/secret-rotation.md](../../../docs/runbooks/secret-rotation.md).
 
 ## Teardown and data retention
-Destroy removes VM, disks and the SQL VM registration; the Key Vault secrets are deleted (soft-delete/purge protection of the vault applies).
+Destroy removes VM, disks and the SQL VM registration; the DSV secrets are not touched (delete them with the dsv CLI if the environment is gone).
 `prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
 synthetic data in it.
 

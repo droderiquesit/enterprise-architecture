@@ -1,21 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Instrumentation / telemetry transport contract v1 (also emitted by the portable package for existing environments)",
+  "title": "Instrumentation / telemetry transport contract v2 (also emitted by the portable package for existing environments). Secrets are Delinea DSV references (dsv://<path>#<element>), never values; v2 replaces the v1 Key Vault secret ids (ADR-0001 section 14).",
   "type": "object",
   "required": [
     "datadog_site",
     "otlp",
     "fluentbit",
     "env",
-    "api_key_secret_id"
+    "api_key_ref",
+    "secrets"
   ],
   "properties": {
     "datadog_site": {
       "type": "string"
-    },
-    "api_key_secret_id": {
-      "type": "string",
-      "description": "Key Vault versionless secret id holding the Datadog API key"
     },
     "otlp": {
       "type": "object",
@@ -29,13 +26,6 @@
         },
         "http_endpoint": {
           "type": "string"
-        },
-        "headers_secret_id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "Key Vault versionless secret id whose value is the full OTEL_EXPORTER_OTLP_HEADERS string (e.g. authorization=Bearer ...); null when the gateway does not require auth"
         },
         "default_protocol": {
           "enum": [
@@ -70,6 +60,14 @@
             "forward"
           ],
           "description": "what the OTel gateway does with OTLP logs (drop = accepted and discarded; application logs arrive via Fluent Bit only)"
+        },
+        "headers_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$",
+          "description": "DSV reference whose value is the full OTEL_EXPORTER_OTLP_HEADERS string; null when the gateway does not require auth"
         }
       }
     },
@@ -91,7 +89,7 @@
         },
         "sidecar_config": {
           "type": "string",
-          "description": "fluent-bit YAML config for file-tail sidecars (no secrets; API key via env from secret ref)"
+          "description": "fluent-bit YAML config for file-tail sidecars (no secrets; includes the dsv-fetch env-yaml file for DD_API_KEY)"
         },
         "sidecar_forward_config": {
           "type": [
@@ -123,12 +121,6 @@
         "logs_intake_host": {
           "type": "string"
         },
-        "forward_shared_key_secret_id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "forward_tls": {
           "type": "boolean"
         },
@@ -141,6 +133,14 @@
             "type": "string"
           },
           "description": "Container Apps/Jobs (exact names or prefix*) whose ContainerAppConsoleLogs the aggregator forwards; all other apps in the environment are dropped (sidecar-collected)"
+        },
+        "forward_shared_key_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$",
+          "description": "DSV reference of the Fluent Bit forward shared key"
         }
       }
     },
@@ -272,7 +272,7 @@
         "object",
         "null"
       ],
-      "description": "Azure Batch node log setup published by observability (ADR-0001 \u00a713): gzip+base64 Linux installer (pinned Fluent Bit, linux-host config, API key read from Key Vault on the node). Run by the job's job preparation task (deploy-jobs) with the env vars named here. No secrets.",
+      "description": "Azure Batch node log setup published by observability (ADR-0001 section 13): gzip+base64 Linux installer (pinned Fluent Bit, linux-host config, API key read from DSV on the node with the pool identity via dsv-fetch). Run by the job's job preparation task (deploy-jobs) with the env vars named here. No secrets.",
       "required": [
         "script_gzip_base64",
         "script_sha256",
@@ -306,6 +306,62 @@
         }
       },
       "additionalProperties": false
+    },
+    "api_key_ref": {
+      "type": "string",
+      "pattern": "^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$",
+      "description": "DSV reference of the Datadog API key, e.g. dsv://eh/dev/datadog-api-key#value"
+    },
+    "secrets": {
+      "type": "object",
+      "description": "How workloads resolve dsv:// references at runtime (DSV runtime env contract; no credentials).",
+      "required": [
+        "provider",
+        "base_url",
+        "auth"
+      ],
+      "properties": {
+        "provider": {
+          "const": "delinea-dsv"
+        },
+        "tenant": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tld": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_url": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "auth": {
+          "enum": [
+            "azure",
+            "client_credentials",
+            "none"
+          ],
+          "description": "DSV_AUTH for workloads (azure = managed identity / workload identity)"
+        },
+        "fetch_image": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "dsv-fetch helper image (init containers / refresher), digest-pinned"
+        },
+        "env_file": {
+          "type": "string",
+          "description": "path of the Fluent Bit env-yaml file written by dsv-fetch inside containers"
+        }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "additionalProperties": false
 }

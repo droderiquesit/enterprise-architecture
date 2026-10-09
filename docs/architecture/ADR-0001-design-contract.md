@@ -48,7 +48,7 @@ registry is `catalog/components.yaml` (schema `catalog/schemas/component.schema.
 | Layer | Directory | Owns | Never owns |
 |---|---|---|---|
 | bootstrap | `bootstrap/` | state storage, contract/plan/record containers, pipeline identities + federated credentials | anything a workload uses |
-| foundation | `foundation/<component>/` | VNets, subnets, NSGs, route tables, NAT, private DNS zones, Key Vault, workload user-assigned identities, budgets, policy, deploy agents, optional edge | compute platforms, databases, app settings |
+| foundation | `foundation/<component>/` | VNets, subnets, NSGs, route tables, NAT, private DNS zones, workload user-assigned identities, Delinea DSV access configuration (`foundation-secrets`, section 14), budgets, policy, deploy agents, optional edge | compute platforms, databases, app settings |
 | platform | `platform/<component>/` | compute *platforms* (AKS cluster, ACA environment, App Service/Functions plans, VM/VMSS hosts, Batch account+pool, SF/ARO clusters), databases/servers/accounts, logical DBs, messaging, storage, private endpoints for those resources, RBAC data-plane grants for workload identities | application settings, container images, app-level resources |
 | applications | `applications/services/<svc>/` (source) and `applications/deployments/<deployment>/` (Terraform root) | the *app resource* (container app, web/function app, k8s Deployment, container group, SWA content, VM run-command install, Batch job, Logic App workflow) **and all of its settings/env vars** | platform resources |
 | observability | `observability/` (portable package) and `observability/lab/<component>/` (lab roots consuming the package) | Datadog org resources, Azure integration, diagnostic settings, telemetry transport (Fluent Bit aggregator, OTel gateway, Event Hub for log export), agents/extensions on hosts and clusters, DBM checks | application settings (it publishes *integration hooks* the app owner applies) |
@@ -95,7 +95,7 @@ uploads it to `contracts/<env>/<contract-name>/v<major>.json`:
   validates outputs; `tools/contracts/materialize.py` downloads/assembles consumer inputs into
   `<root>/contracts.auto.tfvars.json` as one variable per upstream contract (variable name = contract name with `-`→`_`).
 - Consumers declare `variable "<contract_name>"` with an explicit `object({...})` type listing only the fields they use.
-- **No secrets in contracts.** Secrets travel as Key Vault secret *versionless IDs* (`*_secret_id`).
+- **No secrets in contracts.** Secrets travel as Delinea DSV references `dsv://<prefix>/<env>/<name>#<element>` (fields keep the `*_secret_id` suffix; section 14).
 - Breaking change ⇒ new major version (`v2`) published alongside `v1` until consumers move.
 - `terraform_remote_state` is forbidden.
 
@@ -166,7 +166,7 @@ with no Firewall (NAT Gateway for egress). Subnet catalogue (names fixed, prefix
 | `apim` | API Management v2 VNet integration (optional) | `Microsoft.Web/serverFarms` |
 | `AzureBastionSubnet`, `AzureFirewallSubnet`, `appgw` | hub / edge (optional) | — |
 
-Databases, Key Vault, storage, registries, Service Bus Premium and management endpoints are private by default
+Databases, storage, registries, Service Bus Premium and management endpoints are private by default
 (`public_network_access_enabled = false`) when the SKU supports it; exceptions are recorded per component in its
 README and in `catalog/services/*.yaml` (`networking.private_support`).
 
@@ -270,6 +270,9 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
   only the runtime (Python 3.13). (Supersedes the earlier "start task references the script" wording of this amendment.)
 - 2026-10-09: Secrets move from Key Vault to Delinea DSV (section 14). Rules in sections 5, 9 and 10 that mention Key Vault
   secret IDs now mean DSV references (`dsv://`).
+- 2026-10-09: `foundation-identity` contract is **v2** (v1 removed: no `key_vault_*`, no `secret_ids`); new component
+  `foundation-secrets`; platform-scope artifact `img-dsv-fetch` is consumed by applications roots by its recorded digest
+  (cross-scope artifacts, `tools/deploy/artifacts.py tfvars --recorded`). Pipelines use no variable groups for secrets.
 - 2026-10-09: Static Web Apps is not available in swedencentral; the frontend SWA resource uses a separate `swa_location` (default westeurope).
 
 ## 14. Secret management: Delinea DevOps Secrets Vault (DSV)

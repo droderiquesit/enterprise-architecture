@@ -80,14 +80,13 @@ module "env" {
     tier    = local.meta[each.key].tier
     region  = local.location
   }
-  runtime               = local.meta[each.key].runtime
-  architecture          = "aca"
-  telemetry             = var.obs_telemetry_transport
-  identity_client_id    = local.ids[each.key].client_id
-  key_vault_identity_id = local.ids[each.key].id
+  runtime            = local.meta[each.key].runtime
+  architecture       = "aca"
+  telemetry          = var.obs_telemetry_transport
+  identity_client_id = local.ids[each.key].client_id
   faults = {
-    enabled         = var.settings.faults_enabled
-    token_secret_id = lookup(var.foundation_identity.secret_ids, "fault-token", null)
+    enabled   = var.settings.faults_enabled
+    token_ref = lookup(var.foundation_identity.secrets.refs, "fault-token", null)
   }
   log_level          = var.settings.log_level
   trace_sample_ratio = var.settings.trace_sample_ratio
@@ -112,8 +111,6 @@ module "app" {
     memory = each.value.memory
   }
   env           = module.env[each.key].env
-  secret_env    = module.env[each.key].secret_env
-  secret_names  = module.env[each.key].secret_names
   sidecar_patch = module.env[each.key].container_app_patch
 
   ingress = {

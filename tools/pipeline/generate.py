@@ -10,7 +10,7 @@ Two files, one per pipeline scope (registry field `scope`, tools/changeset/regis
   pipelines/generated/platform-stages.yml       azure-pipelines.yml
   pipelines/generated/applications-stages.yml   azure-pipelines.applications.yml
 Generated stages (after Select/Validate/Security, which live in pipelines/templates/universal.yml):
-  Build      (applications only) one job per artifact component + the Helm chart job: resolve the image/package for the source fingerprint
+  Build      one job per artifact component OF THIS SCOPE (+ the Helm chart job in applications): resolve the image/package for the source fingerprint
              (first environment of a promotion chain: build if missing) or promote it from the
              previous environment (later environments: never build)
   P_<x>      Plan stage per Terraform component (pipeline: manual components excluded); PLAN identity,
@@ -21,7 +21,10 @@ Generated stages (after Select/Validate/Security, which live in pipelines/templa
 
 Conditions (evaluated in tests with tools/pipeline/conditions.py):
   P_x: and(not(canceled()), <Select/Validate/Security succeeded>, eq(sel_x,'true'),
-           <artifacts of x ready>, <for each DIRECT upstream u: upstream_ok(u)>)
+           <artifacts of x built in THIS pipeline ready>, <for each DIRECT upstream u: upstream_ok(u)>)
+       Artifacts of the other scope (img-dsv-fetch is platform, consumed by applications roots) are not Build
+       jobs here: tf-prepare.sh reads their digest from the artifact's deployment record (tools/deploy/artifacts.py
+       tfvars --records-url), and selection waits for the platform run that builds them (tools/changeset/select.py).
   upstream_ok(u) = and(or(in(P_u.result, 'Succeeded','SucceededWithIssues'),
                           and(eq(P_u.result,'Skipped'), ne(sel_u,'true'))),
                        in(C_u.result, 'Succeeded','SucceededWithIssues','Skipped'))
@@ -40,7 +43,7 @@ import difflib
 import hashlib
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import yaml
 
@@ -55,10 +58,8 @@ OUTPUTS = {"platform": "pipelines/generated/platform-stages.yml",
 GATE_STAGES = ("Select", "Validate", "Security")
 OK = "'Succeeded', 'SucceededWithIssues'"
 LANGUAGE_HINTS = {"svc-traffic": "python", "svc-logicapps": "workflow"}
-# Roots whose Terraform providers/variables need Datadog keys (Key Vault-linked variable group):
-#   provider -> DD_API_KEY / DD_APP_KEY for the datadog provider; tfvar -> TF_VAR_datadog_api_key (ephemeral)
-DATADOG = {"obs-prereqs": "provider", "obs-azure-integration": "provider", "obs-monitoring": "provider",
-           "obs-kubernetes": "tfvar"}
+# Secrets: components with `secret_env` (catalog/components.yaml) run their Terraform step through
+# tools/secrets/fetch.py exec (Delinea DSV, deploy agent managed identity); no variable group carries secrets.
 
 
 def sel(cid: str) -> str:
@@ -91,9 +92,19 @@ def artifact_ready(cid: str) -> str:
     return f"eq(dependencies.Build.outputs['B_{var_id(cid)}.ready.ready'], 'true')"
 
 
-def plan_condition(c: Component, upstream: List[Component]) -> str:
+def built_here(reg: Registry, c: Component, scope: str) -> List[str]:
+    """Artifacts of `c` built by the Build stage of this pipeline scope."""
+    return [a for a in c.artifacts if reg.get(a).scope == scope]
+
+
+def recorded(reg: Registry, c: Component, scope: str) -> List[str]:
+    """Artifacts of `c` built by the other pipeline: consumed by their recorded digest."""
+    return [a for a in c.artifacts if reg.get(a).scope != scope]
+
+
+def plan_condition(c: Component, upstream: List[Component], artifacts: Optional[List[str]] = None) -> str:
     terms = ["not(canceled())", *gate_terms(), f"eq({sel(c.id)}, 'true')"]
-    terms += [artifact_ready(a) for a in c.artifacts]
+    terms += [artifact_ready(a) for a in (c.artifacts if artifacts is None else artifacts)]
     terms += [upstream_term(u.id) for u in upstream]
     return "and(" + ", ".join(terms) + ")"
 
@@ -144,47 +155,53 @@ def build(reg: Registry, scope: str) -> dict:
     stages: List[dict] = []
 
     apps = scope == "applications"
-    if apps:
+    if artifacts or apps:
+        jobs = [{
+            "template": "../templates/build-artifact.yml",
+            "parameters": {
+                "component": a.id, "jobName": f"B_{a.var_id}", "componentPath": a.path,
+                "artifactName": a.artifact["name"], "formats": [a.artifact["type"], *a.artifact.get("also", [])],
+                "language": language_of(a), "timeoutMinutes": a.timeout_minutes, "environment": env,
+                "settings": settings,
+            },
+        } for a in artifacts]
+        if apps:
+            jobs.append({"template": "../templates/helm-charts.yml",
+                         "parameters": {"publish": True, "environment": env, "settings": settings}})
         stages.append({
             "stage": "Build",
-            "displayName": "Artifacts + charts (build once per source fingerprint / promote)",
+            "displayName": "Artifacts + charts (build once per source fingerprint / promote)" if apps
+                           else "Artifacts (build once per source fingerprint / promote)",
             "dependsOn": list(GATE_STAGES),
             "condition": "and(" + ", ".join(["not(canceled())", *gate_terms(),
                                               "eq(dependencies.Select.outputs['select.detect.any_build'], 'true')"]) + ")",
             "pool": pool,
-            "jobs": [{
-                "template": "../templates/build-artifact.yml",
-                "parameters": {
-                    "component": a.id, "jobName": f"B_{a.var_id}", "componentPath": a.path,
-                    "artifactName": a.artifact["name"], "formats": [a.artifact["type"], *a.artifact.get("also", [])],
-                    "language": language_of(a), "timeoutMinutes": a.timeout_minutes, "environment": env,
-                    "settings": settings,
-                },
-            } for a in artifacts] + [{
-                "template": "../templates/helm-charts.yml",
-                "parameters": {"publish": True, "environment": env, "settings": settings},
-            }],
+            "jobs": jobs,
         })
+    has_build = bool(artifacts or apps)
 
     for c in deployables:
         ups = [u for u in direct_upstream(graph, reg, c) if u.id in in_scope]
-        common = {"component": c.id, "componentPath": c.path, "artifacts": list(c.artifacts),
+        here = built_here(reg, c, scope)
+        common = {"component": c.id, "componentPath": c.path, "artifacts": here,
                   "timeoutMinutes": c.timeout_minutes, "environment": env,
-                  "datadog": DATADOG.get(c.id, "none"), "settings": settings}
+                  "secretEnv": bool(c.secret_env), "settings": settings}
+        if recorded(reg, c, scope):
+            common["recordedArtifacts"] = recorded(reg, c, scope)
         stages.append({
             "stage": plan_stage(c.id),
             "displayName": f"plan {c.id}",
-            "dependsOn": list(GATE_STAGES) + (["Build"] if c.artifacts else [])
+            "dependsOn": list(GATE_STAGES) + (["Build"] if here else [])
                          + [s for u in ups for s in (plan_stage(u.id), apply_stage(u.id))],
             "lockBehavior": "sequential",
-            "condition": plan_condition(c, ups),
+            "condition": plan_condition(c, ups, here),
             "pool": pool,
             "jobs": [{"template": "../templates/terraform-plan.yml", "parameters": dict(common)}],
         })
         stages.append({
             "stage": apply_stage(c.id),
             "displayName": f"apply {c.id}",
-            "dependsOn": ["Select", plan_stage(c.id)] + (["Build"] if c.artifacts else []),
+            "dependsOn": ["Select", plan_stage(c.id)] + (["Build"] if here else []),
             "lockBehavior": "sequential",
             "condition": apply_condition(c),
             "pool": pool,
@@ -230,7 +247,7 @@ def build(reg: Registry, scope: str) -> dict:
     stages.append({
         "stage": "Evidence",
         "displayName": "Report, evidence and deployment markers",
-        "dependsOn": ["Select", *(["Build"] if apps else []), *plans, *applies, "Retire",
+        "dependsOn": ["Select", *(["Build"] if has_build else []), *plans, *applies, "Retire",
                       *(["Verify"] if apps else []), "Drift"],
         "condition": "and(" + ", ".join(select_ok + [
             "or(eq(dependencies.Select.outputs['select.detect.any_deploy'], 'true'), "

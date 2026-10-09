@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "platform-db-cosmos-cassandra.v1.schema.json",
   "title": "platform-db-cosmos-cassandra contract v1",
-  "description": "Produced by platform/data (see the root README). No secrets: Key Vault versionless secret IDs only.",
+  "description": "Produced by platform/data (see the root README). No secrets: Delinea DSV references (dsv://...) only.",
   "type": "object",
   "required": [
     "resource_group_name",
@@ -85,8 +85,8 @@
         "string",
         "null"
       ],
-      "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
-      "description": "Versionless Key Vault secret ID (never a value)."
+      "pattern": "^dsv://[a-z0-9][a-z0-9/_-]*[a-z0-9]#[A-Za-z0-9_-]+$",
+      "description": "Delinea DSV reference dsv://<prefix>/<env>/<name>#<element> (never a value; ADR-0001 section 14)."
     },
     "private_endpoint": {
       "$ref": "#/$defs/privateEndpoint"
@@ -264,13 +264,13 @@
         },
         "password_secret_id": {
           "type": "string",
-          "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
-          "description": "Versionless Key Vault secret ID (never a value)."
+          "pattern": "^dsv://[a-z0-9][a-z0-9/_-]*[a-z0-9]#[A-Za-z0-9_-]+$",
+          "description": "Delinea DSV reference dsv://<prefix>/<env>/<name>#<element> (never a value; ADR-0001 section 14)."
         },
         "admin_secret_id": {
           "type": "string",
-          "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
-          "description": "Versionless Key Vault secret ID (never a value)."
+          "pattern": "^dsv://[a-z0-9][a-z0-9/_-]*[a-z0-9]#[A-Za-z0-9_-]+$",
+          "description": "Delinea DSV reference dsv://<prefix>/<env>/<name>#<element> (never a value; ADR-0001 section 14)."
         },
         "required_parameters": {
           "type": "object",
@@ -360,8 +360,8 @@
         },
         "password_secret_id": {
           "type": "string",
-          "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
-          "description": "Versionless Key Vault secret ID (never a value)."
+          "pattern": "^dsv://[a-z0-9][a-z0-9/_-]*[a-z0-9]#[A-Za-z0-9_-]+$",
+          "description": "Delinea DSV reference dsv://<prefix>/<env>/<name>#<element> (never a value; ADR-0001 section 14)."
         },
         "login": {
           "type": "string"

@@ -33,14 +33,26 @@ variables {
     expires_on      = "2026-12-31"
     tags            = {}
   }
-  obs_telemetry_transport = { datadog_site = "datadoghq.com" }
-  datadog_api_key         = "mock-not-a-real-key"
-  # mock providers cannot serve ephemeral resources; the Key Vault read is exercised only in real plans
-  api_key_override = "mock-not-a-real-key"
+  obs_telemetry_transport = {
+    datadog_site = "datadoghq.com"
+    api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+    secrets = {
+      tenant      = "contoso"
+      tld         = "com"
+      base_url    = "https://contoso.secretsvaultcloud.com/v1"
+      fetch_image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  }
+  foundation_identity = {
+    identities = {
+      "obs-collector" = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-obs-collector-dev-sec", principal_id = "11111111-1111-1111-1111-111111111111", client_id = "22222222-2222-2222-2222-222222222222", name = "eh-id-obs-collector-dev-sec" }
+    }
+  }
   platform_aks = {
     resource_group_name = "eh-rg-aks-dev-sec"
     cluster_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-aks-dev-sec/providers/Microsoft.ContainerService/managedClusters/eh-aks-dev-sec"
     cluster_name        = "eh-aks-dev-sec"
+    oidc_issuer_url     = "https://swedencentral.oic.prod-aks.azure.com/00000000-0000-0000-0000-000000000000/11111111-1111-1111-1111-111111111111/"
     access              = { private_cluster = true }
   }
 }
@@ -58,6 +70,25 @@ run "lab_kubernetes" {
   assert {
     condition     = yamldecode(module.kubernetes.datadog_values).datadog.tags[0] == "application:enterprise-hello"
     error_message = "Lab tags reach the Agent."
+  }
+  assert {
+    condition     = length(azurerm_federated_identity_credential.collector) == 3 && azurerm_federated_identity_credential.collector["fluent-bit"].subject == "system:serviceaccount:fluent-bit:fluent-bit" && azurerm_federated_identity_credential.collector["datadog-agent"].subject == "system:serviceaccount:datadog:datadog"
+    error_message = "Workload identity federation for the Agent, cluster-checks runner and Fluent Bit service accounts."
+  }
+  assert {
+    condition     = yamldecode(module.kubernetes.datadog_values).datadog.apiKey == "ENC[dsv://eh/dev/datadog-api-key#value]" && yamldecode(module.kubernetes.fluent_bit_values).initContainers[0].image == "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    error_message = "DSV reference + dsv-fetch image from the transport contract; no API key input exists."
+  }
+}
+
+run "syncer_fallback" {
+  command = plan
+  variables {
+    settings = { api_key_mode = "existing" }
+  }
+  assert {
+    condition     = length(azurerm_federated_identity_credential.collector) == 0 && yamldecode(module.kubernetes.datadog_values).datadog.apiKeyExistingSecret == "datadog-api-key"
+    error_message = "Fallback: Secret maintained by the Delinea dsv-k8s syncer; no workload identity needed."
   }
 }
 

@@ -28,30 +28,39 @@ variable "architecture" {
 }
 
 variable "telemetry" {
-  description = "obs-telemetry-transport contract (catalog/contracts/obs-telemetry-transport.v1.schema.json), fields used by the instrumentation hook."
+  description = "obs-telemetry-transport contract v2 (catalog/contracts/obs-telemetry-transport.v2.schema.json), fields used by the instrumentation hook."
   type = object({
-    datadog_site      = string
-    api_key_secret_id = string
+    datadog_site = string
+    api_key_ref  = string
+    secrets = object({
+      provider    = optional(string, "delinea-dsv")
+      tenant      = optional(string)
+      tld         = optional(string, "com")
+      base_url    = string
+      auth        = optional(string, "azure")
+      fetch_image = optional(string)
+      env_file    = optional(string, "/dsv-secrets/fluentbit-env.yaml")
+    })
     otlp = object({
       grpc_endpoint            = string
       http_endpoint            = string
-      headers_secret_id        = optional(string)
+      headers_ref              = optional(string)
       default_protocol         = optional(string, "http/protobuf")
       node_agent_grpc_port     = optional(number, 4317)
       node_agent_http_port     = optional(number, 4318)
       host_agent_grpc_endpoint = optional(string, "http://localhost:4317")
     })
     fluentbit = object({
-      forward_host                 = string
-      forward_port                 = number
-      sidecar_image                = optional(string, "fluent/fluent-bit:5.1.3")
-      sidecar_config               = optional(string)
-      sidecar_forward_config       = optional(string)
-      sidecar_parsers              = optional(string)
-      sidecar_lua                  = optional(string)
-      sidecar_mode                 = optional(string, "datadog")
-      logs_intake_host             = optional(string)
-      forward_shared_key_secret_id = optional(string)
+      forward_host           = string
+      forward_port           = number
+      sidecar_image          = optional(string, "fluent/fluent-bit:5.1.3")
+      sidecar_config         = optional(string)
+      sidecar_forward_config = optional(string)
+      sidecar_parsers        = optional(string)
+      sidecar_lua            = optional(string)
+      sidecar_mode           = optional(string, "datadog")
+      logs_intake_host       = optional(string)
+      forward_shared_key_ref = optional(string)
     })
     env = optional(map(map(string)), {})
   })
@@ -63,22 +72,16 @@ variable "identity_client_id" {
   default     = null
 }
 
-variable "key_vault_identity_id" {
-  description = "User-assigned identity resource id used to resolve Key Vault secret references (Container Apps)."
-  type        = string
-  default     = null
-}
-
 variable "faults" {
-  description = "Fault injection wiring (ADR §9). enabled => FAULTS_ENABLED=true (lab only); token_secret_id => FAULT_TOKEN from Key Vault."
+  description = "Fault injection wiring (ADR §9). enabled => FAULTS_ENABLED=true (lab only); token_ref => FAULT_TOKEN = dsv:// reference (resolved by the app)."
   type = object({
-    enabled         = optional(bool, false)
-    token_secret_id = optional(string)
+    enabled   = optional(bool, false)
+    token_ref = optional(string)
   })
   default = {}
   validation {
-    condition     = var.faults.token_secret_id == null || can(regex("^https://[^/]+/secrets/[A-Za-z0-9-]+$", coalesce(var.faults.token_secret_id, "x")))
-    error_message = "faults.token_secret_id must be a versionless Key Vault secret id."
+    condition     = var.faults.token_ref == null || can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", coalesce(var.faults.token_ref, "x")))
+    error_message = "faults.token_ref must be a Delinea DSV reference (dsv://<path>#<element>)."
   }
 }
 
@@ -108,15 +111,19 @@ variable "extra_env" {
   description = "Service-specific, NON-secret environment (connection hints, URLs). Must not contain secret values."
   type        = map(string)
   default     = {}
+  validation {
+    condition     = !anytrue([for k, v in var.extra_env : startswith(v, "dsv://")])
+    error_message = "extra_env must not carry dsv:// references; put secret settings in secret_env."
+  }
 }
 
 variable "secret_env" {
-  description = "Service-specific secret environment: name -> versionless Key Vault secret id."
+  description = "Service-specific secret settings: name -> Delinea DSV reference (dsv://<path>#<element>). The app resolves them at start-up."
   type        = map(string)
   default     = {}
   validation {
-    condition     = alltrue([for v in values(var.secret_env) : can(regex("^https://[^/]+/secrets/[A-Za-z0-9-]+$", v))])
-    error_message = "secret_env values must be versionless Key Vault secret ids (https://<vault>/secrets/<name>)."
+    condition     = alltrue([for v in values(var.secret_env) : can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", v))])
+    error_message = "secret_env values must be Delinea DSV references (dsv://<path>#<element>), never values."
   }
 }
 

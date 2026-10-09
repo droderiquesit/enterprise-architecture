@@ -1,4 +1,4 @@
-# Credentials from DD_API_KEY / DD_APP_KEY (pipeline: Key Vault -> env). Never in tfvars.
+# Credentials from DD_API_KEY / DD_APP_KEY (pipeline: Delinea DSV -> masked env, pipelines/templates/dsv-secrets.yml). Never in tfvars.
 provider "datadog" {
   api_url = "https://api.${var.datadog_site}/"
 }

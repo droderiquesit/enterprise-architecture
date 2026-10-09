@@ -1,7 +1,10 @@
 # Instrumentation hook: computes everything an application's OWN deployment root needs to apply so that
 # the workload emits telemetry along the authoritative path (ADR-0001 §10, README-transport.md):
 #   env vars, Kubernetes patch, Container Apps sidecar patch, App Service/Functions app settings, ACI sidecar.
-# Values only; secrets are Key Vault secret references. No resources, no providers.
+# Values only; secrets are Delinea DSV references (dsv://...), resolved at runtime by the workload itself
+# (apps: hello_common / Hello.Common resolve env values starting with dsv://) or, for third-party containers
+# (Fluent Bit sidecar), by the dsv-fetch helper writing an env-yaml file into a shared ephemeral volume.
+# No resources, no providers, no Key Vault.
 locals {
   s         = var.service
   container = coalesce(var.container_name, var.service.service)
@@ -107,17 +110,30 @@ locals {
       OTEL_PROPAGATORS   = "tracecontext,baggage"
   })
 
+  # DSV runtime env contract (ADR-0001 section 14): how our app code and dsv-fetch reach DSV.
+  dsv_env = merge(
+    var.telemetry.secrets.tenant == null ? {} : { DSV_TENANT = var.telemetry.secrets.tenant },
+    var.telemetry.secrets.tld == null ? {} : { DSV_TLD = var.telemetry.secrets.tld },
+    {
+      DSV_BASE_URL = var.telemetry.secrets.base_url
+      DSV_AUTH     = var.telemetry.secrets.auth
+    },
+    var.identity_client_id == null ? {} : { AZURE_CLIENT_ID = var.identity_client_id },
+  )
+
+  # env vars whose VALUE is a DSV reference, resolved by the application at start-up (name -> dsv:// ref)
+  secret_env = var.runtime != "browser" && local.otlp_target == "gateway" && var.telemetry.otlp.headers_ref != null ? {
+    OTEL_EXPORTER_OTLP_HEADERS = var.telemetry.otlp.headers_ref
+  } : {}
+
   # LOG_FILE_PATH only where a file tailer is the collector (sidecar, host service)
   env = merge(
     local.base_env,
+    var.runtime == "browser" ? {} : local.dsv_env,
+    local.secret_env,
     contains(["sidecar", "host"], local.log_route) && var.runtime != "browser" ? { LOG_FILE_PATH = var.log_file_path } : {},
     var.architecture == "functions" ? { AzureFunctionsJobHost__telemetryMode = "OpenTelemetry" } : {},
   )
-
-  # env vars whose VALUE must come from Key Vault (name -> versionless secret id)
-  secret_env = var.runtime != "browser" && local.otlp_target == "gateway" && var.telemetry.otlp.headers_secret_id != null ? {
-    OTEL_EXPORTER_OTLP_HEADERS = var.telemetry.otlp.headers_secret_id
-  } : {}
 
   # ---------------------------------------------------------------- Fluent Bit sidecar (aca / aci)
   log_dir         = replace(var.log_file_path, "/\\/[^\\/]+$/", "")
@@ -150,41 +166,59 @@ locals {
       FLB_DD_TLS  = "on"
     },
   )
-  sidecar_secret_env = local.sidecar_forward ? (
-    var.telemetry.fluentbit.forward_shared_key_secret_id == null ? {} : { FLB_FORWARD_SHARED_KEY = var.telemetry.fluentbit.forward_shared_key_secret_id }
-  ) : { DD_API_KEY = var.telemetry.api_key_secret_id }
+  # Fluent Bit secrets: NAME -> dsv:// ref, written by dsv-fetch into the env-yaml file the sidecar config includes
+  sidecar_secret_refs = local.sidecar_forward ? (
+    var.telemetry.fluentbit.forward_shared_key_ref == null ? {} : { FLB_FORWARD_SHARED_KEY = var.telemetry.fluentbit.forward_shared_key_ref }
+  ) : { DD_API_KEY = var.telemetry.api_key_ref }
 
   sidecar_config      = local.sidecar_forward ? var.telemetry.fluentbit.sidecar_forward_config : var.telemetry.fluentbit.sidecar_config
   sidecar_files_ready = local.sidecar_config != null && var.telemetry.fluentbit.sidecar_parsers != null && var.telemetry.fluentbit.sidecar_lua != null
 
-  secret_name = { for k, v in merge(local.secret_env, local.sidecar_secret_env) : k => lower(replace(k, "_", "-")) }
+  uses_sidecar = local.log_route == "sidecar" && var.runtime != "browser"
+  needs_fetch  = local.uses_sidecar && length(local.sidecar_secret_refs) > 0
 
-  uses_sidecar = local.log_route == "sidecar"
+  secrets_dir   = replace(var.telemetry.secrets.env_file, "/\\/[^\\/]+$/", "")
+  env_yaml_name = replace(var.telemetry.secrets.env_file, "/^.*\\//", "")
+
+  # dsv-fetch command line (image entrypoint = dsv-fetch): one --map per secret, env-yaml for Fluent Bit
+  fetch_args = concat(
+    ["init", "--out", local.secrets_dir, "--format", "env-yaml", "--env-yaml-name", local.env_yaml_name],
+    flatten([for k in sort(keys(local.sidecar_secret_refs)) : ["--map", "${k}=${local.sidecar_secret_refs[k]}"]]),
+  )
+  fetch_env = merge(local.dsv_env, { DSV_TIMEOUT_SECONDS = "10" })
 
   container_app_patch = {
-    secrets = concat(
-      [for k, id in merge(local.secret_env, local.uses_sidecar ? local.sidecar_secret_env : {}) : {
-        name                = local.secret_name[k]
-        key_vault_secret_id = id
-        identity            = coalesce(var.key_vault_identity_id, "System")
-        value               = null
-      }],
-      local.uses_sidecar && local.sidecar_files_ready ? [
-        { name = "flb-config", value = local.sidecar_config, key_vault_secret_id = null, identity = null },
-        { name = "flb-parsers", value = var.telemetry.fluentbit.sidecar_parsers, key_vault_secret_id = null, identity = null },
-        { name = "flb-lua", value = var.telemetry.fluentbit.sidecar_lua, key_vault_secret_id = null, identity = null },
-      ] : [],
-    )
-    volumes = local.uses_sidecar ? [
-      { name = "app-logs", storage_type = "EmptyDir" },
-      { name = "flb-files", storage_type = "Secret" },
+    # Container Apps "secrets" carry ONLY the non-secret Fluent Bit config files (mounted as a Secret volume
+    # because azurerm 5.9 has no config-file volume type); no Key Vault references, no secret values.
+    secrets = local.uses_sidecar && local.sidecar_files_ready ? [
+      { name = "flb-config", value = local.sidecar_config },
+      { name = "flb-parsers", value = var.telemetry.fluentbit.sidecar_parsers },
+      { name = "flb-lua", value = var.telemetry.fluentbit.sidecar_lua },
     ] : []
+    volumes = local.uses_sidecar ? concat(
+      [
+        { name = "app-logs", storage_type = "EmptyDir" },
+        { name = "flb-files", storage_type = "Secret" },
+      ],
+      local.needs_fetch ? [{ name = "dsv-secrets", storage_type = "EmptyDir" }] : [],
+    ) : []
+    # dsv-fetch runs before the sidecar starts and writes the env-yaml file (mode 0400) into the
+    # replica-scoped EmptyDir. Requires managed identity for init containers: workload-profiles environment,
+    # Consumption profile (Microsoft Learn: init containers cannot use managed identities in consumption-only
+    # environments or on dedicated workload profiles).
+    init_containers = local.needs_fetch ? [{
+      name          = "dsv-fetch"
+      image         = var.telemetry.secrets.fetch_image
+      cpu           = var.fetch_resources.cpu
+      memory        = var.fetch_resources.memory
+      command       = null
+      args          = local.fetch_args
+      env           = [for k in sort(keys(local.fetch_env)) : { name = k, value = local.fetch_env[k], secret_name = null }]
+      volume_mounts = [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }]
+    }] : []
     app_container = {
-      name = local.container
-      env = concat(
-        [for k in sort(keys(local.env)) : { name = k, value = local.env[k], secret_name = null }],
-        [for k in sort(keys(local.secret_env)) : { name = k, value = null, secret_name = local.secret_name[k] }],
-      )
+      name          = local.container
+      env           = [for k in sort(keys(local.env)) : { name = k, value = local.env[k], secret_name = null }]
       volume_mounts = local.uses_sidecar ? [{ name = "app-logs", path = local.log_dir, sub_path = null }] : []
     }
     sidecars = local.uses_sidecar ? [{
@@ -193,27 +227,31 @@ locals {
       cpu    = var.sidecar_resources.cpu
       memory = var.sidecar_resources.memory
       args   = ["-c", "/fluent-bit/etc/eh/fluent-bit.yaml"]
-      env = concat(
-        [for k in sort(keys(local.sidecar_env)) : { name = k, value = local.sidecar_env[k], secret_name = null }],
-        [for k in sort(keys(local.sidecar_secret_env)) : { name = k, value = null, secret_name = local.secret_name[k] }],
+      env    = [for k in sort(keys(local.sidecar_env)) : { name = k, value = local.sidecar_env[k], secret_name = null }]
+      volume_mounts = concat(
+        [
+          { name = "app-logs", path = local.log_dir, sub_path = null },
+          { name = "flb-files", path = "/fluent-bit/etc/eh/fluent-bit.yaml", sub_path = "flb-config" },
+          { name = "flb-files", path = "/fluent-bit/etc/eh/parsers.yaml", sub_path = "flb-parsers" },
+          { name = "flb-files", path = "/fluent-bit/etc/eh/lua/enterprise_hello.lua", sub_path = "flb-lua" },
+        ],
+        local.needs_fetch ? [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }] : [],
       )
-      volume_mounts = [
-        { name = "app-logs", path = local.log_dir, sub_path = null },
-        { name = "flb-files", path = "/fluent-bit/etc/eh/fluent-bit.yaml", sub_path = "flb-config" },
-        { name = "flb-files", path = "/fluent-bit/etc/eh/parsers.yaml", sub_path = "flb-parsers" },
-        { name = "flb-files", path = "/fluent-bit/etc/eh/lua/enterprise_hello.lua", sub_path = "flb-lua" },
-      ]
       liveness_probe = { transport = "HTTP", port = 2020, path = "/api/v1/health" }
     }] : []
   }
 
-  # App Service / Functions / Logic Apps Standard: Key Vault references for secret values
-  app_settings = merge(
-    local.env,
-    { for k, id in local.secret_env : k => "@Microsoft.KeyVault(SecretUri=${id})" },
-  )
+  # App Service / Functions / Logic Apps Standard: plain app settings. Secret settings carry the dsv://
+  # reference as their VALUE; the app resolves it at start-up with its managed identity (DSV_* settings).
+  app_settings = local.env
 
-  # Azure Container Instances: container group sidecar (azurerm_container_group container/volume blocks)
+  # Azure Container Instances: ACI init containers cannot use managed identities (Microsoft Learn,
+  # "Run an init container"), so dsv-fetch runs as a regular REFRESHER container: it writes the env-yaml
+  # file, then re-fetches every refresh_s seconds (rotation pick-up; retries every 30 s on failure). Fluent Bit
+  # fails fast while the include file is missing and is restarted by the group's restart policy.
+  # image: distroless python (ENTRYPOINT python3.13 -I /opt/dsv-fetch/dsv_fetch.py, no shell) -> override with an
+  # inline python loop that re-runs the same script
+  aci_fetch_stub = "import subprocess,sys,time\nwhile True:\n    rc = subprocess.call([sys.executable, '-I', '/opt/dsv-fetch/dsv_fetch.py'] + sys.argv[1:])\n    time.sleep(${var.fetch_resources.refresh_s} if rc == 0 else 30)\n"
   aci_sidecar = local.uses_sidecar ? {
     container = {
       name                         = "fluent-bit"
@@ -222,18 +260,30 @@ locals {
       memory                       = 0.5
       commands                     = ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/eh/fluent-bit.yaml"]
       environment_variables        = local.sidecar_env
-      secure_environment_variables = local.sidecar_secret_env # VALUES must be resolved by the caller from these secret ids
-      volumes = [
-        { name = "app-logs", mount_path = local.log_dir, empty_dir = true, secret = null },
-        { name = "flb-config", mount_path = "/fluent-bit/etc/eh", empty_dir = false, secret = local.sidecar_files_ready ? {
-          "fluent-bit.yaml" = base64encode(local.sidecar_config)
-          "parsers.yaml"    = base64encode(var.telemetry.fluentbit.sidecar_parsers)
-        } : null },
-        { name = "flb-lua", mount_path = "/fluent-bit/etc/eh/lua", empty_dir = false, secret = local.sidecar_files_ready ? {
-          "enterprise_hello.lua" = base64encode(var.telemetry.fluentbit.sidecar_lua)
-        } : null },
-      ]
+      secure_environment_variables = {}
+      volumes = concat(
+        [
+          { name = "app-logs", mount_path = local.log_dir, empty_dir = true, secret = null },
+          { name = "flb-config", mount_path = "/fluent-bit/etc/eh", empty_dir = false, secret = local.sidecar_files_ready ? {
+            "fluent-bit.yaml" = base64encode(local.sidecar_config)
+            "parsers.yaml"    = base64encode(var.telemetry.fluentbit.sidecar_parsers)
+          } : null },
+          { name = "flb-lua", mount_path = "/fluent-bit/etc/eh/lua", empty_dir = false, secret = local.sidecar_files_ready ? {
+            "enterprise_hello.lua" = base64encode(var.telemetry.fluentbit.sidecar_lua)
+          } : null },
+        ],
+        local.needs_fetch ? [{ name = "dsv-secrets", mount_path = local.secrets_dir, empty_dir = true, secret = null }] : [],
+      )
     }
+    fetcher = local.needs_fetch ? {
+      name                  = "dsv-fetch"
+      image                 = var.telemetry.secrets.fetch_image
+      cpu                   = var.fetch_resources.aci_cpu
+      memory                = var.fetch_resources.aci_mem
+      commands              = concat(["/usr/bin/python3.13", "-I", "-c", local.aci_fetch_stub], local.fetch_args)
+      environment_variables = local.fetch_env
+      volumes               = [{ name = "dsv-secrets", mount_path = local.secrets_dir, empty_dir = true, secret = null }]
+    } : null
     app_volume_mounts = [{ name = "app-logs", mount_path = local.log_dir }]
   } : null
 

@@ -7,6 +7,7 @@ requires_confirmation: true
 components:
 - foundation-network
 - foundation-identity
+- foundation-secrets
 - foundation-governance
 - foundation-deploy-agents
 - platform-shared
@@ -20,6 +21,7 @@ components:
 - obs-azure-integration
 - platform-containerapps
 - obs-telemetry-transport
+- img-dsv-fetch
 - obs-diagnostics
 - obs-monitoring
 - deploy-specialized

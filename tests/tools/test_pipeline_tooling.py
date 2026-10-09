@@ -210,3 +210,48 @@ def test_chart_lint_and_package_with_helm(tmp_path):
     assert charts.main(["--repo", str(tmp_path), "package", "--out", str(out)]) == 0
     index = json.loads((out / "charts.json").read_text())
     assert index[0]["version"].startswith("0.1.0+src") and list(out.glob("hello-0.1.0+src*.tgz"))
+
+
+# ------------------------------------------------------------ DSV secret rules
+def test_template_lint_negative_secret_rules(copy):
+    t = copy / "pipelines/templates/telemetry-verify.yml"
+    text = t.read_text()
+    text = text.replace("    variables:\n", "    variables:\n      - group: lab-dev-datadog\n", 1)
+    text = text.replace("      - template: steps-setup.yml\n", "      - template: steps-setup.yml\n"
+                        "      - task: AzureKeyVault@2\n        inputs: {azureSubscription: x, KeyVaultName: kv}\n"
+                        "      - script: echo \"$TF_VAR_admin_password\" && printenv\n        displayName: leak\n", 1)
+    t.write_text(text)
+    v = copy / "pipelines/templates/validate.yml"
+    v.write_text(v.read_text().replace("steps:\n", "steps:\n      - script: python3 tools/secrets/fetch.py ado --env dev --map X=fault-token\n", 1))
+    (copy / "pipelines/variables/dev.yml").write_text((copy / "pipelines/variables/dev.yml").read_text()
+                                                     .replace("dsvTenant: example-lab", "dsvTenant: other-tenant"))
+    rules = _rules(copy)
+    assert {"SEC001", "SEC002", "TC009", "ENV004"} <= rules
+
+
+def test_pipeline_lint_forbids_key_vault_and_groups(copy):
+    from tools.validate import pipeline_lint
+
+    t = copy / "pipelines/templates/smoke.yml"
+    t.write_text(t.read_text().replace("    variables:\n      LAB_ENV:", "    variables:\n      LAB_ENV:", 1)
+                 .replace("      - template: steps-setup.yml\n", "      - template: steps-setup.yml\n"
+                          "      - task: AzureKeyVault@2\n        inputs: {azureSubscription: x, KeyVaultName: kv}\n"
+                          "      - script: echo $(DD_API_KEY)\n        displayName: leak\n", 1))
+    errors = "\n".join(pipeline_lint.lint(copy, check_generated=False))
+    assert "PL015" in errors and "PL009" in errors
+
+
+def test_artifact_tfvars_reads_cross_scope_artifact_from_record(tmp_path):
+    from tools.deploy.artifacts import RecordError, recorded_metadata
+
+    store = LocalStore(tmp_path / "records")
+    sel = {"components": {"img-dsv-fetch": {"deploy_fp": "a" * 64}}}
+    with pytest.raises(RecordError):
+        recorded_metadata("img-dsv-fetch", store, "dev", sel)
+    store.put_json("dev/img-dsv-fetch.json", {"status": "succeeded", "artifact_metadata": {
+        "name": "dsv-fetch", "digest": "sha256:" + "1" * 64, "image": "acr.azurecr.io/dsv-fetch@sha256:" + "1" * 64,
+        "source_fp": "b" * 64, "tag": "src-" + "b" * 24}})
+    with pytest.raises(RecordError, match="recorded source fingerprint"):
+        recorded_metadata("img-dsv-fetch", store, "dev", sel)
+    sel["components"]["img-dsv-fetch"]["deploy_fp"] = "b" * 64
+    assert recorded_metadata("img-dsv-fetch", store, "dev", sel)["digest"].startswith("sha256:")

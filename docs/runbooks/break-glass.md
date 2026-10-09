@@ -33,7 +33,7 @@ Other break-glass access paths, each owned by its root:
 
 | Need | How |
 |---|---|
-| Key Vault values (vault is private) | `set-secrets.sh` from a VNet host; or temporarily `components.foundation-identity.public_network_access_enabled = true` + `allowed_ip_ranges` (re-disable afterwards) |
+| Secret values (Delinea DSV) | dsv CLI as a DSV administrator from any host with access to the tenant; see [secret rotation - break-glass](secret-rotation.md#break-glass) |
 | AKS (private API server) | `az aks command invoke` (`run_command_enabled = true`, Entra-authorised); `kubectl rollout undo` for an urgent app rollback |
 | VMs | Entra login extensions (`Virtual Machine Administrator Login`); local break-glass credentials: SSH key if configured, otherwise a `random_password` that exists only in Terraform state |
 | MySQL admin | write-only password: reset with `az mysql flexible-server update --admin-password` |

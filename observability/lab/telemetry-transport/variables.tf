@@ -8,9 +8,10 @@ variable "settings" {
     event_hub_mode                 = optional(string, "create")
     event_hub_capacity             = optional(number, 1)
     event_hub_private_endpoint     = optional(bool, true)
-    event_hub_activity_logs_hub    = optional(string, "activity-logs") # "" = share the platform-logs hub
-    eventhub_secret_version        = optional(number, 1)               # increment to re-write the listen secret (secret-rotation runbook)
-    batch_log_setup_enabled        = optional(bool, true)              # publish the Batch Fluent Bit setup script in the contract
+    event_hub_activity_logs_hub    = optional(string, "activity-logs")             # "" = share the platform-logs hub
+    eventhub_listen_secret_name    = optional(string, "eventhub-fluentbit-listen") # DSV secret written by tools/secrets/publish.py
+    fetch_artifact                 = optional(string, "img-dsv-fetch")             # artifacts key of the dsv-fetch image
+    batch_log_setup_enabled        = optional(bool, true)                          # publish the Batch Fluent Bit setup script in the contract
     aggregator_hosting             = optional(string, "container_app")
     gateway_hosting                = optional(string, "container_app")
     gateway_distribution           = optional(string, "upstream")
@@ -22,16 +23,11 @@ variable "settings" {
     workload_profile_name          = optional(string) # null = first profile of platform_containerapps
     sidecar_mode                   = optional(string, "datadog")
     aca_console_allow              = optional(list(string)) # null = ["<prefix>-caj-*"] (ACA jobs have no sidecar)
-    grant_key_vault_secrets_user   = optional(bool, false)  # foundation-identity already grants obs-collector
   })
   default = {}
   validation {
     condition     = contains(["create", "existing", "none"], var.settings.event_hub_mode) && contains(["container_app", "none"], var.settings.aggregator_hosting) && contains(["container_app", "none"], var.settings.gateway_hosting)
     error_message = "event_hub_mode: create|existing|none; aggregator_hosting/gateway_hosting: container_app|none."
-  }
-  validation {
-    condition     = var.settings.eventhub_secret_version >= 1 && floor(var.settings.eventhub_secret_version) == var.settings.eventhub_secret_version
-    error_message = "eventhub_secret_version must be a positive integer (increment it to rotate)."
   }
   validation {
     condition     = var.settings.event_hub_capacity >= 1 && var.settings.event_hub_capacity <= 2 && var.settings.gateway_max_replicas <= 5 && var.settings.aggregator_max_replicas <= 5
@@ -54,18 +50,28 @@ variable "foundation_network" {
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract (fields used)."
+  description = "foundation-identity contract v2 (fields used): identities + Delinea DSV secrets block (no Key Vault)."
   type = object({
-    key_vault_id  = string
-    key_vault_uri = string
     identities = map(object({
       id           = string
       principal_id = string
       client_id    = string
       name         = string
+      secrets      = optional(list(string), [])
     }))
-    secret_ids = map(string)
+    secrets = object({
+      provider  = string
+      tenant    = optional(string)
+      tld       = optional(string, "com")
+      base_url  = string
+      base_path = string
+      refs      = map(string)
+    })
   })
+  validation {
+    condition     = var.foundation_identity.secrets.provider == "delinea-dsv"
+    error_message = "foundation_identity.secrets.provider must be delinea-dsv (ADR-0001 section 14)."
+  }
 }
 
 variable "platform_containerapps" {
@@ -75,4 +81,23 @@ variable "platform_containerapps" {
     default_domain    = string
     workload_profiles = list(string)
   })
+}
+
+variable "artifacts" {
+  description = "Immutable build outputs keyed by artifact component id (tools/deploy/artifacts.py tfvars); this root uses img-dsv-fetch (digest-pinned)."
+  type = map(object({
+    name    = optional(string)
+    image   = optional(string)
+    digest  = optional(string)
+    version = optional(string)
+    commit  = optional(string)
+    tag     = optional(string)
+  }))
+  default = {}
+  validation {
+    condition = alltrue([for a in values(var.artifacts) : a.image == null || can(regex(
+      "^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$", coalesce(a.image, "x")
+    ))])
+    error_message = "artifacts[*].image must be digest-pinned (<registry>/<repo>@sha256:<64 hex>)."
+  }
 }

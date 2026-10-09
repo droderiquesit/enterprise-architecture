@@ -18,7 +18,7 @@ locals {
 }
 
 module "onboarding" {
-  source = "./.vendor/observability-1.1.0/modules/onboarding"
+  source = "./.vendor/observability-2.0.0/modules/onboarding"
 
   services   = local.services
   routing    = yamldecode(file("${path.module}/routing/${var.env}.yaml"))
@@ -32,7 +32,7 @@ module "onboarding" {
 }
 
 module "azure_integration" {
-  source = "./.vendor/observability-1.1.0/modules/azure-integration"
+  source = "./.vendor/observability-2.0.0/modules/azure-integration"
   count  = var.azure_integration.enabled ? 1 : 0
 
   mode             = "app_registration"
@@ -47,7 +47,7 @@ module "azure_integration" {
 }
 
 module "diagnostics" {
-  source = "./.vendor/observability-1.1.0/modules/diagnostic-settings"
+  source = "./.vendor/observability-2.0.0/modules/diagnostic-settings"
   count  = var.diagnostics.enabled ? 1 : 0
 
   resources = local.diagnostic_resources
@@ -61,7 +61,7 @@ module "diagnostics" {
 
 # Subscription Activity Log (+ optional Entra ID) of the supplied subscriptions -> activity-logs hub.
 module "azure_logs" {
-  source = "./.vendor/observability-1.1.0/modules/azure-logs"
+  source = "./.vendor/observability-2.0.0/modules/azure-logs"
   count  = var.diagnostics.enabled ? 1 : 0
 
   activity_log = {
@@ -77,7 +77,7 @@ module "azure_logs" {
 }
 
 module "log_management" {
-  source = "./.vendor/observability-1.1.0/modules/log-management"
+  source = "./.vendor/observability-2.0.0/modules/log-management"
 
   env       = var.env
   dashboard = { enabled = var.log_management.dashboard, entra = var.azure_logs.entra.enabled }
@@ -87,7 +87,7 @@ module "log_management" {
 }
 
 module "dbm" {
-  source = "./.vendor/observability-1.1.0/modules/dbm"
+  source = "./.vendor/observability-2.0.0/modules/dbm"
   count  = var.dbm.enabled ? 1 : 0
 
   hosting = "cluster_checks"
@@ -100,30 +100,38 @@ module "dbm" {
       port            = 5432
       username        = "datadog"
       auth            = "password"
-      password_ref    = { kind = "env", name = "DD_DBM_ORDERS_PG_PASSWORD" }
+      password_ref    = { kind = "dsv", name = var.dbm.password_ref }
       resource_id     = var.dbm.resource_id
     }
   }
 }
 
 module "kubernetes" {
-  source = "./.vendor/observability-1.1.0/modules/kubernetes"
+  source = "./.vendor/observability-2.0.0/modules/kubernetes"
   count  = var.kubernetes.enabled ? 1 : 0
 
   cluster_name = var.kubernetes.cluster_name
   datadog      = { site = var.datadog_site, env = var.env }
-  api_key      = { mode = "existing" }
+  api_key = {
+    mode                      = var.kubernetes.api_key_mode
+    cluster_agent_secret_name = var.kubernetes.cluster_agent_secret_name
+  }
+  dsv = {
+    api_key_ref        = var.telemetry.api_key_ref
+    tenant             = var.telemetry.secrets.tenant
+    tld                = var.telemetry.secrets.tld
+    base_url           = var.telemetry.secrets.base_url
+    fetch_image        = var.telemetry.secrets.fetch_image
+    identity_client_id = var.kubernetes.identity_client_id
+  }
 
   cluster_checks = var.dbm.enabled ? module.dbm[0].cluster_check_confd : {}
-  cluster_check_env = var.dbm.enabled ? {
-    DD_DBM_ORDERS_PG_PASSWORD = { secret_name = var.dbm.password_secret, secret_key = "password" }
-  } : {}
 }
 
 # Instrumentation hooks: env vars / app settings / k8s patches the application owners apply in their own
 # deployment code (this root never changes application settings).
 module "instrumentation" {
-  source   = "./.vendor/observability-1.1.0/modules/instrumentation"
+  source   = "./.vendor/observability-2.0.0/modules/instrumentation"
   for_each = var.instrumented_services
 
   service = {

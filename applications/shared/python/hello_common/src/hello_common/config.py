@@ -9,6 +9,8 @@ PORT                                  HTTP listen port (default 8080)
 LOG_LEVEL, LOG_FILE_PATH              logging (see hello_common.logging)
 FAULTS_ENABLED, FAULT_TOKEN           fault injection (see hello_common.faults)
 AZURE_CLIENT_ID                       user-assigned managed identity client id
+DSV_*                                 Delinea DSV secret references (see hello_common.secrets): any value
+                                      starting with dsv:// is replaced with the secret at start-up
 """
 
 from __future__ import annotations

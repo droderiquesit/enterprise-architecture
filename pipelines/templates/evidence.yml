@@ -18,7 +18,6 @@ jobs:
     workspace:
       clean: all
     variables:
-      - group: ${{ parameters.settings.datadogVariableGroup }}
       - name: LAB_ENV
         value: ${{ parameters.environment }}
       - name: RECORDS_URL

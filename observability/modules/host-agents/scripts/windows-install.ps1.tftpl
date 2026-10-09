@@ -1,15 +1,28 @@
 # Enterprise Hello / portable Datadog package: Windows host log + OTLP setup (idempotent; safe to re-run).
-#  1. Datadog Agent (DatadogWindowsAgent extension): OTLP receiver on localhost, Agent log collection OFF.
-#  2. Fluent Bit ${fb_version} MSI from packages.fluentbit.io (SHA256 verified), config in
-#     C:\ProgramData\fluent-bit-eh, Windows service fluent-bit-eh with a service-scoped environment.
-#  3. Datadog API key read from Key Vault with the VM's user-assigned identity, or protected parameter.
+# Secrets come from Delinea DSV at run time with the VM's user-assigned managed identity (IMDS token for
+# https://management.azure.com/ -> POST <dsv>/token grant_type=azure -> GET <dsv>/secrets/<path>), the same protocol
+# as dsv-fetch (ADR-0001 §14). Nothing secret is rendered into this script, the run command or Terraform state.
+#  1. Datadog Agent ${agent_version} MSI (pinned version + pinned SHA256): installed WITHOUT an API
+#     key on the command line; the key is written into datadog.yaml (ACL: Administrators, SYSTEM, ddagentuser).
+#     Windows cannot use dsv-fetch as secret_backend_command (the Agent requires a Win32 executable, not a script),
+#     so the key is refreshed only when this installer runs again (documented limitation).
+#     OTLP receiver on localhost, Agent log collection OFF.
+#  2. Fluent Bit ${fb_version} MSI (pinned SHA256), config in C:\ProgramData\fluent-bit-eh, service fluent-bit-eh;
+#     the API key is written into the env-yaml file the config includes (secrets\fluentbit-env.yaml, ACL
+#     SYSTEM + Administrators only) - never into the service environment.
+# setup revision: ${setup_revision}
 $ErrorActionPreference = 'Stop'
 $FbVersion = '${fb_version}'
+$AgentVersion = '${agent_version}'
+$DdSite = '${site}'
+$ApiKeyRef = '${api_key_ref}'
 $ConfDir = 'C:\ProgramData\fluent-bit-eh'
+$SecretsDir = Join-Path $ConfDir 'secrets'
 $FbExe = 'C:\Program Files\fluent-bit\bin\fluent-bit.exe'
-$ApiKeySecretId = '${api_key_secret_id}'
 $IdentityClientId = '${identity_client_id}'
 $ConfigureAgent = '${configure_agent}'
+$InstallAgent = '${install_agent}'
+$Dsv = '${dsv_config_json}' | ConvertFrom-Json
 function Log($m) { Write-Output "[eh-host-setup] $m" }
 function Expand-Gz([string]$b64) {
   $in = New-Object IO.MemoryStream(,[Convert]::FromBase64String($b64))
@@ -17,7 +30,53 @@ function Expand-Gz([string]$b64) {
   $out = New-Object IO.MemoryStream; $gz.CopyTo($out); $gz.Dispose()
   return [Text.Encoding]::UTF8.GetString($out.ToArray())
 }
+function Protect-Path([string]$path, [string[]]$extra = @()) {
+  $grants = @('SYSTEM:(OI)(CI)F', 'Administrators:(OI)(CI)F') + $extra
+  icacls $path /inheritance:r /grant:r @grants | Out-Null
+}
+function Get-DsvSecret([string]$ref) {
+  if (-not $ref.StartsWith('dsv://')) { throw 'not a dsv:// reference' }
+  $p = $ref.Substring(6); $element = 'value'
+  if ($p.Contains('#')) { $element = $p.Split('#')[1]; $p = $p.Split('#')[0] }
+  $base = if ($Dsv.DSV_BASE_URL) { $Dsv.DSV_BASE_URL.TrimEnd('/') } else { "https://$($Dsv.DSV_TENANT).secretsvaultcloud.$(if ($Dsv.DSV_TLD) { $Dsv.DSV_TLD } else { 'com' })/v1" }
+  $imds = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fmanagement.azure.com%2F&client_id=$IdentityClientId"
+  $jwt = (Invoke-RestMethod -Headers @{ Metadata = 'true' } -Uri $imds -TimeoutSec 10).access_token
+  $tok = (Invoke-RestMethod -Method Post -ContentType 'application/json' -Uri "$base/token" -TimeoutSec 10 -Body (@{ grant_type = 'azure'; jwt = $jwt } | ConvertTo-Json)).accessToken
+  $sec = Invoke-RestMethod -Headers @{ Authorization = "Bearer $tok" } -Uri "$base/secrets/$p" -TimeoutSec 10
+  $v = $sec.data.$element
+  if (-not $v) { throw "DSV secret element missing for $element" }
+  return [string]$v
+}
+# SHA256 pinned in Terraform (modules/host-agents var.windows_msi_sha256): neither vendor publishes a .sha256 file
+function Get-Msi([string]$url, [string]$name, [string]$expected) {
+  $msi = Join-Path $env:TEMP $name
+  Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $msi
+  if ((Get-FileHash $msi -Algorithm SHA256).Hash.ToLower() -ne $expected.ToLower()) { throw "checksum mismatch for $url" }
+  return $msi
+}
 
+if (-not $IdentityClientId) { throw 'no managed identity client id (hosts[*].identity_client_id): DSV cannot be read' }
+$apiKey = Get-DsvSecret $ApiKeyRef   # process memory only
+
+# ------------------------------------------------------------------ Datadog Agent
+if ($InstallAgent -eq 'true') {
+  $agentSvc = Get-Service datadogagent -ErrorAction SilentlyContinue
+  $agentExe = 'C:\Program Files\Datadog\Datadog Agent\bin\agent.exe'
+  $current = if (Test-Path $agentExe) { (& $agentExe version 2>$null | Select-Object -First 1) } else { '' }
+  if ($current -notmatch [regex]::Escape($AgentVersion)) {
+    $msi = Get-Msi "https://windows-agent.datadoghq.com/ddagent-cli-$AgentVersion.msi" "ddagent-$AgentVersion.msi" '${agent_msi_sha256}'
+    $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart SITE=$DdSite" -Wait -PassThru
+    if ($p.ExitCode -ne 0) { throw "datadog agent msiexec failed: $($p.ExitCode)" }
+    Log "datadog-agent $AgentVersion installed"
+  }
+  $ddYaml = 'C:\ProgramData\Datadog\datadog.yaml'
+  $content = "# Managed by the portable Datadog package (modules/host-agents); key read from Delinea DSV at install time.`r`napi_key: '$($apiKey.Replace("'", "''"))'`r`nsite: $DdSite`r`n"
+  if (-not (Test-Path $ddYaml) -or (Get-Content -Raw $ddYaml) -ne $content) {
+    [IO.File]::WriteAllText($ddYaml, $content)
+    Protect-Path $ddYaml @('ddagentuser:R')
+    $agentChanged = $true
+  }
+}
 if ($ConfigureAgent -eq 'true') {
   $agentEnv = @{
     'DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT' = 'localhost:4317'
@@ -26,56 +85,47 @@ if ($ConfigureAgent -eq 'true') {
     'DD_LOGS_ENABLED'                                 = 'false'
     'DD_TAGS'                                         = '${agent_tags}'
   }
-  $changed = $false
   foreach ($k in $agentEnv.Keys) {
     if ([Environment]::GetEnvironmentVariable($k, 'Machine') -ne $agentEnv[$k]) {
-      [Environment]::SetEnvironmentVariable($k, $agentEnv[$k], 'Machine'); $changed = $true
+      [Environment]::SetEnvironmentVariable($k, $agentEnv[$k], 'Machine'); $agentChanged = $true
     }
   }
-  if ($changed -and (Get-Service datadogagent -ErrorAction SilentlyContinue)) { Restart-Service datadogagent -Force; Log 'datadogagent reconfigured' }
+  if ($agentChanged -and (Get-Service datadogagent -ErrorAction SilentlyContinue)) { Restart-Service datadogagent -Force; Log 'datadogagent reconfigured' }
 }
 
 if ('${install_fluent_bit}' -ne 'true') { Log 'agent-only host (no application log files)'; exit 0 }
 
 $current = if (Test-Path $FbExe) { (& $FbExe --version 2>$null | Select-Object -First 1) } else { '' }
 if ($current -notmatch [regex]::Escape("v$FbVersion")) {
-  $msi = Join-Path $env:TEMP "fluent-bit-$FbVersion-win64.msi"
-  $url = "https://packages.fluentbit.io/windows/fluent-bit-$FbVersion-win64.msi"
-  Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $msi
-  $expected = ((Invoke-WebRequest -UseBasicParsing -Uri "$url.sha256").Content -split '\s+')[0].Trim().ToLower()
-  if ((Get-FileHash $msi -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw "checksum mismatch for $url" }
+  $msi = Get-Msi "https://packages.fluentbit.io/windows/fluent-bit-$FbVersion-win64.msi" "fluent-bit-$FbVersion-win64.msi" '${fluent_bit_msi_sha256}'
   $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart" -Wait -PassThru
   if ($p.ExitCode -ne 0) { throw "msiexec failed: $($p.ExitCode)" }
   Log "fluent-bit $FbVersion installed"
 }
-
-$apiKey = $env:DD_API_KEY
-if ($ApiKeySecretId -and $IdentityClientId) {
-  $tok = (Invoke-RestMethod -Headers @{Metadata='true'} -Uri "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net&client_id=$IdentityClientId").access_token
-  $apiKey = (Invoke-RestMethod -Headers @{Authorization="Bearer $tok"} -Uri "$ApiKeySecretId`?api-version=7.4").value
-}
-if (-not $apiKey) { throw 'no Datadog API key available (Key Vault or protected parameter)' }
 
 $files = @{
 %{ for path, gz in files ~}
   '${replace(path, "/", "\\")}' = '${gz}'
 %{ endfor ~}
 }
-New-Item -ItemType Directory -Force -Path "$ConfDir\lua", "$ConfDir\state" | Out-Null
+New-Item -ItemType Directory -Force -Path "$ConfDir\lua", "$ConfDir\state", $SecretsDir | Out-Null
 $restart = $false
 foreach ($rel in $files.Keys) {
   $target = Join-Path $ConfDir $rel
   $content = Expand-Gz $files[$rel]
   if (-not (Test-Path $target) -or (Get-Content -Raw $target) -ne $content) { [IO.File]::WriteAllText($target, $content); $restart = $true }
 }
-# config dir: SYSTEM + Administrators only
-icacls $ConfDir /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+# config dir (incl. secrets\): SYSTEM + Administrators only
+Protect-Path $ConfDir
+$envYaml = "env:`n  DD_API_KEY: '$($apiKey.Replace("'", "''"))'`n"
+$envPath = Join-Path $SecretsDir 'fluentbit-env.yaml'
+if (-not (Test-Path $envPath) -or (Get-Content -Raw $envPath) -ne $envYaml) { [IO.File]::WriteAllText($envPath, $envYaml); $restart = $true }
+Remove-Variable apiKey
 
 $svcEnv = @(
 %{ for k, v in env ~}
   '${k}=${v}'
 %{ endfor ~}
-  "DD_API_KEY=$apiKey"
 )
 $svcName = 'fluent-bit-eh'
 if (-not (Get-Service $svcName -ErrorAction SilentlyContinue)) {

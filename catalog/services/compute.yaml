@@ -1232,7 +1232,7 @@ services:
     azapi: []
     component: platform-aro
     implemented: true
-    notes: 'implemented in platform-aro but off by default (settings.enabled = false). Prerequisites to enable: 44 vCPU DSv5 quota, Microsoft.RedHatOpenShift registered, empty aro-master/aro-worker subnets, ARO RP service principal object id, version from az aro get-versions, Red Hat pull secret in Key Vault'
+    notes: 'implemented in platform-aro but off by default (settings.enabled = false). Prerequisites to enable: 44 vCPU DSv5 quota, Microsoft.RedHatOpenShift registered, empty aro-master/aro-worker subnets, ARO RP service principal object id, version from az aro get-versions, Red Hat pull secret in Delinea DSV (aro-pull-secret, pipeline input)'
   workload:
     exercised_by:
     - hello-catalog-api

@@ -1,5 +1,5 @@
 output "contract" {
-  description = "platform-db-documentdb v1 (catalog/contracts/platform-db-documentdb.v1.schema.json). No secrets."
+  description = "platform-db-documentdb v1 (catalog/contracts/platform-db-documentdb.v1.schema.json). No secrets (dsv:// references only)."
   value = {
     resource_group_name = azurerm_resource_group.this.name
     engine              = "azure-documentdb"
@@ -14,7 +14,7 @@ output "contract" {
       public_network_access_enabled = false
       authentication_methods        = ["NativeAuth", "MicrosoftEntraID"]
       admin_login                   = local.admin_login
-      admin_password_secret_id      = azurerm_key_vault_secret.admin.versionless_id
+      admin_password_secret_id      = lookup(var.foundation_identity.secrets.refs, var.settings.admin_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.admin_secret_name}#value")
     }
     auth_mode = "entra-oidc"
     private_endpoint = {

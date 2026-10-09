@@ -11,6 +11,7 @@ Synthetic data only. Never point a real Fluent Bit at this with a real API key.
 """
 
 import gzip
+import hashlib
 import json
 import os
 import threading
@@ -83,6 +84,8 @@ class Handler(BaseHTTPRequestHandler):
                         "bytes": len(raw),
                         "content_type": self.headers.get("Content-Type"),
                         "api_key_present": bool(api_key),
+                        # sha256 only (never the value): proves which key arrived (DSV -> dsv-fetch -> collector)
+                        "api_key_sha256": hashlib.sha256(api_key.encode()).hexdigest() if api_key else None,
                     }
                 )
             return self._send(202, {})
@@ -102,6 +105,7 @@ class Handler(BaseHTTPRequestHandler):
                     "content_type": self.headers.get("Content-Type"),
                     "count": len(items),
                     "api_key_present": True,
+                    "api_key_sha256": hashlib.sha256(api_key.encode()).hexdigest(),
                 }
             )
         return self._send(202, {})

@@ -23,7 +23,9 @@ locals {
     },
     var.fluentbit_metrics_target != null ? { FLUENTBIT_METRICS_TARGET = var.fluentbit_metrics_target } : {},
   )
-  secret_env = concat(["DD_API_KEY"], var.bearer_auth ? ["OTLP_BEARER_TOKEN"] : [])
+  # secret FILES read by the config (${file:...}); dsv-fetch init --format files writes them from Delinea DSV
+  secret_files = concat(["dd-api-key"], var.bearer_auth ? ["otlp-bearer-token"] : [])
+  secrets_dir  = "/dsv-secrets"
   image      = var.distribution == "ddot" ? var.images.ddot : var.images.upstream
 }
 

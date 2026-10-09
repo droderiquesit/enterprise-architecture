@@ -12,7 +12,7 @@ and `FaultInjectionMiddleware` / `FaultState` in `applications/shared/dotnet` (.
 |---|---|
 | Disabled by default | `FAULTS_ENABLED` defaults to `false`; every deployment root that exposes `settings.faults_enabled` defaults it to `false` (8 roots; `frontend`, `jobs`, `logicapps`, `specialized` have no fault setting) and `applications/deployments/modules/app-env` maps it to `FAULTS_ENABLED`. While disabled, `/admin/faults` answers **404** (looks absent) |
 | Authenticated | header `X-Fault-Token` compared in constant time (`hmac.compare_digest` / constant-time SHA-256 compare) with `FAULT_TOKEN`; missing/wrong token -> 403; **unset `FAULT_TOKEN` fails closed** (403) |
-| Token storage | Key Vault secret `fault-token` (generated with `set-secrets.sh <vault> generate fault-token`), injected as a Key Vault reference / CSI secret; never in contracts. Exception: ACI partner-sim reads it at plan time (state) |
+| Token storage | Delinea DSV secret `<prefix>/<env>/fault-token` (generated, `dsv secret create`); services get the reference `FAULT_TOKEN=dsv://<prefix>/<env>/fault-token#value` and resolve it at start-up with their managed identity; never in contracts |
 | Limited | types `http_500`, `latency`, `db_error`, `dependency_timeout`; `rate` 0..1; probes (`/healthz`, `/readyz`, `/version`) and admin routes are exempt |
 | Auto-expiring | `duration_seconds` 1..900; faults expire on their own and do not survive a restart; `DELETE /admin/faults` clears all |
 | Not in existing environments | `observability/examples/existing-environment` has `fault_injection_enabled = false` with a validation that rejects `true`, and the instrumentation output sets `FAULTS_ENABLED=false` |
@@ -28,10 +28,10 @@ Durable workflow and partner faults are separate, settings-driven knobs (no HTTP
 ## Procedure
 
 1. Enable for one service: `components.<deploy root>.faults_enabled: true` in `environments/<env>/environment.yaml`
-   -> PR -> pipeline apply (approval on `lab-<env>`). Make sure `fault-token` exists in Key Vault.
+   -> PR -> pipeline apply (approval on `lab-<env>`). Make sure `fault-token` exists in DSV (`python3 tools/secrets/check.py --env <env> --names fault-token`).
 2. From a host that reaches the service (internal ingress for everything except the BFF):
    ```bash
-   TOKEN=$(az keyvault secret show --vault-name <vault> -n fault-token --query value -o tsv)   # VNet host
+   TOKEN=$(dsv secret read --path <prefix>/<env>/fault-token --filter .data.value)   # operator with DSV access
    curl -sS -X POST https://<service>/admin/faults -H "X-Fault-Token: $TOKEN" -H 'content-type: application/json' \
      -d '{"type":"dependency_timeout","rate":0.5,"duration_seconds":300}'
    curl -sS https://<service>/admin/faults -H "X-Fault-Token: $TOKEN"          # active faults

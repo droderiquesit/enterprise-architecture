@@ -12,11 +12,6 @@ mock_provider "azurerm" {
       console_url = "https://console-openshift-console.apps.ehdevabcde.swedencentral.aroapp.io/"
     }
   }
-  mock_data "azurerm_key_vault_secret" {
-    defaults = {
-      value = "{\"auths\":{}}"
-    }
-  }
 }
 
 # BEGIN FIXTURE (generated): upstream contract shapes with valid Azure IDs.
@@ -57,9 +52,6 @@ variables {
       "aro-worker"         = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-spoke/subnets/snet-aro-worker", name = "snet-aro-worker", address_prefix = "10.41.16.0/24" }
     }
   }
-  foundation_identity = {
-    key_vault_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.KeyVault/vaults/eh-kv-id-dev-abcde"
-  }
 }
 # END FIXTURE
 
@@ -75,11 +67,11 @@ run "enabled_managed_identities" {
   command = plan
   variables {
     settings = {
-      enabled               = true
-      version               = "4.17.27"
-      aro_rp_principal_id   = "00000000-0000-0000-0004-000000000000"
-      pull_secret_secret_id = "https://eh-kv-id-dev-abcde.vault.azure.net/secrets/aro-pull-secret"
+      enabled             = true
+      version             = "4.17.27"
+      aro_rp_principal_id = "00000000-0000-0000-0004-000000000000"
     }
+    pull_secret = "{\"auths\":{}}"
   }
   assert {
     condition     = length(azurerm_user_assigned_identity.operator) == 8 && length(azurerm_role_assignment.cluster_federation) == 8
@@ -98,8 +90,8 @@ run "enabled_managed_identities" {
     error_message = "minimum ARO topology (44-core quota)."
   }
   assert {
-    condition     = data.azurerm_key_vault_secret.pull_secret[0].name == "aro-pull-secret"
-    error_message = "pull secret read from Key Vault by reference."
+    condition     = azurerm_redhat_openshift_cluster.this[0].cluster_profile[0].pull_secret == "{\"auths\":{}}"
+    error_message = "pull secret is the pipeline input (DSV aro-pull-secret)."
   }
 }
 

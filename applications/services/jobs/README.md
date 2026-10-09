@@ -8,7 +8,7 @@ idempotent); daily aggregates as JSON files/blobs. (Reconciliation summaries are
 | Command | Hosting | What it does |
 |---|---|---|
 | `seed` | ACA job (manual) | POST `/seed` on catalog (`CATALOG_API_URL`), inventory (`INVENTORY_API_URL/inventory/seed`), adapters (`ADAPTERS_JSON`) with `Idempotency-Key` |
-| `reconcile-trigger` | ACA job (scheduled) | POST `{DURABLE_API_URL}/api/workflows/reconciliation` (`x-functions-key` from `DURABLE_FUNCTION_KEY`, a Key Vault reference) |
+| `reconcile-trigger` | ACA job (scheduled) | POST `{DURABLE_API_URL}/api/workflows/reconciliation` (`x-functions-key` from `DURABLE_FUNCTION_KEY`, a Delinea DSV reference `dsv://…`, resolved at start-up by hello_common) |
 | `process-batch-items` | ACA job (event-driven, KEDA azure-servicebus on `batch-items`) | receive ≤ `BATCH_MAX_MESSAGES` (50) within `BATCH_MAX_SECONDS` (60), exit when drained; span `servicebus.process` per message linked to producer; poison → DLQ; `RESULT_SINK=table\|log\|memory` |
 | `daily-aggregate` | Azure Batch (zip + `run.sh`) and ACA | GET `{ORDERS_API_URL}/orders?since=<day>&limit=100`, aggregate per sku/status for `AGGREGATE_DATE` (default yesterday UTC), write `daily-aggregate-<date>.json` to `OUTPUT_PATH` (`$AZ_BATCH_TASK_WORKING_DIR`), optional upload to `AGGREGATE_BLOB_ACCOUNT_URL`/`AGGREGATE_BLOB_CONTAINER` |
 

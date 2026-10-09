@@ -38,6 +38,8 @@ log() { printf '\n==> %s\n' "$*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 # Resource providers used across the catalogue (bootstrap.sh is the only place that registers them).
+# Microsoft.KeyVault: only the optional Azure ML workspace (platform-specialized-compute) and APIM need it; lab
+# secrets live in Delinea DSV (ADR-0001 section 14).
 PROVIDERS=(
   Microsoft.Storage Microsoft.Network Microsoft.KeyVault Microsoft.ManagedIdentity Microsoft.Authorization
   Microsoft.Insights Microsoft.OperationalInsights Microsoft.AlertsManagement Microsoft.Consumption Microsoft.CostManagement

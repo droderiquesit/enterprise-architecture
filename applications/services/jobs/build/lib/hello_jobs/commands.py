@@ -4,7 +4,7 @@ exits non-zero when the job failed.
 seed                 POST {CATALOG_API_URL}/seed, {INVENTORY_API_URL}/inventory/seed (if set) and /seed on every
                      adapter in ADAPTERS_JSON ([{"family","url"}]). Idempotent (deterministic seeds).
 reconcile-trigger    POST {DURABLE_API_URL}/api/workflows/reconciliation (x-functions-key from DURABLE_FUNCTION_KEY
-                     when set - a Key Vault reference, never logged).
+                     when set - a dsv:// reference resolved from Delinea DSV at start-up, never logged).
 process-batch-items  Receive from Service Bus queue SB_QUEUE (default batch-items) at most BATCH_MAX_MESSAGES
                      (default 50) within BATCH_MAX_SECONDS (default 60); one CONSUMER span per message linked
                      to the producer; results upserted (idempotent by item id) to RESULT_SINK=table|log|memory;

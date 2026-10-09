@@ -1,7 +1,7 @@
 # Telemetry verification (job template): calls the observability package's verifier
 # (observability/tools/verify/telemetry_verify.py, owned by the observability team) with the run's
-# selection. Datadog keys come from the Key Vault-linked variable group (secrets datadog-api-key,
-# datadog-app-key) and are passed only as environment variables - never echoed.
+# selection. Datadog keys come from Delinea DSV (datadog-api-key, datadog-app-key) through tools/secrets/fetch.py exec
+# with the deploy agent's managed identity: they exist only in the verifier process' environment - never echoed.
 parameters:
   - name: environment
     type: string
@@ -17,7 +17,6 @@ jobs:
     workspace:
       clean: all
     variables:
-      - group: ${{ parameters.settings.datadogVariableGroup }}
       - name: LAB_ENV
         value: ${{ parameters.environment }}
     steps:
@@ -39,12 +38,11 @@ jobs:
             echo '{"status":"not-run","reason":"verifier missing"}' > "$out/telemetry-results.json"
             exit 0
           fi
+          python3 tools/secrets/fetch.py exec --env "$LAB_ENV" --map DD_API_KEY=datadog-api-key --map DD_APP_KEY=datadog-app-key -- \
           python3 "$verifier" --env "$LAB_ENV" --site "$DD_SITE" \
             --selection "$(Pipeline.Workspace)/selection/selection.json" --out "$out/telemetry-results.json"
         displayName: Verify telemetry (logs, traces, metrics, RUM)
         env:
-          DD_API_KEY: $(datadog-api-key)
-          DD_APP_KEY: $(datadog-app-key)
           DD_SITE: ${{ parameters.settings.datadogSite }}
       - task: PublishPipelineArtifact@1
         displayName: Publish telemetry results

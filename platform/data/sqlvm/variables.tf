@@ -32,18 +32,20 @@ variable "foundation_network" {
   })
 }
 
-# Upstream contract: catalog/contracts/foundation-identity.v1.schema.json (only the fields used here).
+# Upstream contract: catalog/contracts/foundation-identity.v2.schema.json (only the fields used here).
 variable "foundation_identity" {
   type = object({
-    key_vault_id  = string
-    key_vault_uri = string
-    secret_ids    = optional(map(string), {}) # versionless Key Vault secret IDs (values set out-of-band)
     identities = map(object({
       id           = string
       principal_id = string
       client_id    = string
       name         = string
     }))
+    # Delinea DSV references (ADR-0001 section 14): dsv://<base_path>/<name>#value - never values.
+    secrets = object({
+      base_path = string
+      refs      = optional(map(string), {})
+    })
   })
 }
 
@@ -68,12 +70,32 @@ variable "settings" {
       time     = optional(string, "1900")
       timezone = optional(string, "UTC")
     }), {})
-    # Key Vault secret names (foundation-identity vault). Values are generated here and written
-    # write-only; contracts carry only versionless IDs.
+    # DSV secret names (<prefix>/<env>/<name>); contracts carry only dsv:// references.
     admin_secret_name     = optional(string, "sqlvm-admin-password")
     dbadapter_secret_name = optional(string, "sqlvm-dbadapter-password")
     dbm_secret_name       = optional(string, "dbm-sqlvm-password")
-    secret_version        = optional(number, 1)
   })
   default = {}
+}
+
+# Secret inputs from Delinea DSV (pipeline: tools/secrets/fetch.py -> TF_VAR_admin_password / TF_VAR_dbadapter_password).
+# Not ephemeral: the receiving arguments have no write-only form, so the values are stored in state (README).
+variable "admin_password" {
+  description = "Local administrator + SQL connectivity password (DSV sqlvm-admin-password)."
+  type        = string
+  sensitive   = true
+  validation {
+    condition     = length(var.admin_password) >= 12 && length(var.admin_password) <= 123 && !can(regex("['\"]", var.admin_password))
+    error_message = "admin_password: 12-123 characters, no quotes (DSV sqlvm-admin-password)."
+  }
+}
+
+variable "dbadapter_password" {
+  description = "SQL login `dbadapter` password (DSV sqlvm-dbadapter-password; the adapter reads the same path at runtime)."
+  type        = string
+  sensitive   = true
+  validation {
+    condition     = length(var.dbadapter_password) >= 12 && !can(regex("['\"]", var.dbadapter_password))
+    error_message = "dbadapter_password: at least 12 characters, no quotes (DSV sqlvm-dbadapter-password)."
+  }
 }

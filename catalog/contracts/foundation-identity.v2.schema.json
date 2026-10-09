@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "foundation-identity contract v2",
+  "description": "Workload user-assigned managed identities and Delinea DSV secret references (ADR-0001 section 14). v2 replaces v1: key_vault_id, key_vault_uri, key_vault_name and secret_ids were removed; references are dsv://<base_path>/<name>#<element>. Never values.",
+  "type": "object",
+  "required": ["resource_group_name", "tenant_id", "identities", "secrets"],
+  "additionalProperties": false,
+  "properties": {
+    "resource_group_name": {"type": "string", "minLength": 1},
+    "tenant_id": {"$ref": "#/$defs/guid"},
+    "identities": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9-]{1,62}$"},
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "principal_id", "client_id", "name", "secrets"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^/subscriptions/[^/]+/resource[gG]roups/[^/]+/providers/Microsoft\\.ManagedIdentity/userAssignedIdentities/[^/]+$"},
+          "principal_id": {"type": "string", "minLength": 1},
+          "client_id": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "secrets": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"$ref": "#/$defs/secretName"},
+            "description": "DSV secret names this identity may read at runtime (foundation-secrets grants read on exactly these paths)"
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "required": ["provider", "tenant", "tld", "base_url", "base_path", "auth_provider", "refs"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {"const": "delinea-dsv"},
+        "tenant": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+        "tld": {"enum": ["com", "eu", "com.au", "ca"]},
+        "base_url": {"type": "string", "pattern": "^https?://[^/]+(:[0-9]+)?/v1$"},
+        "base_path": {"type": "string", "pattern": "^[a-z][a-z0-9]{1,5}/[a-z][a-z0-9]{1,7}$", "description": "<name_prefix>/<env>"},
+        "auth_provider": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "description": "DSV Azure auth provider name"},
+        "refs": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/secretName"},
+          "additionalProperties": {"$ref": "#/$defs/dsvRef"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "guid": {"type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "secretName": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"},
+    "dsvRef": {"type": "string", "pattern": "^dsv://[a-z0-9][a-z0-9/_-]*[a-z0-9]#[A-Za-z0-9_-]+$", "description": "DSV reference dsv://<path>#<element> - not a secret"}
+  }
+}

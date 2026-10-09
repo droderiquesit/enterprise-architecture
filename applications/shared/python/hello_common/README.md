@@ -14,8 +14,9 @@ Installable package (`pip install ./applications/shared/python/hello_common`; se
 | `idempotency` | `Idempotency-Key` validation and a bounded TTL replay cache |
 | `problems` | RFC 7807 `application/problem+json` handlers and `Problem` exception |
 | `azure_auth` | `get_credential()` (DefaultAzureCredential / ManagedIdentityCredential / WorkloadIdentityCredential with `AZURE_CLIENT_ID`), `TokenCache` (refreshes 5 min before expiry; used for PostgreSQL/MySQL token-as-password) |
+| `secrets` | Delinea DSV (ADR-0001 §14): `resolve_env()` replaces every env var whose value starts with `dsv://<path>#<element>` in-process at start-up (called by every entrypoint and by `create_app`); `DsvClient` — managed identity (`ManagedIdentityCredential(client_id=AZURE_CLIENT_ID)`, `WorkloadIdentityCredential` when `AZURE_FEDERATED_TOKEN_FILE` is set) → `POST /v1/token` azure grant (or `client_credentials` locally), DSV token refreshed at 80 % of `expiresIn`, secret cache (`DSV_CACHE_TTL_SECONDS`, 900), timeouts (`DSV_TIMEOUT_SECONDS`, 5), bounded jittered retries on connection errors/429/5xx only (`DSV_MAX_ATTEMPTS`, 3); fail-fast `SecretResolutionError` naming variables only; values never logged. `DSV_AUTH=none` + any `dsv://` value = start-up error. `http://` base URLs only for loopback or `DSV_ALLOW_INSECURE_HTTP=true` |
 | `propagation` | W3C helpers for async boundaries: `links_from_properties()` (span **link** to the producer, never parent), Service Bus bytes-property normalisation, `Diagnostic-Id` fallback |
 | `messaging` | `ServiceBusSource` (azure-servicebus async PEEK_LOCK receiver + `AutoLockRenewer`, MI or emulator connection string) and `MemorySource` |
 | `testing` | throwaway docker containers for `integration` tests, Service Bus emulator (+ SQL Server) bootstrap |
 
-Tests: `pytest` (31 unit tests). See `applications/python/README.md` for the build pipeline.
+Tests: `pytest` (unit tests; `tests/test_secrets.py` runs against `tools/secrets/mock_dsv.py`). See `applications/python/README.md` for the build pipeline.

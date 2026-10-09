@@ -66,11 +66,15 @@ variable "identity" {
 }
 
 variable "app_settings" {
-  description = "App settings (secrets only as @Microsoft.KeyVault(...) references)."
+  description = "App settings: plain values; secret settings carry dsv:// references the app resolves at start-up with its managed identity (no Key Vault references)."
   type        = map(string)
   validation {
     condition     = alltrue([for k, v in var.app_settings : !can(regex("(?i)(password|pwd|accountkey|sharedaccesskey)\\s*=", v))])
-    error_message = "app_settings must not contain inline passwords or keys; use Key Vault references."
+    error_message = "app_settings must not contain inline passwords or keys; use dsv:// references (Delinea DSV)."
+  }
+  validation {
+    condition     = !anytrue([for k, v in var.app_settings : startswith(v, "@Microsoft.KeyVault(")])
+    error_message = "Key Vault references are not used (ADR-0001 section 14): the value of a secret setting is its dsv:// reference."
   }
 }
 

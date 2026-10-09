@@ -214,3 +214,37 @@ def test_explain_previews_working_tree(lab, capsys):
                 "--contracts-dir", str(contracts.root), "--scope", "applications", "--json"]) == 0
     doc = json.loads(capsys.readouterr().out)
     assert doc["summary"]["plan"] == ["obs-monitoring"]
+
+
+def test_platform_artifact_consumed_by_applications_root_waits_for_platform_build(tmp_path):
+    """img-dsv-fetch (scope platform) is an artifact of deploy-core-aca (applications): a change to it is built by the
+    platform pipeline; the applications pipeline waits, then re-deploys the consumer with the recorded digest."""
+    import copy
+
+    from fixture_repo import FIXTURE_ENABLED, SYNTHETIC_REGISTRY
+
+    reg = copy.deepcopy(SYNTHETIC_REGISTRY)
+    reg["components"].insert(-1, {"id": "img-dsv-fetch", "layer": "observability", "kind": "artifact",
+                                  "path": "observability/images/dsv-fetch", "scope": "platform",
+                                  "artifact": {"type": "container-image", "name": "dsv-fetch"}})
+    for c in reg["components"]:
+        if c["id"] in ("deploy-core-aca", "obs-telemetry-transport"):
+            c["artifacts"] = list(c.get("artifacts", [])) + ["img-dsv-fetch"]
+    repo = make_synthetic_repo(tmp_path, enabled=FIXTURE_ENABLED + ["img-dsv-fetch"], registry=reg)
+    records, contracts = LocalStore(tmp_path / "records"), LocalStore(tmp_path / "contracts")
+    record_successful_deployment(repo, tmp_path / "records")
+    _publish_all(repo, contracts)
+    _record_contracts(repo, records, contracts)
+
+    write(repo, "observability/images/dsv-fetch/src/Program.cs", "// dsv-fetch v2\n")
+    commit_all(repo, "dsv-fetch change")
+    apps = select_deploy(repo, "dev", records, scope="applications", contracts_store=contracts)
+    assert apps["components"]["img-dsv-fetch"]["build"] is False            # never built by the applications pipeline
+    assert "img-dsv-fetch" in apps["components"]["deploy-core-aca"]["waiting_for"]
+    plat = select_deploy(repo, "dev", records, scope="platform", contracts_store=contracts)
+    assert plat["components"]["img-dsv-fetch"]["build"] is True
+    assert "obs-telemetry-transport" in plat["summary"]["plan"]             # in-scope consumer re-deploys
+    _deploy_records(repo, records, plat)
+    apps = select_deploy(repo, "dev", records, scope="applications", contracts_store=contracts)
+    assert apps["summary"]["waiting"] == [] and "deploy-core-aca" in apps["summary"]["plan"]
+    assert "deploy-dbadapters" not in apps["summary"]["plan"]

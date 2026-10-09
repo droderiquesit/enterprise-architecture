@@ -9,8 +9,9 @@ locals {
   boundary = "db adapter / collection records"
 
   # Azure Cosmos DB for MongoDB (RU) has no Microsoft Entra data-plane auth: clients use the account
-  # connection string, stored out-of-band in Key Vault (never in state or contracts).
-  key_secret_id = "${trimsuffix(var.foundation_identity.key_vault_uri, "/")}/secrets/${var.settings.connection_string_secret_name}"
+  # connection string, stored out-of-band in Delinea DSV (never in state or contracts);
+  # only the dsv:// reference is published.
+  key_secret_id = lookup(var.foundation_identity.secrets.refs, var.settings.connection_string_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.connection_string_secret_name}#value")
 }
 
 module "naming" {

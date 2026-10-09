@@ -15,14 +15,16 @@ parameters:
     type: string
   - name: azureServiceConnection
     type: string
-  - name: keyVaultName
+  - name: dsv                    # Delinea DSV: {tenant, tld?, base_url?, identity_client_id?, auth?} (templates/dsv-secrets.yml)
+    type: object
+  - name: datadogApiKeyRef
     type: string
-  - name: datadogApiKeySecret
+    default: dsv://observability/prod/datadog-api-key#value
+  - name: datadogAppKeyRef
     type: string
-    default: datadog-api-key
-  - name: datadogAppKeySecret
+    default: dsv://observability/prod/datadog-app-key#value
+  - name: dsvFetchPath           # dsv_fetch.py of the vendored package (<packageDir>/images/dsv-fetch/dsv_fetch.py)
     type: string
-    default: datadog-app-key
   - name: datadogSite
     type: string
     default: datadoghq.com
@@ -44,13 +46,11 @@ jobs:
           steps:
             - download: current
               artifact: tfplan-${{ parameters.environment }}
-            - task: AzureKeyVault@2
-              displayName: Read Datadog keys
-              inputs:
-                azureSubscription: ${{ parameters.azureServiceConnection }}
-                KeyVaultName: ${{ parameters.keyVaultName }}
-                SecretsFilter: ${{ parameters.datadogApiKeySecret }},${{ parameters.datadogAppKeySecret }}
-                RunAsPreJob: false
+            - template: dsv-secrets.yml
+              parameters:
+                dsv: ${{ parameters.dsv }}
+                dsvFetchPath: ${{ parameters.dsvFetchPath }}
+                secrets: {DD_API_KEY: '${{ parameters.datadogApiKeyRef }}', DD_APP_KEY: '${{ parameters.datadogAppKeyRef }}'}
             - task: AzureCLI@2
               displayName: terraform apply (saved plan)
               inputs:
@@ -66,6 +66,6 @@ jobs:
                   chmod -R u+x .terraform/providers || true
                   terraform apply -input=false -lock-timeout=5m tfplan
               env:
-                DD_API_KEY: $(${{ parameters.datadogApiKeySecret }})
-                DD_APP_KEY: $(${{ parameters.datadogAppKeySecret }})
+                DD_API_KEY: $(DD_API_KEY)
+                DD_APP_KEY: $(DD_APP_KEY)
                 DD_SITE: ${{ parameters.datadogSite }}

@@ -68,7 +68,8 @@ pricing calculator - nothing here has been billed):
 | Component | Estimate | Main driver |
 |---|---:|---|
 | foundation-network | ~50 | NAT Gateway (~33) + public IP + ~27 private DNS zones |
-| foundation-identity | ~8 | Key Vault private endpoint |
+| foundation-identity | 0 | managed identities only (the former Key Vault + private endpoint, ~8, is gone) |
+| foundation-secrets | 0 | no Azure resources; Delinea DSV is a separate subscription |
 | platform-shared | ~20 | ACR Standard; Log Analytics capped at 1 GB/day |
 | platform-messaging | ~10 | Service Bus Standard |
 | platform-containerapps | ~0 idle | Consumption profile; `dedicated-d4` min 0 |

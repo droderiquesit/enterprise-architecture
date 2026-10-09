@@ -7,8 +7,9 @@ variable "hosts" {
       location           : region (required by run commands)
       service_tags       : unified tags for the host (env/service/version/team/...) -> Agent DD_TAGS + Fluent Bit ddtags
       log_paths          : application log files tailed by Fluent Bit (the app writes JSON lines there)
-      identity_client_id : user-assigned identity on the host with "Key Vault Secrets User" (Fluent Bit API key
-                           fetched at install time; nothing secret in Terraform state). Null = protected parameter.
+      identity_client_id : client id of the host's user-assigned managed identity, mapped to a DSV user with read on
+                           the API key path (required; the key is read on the host, never in Terraform state)
+      install_agent      : install + configure the Datadog Agent (pinned datadog.agent_version)
   EOT
   type = map(object({
     resource_id        = string
@@ -41,38 +42,59 @@ variable "hosts" {
 
 variable "datadog" {
   description = <<-EOT
-    site, agent_version (pinned) and how the Agent extension gets the API key:
-      api_key_key_vault = { secret_url, source_vault_id } -> protectedSettingsFromKeyVault; the secret VALUE
-                          must be the JSON {"api_key":"<key>"} (preferred, nothing in state; vault needs
-                          enabled_for_deployment). Otherwise api_key (sensitive variable) is used.
-    api_key_secret_id : versionless Key Vault id of the plain API key, read by the Fluent Bit installer.
+    site, agent_version (pinned 7.x.y) and the Delinea DSV reference of the API key (never the key):
+      api_key_ref : dsv://<path>#<element>; Linux Agents resolve it through secret_backend_command (dsv-fetch
+                    agent-backend), Fluent Bit through the dsv-fetch env-yaml file; Windows installers read it at run time.
   EOT
   type = object({
     site               = string
     agent_version      = optional(string, "7.84.2")
-    extension_version  = optional(string, "7.0")
-    api_key_secret_id  = optional(string)
+    api_key_ref        = string
     process_collection = optional(bool, false)
-    api_key_key_vault = optional(object({
-      secret_url      = string
-      source_vault_id = string
-    }))
   })
-  validation {
-    condition     = var.datadog.api_key_key_vault == null || can(regex("^https://[^/]+/secrets/[^/]+/[0-9a-fA-F]{32}$", try(var.datadog.api_key_key_vault.secret_url, "")))
-    error_message = "datadog.api_key_key_vault.secret_url must be a VERSIONED Key Vault secret URL (the compute extension API requires a version)."
-  }
   validation {
     condition     = can(regex("^7\\.[0-9]+\\.[0-9]+$", var.datadog.agent_version))
     error_message = "datadog.agent_version must be a pinned 7.x.y version (no 'latest')."
   }
+  validation {
+    condition     = can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", var.datadog.api_key_ref))
+    error_message = "datadog.api_key_ref must be a Delinea DSV reference (dsv://<path>#<element>), never a key."
+  }
 }
 
-variable "api_key" {
-  description = "Datadog API key (only when datadog.api_key_key_vault / identity-based Key Vault reads are not available). Sensitive; ends up in state as a protected setting."
+variable "secrets" {
+  description = "Delinea DSV endpoint for the on-host reader (non-secret): tenant/tld or base_url, auth (azure = managed identity via IMDS)."
+  type = object({
+    tenant   = optional(string)
+    tld      = optional(string, "com")
+    base_url = optional(string)
+    auth     = optional(string, "azure")
+  })
+  validation {
+    condition     = (var.secrets.tenant != null || var.secrets.base_url != null) && contains(["azure", "client_credentials"], var.secrets.auth)
+    error_message = "secrets needs tenant or base_url; auth azure (hosts) or client_credentials (tests only)."
+  }
+}
+
+variable "dsv_fetch_source" {
+  description = "Path of dsv_fetch.py embedded into the Linux installer (null = observability/images/dsv-fetch/dsv_fetch.py of this package)."
   type        = string
   default     = null
-  sensitive   = true
+}
+
+variable "windows_msi_sha256" {
+  description = "Pinned SHA256 of the Windows MSIs (vendors publish no checksum files). Values computed 2026-10-09 for agent 7.84.2 / Fluent Bit 5.1.3; update together with the versions."
+  type = object({
+    agent      = optional(string, "9ebecc6f16fad77df6dd14cf55d7edf84587cdf43f259442301bd6f2671b0b86")
+    fluent_bit = optional(string, "334685284bfd830a61d04161406473bf2174dd1ac14df9f459e26819ab874944")
+  })
+  default = {}
+}
+
+variable "setup_revision" {
+  description = "Bump to force the installer to re-run everywhere (e.g. after removing the 1.x Datadog VM extension, or to refresh a rotated key on Windows)."
+  type        = number
+  default     = 1
 }
 
 variable "fluent_bit_version" {

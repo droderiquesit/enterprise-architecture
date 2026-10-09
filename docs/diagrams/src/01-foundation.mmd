@@ -1,5 +1,5 @@
 %% Foundation layer: bootstrap, hub/spoke network, subnets + delegations, private endpoints, private DNS,
-%% egress, identities / Key Vault, governance and deployment-agent access.
+%% egress, identities / Delinea DSV secret access (no Key Vault), governance and deployment-agent access.
 %% Sources: bootstrap/README.md, foundation/*/README.md, ADR-0001 sections 4 and 8.
 flowchart TB
   subgraph LEGEND["Legend"]
@@ -62,10 +62,11 @@ flowchart TB
     INTZ["lab internal zone<br/>&lt;env&gt;.&lt;prefix&gt;.lab.internal<br/>(VM auto-registration)"]
   end
 
-  subgraph IDENT["foundation-identity"]
-    KV[("Key Vault (RBAC, public access off,<br/>purge protection, 7 d soft delete)<br/>secrets set out-of-band")]
-    UAI["Workload user-assigned identities<br/>hello-*, obs-collector, obs-dbm,<br/>aks-control-plane, aks-kubelet, deploy-agent"]
+  subgraph IDENT["foundation-identity + foundation-secrets"]
+    UAI["Workload user-assigned identities<br/>hello-*, obs-collector, obs-dbm,<br/>aks-control-plane, aks-kubelet, deploy-agent<br/>+ per-identity DSV secret names"]
+    SECR["foundation-secrets: desired DSV state<br/>(auth provider, 1 user per identity,<br/>least-privilege read permissions)"]
   end
+  DSV[("Delinea DSV (SaaS)<br/>&lt;tenant&gt;.secretsvaultcloud.&lt;tld&gt;<br/>all keys and secrets, values set out-of-band")]
 
   subgraph GOV["foundation-governance (subscription scope)"]
     BUDGET["Monthly budget + action group<br/>(alerts only, does not cap spend)"]
@@ -76,7 +77,6 @@ flowchart TB
     VMSSAG["Self-hosted agents: VMSS (0 instances idle)<br/>or Managed DevOps Pool"]
   end
 
-  PE_KV["PE vault"]
   PE_STATE["PE blob (bootstrap phase 2)"]
   PE_PLAT["PEs of platform resources<br/>(SQL, Cosmos, Redis, ACR Premium,<br/>Service Bus Premium, storage, Event Hubs)"]
 
@@ -87,19 +87,19 @@ flowchart TB
   MSH c4@==>|"phase 1: temporary IP allowlist"| STATE
   VMSSAG c5@==> ARM
   VMSSAG c6@==>|"phase 2: private only"| PE_STATE
-  VMSSAG c7@==> PE_KV
+  VMSSAG c7@==>|"dsv_apply.py / fetch.py (deploy-agent identity)"| DSV
   VMSSAG c8@==> PE_PLAT
   PID c9@==>|"workload identity federation"| PIPE
   POLICY c10@==> SPOKE
   VMSSAG c11@==> S_AGENTS
 
   %% application / data paths
-  S_PE a1@--- PE_KV
+  SECR a1@--> DSV
   S_PE a2@--- PE_STATE
   S_PE a3@--- PE_PLAT
-  PE_KV a4@--> KV
+  UAI a4@--> SECR
   PE_STATE a5@--> STATE
-  ZONES a6@--> PE_KV
+  NAT a6@-->|"HTTPS 443"| DSV
   ZONES a7@--> PE_PLAT
   SUBS_COMPUTE a8@--> NAT
   S_OBS a9@--> NAT
@@ -110,7 +110,7 @@ flowchart TB
   FW a14@--> INET
   FWSUB a15@--- FW
   HUB a16@<--> SPOKE
-  UAI a17@--> KV
+  UAI a17@-->|"managed identity token -> DSV token"| DSV
   SUBS_COMPUTE a18@--> S_PE
 
   %% telemetry

@@ -20,9 +20,12 @@ parameters:
   - name: dryRun
     type: boolean
     default: false
-  - name: datadog
-    type: string
-    default: none
+  - name: recordedArtifacts       # artifacts built by the OTHER pipeline: digest from their deployment record
+    type: object
+    default: []
+  - name: secretEnv               # registry secret_env: Terraform runs through tools/secrets/fetch.py exec (DSV)
+    type: boolean
+    default: false
   - name: settings
     type: object
 
@@ -46,8 +49,10 @@ jobs:
         - ${{ each artifact in parameters.artifacts }}:
           - name: ARTIFACT_${{ replace(artifact, '-', '_') }}
             value: $[ stageDependencies.Build.B_${{ replace(artifact, '-', '_') }}.outputs['ready.artifact'] ]
-        - ${{ if ne(parameters.datadog, 'none') }}:
-          - group: ${{ parameters.settings.datadogVariableGroup }}
+        - name: RECORDED_ARTIFACTS      # tf-prepare.sh: these artifacts' metadata comes from their deployment records
+          value: ${{ join(',', parameters.recordedArtifacts) }}
+        - name: TF_SECRET_ENV           # tf-plan.sh / tf-apply.sh wrap terraform with tools/secrets/fetch.py exec
+          value: ${{ lower(parameters.secretEnv) }}
       strategy:
         runOnce:
           deploy:
@@ -63,7 +68,6 @@ jobs:
                   displayName: Re-render, verify plan binding, apply, deploy code, publish contract, record
                   serviceConnection: ${{ parameters.settings.applyServiceConnection }}
                   serviceConnectionId: ${{ parameters.settings.applyServiceConnectionId }}
-                  datadog: ${{ parameters.datadog }}
                   script: |
                     bash pipelines/scripts/tf-prepare.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"
                     bash pipelines/scripts/tf-init.sh "${{ parameters.component }}" "${{ parameters.componentPath }}"

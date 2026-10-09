@@ -4,12 +4,11 @@ mock_provider "azurerm" {
 
 variables {
   datadog = {
-    site              = "datadoghq.eu"
-    api_key_secret_id = "https://kv-obs.vault.azure.net/secrets/datadog-api-key"
-    api_key_key_vault = {
-      secret_url      = "https://kv-obs.vault.azure.net/secrets/datadog-agent-protected-settings/0123456789abcdef0123456789abcdef"
-      source_vault_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv-obs"
-    }
+    site        = "datadoghq.eu"
+    api_key_ref = "dsv://eh/dev/datadog-api-key#value"
+  }
+  secrets = {
+    tenant = "contoso"
   }
   hosts = {
     worker = {
@@ -45,72 +44,64 @@ run "vm_and_vmss" {
   command = plan
 
   assert {
-    condition     = azurerm_virtual_machine_extension.datadog["worker"].type == "DatadogLinuxAgent" && azurerm_virtual_machine_extension.datadog["inventory_win"].type == "DatadogWindowsAgent" && azurerm_virtual_machine_extension.datadog["worker"].publisher == "Datadog.Agent"
-    error_message = "Datadog.Agent extension types per OS."
-  }
-  assert {
-    condition     = jsondecode(azurerm_virtual_machine_extension.datadog["worker"].settings).agentVersion == "7.84.2" && jsondecode(azurerm_virtual_machine_extension.datadog["worker"].settings).site == "datadoghq.eu"
-    error_message = "Pinned agent version and site in public settings."
-  }
-  assert {
-    condition     = azurerm_virtual_machine_extension.datadog["worker"].protected_settings == null && length(azurerm_virtual_machine_extension.datadog["worker"].protected_settings_from_key_vault) == 1
-    error_message = "API key comes from Key Vault, not Terraform."
-  }
-  assert {
-    condition     = !strcontains(azurerm_virtual_machine_extension.datadog["worker"].settings, "api_key")
-    error_message = "API key must never be in public settings."
-  }
-  assert {
     condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "DD_LOGS_ENABLED=false") && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "localhost:4317")
     error_message = "Agent configured with OTLP on localhost and log collection disabled."
   }
   assert {
-    condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "FB_VERSION='5.1.3'") && length(azurerm_virtual_machine_run_command.setup["worker"].protected_parameter) == 0
-    error_message = "Pinned Fluent Bit; no protected parameter when Key Vault identity is used."
+    condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "FB_VERSION='5.1.3'") && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "AGENT_VERSION='7.84.2'") && length(azurerm_virtual_machine_run_command.setup["worker"].protected_parameter) == 0
+    error_message = "Pinned Fluent Bit + Agent; no protected parameters."
   }
   assert {
-    condition     = strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "fluent-bit-eh") && strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "msiexec")
-    error_message = "Windows installer."
+    condition = (strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "api_key: ENC[$API_KEY_REF]")
+      && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "API_KEY_REF='dsv://eh/dev/datadog-api-key#value'")
+      && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "secret_backend_command: $DSV_DIR/agent/dsv-fetch")
+    && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "--owner dd-agent"))
+    error_message = "Linux Agent: api_key is an ENC[] DSV reference resolved by dsv-fetch agent-backend owned by dd-agent."
   }
   assert {
-    condition     = azurerm_virtual_machine_scale_set_extension.setup["worker_vmss"].type == "CustomScript" && contains(azurerm_virtual_machine_scale_set_extension.setup["worker_vmss"].provision_after_extensions, "DatadogAgent")
-    error_message = "VMSS: CustomScript after the Datadog extension."
+    condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "ExecStartPre=$DSV_DIR/dsv-fetch init --config $DSV_CONF --out /run/fluent-bit-eh --format env-yaml") && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "RuntimeDirectory=fluent-bit-eh")
+    error_message = "Fluent Bit: dsv-fetch writes the env-yaml into the tmpfs RuntimeDirectory at service start."
   }
   assert {
-    condition     = azurerm_virtual_machine_scale_set_extension.datadog["worker_vmss"].type == "DatadogLinuxAgent"
-    error_message = "VMSS Datadog extension."
+    condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "\"DSV_TENANT\":\"contoso\"") && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "IDENTITY_CLIENT_ID='22222222-2222-2222-2222-222222222222'")
+    error_message = "Non-secret DSV settings + host identity rendered for the on-host reader."
+  }
+  assert {
+    condition     = !strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "vault.azure.net") && !strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "vault.azure.net")
+    error_message = "No Key Vault anywhere."
+  }
+  assert {
+    condition     = strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "fluent-bit-eh") && strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "msiexec") && strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "grant_type = 'azure'") && strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "334685284bfd830a61d04161406473bf2174dd1ac14df9f459e26819ab874944")
+    error_message = "Windows installer reads DSV with the managed identity and verifies pinned MSI hashes."
+  }
+  assert {
+    condition     = azurerm_virtual_machine_scale_set_extension.setup["worker_vmss"].type == "CustomScript" && length(coalesce(azurerm_virtual_machine_scale_set_extension.setup["worker_vmss"].provision_after_extensions, [])) == 0
+    error_message = "VMSS: CustomScript installs Agent + Fluent Bit (no Datadog VM extension)."
   }
   assert {
     condition     = length(azurerm_virtual_machine_run_command.setup) == 2 && length(azurerm_virtual_machine_scale_set_extension.setup) == 1
     error_message = "Run command for VMs only; CustomScript for VMSS."
   }
+  assert {
+    condition     = output.scripts_sha256["worker"] == sha256(output.installer_scripts["worker"])
+    error_message = "Script hash output."
+  }
 }
 
-run "protected_parameter_fallback" {
+run "setup_revision_changes_script" {
   command = plan
   variables {
-    api_key = "mock-not-real"
-    datadog = { site = "datadoghq.com" }
-    hosts = {
-      worker = {
-        resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-worker"
-        os_type     = "linux"
-        location    = "swedencentral"
-        log_paths   = ["/var/log/app/*.log"]
-      }
-    }
+    setup_revision = 2
   }
   assert {
-    condition     = length(azurerm_virtual_machine_run_command.setup["worker"].protected_parameter) == 1 && azurerm_virtual_machine_extension.datadog["worker"].protected_settings != null
-    error_message = "Without Key Vault identity the key is passed as protected values."
+    condition     = strcontains(output.installer_scripts["worker"], "# setup revision: 2")
+    error_message = "Bumping setup_revision re-renders the installer (re-run)."
   }
 }
 
-run "reject_vmss_without_key_vault_identity" {
+run "reject_host_without_identity" {
   command = plan
   variables {
-    api_key = "mock-not-real"
-    datadog = { site = "datadoghq.com" }
     hosts = {
       w = {
         resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachineScaleSets/vmss"
@@ -122,6 +113,14 @@ run "reject_vmss_without_key_vault_identity" {
     }
   }
   expect_failures = [azurerm_virtual_machine_scale_set_extension.setup["w"]]
+}
+
+run "reject_literal_api_key" {
+  command = plan
+  variables {
+    datadog = { site = "datadoghq.com", api_key_ref = "0123456789abcdef0123456789abcdef" }
+  }
+  expect_failures = [var.datadog]
 }
 
 run "reject_kind_mismatch" {
@@ -143,7 +142,7 @@ run "reject_kind_mismatch" {
 run "reject_latest_agent" {
   command = plan
   variables {
-    datadog = { site = "datadoghq.com", agent_version = "latest" }
+    datadog = { site = "datadoghq.com", agent_version = "latest", api_key_ref = "dsv://eh/dev/datadog-api-key" }
   }
   expect_failures = [var.datadog]
 }

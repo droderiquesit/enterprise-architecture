@@ -42,14 +42,13 @@ module "env" {
     tier    = local.meta.tier
     region  = local.location
   }
-  runtime               = "python"
-  architecture          = local.arch[local.hosting[each.key]]
-  telemetry             = var.obs_telemetry_transport
-  identity_client_id    = local.identity.client_id
-  key_vault_identity_id = local.identity.id
+  runtime            = "python"
+  architecture       = local.arch[local.hosting[each.key]]
+  telemetry          = var.obs_telemetry_transport
+  identity_client_id = local.identity.client_id
   faults = {
-    enabled         = var.settings.faults_enabled
-    token_secret_id = lookup(var.foundation_identity.secret_ids, "fault-token", null)
+    enabled   = var.settings.faults_enabled
+    token_ref = lookup(var.foundation_identity.secrets.refs, "fault-token", null)
   }
   port               = local.hosting[each.key] == "appservice" ? 8000 : 8080
   log_level          = var.settings.log_level
@@ -77,8 +76,6 @@ module "aca" {
     memory = "1Gi"
   }
   env           = module.env[each.key].env
-  secret_env    = module.env[each.key].secret_env
-  secret_names  = module.env[each.key].secret_names
   sidecar_patch = module.env[each.key].container_app_patch
   ingress       = { external = false, target_port = 8080 }
   scale = {

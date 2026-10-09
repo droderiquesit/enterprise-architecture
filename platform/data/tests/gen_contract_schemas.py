@@ -12,8 +12,8 @@ OUT = ROOT / "catalog" / "contracts"
 
 RID = {"type": "string", "pattern": "^/subscriptions/[^/]+/"}
 NRID = {"type": ["string", "null"], "pattern": "^/subscriptions/[^/]+/"}
-SECRET = {"type": "string", "pattern": "^https://[^/]+/secrets/[A-Za-z0-9-]+$",
-          "description": "Versionless Key Vault secret ID (never a value)."}
+SECRET = {"type": "string", "pattern": "^dsv://[a-z0-9][a-z0-9/_-]*[a-z0-9]#[A-Za-z0-9_-]+$",
+          "description": "Delinea DSV reference dsv://<prefix>/<env>/<name>#<element> (never a value; ADR-0001 section 14)."}
 NSECRET = dict(SECRET, type=["string", "null"])
 STR = {"type": "string"}
 NSTR = {"type": ["string", "null"]}
@@ -196,7 +196,7 @@ def main():
         doc = {"$schema": "https://json-schema.org/draft/2020-12/schema",
                "$id": f"{name}.v1.schema.json",
                "title": f"{name} contract v1",
-               "description": "Produced by platform/data (see the root README). No secrets: Key Vault versionless secret IDs only.",
+               "description": "Produced by platform/data (see the root README). No secrets: Delinea DSV references (dsv://...) only.",
                **schema, "$defs": DEFS}
         (OUT / f"{name}.v1.schema.json").write_text(json.dumps(doc, indent=2) + "\n")
         print("wrote", OUT / f"{name}.v1.schema.json")

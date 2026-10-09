@@ -8,6 +8,7 @@ requires_confirmation: false
 components:
 - foundation-network
 - foundation-identity
+- foundation-secrets
 - foundation-governance
 - platform-shared
 - platform-messaging
@@ -18,6 +19,7 @@ components:
 - obs-prereqs
 - obs-azure-integration
 - obs-telemetry-transport
+- img-dsv-fetch
 - obs-diagnostics
 - obs-dbm
 - obs-monitoring

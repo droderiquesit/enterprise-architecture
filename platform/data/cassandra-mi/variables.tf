@@ -32,18 +32,20 @@ variable "foundation_network" {
   })
 }
 
-# Upstream contract: catalog/contracts/foundation-identity.v1.schema.json (only the fields used here).
+# Upstream contract: catalog/contracts/foundation-identity.v2.schema.json (only the fields used here).
 variable "foundation_identity" {
   type = object({
-    key_vault_id  = string
-    key_vault_uri = string
-    secret_ids    = optional(map(string), {}) # versionless Key Vault secret IDs (values set out-of-band)
     identities = map(object({
       id           = string
       principal_id = string
       client_id    = string
       name         = string
     }))
+    # Delinea DSV references (ADR-0001 section 14): dsv://<base_path>/<name>#value - never values.
+    secrets = object({
+      base_path = string
+      refs      = optional(map(string), {})
+    })
   })
 }
 
@@ -63,7 +65,6 @@ variable "settings" {
     # "subnet" (least privilege) or "vnet" (as in Microsoft's quickstart).
     network_contributor_scope = optional(string, "subnet")
     admin_secret_name         = optional(string, "cassandra-mi-admin-password")
-    secret_version            = optional(number, 1)
   })
   default = {}
 
@@ -79,4 +80,12 @@ variable "settings" {
     condition     = contains(["subnet", "vnet"], var.settings.network_contributor_scope)
     error_message = "network_contributor_scope must be subnet or vnet."
   }
+}
+
+# Secret input from Delinea DSV (pipeline: tools/secrets/fetch.py -> TF_VAR_admin_password); only needed when enabled.
+variable "admin_password" {
+  description = "Default admin password of the cluster (DSV cassandra-mi-admin-password). Stored in state (no write-only form)."
+  type        = string
+  default     = null
+  sensitive   = true
 }

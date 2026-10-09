@@ -15,7 +15,7 @@ distributed table `adapter.records` (`scripts/elastic-distribute.sql`).
 | Contract | Fields used |
 |---|---|
 | `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v1 | `key_vault_id`, `key_vault_uri`, `secret_ids` (optional), `identities[<name>].{principal_id, client_id, name}` |
+| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
 
 ## Produced contract
 `platform-db-postgresql` v1 — schema `catalog/contracts/platform-db-postgresql.v1.schema.json` (output `contract`, no secrets).

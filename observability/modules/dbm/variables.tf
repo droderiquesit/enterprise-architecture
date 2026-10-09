@@ -5,7 +5,7 @@ variable "databases" {
       deployment_type : postgres/mysql -> flexible_server ; sqlserver -> sql_database | managed_instance | virtual_machine
       auth            : password (password_ref required) | managed_identity (postgres + sqlserver only)
       password_ref    : how the Agent resolves the password - NEVER a literal:
-                          key_vault  name=<Key Vault secret name>  -> ENC[<name>]  (secret_backend_type azure.keyvault)
+                          dsv        name=dsv://<path>#<element> -> ENC[dsv://...] (secret backend dsv-fetch agent-backend)
                           k8s_secret name=<ns>/<secret>/<key>     -> ENC[k8s_secret@...]
                           file       name=<absolute path>         -> ENC[file@...]
                           env        name=<ENV_VAR>               -> %%env_<ENV_VAR>%% (cluster checks / autodiscovery)
@@ -41,8 +41,12 @@ variable "databases" {
     error_message = "auth must be password or managed_identity; MySQL DBM does not support Entra managed identity authentication."
   }
   validation {
-    condition     = alltrue([for d in values(var.databases) : d.auth == "managed_identity" ? d.managed_identity_client_id != null : (d.password_ref != null && contains(["key_vault", "k8s_secret", "file", "env"], try(d.password_ref.kind, "")))])
-    error_message = "auth = password needs password_ref {kind = key_vault|k8s_secret|file|env, name}; auth = managed_identity needs managed_identity_client_id."
+    condition     = alltrue([for d in values(var.databases) : d.auth == "managed_identity" ? d.managed_identity_client_id != null : (d.password_ref != null && contains(["dsv", "k8s_secret", "file", "env"], try(d.password_ref.kind, "")))])
+    error_message = "auth = password needs password_ref {kind = dsv|k8s_secret|file|env, name}; auth = managed_identity needs managed_identity_client_id."
+  }
+  validation {
+    condition     = alltrue([for d in values(var.databases) : try(d.password_ref.kind, "") != "dsv" || can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", d.password_ref.name))])
+    error_message = "password_ref.kind = dsv needs name = dsv://<path>#<element>."
   }
   validation {
     condition     = alltrue([for d in values(var.databases) : d.engine != "sqlserver" || d.deployment_type != "sql_database" || d.database != null])
@@ -66,7 +70,7 @@ variable "hosting" {
 }
 
 variable "aci" {
-  description = "ACI hosting: existing subnet (delegated to Microsoft.ContainerInstance/containerGroups), RG, identity with Key Vault Secrets User."
+  description = "ACI hosting: existing subnet (delegated to Microsoft.ContainerInstance/containerGroups), RG, user-assigned identity mapped to a DSV user with read on the API key / DB password paths, DSV endpoint."
   type = object({
     name                = string
     resource_group_name = string
@@ -74,11 +78,16 @@ variable "aci" {
     subnet_id           = string
     identity_id         = string
     identity_client_id  = string
-    key_vault_uri       = string
-    api_key_secret_name = optional(string, "datadog-api-key")
-    image               = optional(string, "datadog/agent:7.84.2")
-    cpu                 = optional(number, 1)
-    memory_gb           = optional(number, 2)
+    api_key_ref         = string
+    dsv = object({
+      tenant   = optional(string)
+      tld      = optional(string, "com")
+      base_url = optional(string)
+    })
+    dsv_fetch_source = optional(string)
+    image            = optional(string, "datadog/agent:7.84.2")
+    cpu              = optional(number, 1)
+    memory_gb        = optional(number, 2)
   })
   default = null
 }

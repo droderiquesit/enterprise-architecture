@@ -1,103 +1,113 @@
 # foundation-identity
 
 - **Owner:** platform-engineering · **Component id:** `foundation-identity` · **State key:** `<env>/foundation-identity.tfstate`
-- **Purpose:** the lab Key Vault (RBAC, private endpoint only), every workload user-assigned managed identity, and the
-  Key Vault data-plane RBAC that lets those identities read the secrets they need. Secret **values** are never managed by Terraform.
-- **Consumes:** `foundation-network` (`subnets["private-endpoints"].id`, `private_dns_zones["vault"].id`).
-- **Produces:** `foundation-identity` v1 ([schema](../../catalog/contracts/foundation-identity.v1.schema.json)).
+- **Purpose:** every workload user-assigned managed identity, the per-identity list of **Delinea DSV** secret names it may
+  read, and the DSV references (`dsv://<prefix>/<env>/<name>#value`) of every lab secret. No Azure Key Vault (ADR-0001
+  section 14: all keys and secrets live in Delinea DSV; workloads read DSV directly with these identities). Secret
+  **values** are never managed by Terraform.
+- **Consumes:** nothing (the global `secrets` section of `environments/<env>/environment.yaml`: DSV tenant, tld, auth provider).
+- **Produces:** `foundation-identity` **v2** ([schema](../../catalog/contracts/foundation-identity.v2.schema.json)); v1 (Key
+  Vault ids, `secret_ids`) was removed. Consumers: `foundation-secrets` (DSV users/permissions), platform roots
+  (identities; data roots also `secrets.base_path`/`refs`), observability and application roots.
 - **Status:** implemented (validate + mock tests + `tests/test_no_secret_values.py`). Not deployed.
 
-## Key Vault
+## Contract v2
 
-| Property | Value |
-|---|---|
-| Name | `module.naming.unique.key_vault` (e.g. `eh-kv-identi-dev-<5 hex>`) |
-| Authorization | Azure RBAC (`rbac_authorization_enabled = true`), no access policies |
-| Network | `public_network_access_enabled = false`, ACL default `Deny`, bypass `AzureServices`; private endpoint (`vault`) in `private-endpoints` with zone `privatelink.vaultcore.azure.net` via `foundation/modules/private-endpoint` |
-| Soft delete / purge protection | 7 days / **on** by default |
+```json
+{ "resource_group_name": "...", "tenant_id": "<entra tenant>",
+  "identities": { "<key>": { "id", "principal_id", "client_id", "name", "secrets": ["<secret-name>", ...] } },
+  "secrets": { "provider": "delinea-dsv", "tenant": "<tenant>", "tld": "com",
+               "base_url": "https://<tenant>.secretsvaultcloud.<tld>/v1", "base_path": "<prefix>/<env>",
+               "auth_provider": "<DSV azure auth provider>",
+               "refs": { "<secret-name>": "dsv://<prefix>/<env>/<secret-name>#value" } } }
+```
 
-**Teardown implication of purge protection:** a deleted vault stays soft-deleted for `soft_delete_retention_days` (7) and
-*cannot be purged*; its name (deterministic: prefix+env+subscription hash) cannot be reused until then, so a destroy +
-re-create of the same environment within 7 days fails. Either wait, use a different `name_prefix`/environment, or set
-`purge_protection_enabled = false` for throwaway labs **before** the first apply (it can never be turned off afterwards).
+References are not secrets (ADR-0001 section 14) and may appear in contracts, state, app settings and Helm values.
 
 ## Workload identities (contract `identities.<key>`)
 
-| Key | Runtime secrets (Key Vault Secrets User) |
+| Key | DSV secrets it reads (foundation-secrets grants `read` on exactly these paths) |
 |---|---|
 | hello-bff, hello-orders-api, hello-catalog-api, hello-functions | `fault-token`, `datadog-api-key` (Fluent Bit sidecar on Container Apps, `sidecar_mode = datadog`) |
 | hello-inventory-api, hello-dbadapter | `fault-token`, `datadog-api-key` (ACA sidecar and the VM/VMSS Fluent Bit installer of obs-hosts, which reads the key with the host identity); hello-dbadapter also the adapter secrets |
-| hello-durable, hello-partner-sim, hello-traffic | `fault-token` (partner-sim's ACI sidecar key is resolved by the pipeline at plan time) |
+| hello-durable, hello-traffic | `fault-token` |
+| hello-partner-sim | `fault-token`, `datadog-api-key` (the ACI Fluent Bit sidecar's `dsv-fetch` init container reads it with this identity) |
 | hello-worker | `datadog-api-key` (VM/VMSS Fluent Bit installer, obs-hosts) |
 | hello-jobs | `datadog-api-key` (Batch job preparation task installs Fluent Bit with the pool identity, ADR-0001 §13) |
 | hello-frontend | — |
-| obs-collector (Fluent Bit aggregator / OTel gateway) | `datadog-api-key`, `fluentbit-shared-key` (aggregator forward input) |
+| obs-collector (Fluent Bit aggregator / OTel gateway) | `datadog-api-key`, `fluentbit-shared-key` (aggregator forward input), `eventhub-fluentbit-listen` (kafka input) |
 | obs-dbm (Datadog Agent DBM) | `datadog-api-key`, `dbm-<engine>-password` |
-| aks-control-plane, aks-kubelet, deploy-agent | — |
+| deploy-agent (pipelines) | pipeline secrets `datadog-api-key`, `datadog-app-key`, `datadog-client-token`, `fault-token` and the platform apply inputs (`sqlvm-admin-password`, `sqlvm-dbadapter-password`, `documentdb-admin-password`, `cassandra-mi-admin-password`, `mysql-admin-password`, `appgw-tls-pfx`, `aro-pull-secret`); also publishes generated values (create/update on `eventhub-fluentbit-listen`) and lists paths for `check.py` |
+| aks-control-plane, aks-kubelet, hello-logicapps, hello-frontend | — |
 
 Plus `settings.extra_identities`. Platform roots grant everything else (AcrPull, SQL/Cosmos data roles, Service Bus, etc.)
 because they own those resources (ADR §3). Names: `<prefix>-id-<key>-<env>-<region>`.
 
-**RBAC scope.** Default: *Key Vault Secrets User at vault scope* — a secret-scoped assignment needs the secret to exist,
-and secrets are created after this root. Once every secret exists, set `secret_scoped_assignments = true` to switch to one
-assignment per identity × secret (true least privilege; the vault-scoped ones are replaced in the same apply).
+## Secrets (catalogue `secrets.yaml`, contract `secrets.refs`)
 
-## Secrets (contract `secret_ids`, versionless `<vault_uri>secrets/<name>`)
+[`secrets.yaml`](secrets.yaml) is the catalogue of every lab secret: **names and metadata only** (source `operator` |
+`generated`, publisher, `required_by` components). `tools/secrets/check.py` uses `required_by` to verify that an
+environment's required paths exist (never reading values). Path `/<prefix>/<env>/<name>`, element `value`.
 
-| Name | Used by | Notes |
+| Name | Readers | Source |
 |---|---|---|
-| `datadog-api-key` | agents, Fluent Bit, OTel gateway; pipeline | |
-| `datadog-app-key` | pipeline only (Datadog Terraform provider) | grant with `pipeline_reader_principal_ids` |
-| `fault-token` | HTTP services + traffic generator | `X-Fault-Token` for `POST /admin/faults` |
-| `datadog-client-token` | deploy pipeline injects into the frontend build | browser-safe RUM token, still stored centrally |
-| `fluentbit-shared-key` | obs-collector (aggregator forward input); app identities only when `sidecar_mode = forward` | Fluent Bit forward protocol shared key; `set-secrets.sh <vault> generate fluentbit-shared-key` |
-| `dbm-mysql-password` | obs-dbm | MySQL Flexible: the Datadog DBM check has no Entra managed-identity auth → SQL auth |
-| `dbm-sqlvm-password` | obs-dbm | SQL Server on VM: no Entra-joined SQL by default → SQL login |
+| `datadog-api-key` | agents, Fluent Bit, OTel gateway, deploy-agent | operator (Datadog org settings) |
+| `datadog-app-key` | deploy-agent only (Datadog Terraform provider) | operator |
+| `datadog-client-token` | deploy-agent (injected into the frontend build) | operator (Datadog RUM app) |
+| `fault-token` | HTTP services + traffic generator, deploy-agent (smoke) | operator (generate) |
+| `fluentbit-shared-key` | obs-collector | operator (generate) |
+| `eventhub-fluentbit-listen` | obs-collector | **generated** - `obs-telemetry-transport` output `generated_secrets`, written by `tools/secrets/publish.py` after apply |
+| adapter secrets (`sqlvm-dbadapter-password`, `cassandra-mi-dbadapter-password`, `cosmos-*`) | hello-dbadapter | operator |
+| `dbm-<engine>-password` (`settings.dbm_sql_auth_engines`) | obs-dbm | operator |
+| platform apply inputs (`sqlvm-admin-password`, `documentdb-admin-password`, `cassandra-mi-admin-password`, `mysql-admin-password`, `appgw-tls-pfx`, `aro-pull-secret`) | deploy-agent | operator |
 
 DBM authentication per engine (Datadog [managed authentication guide](https://docs.datadoghq.com/database_monitoring/guide/managed_authentication/), checked 2026-10-09):
 **PostgreSQL Flexible** → managed identity (`azure.managed_authentication`, Agent ≥ 7.48) → no password;
 **Azure SQL DB / SQL MI** → managed identity (`managed_identity.client_id`, ODBC driver ≥ 17) → no password;
 **MySQL Flexible** and **SQL Server on VM** → SQL auth passwords above (`settings.dbm_sql_auth_engines`).
 
-Set and rotate values with [`scripts/set-secrets.sh`](scripts/set-secrets.sh) from a host on the VNet (the vault has no
-public access): `set-secrets.sh <vault> set datadog-api-key`, `... generate fault-token`, `... generate fluentbit-shared-key`, `... rotate dbm-mysql-password`
-(rotation disables old versions; consumers use versionless IDs and pick up the new version on their refresh cycle).
-The operator needs Key Vault Secrets Officer (`secret_officer_principal_ids`).
+Set and rotate values with the DSV CLI (`dsv secret create|update --path <prefix>/<env>/<name> --data @file.json`) -
+[docs/runbooks/secret-rotation.md](../../docs/runbooks/secret-rotation.md). The former `scripts/set-secrets.sh` (Key Vault)
+was removed.
+
 
 ## Settings (`components.foundation-identity`)
 
 | Key | Default |
 |---|---|
-| `key_vault_sku` | `standard` |
-| `purge_protection_enabled` / `soft_delete_retention_days` | `true` / `7` |
-| `public_network_access_enabled` / `allowed_ip_ranges` | `false` / `[]` (break-glass only) |
 | `extra_identities` | `{}` (key => purpose) |
+| `extra_identity_secrets` | `{}` (identity key => extra catalogue secret names) |
 | `dbm_sql_auth_engines` | `["mysql", "sqlvm"]` |
-| `secret_scoped_assignments` | `false` |
-| `secret_officer_principal_ids` / `pipeline_reader_principal_ids` | `[]` / `[]` |
+| `packages_container_id` / `package_reader_identities` | `null` / adapter, worker, inventory, durable, functions, jobs |
+
+Global `secrets` (environment.yaml, rendered as `var.secrets`): `provider = delinea-dsv`, `tenant`, `tld` (`com`, `eu`,
+`com.au`, `ca`), `auth_provider`, optional `base_url`.
 
 ## Cost at defaults
 
-≈ USD 8/month: private endpoint ≈ 7.3 + Key Vault operations (0.03 per 10k). Managed identities and RBAC are free.
+≈ USD 0/month in Azure: managed identities and role assignments are free (the former Key Vault + private endpoint,
+≈ USD 8/month, is gone). Delinea DSV is a separate subscription (catalog entry `delinea-dsv`).
 
 ## Teardown and data retention
 
-Secret values live only in Key Vault; destroying the vault soft-deletes it (7 days, not purgeable with purge protection).
-Destroy *after* platform/application roots that reference identities. Identities are deleted immediately; role assignments
-and federated credentials created by other roots on these identities must be destroyed first (their roots own them).
+Destroy *after* platform/application roots that reference the identities; role assignments and federated credentials
+created by other roots on these identities must be destroyed first (their roots own them). Destroying an identity
+breaks its DSV user mapping (externalId = the identity resource id); a re-created identity has a new principal and
+the same resource id, so `foundation-secrets` keeps working. Secret values live only in DSV and are not touched.
 
 ## Private networking
 
-Vault reachable only through the private endpoint; Terraform management-plane operations (create vault, role assignments)
-do not need data-plane access, so Microsoft-hosted agents can apply this root. Setting secret values needs VNet access.
+No data-plane endpoint in Azure. Readers reach DSV over HTTPS (`<tenant>.secretsvaultcloud.<tld>`); the Azure Firewall
+default allow-list (`foundation-edge`) includes `*.secretsvaultcloud.*`.
 
 ## Known limitations
 
-- Vault-scoped Secrets User by default (see RBAC scope above).
+- AKS pods authenticate to DSV with workload identity: whether DSV accepts workload-identity-federated tokens (it maps
+  users by the `xms_mirid` claim) is **not verified**; fallback documented in `docs/known-limitations.md`.
 - `hello-frontend` gets no secret access; the RUM client token is injected by the deployment pipeline.
 
 ## References
 
-- Key Vault RBAC: https://learn.microsoft.com/azure/key-vault/general/rbac-guide
-- Soft delete / purge protection: https://learn.microsoft.com/azure/key-vault/general/soft-delete-overview
-- Private endpoint DNS: https://learn.microsoft.com/azure/private-link/private-endpoint-dns
+- Delinea DSV Azure authentication: https://docs.delinea.com/dsv/current/usage/auth-general/authazure
+- Delinea DSV policies: https://docs.delinea.com/online-help/devops-secrets-vault/tutorials/policy.htm
+- User-assigned managed identities: https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview

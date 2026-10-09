@@ -27,7 +27,7 @@ variable "tags" {
 }
 
 variable "identity" {
-  description = "User-assigned identity of the workload (also used for ACR pull and Key Vault secret references)."
+  description = "User-assigned identity of the workload (ACR pull; the app and dsv-fetch read Delinea DSV with it)."
   type = object({
     id        = string
     client_id = string
@@ -55,24 +55,12 @@ variable "container" {
 }
 
 variable "env" {
-  description = "Non-secret environment (app-env module output `env`)."
+  description = "Environment (app-env output `env`): plain values; secret settings are dsv:// references resolved by the app."
   type        = map(string)
-}
-
-variable "secret_env" {
-  description = "Secret environment: name -> versionless Key Vault secret id (app-env output `secret_env`)."
-  type        = map(string)
-  default     = {}
-}
-
-variable "secret_names" {
-  description = "Container Apps secret name per secret env var (app-env output `secret_names`)."
-  type        = map(string)
-  default     = {}
 }
 
 variable "sidecar_patch" {
-  description = "app-env output `container_app_patch` (Fluent Bit sidecar, volumes, secrets). Null = no sidecar."
+  description = "app-env output `container_app_patch` (Fluent Bit sidecar, dsv-fetch init container, volumes, config-file secrets). Null = no sidecar."
   type        = any
   default     = null
 }

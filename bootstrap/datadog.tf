@@ -3,7 +3,7 @@
 # Credentials: Datadog "Secretless Auth" (recommended by Datadog; OIDC workload identity federation) is used when
 # federated_issuer/federated_subject are set - copy both from the Datadog Azure integration tile. Secretless Auth is
 # not available on US1-FED/US2-FED or sovereign clouds; there, create a client secret OUT-OF-BAND and store it in
-# Key Vault (see README "Datadog app registration"). Terraform never creates a client secret, so none is in state.
+# Delinea DSV (see README "Datadog app registration"). Terraform never creates a client secret, so none is in state.
 # The Datadog-side `datadog_integration_azure` resource is owned by observability (obs-azure-integration), which
 # consumes the client_id/tenant_id from the bootstrap contract.
 locals {

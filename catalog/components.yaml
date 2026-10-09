@@ -12,6 +12,11 @@
 #              (azure-pipelines.applications.yml). Default: bootstrap/foundation/platform/docs -> platform,
 #              applications -> applications, observability -> platform unless it reads application
 #              contracts (after_deployments / discovers_resources) -> applications.
+# secret_env:  {ENV_VAR: <dsv secret name>[#element][?]} - values tools/secrets/fetch.py resolves from Delinea DSV with
+#              the deploy agent's managed identity and passes ONLY to the Terraform step of this component (masked,
+#              never echoed; `?` = optional). Typically TF_VAR_<ephemeral/sensitive variable> or provider keys.
+# dsv_state_output: Terraform output holding the desired DSV state (tools/secrets/dsv_apply.py plan/apply).
+# secret_outputs:   sensitive Terraform output {name: value} published to DSV after apply (tools/secrets/publish.py).
 # inputs:      extra repo globs that change this component (shared modules are discovered
 #              automatically by tools/changeset from module "source" paths)
 schema_version: 1
@@ -34,8 +39,15 @@ components:
     layer: foundation
     kind: terraform
     path: foundation/identity
-    consumes: [foundation-network]
     produces: [foundation-identity]
+  - id: foundation-secrets
+    layer: foundation
+    kind: terraform
+    path: foundation/secrets
+    consumes: [foundation-identity]
+    inputs: [foundation/identity/secrets.yaml]   # secret catalogue (source/publisher metadata)
+    dsv_state_output: dsv_desired_state         # converged by tools/secrets/dsv_apply.py (plan stage diff, apply stage)
+    catalog_refs: [delinea-dsv]
   - id: foundation-governance
     layer: foundation
     kind: terraform
@@ -51,7 +63,11 @@ components:
     layer: foundation
     kind: terraform
     path: foundation/edge
-    consumes: [foundation-network, foundation-identity]
+    consumes: [foundation-network]
+    depends_on: [foundation-secrets]
+    secret_env:                                 # App Gateway listener certificate (optional: Front Door managed certs need none)
+      TF_VAR_tls_certificate_pfx: appgw-tls-pfx?
+      TF_VAR_tls_certificate_password: appgw-tls-pfx#password?
     produces: [foundation-edge]
 
   # ----------------------------------------------------------------- platform
@@ -129,7 +145,10 @@ components:
     layer: platform
     kind: terraform
     path: platform/compute/aro
-    consumes: [foundation-network, foundation-identity]
+    consumes: [foundation-network]
+    depends_on: [foundation-secrets]
+    secret_env:
+      TF_VAR_pull_secret: aro-pull-secret?
     produces: [platform-aro]
     catalog_refs: [aro]
   - id: platform-specialized-compute
@@ -159,6 +178,10 @@ components:
     kind: terraform
     path: platform/data/sqlvm
     consumes: [foundation-network, foundation-identity]
+    depends_on: [foundation-secrets]
+    secret_env:
+      TF_VAR_admin_password: sqlvm-admin-password
+      TF_VAR_dbadapter_password: sqlvm-dbadapter-password
     produces: [platform-db-sqlvm]
     catalog_refs: [sql-server-on-vm]
   - id: platform-db-postgresql
@@ -173,6 +196,8 @@ components:
     kind: terraform
     path: platform/data/mysql
     consumes: [foundation-network, foundation-identity]
+    secret_env:
+      TF_VAR_admin_password: mysql-admin-password?   # optional; ephemeral random when absent
     produces: [platform-db-mysql]
     catalog_refs: [mysql-flexible]
   - id: platform-db-cosmos-nosql
@@ -215,6 +240,9 @@ components:
     kind: terraform
     path: platform/data/documentdb
     consumes: [foundation-network, foundation-identity]
+    depends_on: [foundation-secrets]
+    secret_env:
+      TF_VAR_admin_password: documentdb-admin-password
     produces: [platform-db-documentdb]
     catalog_refs: [documentdb]
   - id: platform-db-cassandra-mi
@@ -222,6 +250,9 @@ components:
     kind: terraform
     path: platform/data/cassandra-mi
     consumes: [foundation-network, foundation-identity]
+    depends_on: [foundation-secrets]
+    secret_env:
+      TF_VAR_admin_password: cassandra-mi-admin-password
     produces: [platform-db-cassandra-mi]
     catalog_refs: [managed-cassandra]
   - id: platform-db-redis
@@ -268,10 +299,16 @@ components:
     kind: terraform
     path: observability/lab/prereqs
     produces: [obs-prereqs]
+    secret_env:                 # Datadog Terraform provider keys (DSV, fetched with the deploy agent identity)
+      DD_API_KEY: datadog-api-key
+      DD_APP_KEY: datadog-app-key
   - id: obs-azure-integration
     layer: observability
     kind: terraform
     path: observability/lab/azure-integration
+    secret_env:                 # Datadog Terraform provider keys (DSV, fetched with the deploy agent identity)
+      DD_API_KEY: datadog-api-key
+      DD_APP_KEY: datadog-app-key
     catalog_refs: [datadog-azure-native-integration]
   - id: obs-telemetry-transport
     layer: observability
@@ -280,6 +317,9 @@ components:
     consumes: [foundation-network, foundation-identity, platform-containerapps]
     produces: [obs-telemetry-transport]
     inputs: [observability/modules/host-agents/scripts/**]   # Batch log setup script (templatefile, not a module source)
+    depends_on: [foundation-secrets]
+    artifacts: [img-dsv-fetch]  # init container of the Fluent Bit aggregator / OTel gateway (resolves dsv:// refs)
+    secret_outputs: generated_secrets   # eventhub-fluentbit-listen -> DSV after apply (tools/secrets/publish.py)
   - id: obs-diagnostics
     layer: observability
     kind: terraform
@@ -302,11 +342,15 @@ components:
     path: observability/lab/kubernetes
     consumes: [obs-telemetry-transport, platform-aks]
     produces: [obs-kubernetes]
+    artifacts: [img-dsv-fetch]  # Datadog Agent secret_backend_command + Fluent Bit init container on AKS
+    secret_env:
+      TF_VAR_datadog_api_key: datadog-api-key
   - id: obs-dbm
     layer: observability
     kind: terraform
     path: observability/lab/dbm
     consumes: [obs-telemetry-transport, foundation-network]
+    artifacts: [img-dsv-fetch]  # Datadog Agent secret backend (ENC[dsv://...]) for DBM passwords
     optional_consumes: [platform-db-postgresql, platform-db-mysql, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm]
   - id: obs-monitoring
     layer: observability
@@ -314,9 +358,20 @@ components:
     path: observability/lab/monitoring
     scope: applications         # needs application endpoints/contracts
     consumes: [obs-prereqs]
+    secret_env:                 # Datadog Terraform provider keys (DSV, fetched with the deploy agent identity)
+      DD_API_KEY: datadog-api-key
+      DD_APP_KEY: datadog-app-key
     optional_consumes: [deploy-core-aks, deploy-core-aca, deploy-frontend, deploy-durable, deploy-functions, deploy-partner-sim, deploy-dbadapters, deploy-appservice, deploy-jobs, deploy-vm-workloads, deploy-logicapps, deploy-specialized, obs-telemetry-transport]
     after_deployments: true     # runs after every selected applications deployment (needs endpoints)
     inputs: [observability/onboarding/**, observability/archetypes/**]
+
+  # ------------------------------------------------------ observability images (platform scope)
+  - id: img-dsv-fetch
+    layer: observability
+    kind: artifact
+    path: observability/images/dsv-fetch
+    scope: platform             # built by the platform pipeline; applications roots consume its recorded digest
+    artifact: {type: container-image, name: dsv-fetch}
 
   # ------------------------------------------------------ application builds
   - id: svc-frontend
@@ -412,7 +467,7 @@ components:
     path: applications/deployments/core-aca
     consumes: [platform-containerapps, platform-shared, platform-messaging, platform-db-sql, platform-db-postgresql, obs-telemetry-transport, foundation-identity]
     optional_consumes: [platform-db-redis]
-    artifacts: [svc-bff, svc-orders-api, svc-catalog-api]
+    artifacts: [svc-bff, svc-orders-api, svc-catalog-api, img-dsv-fetch]   # img-dsv-fetch: init container of the Fluent Bit sidecar (platform artifact, recorded digest)
   - id: deploy-frontend
     produces: [deploy-frontend]
     layer: applications
@@ -443,7 +498,7 @@ components:
     kind: terraform
     path: applications/deployments/partner-sim
     consumes: [foundation-network, platform-shared, obs-telemetry-transport, foundation-identity]
-    artifacts: [svc-partner-sim]
+    artifacts: [svc-partner-sim, img-dsv-fetch]   # img-dsv-fetch: init container of the Fluent Bit sidecar (platform artifact, recorded digest)
   - id: deploy-dbadapters
     produces: [deploy-dbadapters]
     layer: applications
@@ -451,7 +506,7 @@ components:
     path: applications/deployments/dbadapters
     consumes: [platform-containerapps, platform-shared, obs-telemetry-transport, foundation-identity]
     optional_consumes: [platform-appservice, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm, platform-db-postgresql, platform-db-mysql, platform-db-cosmos-nosql, platform-db-cosmos-mongo, platform-db-cosmos-cassandra, platform-db-cosmos-gremlin, platform-db-cosmos-table, platform-db-documentdb, platform-db-cassandra-mi, platform-db-redis, platform-db-table-storage, platform-db-ledger, platform-db-horizondb, platform-data-analytics, platform-vmss, foundation-network]
-    artifacts: [svc-dbadapter]
+    artifacts: [svc-dbadapter, img-dsv-fetch]   # img-dsv-fetch: init container of the Fluent Bit sidecar (platform artifact, recorded digest)
   - id: deploy-appservice
     produces: [deploy-appservice]
     layer: applications
@@ -467,7 +522,7 @@ components:
     path: applications/deployments/jobs
     consumes: [platform-containerapps, platform-shared, platform-messaging, platform-db-sql, obs-telemetry-transport, foundation-identity]
     optional_consumes: [platform-batch, deploy-core-aks, deploy-core-aca, deploy-frontend, deploy-durable]
-    artifacts: [svc-jobs, svc-traffic]
+    artifacts: [svc-jobs, svc-traffic, img-dsv-fetch]   # img-dsv-fetch: init container of the Fluent Bit sidecar (platform artifact, recorded digest)
   - id: deploy-vm-workloads
     produces: [deploy-vm-workloads]
     layer: applications

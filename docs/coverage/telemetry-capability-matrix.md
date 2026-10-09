@@ -143,7 +143,7 @@ Verified 2026-10-09. Each cell: support / method / owner component.
 | `functions-dedicated` | platform_logs | never select the console/app-log category twice | none |
 | `functions-dedicated` | profiling | profiler only; tracing stays on OTel SDK (DD_TRACE_ENABLED=false when profiler is used) | profiling requires the Datadog library; OTel profiling signal not used |
 | `functions-consumption-windows` | app_logs | Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function | minutes of latency through Event Hubs; stdout only |
-| `functions-consumption-windows` | traces | only exporter for this app | gRPC not supported by the serverless OTLP intake; API key must be a Key Vault reference |
+| `functions-consumption-windows` | traces | only exporter for this app | gRPC not supported by the serverless OTLP intake; API key must be a Delinea DSV reference resolved at start-up (dsv://...) |
 | `functions-consumption-windows` | app_metrics | single exporter | public egress |
 | `functions-consumption-windows` | runtime_metrics | dd-trace runtime metrics off | no host Agent |
 | `functions-consumption-windows` | platform_metrics | single Azure integration per subscription; do not also enable Azure Monitor metric export to Datadog | Azure Monitor latency (typically several minutes); metric granularity 1 min |

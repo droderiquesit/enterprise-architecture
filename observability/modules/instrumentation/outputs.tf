@@ -9,13 +9,28 @@ output "otlp_target" {
 }
 
 output "env" {
-  description = "Non-secret environment variables for the application container/process."
+  description = "Environment for the application container/process: telemetry env + DSV runtime env (DSV_TENANT/DSV_TLD/DSV_BASE_URL/DSV_AUTH/AZURE_CLIENT_ID) + secret settings whose VALUE is a dsv:// reference (resolved by the app at start-up). No secret values."
   value       = local.env
 }
 
 output "secret_env" {
-  description = "Environment variables whose values must be read from Key Vault: name -> versionless secret id."
+  description = "Subset of env whose value is a Delinea DSV reference (name -> dsv://...). Already included in env."
   value       = local.secret_env
+}
+
+output "dsv_env" {
+  description = "DSV runtime env contract for workloads and dsv-fetch (no credentials)."
+  value       = local.dsv_env
+}
+
+output "sidecar_secret_refs" {
+  description = "Fluent Bit sidecar secrets: env-yaml NAME -> dsv:// reference written by dsv-fetch (empty without a sidecar)."
+  value       = local.uses_sidecar ? local.sidecar_secret_refs : {}
+}
+
+output "fetch_args" {
+  description = "dsv-fetch command line used for the sidecar secrets (init --format env-yaml ...)."
+  value       = local.fetch_args
 }
 
 output "k8s_patch" {
@@ -29,7 +44,7 @@ output "k8s_patch_object" {
 }
 
 output "container_app_patch" {
-  description = "Secrets, volumes, app container env/mounts and Fluent Bit sidecar shaped like azurerm_container_app template blocks."
+  description = "Config-file secrets, volumes (incl. EmptyDir dsv-secrets), dsv-fetch init_containers, app container env/mounts and the Fluent Bit sidecar, shaped like azurerm_container_app template blocks."
   value       = local.container_app_patch
 }
 
@@ -39,12 +54,12 @@ output "container_app_patch_json" {
 }
 
 output "app_settings" {
-  description = "App Service / Functions / Logic Apps Standard app settings (secrets as @Microsoft.KeyVault references)."
+  description = "App Service / Functions / Logic Apps Standard app settings: plain values; secret settings carry dsv:// references the app resolves (no @Microsoft.KeyVault references)."
   value       = local.app_settings
 }
 
 output "aci_sidecar" {
-  description = "Fluent Bit sidecar + volumes for azurerm_container_group (secure env values must be resolved by the caller from the listed secret ids)."
+  description = "Fluent Bit sidecar + dsv-fetch refresher container + volumes for azurerm_container_group (no secret values: dsv-fetch writes the env file at run time)."
   value       = local.aci_sidecar
 }
 

@@ -18,7 +18,9 @@ module "tags" {
 
 locals {
   # Each platform-db-* contract publishes a `dbm` block (supported, engine, deployment_type, auth_mode,
-  # identity_client_id, host, port, resource_id, databases, password_secret_id).
+  # identity_client_id, host, port, resource_id, databases, password_ref | password_secret_name). Passwords are
+  # Delinea DSV references: the block's dsv:// password_ref when published, else the ADR-0001 section 14 path
+  # dsv://<base_path>/<secret name>#value (legacy password_secret_id: its last segment names the secret).
   dbm_blocks = {
     for k, c in {
       postgresql = var.platform_db_postgresql
@@ -50,9 +52,12 @@ locals {
     username                   = d.auth_mode == "entra-managed-identity" ? try(d.identity_name, "obs-dbm") : "datadog"
     auth                       = d.auth_mode == "entra-managed-identity" ? "managed_identity" : "password"
     managed_identity_client_id = d.auth_mode == "entra-managed-identity" ? coalesce(try(d.identity_client_id, null), local.dbm_identity.client_id) : null
-    password_ref               = d.auth_mode == "entra-managed-identity" ? null : { kind = "key_vault", name = element(split("/", d.password_secret_id), length(split("/", d.password_secret_id)) - 1) }
-    resource_id                = try(d.resource_id, null)
-    tags                       = { platform_contract = k }
+    password_ref = d.auth_mode == "entra-managed-identity" ? null : {
+      kind = "dsv"
+      name = startswith(try(d.password_ref, ""), "dsv://") ? d.password_ref : "dsv://${var.foundation_identity.secrets.base_path}/${coalesce(try(d.password_secret_name, null), try(element(split("/", d.password_secret_id), length(split("/", d.password_secret_id)) - 1), null), "dbm-${k}-password")}#value"
+    }
+    resource_id = try(d.resource_id, null)
+    tags        = { platform_contract = k }
   } }
 }
 
@@ -76,9 +81,13 @@ module "dbm" {
     subnet_id           = var.foundation_network.subnets[var.settings.subnet_key].id
     identity_id         = local.dbm_identity.id
     identity_client_id  = local.dbm_identity.client_id
-    key_vault_uri       = var.foundation_identity.key_vault_uri
-    api_key_secret_name = var.settings.api_key_secret_name
-    cpu                 = var.settings.cpu
-    memory_gb           = var.settings.memory_gb
+    api_key_ref         = var.obs_telemetry_transport.api_key_ref
+    dsv = {
+      tenant   = var.obs_telemetry_transport.secrets.tenant
+      tld      = var.obs_telemetry_transport.secrets.tld
+      base_url = var.obs_telemetry_transport.secrets.base_url
+    }
+    cpu       = var.settings.cpu
+    memory_gb = var.settings.memory_gb
   } : null
 }

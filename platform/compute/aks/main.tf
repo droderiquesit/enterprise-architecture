@@ -168,7 +168,8 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
-  # Secrets Store CSI driver (Key Vault) for app secret references, with rotation.
+  # Secrets Store CSI driver (Azure Key Vault provider). OFF by default: lab secrets live in Delinea DSV and pods read
+  # them directly with their workload identity (ADR-0001 section 14). Kept as an opt-in setting for adopters.
   dynamic "key_vault_secrets_provider" {
     for_each = var.settings.key_vault_secrets_provider_enabled ? [1] : []
     content {

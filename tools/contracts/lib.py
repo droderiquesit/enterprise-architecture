@@ -80,16 +80,27 @@ def validate_envelope(tree: Tree, envelope: dict, contract: str, env: str, major
     return errors
 
 
+SECRET_KEY_HINTS = ("password", "secret", "connection_string", "connection-string", "access_key", "primary_key",
+                    "api_key", "api-key", "app_key", "app-key", "sas_token", "client_secret", "shared-key", "fault-token")
+REFERENCE_SUFFIXES = ("_secret_id", "_secret_name", "_secret_uri", "_secret_ref", "_ref")
+DSV_REF_PREFIX = "dsv://"
+
+
+def is_reference(value) -> bool:
+    """A Delinea DSV reference (dsv://<path>#<element>) names a secret; it is not one (ADR-0001 section 14)."""
+    return isinstance(value, str) and value.startswith(DSV_REF_PREFIX)
+
+
 def secret_like_keys(data, path: str = "") -> List[str]:
-    """Contracts must not carry secrets (ADR §5): flag keys that look like secret values."""
+    """Contracts must not carry secrets (ADR §5/§14): flag secret-looking keys whose value is a literal string.
+    DSV references (dsv://...) and *_secret_id / *_ref style reference keys are allowed."""
     bad = []
     if isinstance(data, dict):
         for k, v in data.items():
             p = f"{path}.{k}" if path else k
             lk = k.lower()
-            if any(s in lk for s in ("password", "secret", "connection_string", "access_key", "primary_key",
-                                      "api_key", "app_key", "sas_token", "client_secret")) and not lk.endswith(("_secret_id", "_secret_name", "_secret_uri")):
-                if isinstance(v, str) and v:
+            if any(s in lk for s in SECRET_KEY_HINTS) and not lk.endswith(REFERENCE_SUFFIXES):
+                if isinstance(v, str) and v and not is_reference(v):
                     bad.append(p)
             bad += secret_like_keys(v, p)
     elif isinstance(data, list):

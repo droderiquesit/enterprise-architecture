@@ -2,7 +2,8 @@
 
 - **Owner:** platform-engineering · **Component id:** `foundation-deploy-agents` · **State key:** `<env>/foundation-deploy-agents.tfstate`
 - **Purpose:** self-hosted Azure DevOps agents *inside* the VNet so pipelines can reach private endpoints (state storage
-  in phase 2, Key Vault, databases, AKS private API, ACA internal ingress).
+  in phase 2, databases, AKS private API, ACA internal ingress) and read pipeline secrets from Delinea DSV with the
+  `deploy-agent` managed identity (`tools/secrets/fetch.py`; IMDS, no stored credential).
 - **Consumes:** `foundation-network` (`subnets["deploy-agents"]` incl. `delegation`, `spoke_vnet_id`),
   `foundation-identity` (`identities["deploy-agent"]`).
 - **Produces:** `foundation-deploy-agents` v1 ([schema](../../catalog/contracts/foundation-deploy-agents.v1.schema.json)).

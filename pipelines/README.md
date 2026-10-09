@@ -36,7 +36,7 @@ been deployed by them. See [What only a real Azure DevOps organisation can prove
 | Select | hosted (PR) / `deployPool` | none (PR) / plan identity | validates registry, scopes, environment config and promotion policy; `python3 -m tools.changeset select --scope <scope>`; publishes `selection.json`; tags the run `env-<env>`, `scope-<scope>` |
 | Validate | Microsoft-hosted | **none** | matrix over selected components of the scope (`tools/validate/component.py`), Helm lint (applications), tooling tests, pipeline lint, template-contract lint, ownership, provider pins, generated-file check |
 | Security | Microsoft-hosted | **none** | gitleaks, trivy fs, checkov (pinned, checksum-verified) |
-| Build (applications) | `deployPool` | build identity | per artifact: first environment of a chain resolves the image/package tagged with the source fingerprint or builds + pushes it **by digest** (provenance, SBOM); later environments **promote** the exact digest/sha256 the previous environment recorded (never rebuild). Helm charts: content-addressed `helm package` + OCI push |
+| Build (both scopes: platform builds `img-dsv-fetch`, applications the `svc-*` artifacts + Helm charts) | `deployPool` | build identity | per artifact of the pipeline's scope (an applications root that consumes a **platform** artifact reads its digest from the artifact's deployment record and waits while the platform pipeline still has to build it): first environment of a chain resolves the image/package tagged with the source fingerprint or builds + pushes it **by digest** (provenance, SBOM); later environments **promote** the exact digest/sha256 the previous environment recorded (never rebuild). Helm charts: content-addressed `helm package` + OCI push |
 | P_&lt;x&gt; | `deployPool` | plan identity | render config, materialize contracts, artifact digests, `terraform plan -detailed-exitcode`, plan policy, binding manifest, plan file to the protected `plans` container; publishes the summary |
 | C_&lt;x&gt; | `deployPool` | apply identity, environment `lab-<env>` | runs only when the plan has changes and the component is an apply candidate. Approvals are evaluated when this stage starts, i.e. **after** the plan summary exists. Verifies the binding (stale plan → fail), applies, deploys code + smoke (deployment roots), publishes the contract, writes the deployment record |
 | Retire | `deployPool` | apply identity, `lab-<env>-retire` | destroys approved retirements of the scope, consumers first |
@@ -175,11 +175,20 @@ the validation matrix).
 3. **Environments** `lab-<env>` (Approvals - required for test/prod, two approvers, requester cannot approve;
    **Exclusive lock**) and `lab-<env>-retire` (separate approvers + Exclusive lock). Exclusive lock +
    `lockBehavior: sequential` queue concurrent runs; every plan/apply stage also takes a stage-level lock.
-4. **Required template**: on every service connection, both environments per env, the `deployPool` agent pool
-   and the Datadog variable groups: *Approvals and checks → Required template → repository
+4. **Required template**: on every service connection, both environments per env and the `deployPool` agent
+   pool: *Approvals and checks → Required template → repository
    `enterprise-architecture`, ref `refs/heads/main`, path `pipelines/templates/universal.yml`*.
-5. **Variable groups** `lab-<env>-datadog` linked to the environment Key Vault (secrets `datadog-api-key`,
-   `datadog-app-key`); used only by the roots that need them and by Verify/Evidence, mapped through `env:`.
+5. **Secrets: Delinea DSV, no variable groups** (ADR-0001 section 14; lint SEC001/SEC002/SEC003, PL015). Steps that
+   need a secret run on the self-hosted deploy pool and resolve it with `tools/secrets/fetch.py` using the agents'
+   `deploy-agent` managed identity (IMDS): Terraform steps of components with registry `secret_env` run terraform
+   through `fetch.py exec` (`TF_SECRET_ENV`, `pipelines/scripts/tf-secrets.sh`) so values exist only in that process;
+   Verify/Evidence wrap the verifier / DORA marker the same way. PR builds never fetch. Identifiers in
+   `pipelines/variables/<env>.yml`: `dsvTenant`, `dsvTld`, `dsvAuthProvider` (= `environments/<env>/environment.yaml`
+   `secrets`, lint ENV004). DSV prerequisites (tenant, auth provider, the one admin mapping of `deploy-agent`, seeded
+   values): [bootstrap/README.md](../bootstrap/README.md#delinea-dsv-prerequisites-all-keys-and-secrets).
+   Secret hooks: `foundation-secrets` plan = `dsv_apply.py plan` diff in the plan summary (a DSV diff forces the apply
+   stage), apply = `dsv_apply.py apply` + `check.py`; `obs-telemetry-transport` apply runs `publish.py`
+   (`generated_secrets` → DSV); Verify starts with `check.py`.
 6. **Branch policies** (Azure Repos ignores YAML `pr:`): on `main` add *Build validation* for **both**
    pipelines (required, automatic). PR builds compile only Select/Validate/Security on hosted agents without
    credentials; each validates its own scope; a docs-only PR selects nothing.

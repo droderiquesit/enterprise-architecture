@@ -1,6 +1,7 @@
 using Hello.Common;
 using Hello.Common.Http;
 using Hello.Common.Logging;
+using Hello.Common.Secrets;
 using Hello.Common.Telemetry;
 using Hello.Durable;
 using Hello.Durable.Services;
@@ -17,6 +18,11 @@ using OpenTelemetry.Trace;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 builder.ConfigureFunctionsWebApplication();
+
+// ADR-0001 §14: dsv:// app settings are resolved from Delinea DSV in the isolated worker before any service reads
+// configuration. Settings the Functions *host* reads itself (AzureWebJobsStorage, ServiceBusConnection, ...) are
+// identity-based and never dsv:// — the host cannot resolve them.
+builder.Configuration.AddDsvSecrets();
 
 // Note: the worker's default ObjectSerializer is kept on purpose. Replacing WorkerOptions.Serializer (e.g. snake_case)
 // made orchestration inputs scheduled by DurableTaskClient deserialize as defaults inside the orchestrator (observed in

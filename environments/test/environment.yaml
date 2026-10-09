@@ -16,8 +16,15 @@ profile: minimal
 custom_components: []
 datadog:
   site: datadoghq.com
-  api_key_secret_name: datadog-api-key       # Key Vault secret names (values set out-of-band)
+  api_key_secret_name: datadog-api-key       # Delinea DSV secret names (values set out-of-band, ADR-0001 section 14)
   app_key_secret_name: datadog-app-key
+# Delinea DevOps Secrets Vault: every key/secret lives here; workloads read it directly with their managed identity.
+# Identifiers only (bootstrap/README.md "Delinea DSV prerequisites"). Replace the placeholder tenant before the first run.
+secrets:
+  provider: delinea-dsv
+  tenant: example-lab              # <tenant>.secretsvaultcloud.<tld>
+  tld: com
+  auth_provider: azure-eh          # DSV Azure auth provider (type azure, tenantId = environment.tenant_id)
 network:
   hub_address_space: 10.50.0.0/20
   spoke_address_space: 10.51.0.0/16

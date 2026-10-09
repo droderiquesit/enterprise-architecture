@@ -79,47 +79,62 @@ variable "platform_db_postgresql" {
 }
 
 variable "obs_telemetry_transport" {
-  description = "obs-telemetry-transport contract v1 (required)."
+  description = "obs-telemetry-transport contract v2 (required). Secrets are Delinea DSV references (dsv://...), never values."
   type = object({
-    datadog_site      = string
-    api_key_secret_id = string
+    datadog_site = string
+    api_key_ref  = string
+    secrets = object({
+      provider    = optional(string, "delinea-dsv")
+      tenant      = optional(string)
+      tld         = optional(string, "com")
+      base_url    = string
+      auth        = optional(string, "azure")
+      fetch_image = optional(string)
+      env_file    = optional(string, "/dsv-secrets/fluentbit-env.yaml")
+    })
     otlp = object({
       grpc_endpoint            = string
       http_endpoint            = string
-      headers_secret_id        = optional(string)
+      headers_ref              = optional(string)
       default_protocol         = optional(string, "http/protobuf")
       node_agent_grpc_port     = optional(number, 4317)
       node_agent_http_port     = optional(number, 4318)
       host_agent_grpc_endpoint = optional(string, "http://localhost:4317")
     })
     fluentbit = object({
-      forward_host                 = string
-      forward_port                 = number
-      sidecar_image                = optional(string, "fluent/fluent-bit:5.1.3")
-      sidecar_config               = optional(string)
-      sidecar_forward_config       = optional(string)
-      sidecar_parsers              = optional(string)
-      sidecar_lua                  = optional(string)
-      sidecar_mode                 = optional(string, "datadog")
-      logs_intake_host             = optional(string)
-      forward_shared_key_secret_id = optional(string)
+      forward_host           = string
+      forward_port           = number
+      sidecar_image          = optional(string, "fluent/fluent-bit:5.1.3")
+      sidecar_config         = optional(string)
+      sidecar_forward_config = optional(string)
+      sidecar_parsers        = optional(string)
+      sidecar_lua            = optional(string)
+      sidecar_mode           = optional(string, "datadog")
+      logs_intake_host       = optional(string)
+      forward_shared_key_ref = optional(string)
     })
     env = optional(map(map(string)), {})
   })
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract v1 (required)."
+  description = "foundation-identity contract v2 (required): identities + Delinea DSV secrets block (refs). No Key Vault."
   type = object({
-    key_vault_id  = string
-    key_vault_uri = string
     identities = map(object({
       id           = string
       principal_id = string
       client_id    = string
       name         = string
+      secrets      = optional(list(string), [])
     }))
-    secret_ids = map(string)
+    secrets = object({
+      provider  = optional(string, "delinea-dsv")
+      tenant    = optional(string)
+      tld       = optional(string, "com")
+      base_url  = optional(string)
+      base_path = string
+      refs      = optional(map(string), {})
+    })
   })
 }
 

@@ -149,13 +149,20 @@ variables {
     acr_login_server = "ehcrshareddevabcde.azurecr.io"
   }
   obs_telemetry_transport = {
-    datadog_site      = "datadoghq.com"
-    api_key_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
+    datadog_site = "datadoghq.com"
+    api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+    secrets = {
+      provider    = "delinea-dsv"
+      tenant      = "contoso"
+      tld         = "com"
+      base_url    = "https://contoso.secretsvaultcloud.com/v1"
+      fetch_image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    }
     otlp = {
-      grpc_endpoint     = "http://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:4317"
-      http_endpoint     = "https://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
-      headers_secret_id = null
-      default_protocol  = "http/protobuf"
+      grpc_endpoint    = "http://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:4317"
+      http_endpoint    = "https://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
+      headers_ref      = null
+      default_protocol = "http/protobuf"
     }
     fluentbit = {
       forward_host           = "eh-ca-flbagg.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
@@ -194,8 +201,6 @@ variables {
     }
   }
   foundation_identity = {
-    key_vault_id  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.KeyVault/vaults/eh-kv-ident-dev-abcde"
-    key_vault_uri = "https://eh-kv-ident-dev-abcde.vault.azure.net/"
     identities = {
       "hello-bff" = {
         id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-hello-bff"
@@ -306,11 +311,19 @@ variables {
         name         = "id-deploy-agent"
       }
     }
-    secret_ids = {
-      "datadog-api-key"      = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
-      "datadog-app-key"      = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-app-key"
-      "fault-token"          = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token"
-      "datadog-client-token" = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-client-token"
+    secrets = {
+      provider      = "delinea-dsv"
+      tenant        = "contoso"
+      tld           = "com"
+      base_url      = "https://contoso.secretsvaultcloud.com/v1"
+      base_path     = "eh/dev"
+      auth_provider = "azure-eh"
+      refs = {
+        "datadog-api-key"      = "dsv://eh/dev/datadog-api-key#value"
+        "datadog-app-key"      = "dsv://eh/dev/datadog-app-key#value"
+        "fault-token"          = "dsv://eh/dev/fault-token#value"
+        "datadog-client-token" = "dsv://eh/dev/datadog-client-token#value"
+      }
     }
   }
 }
@@ -328,8 +341,8 @@ run "inventory_windows_code" {
     error_message = "Zip runs from package; without platform-db-cosmos-nosql the inventory uses memory storage."
   }
   assert {
-    condition     = module.app["hello-inventory-api"].app_settings["FAULTS_ENABLED"] == "false" && module.app["hello-inventory-api"].app_settings["FAULT_TOKEN"] == "@Microsoft.KeyVault(SecretUri=https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token)"
-    error_message = "Faults off by default; FAULT_TOKEN as Key Vault reference."
+    condition     = module.app["hello-inventory-api"].app_settings["FAULTS_ENABLED"] == "false" && module.app["hello-inventory-api"].app_settings["FAULT_TOKEN"] == "dsv://eh/dev/fault-token#value" && module.app["hello-inventory-api"].app_settings["DSV_AUTH"] == "azure" && module.app["hello-inventory-api"].app_settings["DSV_BASE_URL"] == "https://contoso.secretsvaultcloud.com/v1" && module.app["hello-inventory-api"].app_settings["AZURE_CLIENT_ID"] != "" && !anytrue([for k, v in module.app["hello-inventory-api"].app_settings : startswith(v, "@Microsoft.KeyVault(")])
+    error_message = "Faults off by default; FAULT_TOKEN is a plain app setting holding the DSV reference (resolved by the app); DSV env present; no Key Vault references."
   }
   assert {
     condition     = !contains(keys(module.app["hello-inventory-api"].app_settings), "LOG_FILE_PATH") && module.env["hello-inventory-api"].log_route == "eventhub"

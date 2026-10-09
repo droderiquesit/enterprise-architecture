@@ -13,6 +13,10 @@
 | svc-logicapps | `services/logicapps` | Standard zip + `batch-request.definition.json` (Consumption) |
 | svc-frontend | `services/frontend` | static bundle zip (no `config.json`), image `hello-frontend` (nginx) |
 
+Secrets: any environment variable whose value is `dsv://<path>#<element>` is resolved from Delinea DSV at start-up by
+`hello_common.secrets.resolve_env()` (called first by every entrypoint: `python -m <pkg>`, worker, jobs CLI, traffic,
+Functions `bootstrap.configure()`); see `shared/python/hello_common/README.md` and ADR-0001 §14. No Key Vault.
+
 Every artifact directory also gets `manifest.json` (version, commit, build time, sha256 per file), `junit.xml`
 and, for images, `image.json`.
 

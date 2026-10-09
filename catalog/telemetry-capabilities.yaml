@@ -732,7 +732,7 @@ compute:
         method: OTel SDK -> OTLP/HTTP direct to Datadog serverless OTLP intake (dd-otlp-source=serverless) - no VNet integration on Consumption
         owner: applications deploy root
         duplicate_prevention: only exporter for this app
-        datadog_limitation: gRPC not supported by the serverless OTLP intake; API key must be a Key Vault reference
+        datadog_limitation: gRPC not supported by the serverless OTLP intake; API key must be a Delinea DSV reference resolved at start-up (dsv://...)
       app_metrics:
         supported: partial
         method: OTel SDK metrics -> Datadog OTLP metrics intake (public)

@@ -58,26 +58,27 @@ variable "settings" {
 variable "app_registration" {
   description = <<-EOT
     Existing Entra app registration (created outside azurerm, e.g. azuread or the portal).
-    auth = secret     -> client_secret is required (pass it from Key Vault with an ephemeral/data read; it is
-                         marked sensitive and never output).
-    auth = secretless -> Datadog workload-identity federation (federated credential configured on the app).
+    auth = secretless -> (default) Datadog workload-identity federation (federated credential on the app): no secret.
+    auth = secret     -> client_secret is required: the pipeline reads it from Delinea DSV just in time
+                         (tools/secrets/fetch.py -> TF_VAR_*, masked) - never stored in tfvars or the repo. The
+                         provider has no write-only argument, so it is persisted (encrypted) in state.
     service_principal_object_id enables the per-subscription "Monitoring Reader" role assignments.
   EOT
   type = object({
     client_id                   = string
-    auth                        = optional(string, "secret")
+    auth                        = optional(string, "secretless")
     service_principal_object_id = optional(string)
     assign_monitoring_reader    = optional(bool, true)
   })
   default = null
   validation {
-    condition     = var.app_registration == null || contains(["secret", "secretless"], try(var.app_registration.auth, "secret"))
+    condition     = var.app_registration == null || contains(["secret", "secretless"], try(var.app_registration.auth, "secretless"))
     error_message = "app_registration.auth must be secret or secretless."
   }
 }
 
 variable "client_secret" {
-  description = "Client secret of the app registration (auth = secret). Source it from Key Vault in the caller."
+  description = "Client secret of the app registration (auth = secret only). Supplied by the pipeline from Delinea DSV at run time (TF_VAR_*); lands in state as datadog_integration_azure.client_secret (no write-only form)."
   type        = string
   default     = null
   sensitive   = true

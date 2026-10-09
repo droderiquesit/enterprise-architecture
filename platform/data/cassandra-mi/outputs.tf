@@ -1,5 +1,5 @@
 output "contract" {
-  description = "platform-db-cassandra-mi v1 (catalog/contracts/platform-db-cassandra-mi.v1.schema.json). No secrets."
+  description = "platform-db-cassandra-mi v1 (catalog/contracts/platform-db-cassandra-mi.v1.schema.json). No secrets (dsv:// references only)."
   value = {
     enabled             = local.enabled
     resource_group_name = try(azurerm_resource_group.this[0].name, null)
@@ -15,7 +15,7 @@ output "contract" {
       sku_name                      = var.settings.sku_name
       public_network_access_enabled = false
       admin_login                   = "cassandra"
-      admin_password_secret_id      = azurerm_key_vault_secret.admin[0].versionless_id
+      admin_password_secret_id      = lookup(var.foundation_identity.secrets.refs, var.settings.admin_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.admin_secret_name}#value")
     } : null
     auth_mode = "cassandra-native"
     databases = local.enabled ? {
@@ -24,7 +24,7 @@ output "contract" {
         boundary            = "keyspace adapter"
         owner_identity_name = "hello-dbadapter"
         login               = "dbadapter"
-        password_secret_id  = "${trimsuffix(var.foundation_identity.key_vault_uri, "/")}/secrets/cassandra-mi-dbadapter-password"
+        password_secret_id  = lookup(var.foundation_identity.secrets.refs, "cassandra-mi-dbadapter-password", "dsv://${var.foundation_identity.secrets.base_path}/${"cassandra-mi-dbadapter-password"}#value")
         bootstrap_script    = "platform/data/cassandra-mi/scripts/create-keyspace.cql"
       }
     } : {}

@@ -66,6 +66,9 @@ def validate_artifact(repo: Path, comp) -> int:
         if (path / "tests").is_dir():
             rc |= run([sys.executable, "-m", "pytest", "-q", str(path / "tests")], cwd=repo)
         return rc
+    if (path / "tests").is_dir() and list(path.glob("*.py")):
+        # stdlib-only Python helpers (e.g. observability/images/dsv-fetch): unit tests only
+        return run([sys.executable, "-m", "pytest", "-q", str(path / "tests")], cwd=repo)
     print(f"{comp.id}: no recognised toolchain; structure only")
     return 0
 

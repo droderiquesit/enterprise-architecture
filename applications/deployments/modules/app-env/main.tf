@@ -1,11 +1,12 @@
 # Application environment composer used by every deployment root:
 #   instrumentation contract (observability/modules/instrumentation, a pure function module) +
 #   identity (AZURE_CLIENT_ID) + fault-injection wiring + service-specific env.
-# Secret VALUES never pass through here: secrets are Key Vault versionless ids rendered per platform as
-#   - Container Apps: secret { key_vault_secret_id, identity } + env secret_name
-#   - App Service / Functions / Logic Apps: "@Microsoft.KeyVault(SecretUri=...)" app setting
-#   - AKS: Secrets Store CSI driver SecretProviderClass -> synced Kubernetes Secret (secretKeyRef)
-#   - ACI / VM: resolved by the caller (documented per root).
+# Secret VALUES never pass through here (ADR-0001 section 14): every secret setting is an ordinary env var / app
+# setting whose VALUE is a Delinea DSV reference (dsv://<path>#<element>). The application resolves it at start-up
+# (hello_common / Hello.Common) with its user-assigned managed identity, using the DSV runtime env published here
+# (DSV_TENANT, DSV_TLD, DSV_BASE_URL, DSV_AUTH, AZURE_CLIENT_ID). The same map works on every platform:
+#   Container Apps / ACI env, App Service / Functions / Logic Apps app settings, Kubernetes env (Helm values), VM env.
+# Third-party sidecars (Fluent Bit) get their keys through the dsv-fetch helper (instrumentation patch).
 module "instrumentation" {
   source = "../../../../observability/modules/instrumentation"
 
@@ -25,7 +26,7 @@ module "instrumentation" {
   telemetry                 = var.telemetry
   otlp_protocol             = var.otlp_protocol
   trace_sample_ratio        = var.trace_sample_ratio
-  key_vault_identity_id     = var.key_vault_identity_id
+  identity_client_id        = var.identity_client_id
   extra_resource_attributes = var.extra_resource_attributes
   log_file_path             = "/var/log/app/app.log"
 }
@@ -47,19 +48,15 @@ locals {
       AZURE_CREDENTIAL_MODE = var.architecture == "aks" ? "workload_identity" : "managed_identity"
     } : {},
   )
-  env = merge(local.base, module.instrumentation.env)
-
+  # secret settings: NAME -> dsv:// reference (values are references, resolved by the app)
   secret_env = merge(
     var.secret_env,
-    var.faults.token_secret_id == null ? {} : { FAULT_TOKEN = var.faults.token_secret_id },
+    var.faults.token_ref == null ? {} : { FAULT_TOKEN = var.faults.token_ref },
     module.instrumentation.secret_env,
   )
 
-  # Container Apps secret names: lowercase alphanumerics and '-'.
-  secret_names = { for k in keys(local.secret_env) : k => lower(replace(k, "_", "-")) }
+  env = merge(local.base, local.secret_env, module.instrumentation.env)
 
-  app_settings = merge(
-    local.env,
-    { for k, id in local.secret_env : k => "@Microsoft.KeyVault(SecretUri=${id})" },
-  )
+  # App Service / Functions / Logic Apps Standard: identical map (no @Microsoft.KeyVault references)
+  app_settings = local.env
 }

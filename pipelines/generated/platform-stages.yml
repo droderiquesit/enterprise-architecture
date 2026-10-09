@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: platform pipeline.
-# Source: catalog/components.yaml (sha256 prefix e5be3fc51e806f01)
+# Source: catalog/components.yaml (sha256 prefix 20078edd5cecfe4f)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -12,6 +12,28 @@ parameters:
   - name: settings
     type: object
 stages:
+  - stage: Build
+    displayName: Artifacts (build once per source fingerprint / promote)
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.any_build'], 'true'))
+    pool: &id001
+      name: ${{ parameters.settings.deployPool }}
+    jobs:
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: img-dsv-fetch
+          jobName: B_img_dsv_fetch
+          componentPath: observability/images/dsv-fetch
+          artifactName: dsv-fetch
+          formats:
+            - container-image
+          language: generic
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
   - stage: P_foundation_governance
     displayName: plan foundation-governance
     dependsOn:
@@ -20,8 +42,7 @@ stages:
       - Security
     lockBehavior: sequential
     condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_foundation_governance'], 'true'))
-    pool: &id001
-      name: ${{ parameters.settings.deployPool }}
+    pool: *id001
     jobs:
       - template: ../templates/terraform-plan.yml
         parameters:
@@ -30,7 +51,7 @@ stages:
           artifacts: &id002 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_foundation_governance
     displayName: apply foundation-governance
@@ -48,7 +69,45 @@ stages:
           artifacts: *id002
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_foundation_identity
+    displayName: plan foundation-identity
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: foundation-identity
+          componentPath: foundation/identity
+          artifacts: &id003 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: false
+          settings: ${{ parameters.settings }}
+  - stage: C_foundation_identity
+    displayName: apply foundation-identity
+    dependsOn:
+      - Select
+      - P_foundation_identity
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_foundation_identity.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_foundation_identity'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: foundation-identity
+          componentPath: foundation/identity
+          artifacts: *id003
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_foundation_network
@@ -65,10 +124,10 @@ stages:
         parameters:
           component: foundation-network
           componentPath: foundation/network
-          artifacts: &id003 []
+          artifacts: &id004 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_foundation_network
     displayName: apply foundation-network
@@ -83,10 +142,10 @@ stages:
         parameters:
           component: foundation-network
           componentPath: foundation/network
-          artifacts: *id003
+          artifacts: *id004
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_azure_integration
@@ -103,10 +162,10 @@ stages:
         parameters:
           component: obs-azure-integration
           componentPath: observability/lab/azure-integration
-          artifacts: &id004 []
+          artifacts: &id005 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: provider
+          secretEnv: true
           settings: ${{ parameters.settings }}
   - stage: C_obs_azure_integration
     displayName: apply obs-azure-integration
@@ -121,10 +180,10 @@ stages:
         parameters:
           component: obs-azure-integration
           componentPath: observability/lab/azure-integration
-          artifacts: *id004
+          artifacts: *id005
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: provider
+          secretEnv: true
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_prereqs
@@ -141,10 +200,10 @@ stages:
         parameters:
           component: obs-prereqs
           componentPath: observability/lab/prereqs
-          artifacts: &id005 []
+          artifacts: &id006 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: provider
+          secretEnv: true
           settings: ${{ parameters.settings }}
   - stage: C_obs_prereqs
     displayName: apply obs-prereqs
@@ -159,50 +218,10 @@ stages:
         parameters:
           component: obs-prereqs
           componentPath: observability/lab/prereqs
-          artifacts: *id005
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: provider
-          settings: ${{ parameters.settings }}
-          dryRun: ${{ parameters.dryRun }}
-  - stage: P_foundation_identity
-    displayName: plan foundation-identity
-    dependsOn:
-      - Select
-      - Validate
-      - Security
-      - P_foundation_network
-      - C_foundation_network
-    lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-plan.yml
-        parameters:
-          component: foundation-identity
-          componentPath: foundation/identity
-          artifacts: &id006 []
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-  - stage: C_foundation_identity
-    displayName: apply foundation-identity
-    dependsOn:
-      - Select
-      - P_foundation_identity
-    lockBehavior: sequential
-    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_foundation_identity.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_foundation_identity'], 'true'))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-apply.yml
-        parameters:
-          component: foundation-identity
-          componentPath: foundation/identity
           artifacts: *id006
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: true
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_foundation_deploy_agents
@@ -226,7 +245,7 @@ stages:
           artifacts: &id007 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_foundation_deploy_agents
     displayName: apply foundation-deploy-agents
@@ -244,49 +263,47 @@ stages:
           artifacts: *id007
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
-  - stage: P_foundation_edge
-    displayName: plan foundation-edge
+  - stage: P_foundation_secrets
+    displayName: plan foundation-secrets
     dependsOn:
       - Select
       - Validate
       - Security
       - P_foundation_identity
       - C_foundation_identity
-      - P_foundation_network
-      - C_foundation_network
     lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_foundation_edge'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
       - template: ../templates/terraform-plan.yml
         parameters:
-          component: foundation-edge
-          componentPath: foundation/edge
+          component: foundation-secrets
+          componentPath: foundation/secrets
           artifacts: &id008 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
-  - stage: C_foundation_edge
-    displayName: apply foundation-edge
+  - stage: C_foundation_secrets
+    displayName: apply foundation-secrets
     dependsOn:
       - Select
-      - P_foundation_edge
+      - P_foundation_secrets
     lockBehavior: sequential
-    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_foundation_edge.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_foundation_edge.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_foundation_edge'], 'true'))
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_foundation_secrets.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_foundation_secrets'], 'true'))
     pool: *id001
     jobs:
       - template: ../templates/terraform-apply.yml
         parameters:
-          component: foundation-edge
-          componentPath: foundation/edge
+          component: foundation-secrets
+          componentPath: foundation/secrets
           artifacts: *id008
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_appservice
@@ -310,7 +327,7 @@ stages:
           artifacts: &id009 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_appservice
     displayName: apply platform-appservice
@@ -328,49 +345,7 @@ stages:
           artifacts: *id009
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-          dryRun: ${{ parameters.dryRun }}
-  - stage: P_platform_aro
-    displayName: plan platform-aro
-    dependsOn:
-      - Select
-      - Validate
-      - Security
-      - P_foundation_identity
-      - C_foundation_identity
-      - P_foundation_network
-      - C_foundation_network
-    lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_aro'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-plan.yml
-        parameters:
-          component: platform-aro
-          componentPath: platform/compute/aro
-          artifacts: &id010 []
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-  - stage: C_platform_aro
-    displayName: apply platform-aro
-    dependsOn:
-      - Select
-      - P_platform_aro
-    lockBehavior: sequential
-    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_platform_aro.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_platform_aro.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_platform_aro'], 'true'))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-apply.yml
-        parameters:
-          component: platform-aro
-          componentPath: platform/compute/aro
-          artifacts: *id010
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_data_analytics
@@ -391,10 +366,10 @@ stages:
         parameters:
           component: platform-data-analytics
           componentPath: platform/data/analytics
-          artifacts: &id011 []
+          artifacts: &id010 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_data_analytics
     displayName: apply platform-data-analytics
@@ -409,52 +384,10 @@ stages:
         parameters:
           component: platform-data-analytics
           componentPath: platform/data/analytics
-          artifacts: *id011
+          artifacts: *id010
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-          dryRun: ${{ parameters.dryRun }}
-  - stage: P_platform_db_cassandra_mi
-    displayName: plan platform-db-cassandra-mi
-    dependsOn:
-      - Select
-      - Validate
-      - Security
-      - P_foundation_identity
-      - C_foundation_identity
-      - P_foundation_network
-      - C_foundation_network
-    lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_db_cassandra_mi'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-plan.yml
-        parameters:
-          component: platform-db-cassandra-mi
-          componentPath: platform/data/cassandra-mi
-          artifacts: &id012 []
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-  - stage: C_platform_db_cassandra_mi
-    displayName: apply platform-db-cassandra-mi
-    dependsOn:
-      - Select
-      - P_platform_db_cassandra_mi
-    lockBehavior: sequential
-    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_platform_db_cassandra_mi.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_platform_db_cassandra_mi'], 'true'))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-apply.yml
-        parameters:
-          component: platform-db-cassandra-mi
-          componentPath: platform/data/cassandra-mi
-          artifacts: *id012
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_cosmos_cassandra
@@ -475,10 +408,10 @@ stages:
         parameters:
           component: platform-db-cosmos-cassandra
           componentPath: platform/data/cosmos-cassandra
-          artifacts: &id013 []
+          artifacts: &id011 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_cosmos_cassandra
     displayName: apply platform-db-cosmos-cassandra
@@ -493,10 +426,10 @@ stages:
         parameters:
           component: platform-db-cosmos-cassandra
           componentPath: platform/data/cosmos-cassandra
-          artifacts: *id013
+          artifacts: *id011
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_cosmos_gremlin
@@ -517,10 +450,10 @@ stages:
         parameters:
           component: platform-db-cosmos-gremlin
           componentPath: platform/data/cosmos-gremlin
-          artifacts: &id014 []
+          artifacts: &id012 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_cosmos_gremlin
     displayName: apply platform-db-cosmos-gremlin
@@ -535,10 +468,10 @@ stages:
         parameters:
           component: platform-db-cosmos-gremlin
           componentPath: platform/data/cosmos-gremlin
-          artifacts: *id014
+          artifacts: *id012
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_cosmos_mongo
@@ -559,10 +492,10 @@ stages:
         parameters:
           component: platform-db-cosmos-mongo
           componentPath: platform/data/cosmos-mongo
-          artifacts: &id015 []
+          artifacts: &id013 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_cosmos_mongo
     displayName: apply platform-db-cosmos-mongo
@@ -577,10 +510,10 @@ stages:
         parameters:
           component: platform-db-cosmos-mongo
           componentPath: platform/data/cosmos-mongo
-          artifacts: *id015
+          artifacts: *id013
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_cosmos_nosql
@@ -601,10 +534,10 @@ stages:
         parameters:
           component: platform-db-cosmos-nosql
           componentPath: platform/data/cosmos-nosql
-          artifacts: &id016 []
+          artifacts: &id014 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_cosmos_nosql
     displayName: apply platform-db-cosmos-nosql
@@ -619,10 +552,10 @@ stages:
         parameters:
           component: platform-db-cosmos-nosql
           componentPath: platform/data/cosmos-nosql
-          artifacts: *id016
+          artifacts: *id014
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_cosmos_table
@@ -643,10 +576,10 @@ stages:
         parameters:
           component: platform-db-cosmos-table
           componentPath: platform/data/cosmos-table
-          artifacts: &id017 []
+          artifacts: &id015 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_cosmos_table
     displayName: apply platform-db-cosmos-table
@@ -661,52 +594,10 @@ stages:
         parameters:
           component: platform-db-cosmos-table
           componentPath: platform/data/cosmos-table
-          artifacts: *id017
+          artifacts: *id015
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-          dryRun: ${{ parameters.dryRun }}
-  - stage: P_platform_db_documentdb
-    displayName: plan platform-db-documentdb
-    dependsOn:
-      - Select
-      - Validate
-      - Security
-      - P_foundation_identity
-      - C_foundation_identity
-      - P_foundation_network
-      - C_foundation_network
-    lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_db_documentdb'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-plan.yml
-        parameters:
-          component: platform-db-documentdb
-          componentPath: platform/data/documentdb
-          artifacts: &id018 []
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-  - stage: C_platform_db_documentdb
-    displayName: apply platform-db-documentdb
-    dependsOn:
-      - Select
-      - P_platform_db_documentdb
-    lockBehavior: sequential
-    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_platform_db_documentdb.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_platform_db_documentdb'], 'true'))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-apply.yml
-        parameters:
-          component: platform-db-documentdb
-          componentPath: platform/data/documentdb
-          artifacts: *id018
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_horizondb
@@ -727,10 +618,10 @@ stages:
         parameters:
           component: platform-db-horizondb
           componentPath: platform/data/horizondb
-          artifacts: &id019 []
+          artifacts: &id016 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_horizondb
     displayName: apply platform-db-horizondb
@@ -745,10 +636,10 @@ stages:
         parameters:
           component: platform-db-horizondb
           componentPath: platform/data/horizondb
-          artifacts: *id019
+          artifacts: *id016
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_ledger
@@ -769,10 +660,10 @@ stages:
         parameters:
           component: platform-db-ledger
           componentPath: platform/data/ledger
-          artifacts: &id020 []
+          artifacts: &id017 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_ledger
     displayName: apply platform-db-ledger
@@ -787,10 +678,10 @@ stages:
         parameters:
           component: platform-db-ledger
           componentPath: platform/data/ledger
-          artifacts: *id020
+          artifacts: *id017
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_mysql
@@ -811,10 +702,10 @@ stages:
         parameters:
           component: platform-db-mysql
           componentPath: platform/data/mysql
-          artifacts: &id021 []
+          artifacts: &id018 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: true
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_mysql
     displayName: apply platform-db-mysql
@@ -829,10 +720,10 @@ stages:
         parameters:
           component: platform-db-mysql
           componentPath: platform/data/mysql
-          artifacts: *id021
+          artifacts: *id018
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: true
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_postgresql
@@ -853,10 +744,10 @@ stages:
         parameters:
           component: platform-db-postgresql
           componentPath: platform/data/postgresql
-          artifacts: &id022 []
+          artifacts: &id019 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_postgresql
     displayName: apply platform-db-postgresql
@@ -871,10 +762,10 @@ stages:
         parameters:
           component: platform-db-postgresql
           componentPath: platform/data/postgresql
-          artifacts: *id022
+          artifacts: *id019
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_redis
@@ -895,10 +786,10 @@ stages:
         parameters:
           component: platform-db-redis
           componentPath: platform/data/redis
-          artifacts: &id023 []
+          artifacts: &id020 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_redis
     displayName: apply platform-db-redis
@@ -913,10 +804,10 @@ stages:
         parameters:
           component: platform-db-redis
           componentPath: platform/data/redis
-          artifacts: *id023
+          artifacts: *id020
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_sql
@@ -937,10 +828,10 @@ stages:
         parameters:
           component: platform-db-sql
           componentPath: platform/data/sql
-          artifacts: &id024 []
+          artifacts: &id021 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_sql
     displayName: apply platform-db-sql
@@ -955,10 +846,10 @@ stages:
         parameters:
           component: platform-db-sql
           componentPath: platform/data/sql
-          artifacts: *id024
+          artifacts: *id021
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_sqlmi
@@ -979,10 +870,10 @@ stages:
         parameters:
           component: platform-db-sqlmi
           componentPath: platform/data/sqlmi
-          artifacts: &id025 []
+          artifacts: &id022 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_sqlmi
     displayName: apply platform-db-sqlmi
@@ -997,52 +888,10 @@ stages:
         parameters:
           component: platform-db-sqlmi
           componentPath: platform/data/sqlmi
-          artifacts: *id025
+          artifacts: *id022
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-          dryRun: ${{ parameters.dryRun }}
-  - stage: P_platform_db_sqlvm
-    displayName: plan platform-db-sqlvm
-    dependsOn:
-      - Select
-      - Validate
-      - Security
-      - P_foundation_identity
-      - C_foundation_identity
-      - P_foundation_network
-      - C_foundation_network
-    lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_db_sqlvm'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-plan.yml
-        parameters:
-          component: platform-db-sqlvm
-          componentPath: platform/data/sqlvm
-          artifacts: &id026 []
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
-          settings: ${{ parameters.settings }}
-  - stage: C_platform_db_sqlvm
-    displayName: apply platform-db-sqlvm
-    dependsOn:
-      - Select
-      - P_platform_db_sqlvm
-    lockBehavior: sequential
-    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_platform_db_sqlvm.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_platform_db_sqlvm'], 'true'))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-apply.yml
-        parameters:
-          component: platform-db-sqlvm
-          componentPath: platform/data/sqlvm
-          artifacts: *id026
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_db_table_storage
@@ -1063,10 +912,10 @@ stages:
         parameters:
           component: platform-db-table-storage
           componentPath: platform/data/table-storage
-          artifacts: &id027 []
+          artifacts: &id023 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_db_table_storage
     displayName: apply platform-db-table-storage
@@ -1081,10 +930,10 @@ stages:
         parameters:
           component: platform-db-table-storage
           componentPath: platform/data/table-storage
-          artifacts: *id027
+          artifacts: *id023
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_functions
@@ -1105,10 +954,10 @@ stages:
         parameters:
           component: platform-functions
           componentPath: platform/compute/functions
-          artifacts: &id028 []
+          artifacts: &id024 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_functions
     displayName: apply platform-functions
@@ -1123,10 +972,10 @@ stages:
         parameters:
           component: platform-functions
           componentPath: platform/compute/functions
-          artifacts: *id028
+          artifacts: *id024
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_messaging
@@ -1147,10 +996,10 @@ stages:
         parameters:
           component: platform-messaging
           componentPath: platform/messaging
-          artifacts: &id029 []
+          artifacts: &id025 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_messaging
     displayName: apply platform-messaging
@@ -1165,10 +1014,10 @@ stages:
         parameters:
           component: platform-messaging
           componentPath: platform/messaging
-          artifacts: *id029
+          artifacts: *id025
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_servicefabric
@@ -1189,10 +1038,10 @@ stages:
         parameters:
           component: platform-servicefabric
           componentPath: platform/compute/servicefabric
-          artifacts: &id030 []
+          artifacts: &id026 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_servicefabric
     displayName: apply platform-servicefabric
@@ -1207,10 +1056,10 @@ stages:
         parameters:
           component: platform-servicefabric
           componentPath: platform/compute/servicefabric
-          artifacts: *id030
+          artifacts: *id026
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_shared
@@ -1231,10 +1080,10 @@ stages:
         parameters:
           component: platform-shared
           componentPath: platform/shared
-          artifacts: &id031 []
+          artifacts: &id027 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_shared
     displayName: apply platform-shared
@@ -1249,10 +1098,10 @@ stages:
         parameters:
           component: platform-shared
           componentPath: platform/shared
-          artifacts: *id031
+          artifacts: *id027
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_specialized_compute
@@ -1273,10 +1122,10 @@ stages:
         parameters:
           component: platform-specialized-compute
           componentPath: platform/compute/specialized
-          artifacts: &id032 []
+          artifacts: &id028 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_specialized_compute
     displayName: apply platform-specialized-compute
@@ -1291,10 +1140,10 @@ stages:
         parameters:
           component: platform-specialized-compute
           componentPath: platform/compute/specialized
-          artifacts: *id032
+          artifacts: *id028
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_vm
@@ -1315,10 +1164,10 @@ stages:
         parameters:
           component: platform-vm
           componentPath: platform/compute/vm
-          artifacts: &id033 []
+          artifacts: &id029 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_vm
     displayName: apply platform-vm
@@ -1333,10 +1182,10 @@ stages:
         parameters:
           component: platform-vm
           componentPath: platform/compute/vm
-          artifacts: *id033
+          artifacts: *id029
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_vmss
@@ -1357,10 +1206,10 @@ stages:
         parameters:
           component: platform-vmss
           componentPath: platform/compute/vmss
-          artifacts: &id034 []
+          artifacts: &id030 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_vmss
     displayName: apply platform-vmss
@@ -1375,10 +1224,52 @@ stages:
         parameters:
           component: platform-vmss
           componentPath: platform/compute/vmss
-          artifacts: *id034
+          artifacts: *id030
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_foundation_edge
+    displayName: plan foundation-edge
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - P_foundation_network
+      - C_foundation_network
+      - P_foundation_secrets
+      - C_foundation_secrets
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_foundation_edge'], 'true'), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_secrets.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'))), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: foundation-edge
+          componentPath: foundation/edge
+          artifacts: &id031 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
+          settings: ${{ parameters.settings }}
+  - stage: C_foundation_edge
+    displayName: apply foundation-edge
+    dependsOn:
+      - Select
+      - P_foundation_edge
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_foundation_edge.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_foundation_edge.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_foundation_edge'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: foundation-edge
+          componentPath: foundation/edge
+          artifacts: *id031
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_aks
@@ -1401,10 +1292,10 @@ stages:
         parameters:
           component: platform-aks
           componentPath: platform/compute/aks
-          artifacts: &id035 []
+          artifacts: &id032 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_aks
     displayName: apply platform-aks
@@ -1419,10 +1310,52 @@ stages:
         parameters:
           component: platform-aks
           componentPath: platform/compute/aks
-          artifacts: *id035
+          artifacts: *id032
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_platform_aro
+    displayName: plan platform-aro
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - P_foundation_network
+      - C_foundation_network
+      - P_foundation_secrets
+      - C_foundation_secrets
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_aro'], 'true'), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_secrets.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'))), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: platform-aro
+          componentPath: platform/compute/aro
+          artifacts: &id033 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
+          settings: ${{ parameters.settings }}
+  - stage: C_platform_aro
+    displayName: apply platform-aro
+    dependsOn:
+      - Select
+      - P_platform_aro
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_platform_aro.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_platform_aro.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_platform_aro'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: platform-aro
+          componentPath: platform/compute/aro
+          artifacts: *id033
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_batch
@@ -1445,10 +1378,10 @@ stages:
         parameters:
           component: platform-batch
           componentPath: platform/compute/batch
-          artifacts: &id036 []
+          artifacts: &id034 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_batch
     displayName: apply platform-batch
@@ -1463,10 +1396,10 @@ stages:
         parameters:
           component: platform-batch
           componentPath: platform/compute/batch
-          artifacts: *id036
+          artifacts: *id034
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_platform_containerapps
@@ -1489,10 +1422,10 @@ stages:
         parameters:
           component: platform-containerapps
           componentPath: platform/compute/containerapps
-          artifacts: &id037 []
+          artifacts: &id035 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_platform_containerapps
     displayName: apply platform-containerapps
@@ -1507,14 +1440,14 @@ stages:
         parameters:
           component: platform-containerapps
           componentPath: platform/compute/containerapps
-          artifacts: *id037
+          artifacts: *id035
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
-  - stage: P_obs_telemetry_transport
-    displayName: plan obs-telemetry-transport
+  - stage: P_platform_db_cassandra_mi
+    displayName: plan platform-db-cassandra-mi
     dependsOn:
       - Select
       - Validate
@@ -1523,26 +1456,163 @@ stages:
       - C_foundation_identity
       - P_foundation_network
       - C_foundation_network
+      - P_foundation_secrets
+      - C_foundation_secrets
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_db_cassandra_mi'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_secrets.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'))), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: platform-db-cassandra-mi
+          componentPath: platform/data/cassandra-mi
+          artifacts: &id036 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
+          settings: ${{ parameters.settings }}
+  - stage: C_platform_db_cassandra_mi
+    displayName: apply platform-db-cassandra-mi
+    dependsOn:
+      - Select
+      - P_platform_db_cassandra_mi
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_platform_db_cassandra_mi.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_platform_db_cassandra_mi'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: platform-db-cassandra-mi
+          componentPath: platform/data/cassandra-mi
+          artifacts: *id036
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_platform_db_documentdb
+    displayName: plan platform-db-documentdb
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - P_foundation_identity
+      - C_foundation_identity
+      - P_foundation_network
+      - C_foundation_network
+      - P_foundation_secrets
+      - C_foundation_secrets
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_db_documentdb'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_secrets.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'))), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: platform-db-documentdb
+          componentPath: platform/data/documentdb
+          artifacts: &id037 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
+          settings: ${{ parameters.settings }}
+  - stage: C_platform_db_documentdb
+    displayName: apply platform-db-documentdb
+    dependsOn:
+      - Select
+      - P_platform_db_documentdb
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_platform_db_documentdb.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_platform_db_documentdb'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: platform-db-documentdb
+          componentPath: platform/data/documentdb
+          artifacts: *id037
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_platform_db_sqlvm
+    displayName: plan platform-db-sqlvm
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - P_foundation_identity
+      - C_foundation_identity
+      - P_foundation_network
+      - C_foundation_network
+      - P_foundation_secrets
+      - C_foundation_secrets
+    lockBehavior: sequential
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_db_sqlvm'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_secrets.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'))), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: platform-db-sqlvm
+          componentPath: platform/data/sqlvm
+          artifacts: &id038 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
+          settings: ${{ parameters.settings }}
+  - stage: C_platform_db_sqlvm
+    displayName: apply platform-db-sqlvm
+    dependsOn:
+      - Select
+      - P_platform_db_sqlvm
+    lockBehavior: sequential
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_platform_db_sqlvm.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_platform_db_sqlvm'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: platform-db-sqlvm
+          componentPath: platform/data/sqlvm
+          artifacts: *id038
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: true
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
+  - stage: P_obs_telemetry_transport
+    displayName: plan obs-telemetry-transport
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+      - P_foundation_identity
+      - C_foundation_identity
+      - P_foundation_network
+      - C_foundation_network
+      - P_foundation_secrets
+      - C_foundation_secrets
       - P_platform_containerapps
       - C_platform_containerapps
     lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_containerapps.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_containerapps'], 'true'))), in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'), eq(dependencies.Build.outputs['B_img_dsv_fetch.ready.ready'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_secrets.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'))), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_containerapps.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_containerapps'], 'true'))), in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
       - template: ../templates/terraform-plan.yml
         parameters:
           component: obs-telemetry-transport
           componentPath: observability/lab/telemetry-transport
-          artifacts: &id038 []
+          artifacts: &id039
+            - img-dsv-fetch
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_obs_telemetry_transport
     displayName: apply obs-telemetry-transport
     dependsOn:
       - Select
       - P_obs_telemetry_transport
+      - Build
     lockBehavior: sequential
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_telemetry_transport.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_telemetry_transport'], 'true'))
     pool: *id001
@@ -1551,10 +1621,10 @@ stages:
         parameters:
           component: obs-telemetry-transport
           componentPath: observability/lab/telemetry-transport
-          artifacts: *id038
+          artifacts: *id039
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_dbm
@@ -1563,6 +1633,7 @@ stages:
       - Select
       - Validate
       - Security
+      - Build
       - P_foundation_network
       - C_foundation_network
       - P_obs_telemetry_transport
@@ -1578,23 +1649,25 @@ stages:
       - P_platform_db_sqlvm
       - C_platform_db_sqlvm
     lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_dbm'], 'true'), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_mysql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_mysql'], 'true'))), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_postgresql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_postgresql'], 'true'))), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sql'], 'true'))), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sqlmi.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlmi'], 'true'))), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sqlvm.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlvm'], 'true'))), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_dbm'], 'true'), eq(dependencies.Build.outputs['B_img_dsv_fetch.ready.ready'], 'true'), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_mysql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_mysql'], 'true'))), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_postgresql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_postgresql'], 'true'))), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sql.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sql'], 'true'))), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sqlmi.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlmi'], 'true'))), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_db_sqlvm.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_db_sqlvm'], 'true'))), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
       - template: ../templates/terraform-plan.yml
         parameters:
           component: obs-dbm
           componentPath: observability/lab/dbm
-          artifacts: &id039 []
+          artifacts: &id040
+            - img-dsv-fetch
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_obs_dbm
     displayName: apply obs-dbm
     dependsOn:
       - Select
       - P_obs_dbm
+      - Build
     lockBehavior: sequential
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_dbm.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_dbm.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_dbm'], 'true'))
     pool: *id001
@@ -1603,10 +1676,10 @@ stages:
         parameters:
           component: obs-dbm
           componentPath: observability/lab/dbm
-          artifacts: *id039
+          artifacts: *id040
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_kubernetes
@@ -1615,28 +1688,31 @@ stages:
       - Select
       - Validate
       - Security
+      - Build
       - P_obs_telemetry_transport
       - C_obs_telemetry_transport
       - P_platform_aks
       - C_platform_aks
     lockBehavior: sequential
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_kubernetes'], 'true'), and(or(in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_aks'], 'true'))), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_kubernetes'], 'true'), eq(dependencies.Build.outputs['B_img_dsv_fetch.ready.ready'], 'true'), and(or(in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_obs_telemetry_transport.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_obs_telemetry_transport'], 'true'))), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_platform_aks.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_platform_aks.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_platform_aks'], 'true'))), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
       - template: ../templates/terraform-plan.yml
         parameters:
           component: obs-kubernetes
           componentPath: observability/lab/kubernetes
-          artifacts: &id040 []
+          artifacts: &id041
+            - img-dsv-fetch
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: tfvar
+          secretEnv: true
           settings: ${{ parameters.settings }}
   - stage: C_obs_kubernetes
     displayName: apply obs-kubernetes
     dependsOn:
       - Select
       - P_obs_kubernetes
+      - Build
     lockBehavior: sequential
     condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_kubernetes.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_kubernetes'], 'true'))
     pool: *id001
@@ -1645,10 +1721,10 @@ stages:
         parameters:
           component: obs-kubernetes
           componentPath: observability/lab/kubernetes
-          artifacts: *id040
+          artifacts: *id041
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: tfvar
+          secretEnv: true
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - template: ../templates/retire.yml
@@ -1656,22 +1732,19 @@ stages:
       dependsOn:
         - Select
         - P_foundation_governance
+        - P_foundation_identity
         - P_foundation_network
         - P_obs_azure_integration
         - P_obs_prereqs
-        - P_foundation_identity
         - P_foundation_deploy_agents
-        - P_foundation_edge
+        - P_foundation_secrets
         - P_platform_appservice
-        - P_platform_aro
         - P_platform_data_analytics
-        - P_platform_db_cassandra_mi
         - P_platform_db_cosmos_cassandra
         - P_platform_db_cosmos_gremlin
         - P_platform_db_cosmos_mongo
         - P_platform_db_cosmos_nosql
         - P_platform_db_cosmos_table
-        - P_platform_db_documentdb
         - P_platform_db_horizondb
         - P_platform_db_ledger
         - P_platform_db_mysql
@@ -1679,7 +1752,6 @@ stages:
         - P_platform_db_redis
         - P_platform_db_sql
         - P_platform_db_sqlmi
-        - P_platform_db_sqlvm
         - P_platform_db_table_storage
         - P_platform_functions
         - P_platform_messaging
@@ -1688,29 +1760,31 @@ stages:
         - P_platform_specialized_compute
         - P_platform_vm
         - P_platform_vmss
+        - P_foundation_edge
         - P_platform_aks
+        - P_platform_aro
         - P_platform_batch
         - P_platform_containerapps
+        - P_platform_db_cassandra_mi
+        - P_platform_db_documentdb
+        - P_platform_db_sqlvm
         - P_obs_telemetry_transport
         - P_obs_dbm
         - P_obs_kubernetes
         - C_foundation_governance
+        - C_foundation_identity
         - C_foundation_network
         - C_obs_azure_integration
         - C_obs_prereqs
-        - C_foundation_identity
         - C_foundation_deploy_agents
-        - C_foundation_edge
+        - C_foundation_secrets
         - C_platform_appservice
-        - C_platform_aro
         - C_platform_data_analytics
-        - C_platform_db_cassandra_mi
         - C_platform_db_cosmos_cassandra
         - C_platform_db_cosmos_gremlin
         - C_platform_db_cosmos_mongo
         - C_platform_db_cosmos_nosql
         - C_platform_db_cosmos_table
-        - C_platform_db_documentdb
         - C_platform_db_horizondb
         - C_platform_db_ledger
         - C_platform_db_mysql
@@ -1718,7 +1792,6 @@ stages:
         - C_platform_db_redis
         - C_platform_db_sql
         - C_platform_db_sqlmi
-        - C_platform_db_sqlvm
         - C_platform_db_table_storage
         - C_platform_functions
         - C_platform_messaging
@@ -1727,13 +1800,18 @@ stages:
         - C_platform_specialized_compute
         - C_platform_vm
         - C_platform_vmss
+        - C_foundation_edge
         - C_platform_aks
+        - C_platform_aro
         - C_platform_batch
         - C_platform_containerapps
+        - C_platform_db_cassandra_mi
+        - C_platform_db_documentdb
+        - C_platform_db_sqlvm
         - C_obs_telemetry_transport
         - C_obs_dbm
         - C_obs_kubernetes
-      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.P_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.P_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
       environment: ${{ parameters.environment }}
       dryRun: ${{ parameters.dryRun }}
       settings: ${{ parameters.settings }}
@@ -1742,22 +1820,19 @@ stages:
     dependsOn:
       - Select
       - P_foundation_governance
+      - P_foundation_identity
       - P_foundation_network
       - P_obs_azure_integration
       - P_obs_prereqs
-      - P_foundation_identity
       - P_foundation_deploy_agents
-      - P_foundation_edge
+      - P_foundation_secrets
       - P_platform_appservice
-      - P_platform_aro
       - P_platform_data_analytics
-      - P_platform_db_cassandra_mi
       - P_platform_db_cosmos_cassandra
       - P_platform_db_cosmos_gremlin
       - P_platform_db_cosmos_mongo
       - P_platform_db_cosmos_nosql
       - P_platform_db_cosmos_table
-      - P_platform_db_documentdb
       - P_platform_db_horizondb
       - P_platform_db_ledger
       - P_platform_db_mysql
@@ -1765,7 +1840,6 @@ stages:
       - P_platform_db_redis
       - P_platform_db_sql
       - P_platform_db_sqlmi
-      - P_platform_db_sqlvm
       - P_platform_db_table_storage
       - P_platform_functions
       - P_platform_messaging
@@ -1774,9 +1848,14 @@ stages:
       - P_platform_specialized_compute
       - P_platform_vm
       - P_platform_vmss
+      - P_foundation_edge
       - P_platform_aks
+      - P_platform_aro
       - P_platform_batch
       - P_platform_containerapps
+      - P_platform_db_cassandra_mi
+      - P_platform_db_documentdb
+      - P_platform_db_sqlvm
       - P_obs_telemetry_transport
       - P_obs_dbm
       - P_obs_kubernetes
@@ -1791,23 +1870,21 @@ stages:
     displayName: Report, evidence and deployment markers
     dependsOn:
       - Select
+      - Build
       - P_foundation_governance
+      - P_foundation_identity
       - P_foundation_network
       - P_obs_azure_integration
       - P_obs_prereqs
-      - P_foundation_identity
       - P_foundation_deploy_agents
-      - P_foundation_edge
+      - P_foundation_secrets
       - P_platform_appservice
-      - P_platform_aro
       - P_platform_data_analytics
-      - P_platform_db_cassandra_mi
       - P_platform_db_cosmos_cassandra
       - P_platform_db_cosmos_gremlin
       - P_platform_db_cosmos_mongo
       - P_platform_db_cosmos_nosql
       - P_platform_db_cosmos_table
-      - P_platform_db_documentdb
       - P_platform_db_horizondb
       - P_platform_db_ledger
       - P_platform_db_mysql
@@ -1815,7 +1892,6 @@ stages:
       - P_platform_db_redis
       - P_platform_db_sql
       - P_platform_db_sqlmi
-      - P_platform_db_sqlvm
       - P_platform_db_table_storage
       - P_platform_functions
       - P_platform_messaging
@@ -1824,29 +1900,31 @@ stages:
       - P_platform_specialized_compute
       - P_platform_vm
       - P_platform_vmss
+      - P_foundation_edge
       - P_platform_aks
+      - P_platform_aro
       - P_platform_batch
       - P_platform_containerapps
+      - P_platform_db_cassandra_mi
+      - P_platform_db_documentdb
+      - P_platform_db_sqlvm
       - P_obs_telemetry_transport
       - P_obs_dbm
       - P_obs_kubernetes
       - C_foundation_governance
+      - C_foundation_identity
       - C_foundation_network
       - C_obs_azure_integration
       - C_obs_prereqs
-      - C_foundation_identity
       - C_foundation_deploy_agents
-      - C_foundation_edge
+      - C_foundation_secrets
       - C_platform_appservice
-      - C_platform_aro
       - C_platform_data_analytics
-      - C_platform_db_cassandra_mi
       - C_platform_db_cosmos_cassandra
       - C_platform_db_cosmos_gremlin
       - C_platform_db_cosmos_mongo
       - C_platform_db_cosmos_nosql
       - C_platform_db_cosmos_table
-      - C_platform_db_documentdb
       - C_platform_db_horizondb
       - C_platform_db_ledger
       - C_platform_db_mysql
@@ -1854,7 +1932,6 @@ stages:
       - C_platform_db_redis
       - C_platform_db_sql
       - C_platform_db_sqlmi
-      - C_platform_db_sqlvm
       - C_platform_db_table_storage
       - C_platform_functions
       - C_platform_messaging
@@ -1863,9 +1940,14 @@ stages:
       - C_platform_specialized_compute
       - C_platform_vm
       - C_platform_vmss
+      - C_foundation_edge
       - C_platform_aks
+      - C_platform_aro
       - C_platform_batch
       - C_platform_containerapps
+      - C_platform_db_cassandra_mi
+      - C_platform_db_documentdb
+      - C_platform_db_sqlvm
       - C_obs_telemetry_transport
       - C_obs_dbm
       - C_obs_kubernetes

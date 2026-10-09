@@ -26,7 +26,7 @@ architectures:
     workloads: [hello-bff, hello-orders-api, hello-catalog-api, hello-dbadapter-*]
     deployment: [deploy-core-aca, deploy-dbadapters]
     artifact: container-image
-    runtime_config: container app env + secret refs (Key Vault) + user-assigned identity
+    runtime_config: container app env + dsv:// secret references (Delinea DSV, resolved at start-up) + user-assigned identity
     telemetry: {logs: fluent-bit-sidecar (shared EmptyDir file), traces: otel-gateway (ACA internal), metrics: azure-integration + otel}
     smoke: GET /readyz on revision FQDN
     rollback: shift traffic to previous revision (multiple revision mode)

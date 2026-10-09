@@ -32,18 +32,20 @@ variable "foundation_network" {
   })
 }
 
-# Upstream contract: catalog/contracts/foundation-identity.v1.schema.json (only the fields used here).
+# Upstream contract: catalog/contracts/foundation-identity.v2.schema.json (only the fields used here).
 variable "foundation_identity" {
   type = object({
-    key_vault_id  = string
-    key_vault_uri = string
-    secret_ids    = optional(map(string), {}) # versionless Key Vault secret IDs (values set out-of-band)
     identities = map(object({
       id           = string
       principal_id = string
       client_id    = string
       name         = string
     }))
+    # Delinea DSV references (ADR-0001 section 14): dsv://<base_path>/<name>#value - never values.
+    secrets = object({
+      base_path = string
+      refs      = optional(map(string), {})
+    })
   })
 }
 
@@ -77,4 +79,14 @@ variable "settings" {
     condition     = var.settings.backup_retention_days >= 1 && var.settings.backup_retention_days <= 35
     error_message = "backup_retention_days must be 1-35."
   }
+}
+
+# Optional ephemeral input (never stored in state or plan files): DSV mysql-admin-password via tools/secrets/fetch.py.
+variable "admin_password" {
+  description = "Break-glass administrator password (ephemeral, write-only argument). Null = ephemeral random value."
+  type        = string
+  default     = null
+  sensitive   = true
+  ephemeral   = true
+  nullable    = true
 }

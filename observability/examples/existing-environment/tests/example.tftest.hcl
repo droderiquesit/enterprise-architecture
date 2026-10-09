@@ -95,7 +95,7 @@ run "dbm_cluster_checks" {
     dbm = { enabled = true }
   }
   assert {
-    condition     = output.dbm["orders-postgresql"].hosting == "cluster_checks" && output.dbm["orders-postgresql"].password_source == "env"
-    error_message = "DBM runs as cluster checks with an env/secret password reference"
+    condition     = output.dbm["orders-postgresql"].hosting == "cluster_checks" && output.dbm["orders-postgresql"].password_source == "dsv"
+    error_message = "DBM runs as cluster checks with a DSV password reference (ENC[dsv://...])"
   }
 }

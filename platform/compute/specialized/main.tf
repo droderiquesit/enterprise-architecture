@@ -217,6 +217,10 @@ resource "azurerm_application_insights" "ml" {
   tags                         = local.tags
 }
 
+# Required by azurerm_machine_learning_workspace (key_vault_id is a required argument): the workspace's own internal
+# store, off by default (settings.ml.enabled), holding NO lab secrets (all lab secrets live in Delinea DSV,
+# ADR-0001 section 14).
+# ownership:allow OWN008 Azure ML workspace dependency, not a secret store of the lab
 resource "azurerm_key_vault" "ml" {
   #checkov:skip=CKV_AZURE_189:AML workspace without workspace private endpoints: public endpoint with network ACL Deny + AzureServices bypass; RBAC-only.
   count                         = local.s.ml.enabled ? 1 : 0

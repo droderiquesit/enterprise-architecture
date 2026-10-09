@@ -1,5 +1,5 @@
-# One App Service web app (Linux or Windows; code or container) with user-assigned identity, Key Vault reference
-# identity, VNet integration, health check, private endpoint or deny-by-default access restrictions, and an
+# One App Service web app (Linux or Windows; code or container) with user-assigned identity (ACR pull; the app reads
+# Delinea DSV with it at start-up - secret settings carry dsv:// references), VNet integration, health check, private endpoint or deny-by-default access restrictions, and an
 # optional `staging` slot for swap-based rollback. Logs: diagnostic settings (obs-diagnostics) - no sidecar.
 locals {
   linux       = var.os_type == "Linux"
@@ -36,7 +36,6 @@ resource "azurerm_linux_web_app" "this" {
   public_network_access_enabled                  = !local.private
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
-  key_vault_reference_identity_id                = var.identity.id
   virtual_network_subnet_id                      = var.integration_subnet_id
   app_settings                                   = local.settings
 
@@ -107,7 +106,6 @@ resource "azurerm_windows_web_app" "this" {
   public_network_access_enabled                  = !local.private
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
-  key_vault_reference_identity_id                = var.identity.id
   virtual_network_subnet_id                      = var.integration_subnet_id
   app_settings                                   = local.settings
 
@@ -179,7 +177,6 @@ resource "azurerm_linux_web_app_slot" "staging" {
   public_network_access_enabled                  = !local.private
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
-  key_vault_reference_identity_id                = var.identity.id
   virtual_network_subnet_id                      = var.integration_subnet_id
   app_settings                                   = local.settings
 
@@ -223,7 +220,6 @@ resource "azurerm_windows_web_app_slot" "staging" {
   public_network_access_enabled                  = !local.private
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
-  key_vault_reference_identity_id                = var.identity.id
   virtual_network_subnet_id                      = var.integration_subnet_id
   app_settings                                   = local.settings
 

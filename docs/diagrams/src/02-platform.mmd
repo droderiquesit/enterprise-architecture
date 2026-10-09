@@ -9,7 +9,7 @@ flowchart LR
     lg5["A"] lc@==> lg6["B: deployment / control"]
   end
 
-  FND["foundation contracts<br/>foundation-network (subnets, DNS zones, egress)<br/>foundation-identity (identities, Key Vault)"]
+  FND["foundation contracts<br/>foundation-network (subnets, DNS zones, egress)<br/>foundation-identity (identities, dsv:// secret refs)"]
 
   subgraph SHARED["platform-shared"]
     ACR[("ACR Standard, Entra-only<br/>(Premium + PE in enterprise profile)")]

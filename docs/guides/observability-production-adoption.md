@@ -23,7 +23,8 @@ paths outside the package, remote state, or a non-placeholder subscription ID).
 
 Prerequisites: Terraform >= 1.14, `DataDog/datadog ~> 4.25` (+ `azurerm ~> 5.9`, `azapi ~> 2.13`, `helm`/`kubernetes ~> 3.3`
 for the collection modules you use), Python 3.11+ with `pyyaml` + `jsonschema` for validate/render in CI, Datadog API +
-application keys in Key Vault, provided to Terraform as `DD_API_KEY` / `DD_APP_KEY` (never in tfvars).
+application keys in your secret store (the lab: Delinea DSV, resolved per step with `tools/secrets/fetch.py`), provided to
+Terraform as `DD_API_KEY` / `DD_APP_KEY` (never in tfvars).
 
 ## 2. Required inputs
 
@@ -41,8 +42,9 @@ application keys in Key Vault, provided to Terraform as `DD_API_KEY` / `DD_APP_K
 
 ## 3. Integration hooks for application owners
 
-The package publishes, it does not apply: `modules/instrumentation` outputs `env`, `secret_env` (name -> Key Vault
-secret id), `app_settings` (App Service / Functions, with `@Microsoft.KeyVault(...)` references), `container_app_patch`
+The package publishes, it does not apply: `modules/instrumentation` outputs `env`, `secret_env` (name -> secret
+reference; the lab uses Delinea DSV `dsv://` references), `app_settings` (App Service / Functions, references resolved at
+start-up), `container_app_patch`
 (+ JSON), `k8s_patch` (+ object), `aci_sidecar`, `log_route`, `otlp_target`, `datadog_tags`. The example root exposes
 them as `terraform output instrumentation`; hand that to the application teams. Their deployment applies the env vars
 or patch (in this lab: `applications/deployments/modules/app-env`). Fault injection is explicitly disabled in the

@@ -186,13 +186,20 @@ variables {
     elastic_cluster = null
   }
   obs_telemetry_transport = {
-    datadog_site      = "datadoghq.com"
-    api_key_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
+    datadog_site = "datadoghq.com"
+    api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+    secrets = {
+      provider    = "delinea-dsv"
+      tenant      = "contoso"
+      tld         = "com"
+      base_url    = "https://contoso.secretsvaultcloud.com/v1"
+      fetch_image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    }
     otlp = {
-      grpc_endpoint     = "http://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:4317"
-      http_endpoint     = "https://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
-      headers_secret_id = null
-      default_protocol  = "http/protobuf"
+      grpc_endpoint    = "http://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:4317"
+      http_endpoint    = "https://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
+      headers_ref      = null
+      default_protocol = "http/protobuf"
     }
     fluentbit = {
       forward_host           = "eh-ca-flbagg.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
@@ -231,8 +238,6 @@ variables {
     }
   }
   foundation_identity = {
-    key_vault_id  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.KeyVault/vaults/eh-kv-ident-dev-abcde"
-    key_vault_uri = "https://eh-kv-ident-dev-abcde.vault.azure.net/"
     identities = {
       "hello-bff" = {
         id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-hello-bff"
@@ -343,11 +348,19 @@ variables {
         name         = "id-deploy-agent"
       }
     }
-    secret_ids = {
-      "datadog-api-key"      = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
-      "datadog-app-key"      = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-app-key"
-      "fault-token"          = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token"
-      "datadog-client-token" = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-client-token"
+    secrets = {
+      provider      = "delinea-dsv"
+      tenant        = "contoso"
+      tld           = "com"
+      base_url      = "https://contoso.secretsvaultcloud.com/v1"
+      base_path     = "eh/dev"
+      auth_provider = "azure-eh"
+      refs = {
+        "datadog-api-key"      = "dsv://eh/dev/datadog-api-key#value"
+        "datadog-app-key"      = "dsv://eh/dev/datadog-app-key#value"
+        "fault-token"          = "dsv://eh/dev/fault-token#value"
+        "datadog-client-token" = "dsv://eh/dev/datadog-client-token#value"
+      }
     }
   }
 }
@@ -369,12 +382,24 @@ run "defaults" {
     error_message = "FAULTS_ENABLED must default to false."
   }
   assert {
-    condition     = alltrue([for k, a in module.app : a.secret_refs["fault-token"] == "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token"])
-    error_message = "FAULT_TOKEN must come from a Key Vault secret reference."
+    condition     = alltrue([for k, a in module.app : a.secret_refs["FAULT_TOKEN"] == "dsv://eh/dev/fault-token#value"])
+    error_message = "FAULT_TOKEN is a plain env var whose value is the DSV reference (the app resolves it at start-up)."
   }
   assert {
-    condition     = alltrue([for k, e in module.env : !contains(keys(e.env), "FAULT_TOKEN") && !contains(keys(e.env), "DD_API_KEY")])
-    error_message = "Secrets must never be plain env values."
+    condition     = alltrue([for k, e in module.env : !contains(keys(e.env), "DD_API_KEY") && alltrue([for n, v in e.secret_env : startswith(v, "dsv://")])])
+    error_message = "Secret settings are dsv:// references only; the app never gets the Datadog API key."
+  }
+  assert {
+    condition     = alltrue([for k, e in module.env : e.env["DSV_AUTH"] == "azure" && e.env["DSV_BASE_URL"] == "https://contoso.secretsvaultcloud.com/v1" && e.env["DSV_TENANT"] == "contoso" && e.env["DSV_TLD"] == "com"])
+    error_message = "DSV runtime env on every app."
+  }
+  assert {
+    condition     = alltrue([for k, a in module.app : a.init_container_names == ["dsv-fetch"]])
+    error_message = "Every sidecar app gets the dsv-fetch init container."
+  }
+  assert {
+    condition     = alltrue([for k, a in module.app : !strcontains(jsonencode(a.plain_env), "@Microsoft.KeyVault(") && !strcontains(jsonencode(a.plain_env), "vault.azure.net")])
+    error_message = "No Key Vault references anywhere."
   }
   assert {
     condition     = alltrue(flatten([for k, a in module.app : [for n, v in a.plain_env : !can(regex("(?i)(password|pwd|accountkey|sharedaccesskey|client_secret)\\s*=", v))]]))

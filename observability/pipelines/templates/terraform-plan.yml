@@ -1,6 +1,7 @@
 # Job template: terraform init/validate/plan of a monitoring root, saved plan published as a pipeline artifact.
 # Azure auth: workload identity federation (OIDC) through an Azure Resource Manager service connection.
-# Datadog keys: read from Key Vault into secret variables and exported only to terraform steps.
+# Datadog keys: read from Delinea DSV (templates/dsv-secrets.yml, agent managed identity) into masked variables and
+# exported only to the terraform step's env. Terraform roots of this package take no secret variables.
 parameters:
   - name: jobName
     type: string
@@ -14,14 +15,16 @@ parameters:
   - name: backendConfig          # -backend-config key/values (storage_account_name, container_name, key, resource_group_name ...)
     type: object
     default: {}
-  - name: keyVaultName           # Key Vault holding the Datadog API/app keys
+  - name: dsv                    # Delinea DSV: {tenant, tld?, base_url?, identity_client_id?, auth?} (templates/dsv-secrets.yml)
+    type: object
+  - name: datadogApiKeyRef
     type: string
-  - name: datadogApiKeySecret
+    default: dsv://observability/prod/datadog-api-key#value
+  - name: datadogAppKeyRef
     type: string
-    default: datadog-api-key
-  - name: datadogAppKeySecret
+    default: dsv://observability/prod/datadog-app-key#value
+  - name: dsvFetchPath           # dsv_fetch.py of the vendored package (<packageDir>/images/dsv-fetch/dsv_fetch.py)
     type: string
-    default: datadog-app-key
   - name: datadogSite
     type: string
     default: datadoghq.com
@@ -44,13 +47,11 @@ jobs:
       - checkout: self
       - ${{ each step in parameters.preSteps }}:
           - ${{ step }}
-      - task: AzureKeyVault@2
-        displayName: Read Datadog keys
-        inputs:
-          azureSubscription: ${{ parameters.azureServiceConnection }}
-          KeyVaultName: ${{ parameters.keyVaultName }}
-          SecretsFilter: ${{ parameters.datadogApiKeySecret }},${{ parameters.datadogAppKeySecret }}
-          RunAsPreJob: false
+      - template: dsv-secrets.yml
+        parameters:
+          dsv: ${{ parameters.dsv }}
+          dsvFetchPath: ${{ parameters.dsvFetchPath }}
+          secrets: {DD_API_KEY: '${{ parameters.datadogApiKeyRef }}', DD_APP_KEY: '${{ parameters.datadogAppKeyRef }}'}
       - task: AzureCLI@2
         displayName: terraform init / validate / plan
         inputs:
@@ -78,8 +79,8 @@ jobs:
             terraform show -json tfplan | python3 -c 'import json,sys; p=json.load(sys.stdin); d=[r["address"] for r in p.get("resource_changes",[]) if "delete" in r["change"]["actions"]]; print("DESTROY:", d if d else "none")'
         name: plan
         env:
-          DD_API_KEY: $(${{ parameters.datadogApiKeySecret }})
-          DD_APP_KEY: $(${{ parameters.datadogAppKeySecret }})
+          DD_API_KEY: $(DD_API_KEY)
+          DD_APP_KEY: $(DD_APP_KEY)
           DD_SITE: ${{ parameters.datadogSite }}
           BACKEND_CONFIG_JSON: ${{ convertToJson(parameters.backendConfig) }}
           VAR_FILES_JSON: ${{ convertToJson(parameters.varFiles) }}

@@ -69,9 +69,6 @@ variables {
       "apim"                          = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/spoke/subnets/apim" }
     }
   }
-  foundation_identity = {
-    key_vault_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv"
-  }
 }
 
 run "everything_off_by_default" {
@@ -93,9 +90,8 @@ run "all_components" {
   variables {
     settings = {
       app_gateway = {
-        enabled                         = true
-        key_vault_certificate_secret_id = "https://eh-kv-identi-dev-abcde.vault.azure.net/secrets/appgw-tls"
-        backend_fqdns                   = ["hello-bff.internal.example"]
+        enabled       = true
+        backend_fqdns = ["hello-bff.internal.example"]
       }
       front_door = {
         enabled  = true
@@ -114,15 +110,17 @@ run "all_components" {
       firewall = { enabled = true }
       bastion  = { enabled = true, sku = "Basic" }
     }
+    tls_certificate_pfx      = "UEZYLXRlc3Q="
+    tls_certificate_password = "test-only"
   }
 
   assert {
-    condition     = azurerm_application_gateway.this[0].sku[0].name == "WAF_v2" && one([for c in azurerm_application_gateway.this[0].ssl_certificate : c.key_vault_secret_id]) == "https://eh-kv-identi-dev-abcde.vault.azure.net/secrets/appgw-tls"
-    error_message = "WAF_v2 with Key Vault certificate"
+    condition     = azurerm_application_gateway.this[0].sku[0].name == "WAF_v2" && one([for c in azurerm_application_gateway.this[0].ssl_certificate : c.key_vault_secret_id]) == null
+    error_message = "WAF_v2 with the pipeline-provided PFX (no Key Vault reference)"
   }
   assert {
-    condition     = azurerm_role_assignment.appgw_kv_secrets[0].scope == var.foundation_identity.key_vault_id
-    error_message = "App Gateway identity must read the certificate from Key Vault"
+    condition     = length(azurerm_application_gateway.this[0].identity) == 0
+    error_message = "no App Gateway identity is needed without Key Vault"
   }
   assert {
     condition     = length(azurerm_cdn_frontdoor_firewall_policy.this[0].managed_rule) == 2 && azurerm_cdn_frontdoor_origin.this["bff"].private_link[0].target_type == "sites"
@@ -178,6 +176,16 @@ run "app_gateway_requires_certificate" {
   command = plan
   variables {
     settings = { app_gateway = { enabled = true, backend_fqdns = ["x.example"] } }
+  }
+  expect_failures = [azurerm_application_gateway.this[0]]
+}
+
+run "app_gateway_requires_backend" {
+  command = plan
+  variables {
+    settings                 = { app_gateway = { enabled = true } }
+    tls_certificate_pfx      = "UEZYLXRlc3Q="
+    tls_certificate_password = "test-only"
   }
   expect_failures = [var.settings]
 }

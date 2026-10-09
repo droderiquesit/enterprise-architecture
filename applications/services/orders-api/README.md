@@ -69,7 +69,7 @@ Service Bus: 2 retries, 5 s try timeout, 15 s overall publish budget.
 
 ## Fault injection (lab)
 
-`FAULTS_ENABLED=true` + `FAULT_TOKEN` (from Key Vault). `POST /admin/faults` with `X-Fault-Token`:
+`FAULTS_ENABLED=true` + `FAULT_TOKEN` (a `dsv://` reference resolved from Delinea DSV at start-up by Hello.Common). `POST /admin/faults` with `X-Fault-Token`:
 `{"type":"http_500|latency|db_error|dependency_timeout","rate":0..1,"latency_ms":int,"duration_seconds":1..900}`.
 `db_error` makes repository calls fail with 503; `dependency_timeout` makes catalog calls hang until the resilience
 timeout (→ 504). Faults expire automatically.

@@ -5,6 +5,7 @@
                   503 problem+json listing the failing checks.
 * GET /version  - {"service","version","commit","build_time","runtime"}.
 * /admin/faults - fault injection (hello_common.faults), default disabled.
+* dsv:// environment values are resolved from Delinea DSV before anything else (hello_common.secrets).
 * W3C trace context in (FastAPI instrumentation) and out (``traceparent`` response header).
 * One structured access-log line per request (health probes logged at DEBUG only).
 """
@@ -26,6 +27,7 @@ from .faults import FaultRegistry, install_faults
 from .logging import configure_logging
 from .problems import install_problem_handlers, problem_response
 from .propagation import inject_current
+from .secrets import resolve_env
 from .telemetry import setup_telemetry
 
 ReadinessCheck = Callable[[], Any] | Callable[[], Awaitable[Any]]
@@ -36,7 +38,11 @@ access_log = logging.getLogger("hello.access")
 
 
 def bootstrap(info: ServiceInfo) -> None:
-    """Logging + telemetry, once per process (safe to call repeatedly)."""
+    """DSV secret references, logging + telemetry, once per process (safe to call repeatedly).
+
+    Entrypoints call ``hello_common.secrets.resolve_env()`` before reading settings; this second call is a no-op
+    then and a safety net for factories used directly (``uvicorn module:app``)."""
+    resolve_env()
     configure_logging(info)
     setup_telemetry(info)
 

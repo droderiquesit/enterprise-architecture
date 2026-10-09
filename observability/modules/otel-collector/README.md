@@ -5,7 +5,9 @@ collector config-provider environment variables:
 
 * `--config=env:OTELCOL_CONFIG_BASE`, followed by the overlays in deterministic order: auth, logs-forward,
   scrape-flb, tail.
-* `env` and `secret_env_names` (`DD_API_KEY`, `OTLP_BEARER_TOKEN`).
+* `env` and `secret_files` (`dd-api-key`, `otlp-bearer-token` in `secrets_dir` = `/dsv-secrets`). The config reads
+  them with `${file:/dsv-secrets/<name>}` (confmap file provider; verified with contrib 0.162.0 and DDOT 7.84.2).
+  The files are written by the `dsv-fetch` init container from Delinea DSV - secrets are never env vars.
 
 The config lives in env vars, so you can run the gateway anywhere (ACA, a VM, Kubernetes) without mounting
 files.

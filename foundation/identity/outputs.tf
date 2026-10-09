@@ -1,22 +1,26 @@
 output "contract" {
-  description = "foundation-identity contract v1 (catalog/contracts/foundation-identity.v1.schema.json). Secret IDs are versionless references, never values."
+  description = "foundation-identity contract v2 (catalog/contracts/foundation-identity.v2.schema.json). DSV references, never values."
   value = {
     resource_group_name = azurerm_resource_group.identity.name
-    key_vault_id        = azurerm_key_vault.this.id
-    key_vault_uri       = azurerm_key_vault.this.vault_uri
-    key_vault_name      = azurerm_key_vault.this.name
+    tenant_id           = var.environment.tenant_id
     identities = {
       for k, v in azurerm_user_assigned_identity.this : k => {
         id           = v.id
         principal_id = v.principal_id
         client_id    = v.client_id
         name         = v.name
-        tenant_id    = v.tenant_id
         secrets      = local.identities[k].secrets
       }
     }
-    # Versionless secret IDs: "<vault_uri>secrets/<name>" (vault_uri ends with "/"). Consumers resolve the
-    # latest version at runtime (Key Vault references, CSI driver, ACA secret refs).
-    secret_ids = { for s in local.secret_names : s => "${azurerm_key_vault.this.vault_uri}secrets/${s}" }
+    # Delinea DSV (ADR-0001 section 14). References are not secrets: dsv://<prefix>/<env>/<name>#value.
+    secrets = {
+      provider      = "delinea-dsv"
+      tenant        = local.dsv_tenant
+      tld           = local.dsv_tld
+      base_url      = local.dsv_base_url
+      base_path     = local.base_path
+      auth_provider = var.secrets.auth_provider
+      refs          = { for s in local.secret_names : s => "dsv://${local.base_path}/${s}#value" }
+    }
   }
 }

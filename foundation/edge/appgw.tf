@@ -1,4 +1,4 @@
-# Application Gateway WAF_v2: HTTPS listener (certificate from Key Vault), HTTP->HTTPS redirect,
+# Application Gateway WAF_v2: HTTPS listener (PFX certificate from Delinea DSV via the pipeline), HTTP->HTTPS redirect,
 # backend pool of FQDNs (e.g. ACA environment / AKS ingress internal hostnames), health probe on /healthz.
 locals {
   agw    = local.s.app_gateway
@@ -14,29 +14,16 @@ locals {
     listener    = "https"
     listener80  = "http"
     redirect    = "http-to-https"
-    cert        = "kv-tls"
+    cert        = "listener-tls"
   }
 }
 
-resource "azurerm_user_assigned_identity" "appgw" {
-  count = local.agw_on ? 1 : 0
-
-  name                = "${var.environment.name_prefix}-id-appgw-${var.environment.name}-${module.naming.region_short}"
-  resource_group_name = local.rg_name
-  location            = local.location
-  tags                = local.tags
-}
-
-# Application Gateway reads the TLS certificate (stored as a Key Vault certificate => secret) with this identity.
-resource "azurerm_role_assignment" "appgw_kv_secrets" {
-  count = local.agw_on ? 1 : 0
-
-  scope                = var.foundation_identity.key_vault_id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_user_assigned_identity.appgw[0].principal_id
-  principal_type       = "ServicePrincipal"
-}
-
+# TLS certificate: Key Vault references are not available (all lab secrets live in Delinea DSV, ADR-0001 section 14).
+# The listener certificate is passed as `ssl_certificate.data` (base64 PFX) + `password` from the ephemeral pipeline
+# inputs var.tls_certificate_pfx / var.tls_certificate_password (DSV appgw-tls-pfx, elements value/password, fetched
+# by tools/secrets/fetch.py). azurerm 5.9 has NO write-only form of ssl_certificate.data/password, so the PFX and
+# its password ARE stored in Terraform state and in the saved plan (protected containers) - docs/known-limitations.md.
+# Recommended alternative without any secret: Front Door (settings.front_door) with its Microsoft-managed certificate.
 resource "azurerm_public_ip" "appgw" {
   count = local.agw_on ? 1 : 0
 
@@ -99,11 +86,6 @@ resource "azurerm_application_gateway" "this" {
     max_capacity = local.agw.max_capacity
   }
 
-  identity {
-    type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.appgw[0].id]
-  }
-
   gateway_ip_configuration {
     name      = local.agw_cfg.gateway_ip
     subnet_id = local.subnets["appgw"].id
@@ -130,8 +112,9 @@ resource "azurerm_application_gateway" "this" {
   }
 
   ssl_certificate {
-    name                = local.agw_cfg.cert
-    key_vault_secret_id = local.agw.key_vault_certificate_secret_id
+    name     = local.agw_cfg.cert
+    data     = var.tls_certificate_pfx
+    password = var.tls_certificate_password
   }
 
   backend_address_pool {
@@ -201,9 +184,11 @@ resource "azurerm_application_gateway" "this" {
     redirect_configuration_name = local.agw_cfg.redirect
   }
 
-  depends_on = [azurerm_role_assignment.appgw_kv_secrets]
-
   lifecycle {
+    precondition {
+      condition     = var.tls_certificate_pfx != null && var.tls_certificate_password != null
+      error_message = "Application Gateway needs the listener certificate: DSV <prefix>/<env>/appgw-tls-pfx (value = base64 PFX, password) passed by the pipeline as TF_VAR_tls_certificate_pfx / TF_VAR_tls_certificate_password."
+    }
     precondition {
       condition     = contains(keys(local.subnets), "appgw")
       error_message = "Application Gateway needs the appgw subnet (foundation-network settings.appgw_subnet = true)."

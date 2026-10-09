@@ -19,7 +19,7 @@ collects the prerequisites from every layer. None of these steps has been execut
 `bootstrap/scripts/bootstrap.sh` is the only place that registers providers (pipeline identities cannot; every root sets
 `resource_provider_registrations = "none"`). It registers:
 
-`Microsoft.Storage, Network, KeyVault, ManagedIdentity, Authorization, Insights, OperationalInsights, AlertsManagement,
+`Microsoft.Storage, Network, KeyVault (only for the optional Azure ML workspace / APIM), ManagedIdentity, Authorization, Insights, OperationalInsights, AlertsManagement,
 Consumption, CostManagement, PolicyInsights, ResourceGraph, App, ContainerService, ContainerRegistry, ContainerInstance,
 Web, Compute, Batch, ServiceFabric, RedHatOpenShift, DevOpsInfrastructure, DevCenter, Sql, DBforPostgreSQL, DBforMySQL,
 DocumentDB, Cache, ConfidentialLedger, Kusto, Synapse, Search, ServiceBus, EventHub, EventGrid, Logic, ApiManagement, Cdn,
@@ -70,22 +70,44 @@ From [`pipelines/README.md`](../../pipelines/README.md#one-time-azure-devops-set
   `components.bootstrap.federated_credentials`, re-run bootstrap, then *Verify and save*.
 * Environments `lab-<env>` (approvals + exclusive lock) and `lab-<env>-retire` (approvals by a different group), for
   every environment of `environments/promotion.yaml` (dev, test, prod).
-* *Required template* check (`pipelines/templates/universal.yml`) on the service connections, environments, deploy
-  agent pool and variable groups.
-* Variable group `lab-<env>-datadog` linked to the environment's Key Vault (`datadog-api-key`, `datadog-app-key`).
+* *Required template* check (`pipelines/templates/universal.yml`) on the service connections, environments and the
+  deploy agent pool.
+* **No variable groups for secrets** (no Key Vault-linked groups, lint SEC001/PL015): every secret a step needs comes
+  from Delinea DSV through `tools/secrets/fetch.py` on the self-hosted deploy pool, authenticated with the agents'
+  `deploy-agent` managed identity. `pipelines/variables/<env>.yml` carries only identifiers (`dsvTenant`, `dsvTld`,
+  `dsvAuthProvider`, equal to `environments/<env>/environment.yaml` `secrets`).
 * Agent pool `foundation-deploy-agents` (created in Azure DevOps after `foundation-deploy-agents` applies; VMSS mode:
   *Agent pools -> Add pool -> Azure virtual machine scale set*).
 
 ## 3. Datadog prerequisites
 
 * An organisation and site (`environment.yaml datadog.site`, default `datadoghq.com`).
-* API key and application key, stored as Key Vault secrets `datadog-api-key` / `datadog-app-key`
-  (names from `datadog.*_secret_name`) - set out-of-band, never in Terraform.
+* API key and application key, stored as Delinea DSV secrets `<prefix>/<env>/datadog-api-key` /
+  `<prefix>/<env>/datadog-app-key` (names from `datadog.*_secret_name`) - set out-of-band, never in Terraform.
 * For the Azure integration with Secretless Auth: issuer + subject from the Datadog Azure tile copied into
   `components.bootstrap.datadog_integration.{federated_issuer,federated_subject}`. Not available on US1-FED/US2-FED or
   sovereign clouds (client secret created out of band instead, see bootstrap README).
 * A Datadog private location if synthetic tests must reach private endpoints (`obs-monitoring` setting
   `private_location_id`; not created by this repo).
+
+## 3b. Delinea DevOps Secrets Vault prerequisites
+
+All keys and secrets live in DSV (ADR-0001 section 14); Azure Key Vault is not used for secrets. Full steps:
+[bootstrap/README.md "Delinea DSV prerequisites"](../../bootstrap/README.md#delinea-dsv-prerequisites-all-keys-and-secrets).
+
+1. A DSV tenant (`<tenant>.secretsvaultcloud.<tld>`, tld `com`/`eu`/`com.au`/`ca`) and the dsv CLI for operators.
+   Set `environments/<env>/environment.yaml` → `secrets: {provider: delinea-dsv, tenant, tld, auth_provider}` and the
+   same identifiers in `pipelines/variables/<env>.yml`.
+2. The **Azure auth provider** bound to the lab tenant:
+   `dsv config auth-provider create --name azure-eh --type azure --azure-tenant-id <tenant-id>`.
+3. After `foundation-identity` applies: the **one manual mapping** - DSV user `<prefix>-<env>-deploy-agent` (provider
+   `azure-eh`, external id = the `deploy-agent` identity's resource id) with DSV administration rights. From then on the
+   pipeline's `foundation-secrets` stage (`tools/secrets/dsv_apply.py`) creates every other user and permission.
+4. Seed the operator-owned values (`foundation/identity/secrets.yaml`, `source: operator`), then
+   `python3 tools/secrets/check.py --env <env>` (names only). Generated values (`eventhub-fluentbit-listen`) are
+   written by the pipeline after `obs-telemetry-transport` applies.
+5. Egress to `<tenant>.secretsvaultcloud.<tld>:443` from every subnet with readers (Azure Firewall default allow-list
+   includes `*.secretsvaultcloud.*`).
 
 ## 4. Bootstrap sequence (local state first, then migrate)
 
@@ -118,8 +140,10 @@ Microsoft-hosted agents are outside the VNet and **cannot reach private endpoint
 
 Notes:
 
-* `foundation-identity` applies from hosted agents (management plane only); *setting secret values* needs VNet access
-  (`set-secrets.sh` from a host in the VNet or through Bastion).
+* `foundation-identity` applies from hosted agents (management plane only). `foundation-secrets` and every component
+  with DSV inputs (registry `secret_env`) need the self-hosted deploy pool: `fetch.py` / `dsv_apply.py` authenticate
+  with the agents' managed identity (IMDS) - hosted agents have none. Setting secret values is done by operators with
+  the dsv CLI from anywhere with access to the DSV tenant (public SaaS endpoint).
 * The `minimal` profile has no private agents: ACR stays Standard (public endpoint, Entra-only) so hosted builds can
   push, AKS is not enabled, and roots that need data-plane access to private resources (Flex deployment container,
   SQL grant scripts) require an agent with VNet access - see [known limitations](../known-limitations.md#deployment-and-networking).

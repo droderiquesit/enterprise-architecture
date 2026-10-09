@@ -38,11 +38,16 @@ output "container_names" {
 }
 
 output "secret_refs" {
-  description = "Container Apps secrets backed by Key Vault: secret name -> versionless secret id (never values)."
-  value       = { for k, s in local.secrets : k => s.key_vault_secret_id if s.key_vault_secret_id != null }
+  description = "Settings whose value is a Delinea DSV reference: name -> dsv:// (resolved by the app; never values)."
+  value       = { for k, v in var.env : k => v if startswith(v, "dsv://") }
+}
+
+output "init_container_names" {
+  description = "Init containers (dsv-fetch for the sidecar's key)."
+  value       = [for c in local.inits : c.name]
 }
 
 output "plain_env" {
-  description = "Non-secret env of the app container (for tests/inspection)."
+  description = "Env of the app container (plain values and dsv:// references; for tests/inspection)."
   value       = var.env
 }

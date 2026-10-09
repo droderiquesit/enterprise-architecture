@@ -20,3 +20,8 @@ output "native_log_forwarding" {
     aad_logs                          = var.mode == "native" && try(var.native.send_aad_logs, false)
   }
 }
+
+output "auth" {
+  description = "app_registration auth mode (secretless = no client secret anywhere; secret = client secret from a pipeline input, stored in state)."
+  value       = local.ar ? try(var.app_registration.auth, "secretless") : null
+}

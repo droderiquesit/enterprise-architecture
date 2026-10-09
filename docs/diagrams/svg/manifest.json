@@ -2,8 +2,8 @@
   "generator": "tools/docs/render_diagrams.sh",
   "mermaid_cli": "11.12.0",
   "diagrams": {
-    "01-foundation": {"source": "docs/diagrams/src/01-foundation.mmd", "source_sha256": "3001efc1ae4bb251fa77f02a3cf40caafda421dda9480ed75eea727b403d4ad4", "svg_sha256": "e7491bdc761a7917f143efd07d6081e0742a61181b446c852ebfbaa3efe7f145"},
-    "02-platform": {"source": "docs/diagrams/src/02-platform.mmd", "source_sha256": "969ac2938448899769c6d649d005ec5ac9ec502a650971ff9c79a05b47ddf471", "svg_sha256": "044f05c28a7fa49a828427f02b76cd0e031b4617bea5545438e796e1889d408e"},
+    "01-foundation": {"source": "docs/diagrams/src/01-foundation.mmd", "source_sha256": "8723c653606c990b6434c8ccf17e06a254c0913b920b23cb2d33c96828627c6f", "svg_sha256": "b0f0bfbc73e007784c54c5329dbc0485e63247ffc6fa22b31998577a2d19f5cd"},
+    "02-platform": {"source": "docs/diagrams/src/02-platform.mmd", "source_sha256": "e09391a78530cfe82b53fdb422a9449fa9ecbca31b81f06fc35e66239e425859", "svg_sha256": "b6729dd308e155d1a1f3f711e26afb224de77cf8f46e8729a5e99dde935a8bf6"},
     "03-application": {"source": "docs/diagrams/src/03-application.mmd", "source_sha256": "6270f434bed7ed0a2a08433adcb26b905287cddd4b392706290bc7cc64c13955", "svg_sha256": "30eede07061f42c1773429d43b02835f7f51272169fcc1b8329c9a07e8fdc324"},
     "04-telemetry": {"source": "docs/diagrams/src/04-telemetry.mmd", "source_sha256": "cc88e0111e5cef350eefebefb8a7eb2678bb7bcc2464046e21fb2fbb83e27df9", "svg_sha256": "808ef73aa05895edc3a3f20e0dc21b9f6833999f0e13d01b536c60d665b01e64"},
     "05-delivery": {"source": "docs/diagrams/src/05-delivery.mmd", "source_sha256": "e2882ec97d9136f869ba4816e81f80ff85f406ce56a6710a50e0f56c6353cbf9", "svg_sha256": "751f748ea87941e99d696f1597142d9ad3dfc086c66218757d8d66724130e049"}

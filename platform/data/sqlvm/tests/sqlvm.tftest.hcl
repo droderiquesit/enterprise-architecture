@@ -18,12 +18,11 @@ mock_provider "azurerm" {
   mock_resource "azurerm_mssql_virtual_machine" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachines/eh-vm-data-sqlvm-dev-sec" }
   }
-  mock_resource "azurerm_key_vault_secret" {
-    defaults = { versionless_id = "https://eh-kv-id-dev-abcde.vault.azure.net/secrets/sqlvm-secret" }
-  }
 }
 
 variables {
+  admin_password     = "Test-Only-Admin-1!"
+  dbadapter_password = "Test-Only-Adapter-1!"
   environment = {
     name            = "dev"
     location        = "swedencentral"
@@ -68,8 +67,13 @@ variables {
     }
   }
   foundation_identity = {
-    key_vault_id  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.KeyVault/vaults/eh-kv-id-dev-abcde"
-    key_vault_uri = "https://eh-kv-id-dev-abcde.vault.azure.net/"
+    secrets = {
+      base_path = "eh/dev"
+      refs = {
+        "dbm-mysql-password" = "dsv://eh/dev/dbm-mysql-password#value"
+        "dbm-sqlvm-password" = "dsv://eh/dev/dbm-sqlvm-password#value"
+      }
+    }
     identities = {
       "hello-orders-api"    = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.ManagedIdentity/userAssignedIdentities/hello-orders-api", principal_id = "aaaaaaaa-0000-0000-0000-000000000001", client_id = "bbbbbbbb-0000-0000-0000-000000000001", name = "hello-orders-api" }
       "hello-inventory-api" = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.ManagedIdentity/userAssignedIdentities/hello-inventory-api", principal_id = "aaaaaaaa-0000-0000-0000-000000000002", client_id = "bbbbbbbb-0000-0000-0000-000000000002", name = "hello-inventory-api" }
@@ -112,7 +116,7 @@ run "defaults" {
     error_message = "Data + log disks attached."
   }
   assert {
-    condition     = startswith(output.contract.databases.adapter.password_secret_id, "https://") && output.contract.dbm.deployment_type == "self_hosted_azure_vm" && output.contract.server.public_network_access_enabled == false
+    condition     = output.contract.databases.adapter.password_secret_id == "dsv://eh/dev/sqlvm-dbadapter-password#value" && output.contract.dbm.password_secret_id == "dsv://eh/dev/dbm-sqlvm-password#value" && output.contract.dbm.deployment_type == "self_hosted_azure_vm" && output.contract.server.public_network_access_enabled == false
     error_message = "Contract exposes secret IDs only and DBM metadata."
   }
 }

@@ -1,16 +1,12 @@
 locals {
   mode = coalesce(var.settings.mode, var.settings.app_client_id != null ? "app_registration" : "none")
-  # the client secret is read only for secret-based app registration auth (sensitive; lands in state as
-  # the integration's client_secret - documented exception; use app_auth = secretless to avoid it)
-  read_secret      = local.mode == "app_registration" && var.settings.app_auth == "secret"
+  # app_auth = secretless (default) needs no secret. app_auth = secret: the pipeline fetches the client secret from
+  # Delinea DSV just in time (tools/secrets/fetch.py -> TF_VAR_datadog_azure_client_secret, masked); it lands in
+  # state as datadog_integration_azure.client_secret (provider has no write-only argument - documented exception).
+  # No data source reads any secret here.
+  use_secret       = local.mode == "app_registration" && var.settings.app_auth == "secret"
   default_filters  = [{ name = "application", value = "enterprise-hello", action = "Include" }]
   subscription_ids = concat([var.environment.subscription_id], var.settings.extra_subscription_ids)
-}
-
-data "azurerm_key_vault_secret" "client_secret" {
-  count        = local.read_secret ? 1 : 0
-  name         = var.settings.client_secret_name
-  key_vault_id = var.foundation_identity.key_vault_id
 }
 
 module "integration" {
@@ -28,7 +24,7 @@ module "integration" {
     auth                        = var.settings.app_auth
     service_principal_object_id = var.settings.app_service_principal_id
   } : null
-  client_secret = local.read_secret ? data.azurerm_key_vault_secret.client_secret[0].value : null
+  client_secret = local.use_secret ? var.datadog_azure_client_secret : null
   native = local.mode == "native" ? {
     existing_monitor_id    = var.settings.native_monitor_id
     send_subscription_logs = var.settings.native_logs.subscription_logs

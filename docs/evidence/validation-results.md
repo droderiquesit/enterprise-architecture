@@ -52,7 +52,7 @@ status `deployed` or `verified`. Exact prerequisites to run live verification:
    [prerequisites-and-bootstrap](../guides/prerequisites-and-bootstrap.md), and an operator able to run `bootstrap/`.
 2. An Azure DevOps organisation/project with the service connections, environments, variable groups and agent pool
    from [pipelines/README.md](../../pipelines/README.md).
-3. A Datadog organisation (API + application key in Key Vault, RUM enabled, Database Monitoring and Synthetics
+3. A Datadog organisation (API + application key in Delinea DSV, RUM enabled, Database Monitoring and Synthetics
    entitlements).
 4. Then: run the universal pipeline with profile `minimal`; the Verify stage runs smoke tests and
    `observability/tools/verify/telemetry_verify.py`, and evidence is pulled into `docs/evidence/<env>/<run-id>/`

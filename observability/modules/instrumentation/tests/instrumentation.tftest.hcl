@@ -14,12 +14,17 @@ variables {
   runtime      = "dotnet"
   architecture = "aks"
   telemetry = {
-    datadog_site      = "datadoghq.eu"
-    api_key_secret_id = "https://kv-obs.vault.azure.net/secrets/datadog-api-key"
+    datadog_site = "datadoghq.eu"
+    api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+    secrets = {
+      tenant      = "contoso"
+      base_url    = "https://contoso.secretsvaultcloud.com/v1"
+      fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    }
     otlp = {
-      grpc_endpoint     = "http://ca-otelgw.internal.example.swedencentral.azurecontainerapps.io:4317"
-      http_endpoint     = "https://ca-otelgw.internal.example.swedencentral.azurecontainerapps.io"
-      headers_secret_id = "https://kv-obs.vault.azure.net/secrets/otlp-headers"
+      grpc_endpoint = "http://ca-otelgw.internal.example.swedencentral.azurecontainerapps.io:4317"
+      http_endpoint = "https://ca-otelgw.internal.example.swedencentral.azurecontainerapps.io"
+      headers_ref   = "dsv://eh/dev/otlp-headers#value"
     }
     fluentbit = {
       forward_host    = "ca-flb.internal.example.swedencentral.azurecontainerapps.io"
@@ -74,9 +79,9 @@ run "aks_dotnet_uses_node_agent_and_daemonset" {
 run "aca_python_sidecar_direct_to_datadog" {
   command = plan
   variables {
-    runtime               = "python"
-    architecture          = "aca"
-    key_vault_identity_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-app"
+    runtime            = "python"
+    architecture       = "aca"
+    identity_client_id = "33333333-3333-3333-3333-333333333333"
   }
   assert {
     condition     = output.log_route == "sidecar" && output.env["LOG_FILE_PATH"] == "/var/log/app/app.log"
@@ -87,16 +92,32 @@ run "aca_python_sidecar_direct_to_datadog" {
     error_message = "ACA must use the gateway HTTP endpoint by default."
   }
   assert {
-    condition     = output.secret_env["OTEL_EXPORTER_OTLP_HEADERS"] == "https://kv-obs.vault.azure.net/secrets/otlp-headers"
-    error_message = "OTLP auth header must be a secret reference."
+    condition     = output.secret_env["OTEL_EXPORTER_OTLP_HEADERS"] == "dsv://eh/dev/otlp-headers#value" && output.env["OTEL_EXPORTER_OTLP_HEADERS"] == "dsv://eh/dev/otlp-headers#value"
+    error_message = "OTLP auth header is a DSV reference in the app env (resolved by the app)."
+  }
+  assert {
+    condition     = output.env["DSV_TENANT"] == "contoso" && output.env["DSV_TLD"] == "com" && output.env["DSV_BASE_URL"] == "https://contoso.secretsvaultcloud.com/v1" && output.env["DSV_AUTH"] == "azure" && output.env["AZURE_CLIENT_ID"] == "33333333-3333-3333-3333-333333333333"
+    error_message = "DSV runtime env defaults for the app."
+  }
+  assert {
+    condition = (length(output.container_app_patch.init_containers) == 1
+      && output.container_app_patch.init_containers[0].name == "dsv-fetch"
+      && startswith(output.container_app_patch.init_containers[0].image, "ehacr.azurecr.io/dsv-fetch@sha256:")
+      && join(" ", output.container_app_patch.init_containers[0].args) == "init --out /dsv-secrets --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value"
+    && anytrue([for e in output.container_app_patch.init_containers[0].env : e.name == "AZURE_CLIENT_ID" && e.value == "33333333-3333-3333-3333-333333333333"]))
+    error_message = "ACA: a dsv-fetch init container writes the Fluent Bit env-yaml file with the app identity."
+  }
+  assert {
+    condition     = anytrue([for v in output.container_app_patch.volumes : v.name == "dsv-secrets" && v.storage_type == "EmptyDir"]) && anytrue([for m in output.container_app_patch.sidecars[0].volume_mounts : m.name == "dsv-secrets" && m.path == "/dsv-secrets"])
+    error_message = "The env file lives on an EmptyDir shared by init container and sidecar."
   }
   assert {
     condition     = length(output.container_app_patch.sidecars) == 1 && output.container_app_patch.sidecars[0].image == "fluent/fluent-bit:5.1.3"
     error_message = "One pinned Fluent Bit sidecar expected."
   }
   assert {
-    condition     = anytrue([for s in output.container_app_patch.secrets : s.name == "dd-api-key" && s.key_vault_secret_id == "https://kv-obs.vault.azure.net/secrets/datadog-api-key" && s.value == null && endswith(s.identity, "id-app")])
-    error_message = "Datadog API key must be a Key Vault reference read with the app identity."
+    condition     = !strcontains(jsonencode(output.container_app_patch), "key_vault") && !anytrue([for e in output.container_app_patch.sidecars[0].env : e.name == "DD_API_KEY"]) && length(output.container_app_patch.secrets) == 3
+    error_message = "No Key Vault references and no API key env on the sidecar; ACA secrets carry only the 3 config files."
   }
   assert {
     condition     = anytrue([for e in output.container_app_patch.sidecars[0].env : e.name == "FLB_DD_HOST" && e.value == "http-intake.logs.datadoghq.eu"])
@@ -117,20 +138,21 @@ run "aca_sidecar_forward_mode" {
   variables {
     architecture = "aca"
     telemetry = {
-      datadog_site      = "datadoghq.com"
-      api_key_secret_id = "https://kv-obs.vault.azure.net/secrets/datadog-api-key"
+      datadog_site = "datadoghq.com"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
       otlp = {
         grpc_endpoint = ""
         http_endpoint = "https://gw"
       }
       fluentbit = {
-        forward_host                 = "ca-flb"
-        forward_port                 = 24224
-        sidecar_mode                 = "forward"
-        sidecar_forward_config       = "service: {}\n"
-        sidecar_parsers              = "parsers: []\n"
-        sidecar_lua                  = "-- lua\n"
-        forward_shared_key_secret_id = "https://kv-obs.vault.azure.net/secrets/flb-shared-key"
+        forward_host           = "ca-flb"
+        forward_port           = 24224
+        sidecar_mode           = "forward"
+        sidecar_forward_config = "service: {}\n"
+        sidecar_parsers        = "parsers: []\n"
+        sidecar_lua            = "-- lua\n"
+        forward_shared_key_ref = "dsv://eh/dev/fluentbit-shared-key#value"
       }
     }
   }
@@ -139,8 +161,8 @@ run "aca_sidecar_forward_mode" {
     error_message = "Forward mode must target the aggregator."
   }
   assert {
-    condition     = !anytrue([for s in output.container_app_patch.secrets : s.name == "dd-api-key"]) && anytrue([for s in output.container_app_patch.secrets : s.name == "flb-forward-shared-key"])
-    error_message = "Forward mode carries the shared key, not the Datadog API key."
+    condition     = jsonencode(output.sidecar_secret_refs) == jsonencode({ FLB_FORWARD_SHARED_KEY = "dsv://eh/dev/fluentbit-shared-key#value" }) && strcontains(join(" ", output.container_app_patch.init_containers[0].args), "--map FLB_FORWARD_SHARED_KEY=dsv://eh/dev/fluentbit-shared-key#value")
+    error_message = "Forward mode fetches the shared key, not the Datadog API key."
   }
 }
 
@@ -154,8 +176,8 @@ run "appservice_eventhub_route_app_settings" {
     error_message = "App Service logs go console -> diagnostic settings -> Event Hubs; no file sink."
   }
   assert {
-    condition     = output.app_settings["OTEL_EXPORTER_OTLP_HEADERS"] == "@Microsoft.KeyVault(SecretUri=https://kv-obs.vault.azure.net/secrets/otlp-headers)"
-    error_message = "Secrets must be Key Vault references in app settings."
+    condition     = output.app_settings["OTEL_EXPORTER_OTLP_HEADERS"] == "dsv://eh/dev/otlp-headers#value" && output.app_settings["DSV_AUTH"] == "azure" && !strcontains(jsonencode(output.app_settings), "@Microsoft.KeyVault(")
+    error_message = "App settings carry dsv:// values (resolved by the app) and the DSV env; no Key Vault references."
   }
 }
 
@@ -177,8 +199,12 @@ run "aci_sidecar_spec" {
     runtime      = "python"
   }
   assert {
-    condition     = output.aci_sidecar.container.secure_environment_variables["DD_API_KEY"] == "https://kv-obs.vault.azure.net/secrets/datadog-api-key"
-    error_message = "ACI sidecar must list the API key as a secret reference to resolve."
+    condition     = length(output.aci_sidecar.container.secure_environment_variables) == 0 && output.aci_sidecar.fetcher.name == "dsv-fetch" && contains(output.aci_sidecar.fetcher.commands, "DD_API_KEY=dsv://eh/dev/datadog-api-key#value") && output.aci_sidecar.fetcher.commands[0] == "/usr/bin/python3.13"
+    error_message = "ACI: no secure env values; a dsv-fetch refresher container (ACI init containers have no managed identity) writes the env file."
+  }
+  assert {
+    condition     = anytrue([for v in output.aci_sidecar.container.volumes : v.name == "dsv-secrets" && v.empty_dir && v.mount_path == "/dsv-secrets"])
+    error_message = "ACI: Fluent Bit mounts the shared emptyDir with the env file."
   }
   assert {
     condition     = output.aci_sidecar.container.volumes[1].secret["fluent-bit.yaml"] == base64encode("service: {}\n")
@@ -213,7 +239,7 @@ run "browser_only_unified_tags" {
   }
   assert {
     condition     = jsonencode(output.env) == jsonencode({ DD_ENV = "dev", DD_SERVICE = "hello-frontend", DD_SITE = "datadoghq.eu", DD_VERSION = "2.0.0" })
-    error_message = "Browser runtime only gets RUM unified tags."
+    error_message = "Browser runtime only gets RUM unified tags (no DSV env, no sidecar)."
   }
 }
 
@@ -229,10 +255,11 @@ run "reject_literal_api_key" {
   command = plan
   variables {
     telemetry = {
-      datadog_site      = "datadoghq.com"
-      api_key_secret_id = "0123456789abcdef0123456789abcdef"
-      otlp              = { grpc_endpoint = "", http_endpoint = "" }
-      fluentbit         = { forward_host = "x", forward_port = 24224 }
+      datadog_site = "datadoghq.com"
+      api_key_ref  = "0123456789abcdef0123456789abcdef"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1" }
+      otlp         = { grpc_endpoint = "", http_endpoint = "" }
+      fluentbit    = { forward_host = "x", forward_port = 24224 }
     }
   }
   expect_failures = [var.telemetry]
@@ -249,4 +276,30 @@ run "reject_bad_service_tag" {
     }
   }
   expect_failures = [var.service]
+}
+
+run "reject_aca_without_fetch_image" {
+  command = plan
+  variables {
+    architecture = "aca"
+    telemetry = {
+      datadog_site = "datadoghq.com"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1" }
+      otlp         = { grpc_endpoint = "", http_endpoint = "" }
+      fluentbit    = { forward_host = "x", forward_port = 24224 }
+    }
+  }
+  expect_failures = [var.telemetry]
+}
+
+run "aks_env_has_dsv_defaults_and_no_secrets" {
+  command = plan
+  variables {
+    identity_client_id = "44444444-4444-4444-4444-444444444444"
+  }
+  assert {
+    condition     = output.env["DSV_BASE_URL"] == "https://contoso.secretsvaultcloud.com/v1" && output.env["AZURE_CLIENT_ID"] == "44444444-4444-4444-4444-444444444444" && length(output.sidecar_secret_refs) == 0
+    error_message = "AKS apps get the DSV env; no sidecar secrets."
+  }
 }

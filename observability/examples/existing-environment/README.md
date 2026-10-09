@@ -20,15 +20,15 @@ No sample applications, no networks, platforms or databases are created. Fault i
 1. Pin the release in `package.lock.json` (`version`, `url`, `sha256` from the release `.sha256` file).
 2. `./vendor.sh` - downloads, verifies sha256, extracts to `./.vendor/observability-<version>/` (git-ignored) and checks
    that every module `source` uses that version.
-   Alternative without vendoring: `source = "git::https://dev.azure.com/<org>/<project>/_git/<repo>//observability/modules/<module>?ref=observability-v1.1.0"`.
+   Alternative without vendoring: `source = "git::https://dev.azure.com/<org>/<project>/_git/<repo>//observability/modules/<module>?ref=observability-v2.0.0"`.
 3. Edit `manifests/prod/*.yaml` (resource ids are used **verbatim**), `routing/prod.yaml`, then
-   `python3 .vendor/observability-1.1.0/tools/onboarding/validate.py --manifests manifests/prod --env prod --routing routing/prod.yaml --strict`
-   and `python3 .vendor/observability-1.1.0/tools/onboarding/render.py render --manifests manifests/prod --env prod --out rendered/prod`.
+   `python3 .vendor/observability-2.0.0/tools/onboarding/validate.py --manifests manifests/prod --env prod --routing routing/prod.yaml --strict`
+   and `python3 .vendor/observability-2.0.0/tools/onboarding/render.py render --manifests manifests/prod --env prod --out rendered/prod`.
    Commit `rendered/prod`.
 4. `terraform init` (backend: your partial config) -> `terraform plan -out tfplan` -> `terraform apply tfplan`
    with `DD_API_KEY`/`DD_APP_KEY` in the environment. Pipelines: `pipelines/azure-pipelines.consumer-example.yml` in the package.
 5. Hand `terraform output instrumentation` to the application owners (App Service app settings, Kubernetes patch,
-   env vars, Key Vault secret references). This root never changes application settings.
+   env vars and Delinea DSV `dsv://` references). This root never changes application settings.
 
 Tests: `terraform test` (after `./vendor.sh`) runs plan-only checks with a mocked Datadog provider.
 

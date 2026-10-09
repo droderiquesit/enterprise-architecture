@@ -1,0 +1,95 @@
+{
+  "_comment": "TEST ONLY - mock Delinea DSV for the local e2e stack (tools/secrets/mock_dsv.py). Throw-away local values. One DSV identity per workload with read on exactly its own paths (least privilege, ADR-0001 \u00a714); client_credentials stand in for the managed-identity azure grant (no IMDS locally).",
+  "users": {
+    "e2e-orders-api": {
+      "read": [
+        "eh/e2e/orders-api/*"
+      ]
+    },
+    "e2e-durable": {
+      "read": [
+        "eh/e2e/durable/*"
+      ]
+    },
+    "e2e-catalog-api": {
+      "read": [
+        "eh/e2e/catalog-api/*"
+      ]
+    },
+    "e2e-dbadapter-postgresql": {
+      "read": [
+        "eh/e2e/dbadapter-postgresql/*"
+      ]
+    },
+    "e2e-worker": {
+      "read": [
+        "eh/e2e/worker/*"
+      ]
+    },
+    "e2e-observability": {
+      "read": [
+        "eh/e2e/datadog-api-key"
+      ]
+    }
+  },
+  "clients": {
+    "e2e-orders-api": {
+      "secret": "e2e-dsv-client-secret-orders-api-local-only",
+      "identity": "e2e-orders-api"
+    },
+    "e2e-durable": {
+      "secret": "e2e-dsv-client-secret-durable-local-only",
+      "identity": "e2e-durable"
+    },
+    "e2e-catalog-api": {
+      "secret": "e2e-dsv-client-secret-catalog-api-local-only",
+      "identity": "e2e-catalog-api"
+    },
+    "e2e-dbadapter-postgresql": {
+      "secret": "e2e-dsv-client-secret-dbadapter-postgresql-local-only",
+      "identity": "e2e-dbadapter-postgresql"
+    },
+    "e2e-worker": {
+      "secret": "e2e-dsv-client-secret-worker-local-only",
+      "identity": "e2e-worker"
+    },
+    "e2e-observability": {
+      "secret": "e2e-dsv-client-secret-observability-local-only",
+      "identity": "e2e-observability"
+    }
+  },
+  "secrets": {
+    "eh/e2e/orders-api/fault-token": {
+      "value": "e2e-fault-token-local-only"
+    },
+    "eh/e2e/orders-api/sql-connection-string": {
+      "value": "Server=tcp:mssql,1433;Database=orders;User Id=sa;Password=E2e-Local0nly!Pass;Encrypt=True;TrustServerCertificate=True;Connect Timeout=15"
+    },
+    "eh/e2e/orders-api/servicebus-connection-string": {
+      "value": "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+    },
+    "eh/e2e/durable/sql-connection-string": {
+      "value": "Server=tcp:mssql,1433;Database=fulfillment;User Id=sa;Password=E2e-Local0nly!Pass;Encrypt=True;TrustServerCertificate=True;Connect Timeout=15"
+    },
+    "eh/e2e/durable/servicebus-connection-string": {
+      "value": "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+    },
+    "eh/e2e/catalog-api/pg": {
+      "value": "e2e-local-only",
+      "username": "postgres"
+    },
+    "eh/e2e/dbadapter-postgresql/pg": {
+      "value": "e2e-local-only",
+      "username": "postgres"
+    },
+    "eh/e2e/worker/servicebus-connection-string": {
+      "value": "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
+    },
+    "eh/e2e/worker/tables-connection-string": {
+      "value": "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
+    },
+    "eh/e2e/datadog-api-key": {
+      "value": "e2e-dd-api-key-from-dsv-not-real"
+    }
+  }
+}

@@ -144,13 +144,19 @@ def test_ownership_rules_detect_violations(tmp_path):
         'resource "azurerm_redis_cache" "r" {\n}',
         'resource "azurerm_linux_web_app" "w" {\n  name = "dup-app"\n  app_settings = {}\n}',
         '# ownership:allow OWN001 documented exception\nresource "azurerm_monitor_diagnostic_setting" "ok" {\n}',
+        'resource "azurerm_key_vault_secret" "s" {\n}',
+        '# ownership:allow OWN008 documented exception\nresource "azurerm_key_vault" "ok" {\n}',
     ]))
+    write(repo, "applications/deployments/core-aca/kv.tf",
+          'resource "azurerm_container_app" "a" {\n  secret {\n    key_vault_secret_id = "x"\n  }\n  x = "@Microsoft.KeyVault(SecretUri=y)"\n}\n')
     write(repo, "platform/data/sql/dup.tf", 'resource "azurerm_linux_web_app" "w2" {\n  name = "dup-app"\n}\n')
     write(repo, "observability/modules/x/main.tf", 'module "n" {\n  source = "../../../foundation/modules/naming"\n}\n')
     rules = {f["rule"] for f in ownership.scan(repo)}
-    assert rules == {"OWN001", "OWN002", "OWN003", "OWN004", "OWN005", "OWN006", "OWN007"}
+    assert rules == {"OWN001", "OWN002", "OWN003", "OWN004", "OWN005", "OWN006", "OWN007", "OWN008"}
     msgs = [f for f in ownership.scan(repo) if f["rule"] == "OWN001"]
     assert len(msgs) == 1
+    kv = [f for f in ownership.scan(repo) if f["rule"] == "OWN008"]
+    assert len(kv) == 3, kv   # key_vault_secret resource, key_vault_secret_id argument, @Microsoft.KeyVault( reference
 
 
 def test_versions_check_detects_mismatch(tmp_path):

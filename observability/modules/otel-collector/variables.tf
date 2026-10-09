@@ -28,7 +28,7 @@ variable "sampling_percentage" {
 }
 
 variable "bearer_auth" {
-  description = "Require a bearer token on OTLP (upstream only; token injected as OTLP_BEARER_TOKEN from a secret)."
+  description = "Require a bearer token on OTLP (upstream only; token read from the file /dsv-secrets/otlp-bearer-token written by dsv-fetch)."
   type        = bool
   default     = false
 }

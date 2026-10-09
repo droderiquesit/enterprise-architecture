@@ -455,20 +455,17 @@ services:
     licensing: []
   networking:
     private_support: private-endpoint
-    notes: public_network_access_enabled = false + private endpoint (vault)
+    notes: not deployed by the lab (secrets live in Delinea DSV); an adopter vault would use public_network_access_enabled = false + private endpoint (vault)
   iac:
-    terraform_resources:
-    - azurerm_key_vault
-    - azurerm_key_vault_secret
+    terraform_resources: []
     azapi: []
-    component: foundation-identity
-    implemented: true
-    notes: 'ADR section 3: foundation owns Key Vault'
+    component: null
+    implemented: false
+    notes: 'Not used for secrets (Delinea DSV, ADR-0001 section 14 - user decision 2026-10-09: all keys/secrets in DSV, workloads read DSV directly). The only vault in the repository is the one azurerm_machine_learning_workspace requires (platform-specialized-compute, off by default; holds no lab secrets). Key Vault-linked variable groups, Key Vault references and the AKS Key Vault CSI add-on are not used (tools/validate/ownership.py forbids them).'
   workload:
-    exercised_by:
-    - all services
+    exercised_by: []
     operations:
-    - secret references (versionless IDs)
+    - none - replaced by delinea-dsv
   telemetry:
     azure_metric_namespace: azure.keyvault_vaults
     signals:
@@ -492,17 +489,13 @@ services:
   cost:
     profile: low
     approx_monthly_usd_default: 1
-    assumptions: Standard, few thousand operations
+    assumptions: not deployed (would be Standard, few thousand operations)
     teardown: terraform destroy of the owning root; soft delete 90 days + purge protection
     data_retention: soft-deleted vault/secrets retained 7-90 days
   status:
-    implementation: implemented
+    implementation: cataloged
     live_validation: not-run
-    default_profiles:
-    - enterprise
-    - full
-    - minimal
-    - specialized
+    default_profiles: []
   references:
   - https://learn.microsoft.com/en-us/azure/key-vault/general/overview
   - https://docs.datadoghq.com/integrations/azure_key_vault/

@@ -1,16 +1,25 @@
-# Datadog Agent (VM extension, publisher Datadog.Agent) + Fluent Bit on EXISTING VMs and VM scale sets.
+# Datadog Agent + Fluent Bit on EXISTING VMs and VM scale sets, with every secret read from Delinea DSV ON THE HOST
+# by the host's user-assigned managed identity (ADR-0001 §14). No API key in Terraform variables, state, VM extension
+# protected settings or run-command parameters:
+#   Linux  : Agent installed by the managed run command / CustomScript (official install script, DD_INSTALL_ONLY,
+#            pinned version) with api_key: ENC[dsv://...] and secret_backend_command = dsv-fetch agent-backend
+#            (owned by dd-agent, 0500); Fluent Bit reads the key from a tmpfs env-yaml file written by dsv-fetch in
+#            the unit's ExecStartPre.
+#   Windows: pinned MSIs; the installer reads the key from DSV (PowerShell, IMDS) and writes it into datadog.yaml /
+#            the Fluent Bit env-yaml include (ACL-restricted files). The Agent cannot run a script as secret backend
+#            on Windows (Win32 executable required), so the key refreshes when the installer re-runs.
 # App logs on hosts: Fluent Bit only (Agent DD_LOGS_ENABLED=false). OTLP: Agent receiver on localhost.
-# VM   -> azurerm_virtual_machine_extension + azurerm_virtual_machine_run_command (managed run command)
-# VMSS -> azurerm_virtual_machine_scale_set_extension (Datadog agent) + CustomScript extension running the
-#         same installer on every instance, including instances created later by autoscale.
+# VM   -> azurerm_virtual_machine_run_command (managed run command)
+# VMSS -> CustomScript extension running the same installer on every instance, including later autoscaled ones.
 locals {
-  ext_type = { linux = "DatadogLinuxAgent", windows = "DatadogWindowsAgent" }
-
-  agent_settings = jsonencode({
-    site         = var.datadog.site
-    agentVersion = var.datadog.agent_version
-  })
-  agent_protected = var.datadog.api_key_key_vault == null ? jsonencode({ api_key = var.api_key }) : null
+  dsv_fetch_source = coalesce(var.dsv_fetch_source, "${path.module}/../../images/dsv-fetch/dsv_fetch.py")
+  dsv_fetch_gz     = base64gzip(file(local.dsv_fetch_source))
+  dsv_base_url     = coalesce(var.secrets.base_url, "https://${coalesce(var.secrets.tenant, "unset")}.secretsvaultcloud.${coalesce(var.secrets.tld, "com")}/v1")
+  dsv_config = merge(
+    var.secrets.tenant == null ? {} : { DSV_TENANT = var.secrets.tenant },
+    var.secrets.tld == null ? {} : { DSV_TLD = var.secrets.tld },
+    { DSV_BASE_URL = local.dsv_base_url, DSV_AUTH = var.secrets.auth, DSV_TIMEOUT_SECONDS = "10" },
+  )
 }
 
 module "flb" {
@@ -31,54 +40,33 @@ locals {
     for k, h in var.hosts : k => templatefile(
       "${path.module}/scripts/${h.os_type == "linux" ? "linux-install.sh.tftpl" : "windows-install.ps1.tftpl"}",
       {
-        fb_version         = var.fluent_bit_version
-        api_key_secret_id  = var.datadog.api_key_secret_id == null ? "" : var.datadog.api_key_secret_id
-        identity_client_id = h.identity_client_id == null ? "" : h.identity_client_id
-        configure_agent    = tostring(h.install_agent)
-        install_fluent_bit = tostring(h.install_fluent_bit)
-        process_collection = tostring(var.datadog.process_collection)
-        agent_tags         = join(" ", [for t in sort(keys(h.service_tags)) : "${t}:${h.service_tags[t]}" if t != "source"])
-        files              = h.install_fluent_bit ? { for p, c in module.flb[k].files : p => base64gzip(c) } : {}
-        env                = h.install_fluent_bit ? module.flb[k].env : {}
+        fb_version            = var.fluent_bit_version
+        agent_version         = var.datadog.agent_version
+        site                  = var.datadog.site
+        api_key_ref           = var.datadog.api_key_ref
+        identity_client_id    = h.identity_client_id == null ? "" : h.identity_client_id
+        dsv_config_json       = jsonencode(local.dsv_config)
+        dsv_fetch_gz          = h.os_type == "linux" ? local.dsv_fetch_gz : ""
+        install_agent         = tostring(h.install_agent)
+        configure_agent       = tostring(h.install_agent)
+        install_fluent_bit    = tostring(h.install_fluent_bit)
+        process_collection    = tostring(var.datadog.process_collection)
+        agent_tags            = join(" ", [for t in sort(keys(h.service_tags)) : "${t}:${h.service_tags[t]}" if t != "source"])
+        files                 = h.install_fluent_bit ? { for p, c in module.flb[k].files : p => base64gzip(c) } : {}
+        env                   = h.install_fluent_bit ? module.flb[k].env : {}
+        secrets_file          = h.install_fluent_bit ? module.flb[k].secrets_env_file : ""
+        agent_msi_sha256      = var.windows_msi_sha256.agent
+        fluent_bit_msi_sha256 = var.windows_msi_sha256.fluent_bit
+        setup_revision        = var.setup_revision
       }
     )
   }
 
   vms   = { for k, h in var.hosts : k => h if h.kind == "vm" }
   vmsss = { for k, h in var.hosts : k => h if h.kind == "vmss" }
-
-  needs_protected_key = { for k, h in var.hosts : k => (h.install_fluent_bit && (var.datadog.api_key_secret_id == null || h.identity_client_id == null)) }
 }
 
 # ---------------------------------------------------------------------------------------------- VMs
-resource "azurerm_virtual_machine_extension" "datadog" {
-  for_each                   = { for k, h in local.vms : k => h if h.install_agent }
-  name                       = "DatadogAgent"
-  virtual_machine_id         = each.value.resource_id
-  publisher                  = "Datadog.Agent"
-  type                       = local.ext_type[each.value.os_type]
-  type_handler_version       = var.datadog.extension_version
-  auto_upgrade_minor_version = true
-  settings                   = local.agent_settings
-  protected_settings         = local.agent_protected
-  tags                       = var.tags
-
-  dynamic "protected_settings_from_key_vault" {
-    for_each = var.datadog.api_key_key_vault == null ? [] : [var.datadog.api_key_key_vault]
-    content {
-      secret_url      = protected_settings_from_key_vault.value.secret_url
-      source_vault_id = protected_settings_from_key_vault.value.source_vault_id
-    }
-  }
-
-  lifecycle {
-    precondition {
-      condition     = var.datadog.api_key_key_vault != null || var.api_key != null
-      error_message = "The Datadog Agent extension needs datadog.api_key_key_vault (preferred) or api_key."
-    }
-  }
-}
-
 resource "azurerm_virtual_machine_run_command" "setup" {
   for_each           = { for k, h in local.vms : k => h if h.install_fluent_bit || h.install_agent }
   name               = "observability-setup"
@@ -90,45 +78,15 @@ resource "azurerm_virtual_machine_run_command" "setup" {
     script = local.scripts[each.key]
   }
 
-  dynamic "protected_parameter" {
-    for_each = local.needs_protected_key[each.key] ? [1] : []
-    content {
-      name  = "DD_API_KEY"
-      value = var.api_key
-    }
-  }
-
-  depends_on = [azurerm_virtual_machine_extension.datadog]
-
   lifecycle {
     precondition {
-      condition     = !local.needs_protected_key[each.key] || var.api_key != null
-      error_message = "Fluent Bit needs the API key: set datadog.api_key_secret_id + hosts[*].identity_client_id (preferred) or api_key."
+      condition     = each.value.identity_client_id != null
+      error_message = "hosts[*].identity_client_id is required: the installer reads the Datadog API key from DSV with the host's user-assigned managed identity."
     }
   }
 }
 
 # ---------------------------------------------------------------------------------------------- VMSS
-resource "azurerm_virtual_machine_scale_set_extension" "datadog" {
-  for_each                     = { for k, h in local.vmsss : k => h if h.install_agent }
-  name                         = "DatadogAgent"
-  virtual_machine_scale_set_id = each.value.resource_id
-  publisher                    = "Datadog.Agent"
-  type                         = local.ext_type[each.value.os_type]
-  type_handler_version         = var.datadog.extension_version
-  auto_upgrade_minor_version   = true
-  settings                     = local.agent_settings
-  protected_settings           = local.agent_protected
-
-  dynamic "protected_settings_from_key_vault" {
-    for_each = var.datadog.api_key_key_vault == null ? [] : [var.datadog.api_key_key_vault]
-    content {
-      secret_url      = protected_settings_from_key_vault.value.secret_url
-      source_vault_id = protected_settings_from_key_vault.value.source_vault_id
-    }
-  }
-}
-
 locals {
   windows_cse_command = {
     # gzip+base64 payload decompressed by a one-line stub (an -EncodedCommand of the full script would
@@ -145,7 +103,7 @@ locals {
 }
 
 # A scale set can carry only ONE CustomScript extension; if the app owner already uses one, bake the
-# installer into the image or set install_fluent_bit = false and call scripts/ from that extension.
+# installer into the image or call the rendered installer (installer_scripts output) from theirs.
 resource "azurerm_virtual_machine_scale_set_extension" "setup" {
   for_each                     = { for k, h in local.vmsss : k => h if h.install_fluent_bit || h.install_agent }
   name                         = "observability-setup"
@@ -154,16 +112,14 @@ resource "azurerm_virtual_machine_scale_set_extension" "setup" {
   type                         = each.value.os_type == "linux" ? "CustomScript" : "CustomScriptExtension"
   type_handler_version         = each.value.os_type == "linux" ? "2.1" : "1.10"
   auto_upgrade_minor_version   = true
-  provision_after_extensions   = each.value.install_agent ? ["DatadogAgent"] : []
   # re-run on every instance when the installer (configs included) changes
   force_update_tag = sha256(local.scripts[each.key])
+  # protected only to keep the (non-secret) script out of the instance view; it contains no secret
   protected_settings = each.value.os_type == "linux" ? jsonencode({
     script = base64gzip(local.scripts[each.key])
     }) : jsonencode({
     commandToExecute = local.windows_cse_command[each.key]
   })
-
-  depends_on = [azurerm_virtual_machine_scale_set_extension.datadog]
 
   lifecycle {
     precondition {
@@ -171,8 +127,8 @@ resource "azurerm_virtual_machine_scale_set_extension" "setup" {
       error_message = "Windows CustomScriptExtension command exceeds the Windows command-line limit; trim log paths/config."
     }
     precondition {
-      condition     = !local.needs_protected_key[each.key]
-      error_message = "VMSS instances must read the API key from Key Vault (datadog.api_key_secret_id + hosts[*].identity_client_id); CustomScript has no protected parameters per instance."
+      condition     = each.value.identity_client_id != null
+      error_message = "hosts[*].identity_client_id is required: every instance reads the Datadog API key from DSV with the scale set's user-assigned managed identity."
     }
   }
 }

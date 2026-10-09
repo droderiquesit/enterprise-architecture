@@ -34,7 +34,7 @@ variable "health_url" {
 }
 
 variable "client_id" {
-  description = "User-assigned identity client id used for IMDS tokens (storage + Key Vault)."
+  description = "User-assigned identity client id used for IMDS tokens (package download; the service reads DSV with it)."
   type        = string
 }
 
@@ -52,7 +52,11 @@ variable "env" {
 }
 
 variable "secret_env" {
-  description = "Secret environment: name -> versionless Key Vault secret id, resolved ON THE HOST via IMDS (never in state)."
+  description = "Secret settings: name -> Delinea DSV reference (dsv://...), written to the env file as the reference and resolved by the service at start-up (never a value in state or on disk)."
   type        = map(string)
   default     = {}
+  validation {
+    condition     = alltrue([for v in values(var.secret_env) : can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", v))])
+    error_message = "secret_env values must be dsv:// references."
+  }
 }

@@ -40,8 +40,8 @@ resource "datadog_integration_azure" "this" {
       error_message = "mode = app_registration requires var.app_registration."
     }
     precondition {
-      condition     = try(var.app_registration.auth, "secret") != "secret" || var.client_secret != null
-      error_message = "app_registration.auth = secret requires client_secret (from Key Vault)."
+      condition     = try(var.app_registration.auth, "secretless") != "secret" || var.client_secret != null
+      error_message = "app_registration.auth = secret requires client_secret (pipeline input fetched from Delinea DSV)."
     }
   }
 }

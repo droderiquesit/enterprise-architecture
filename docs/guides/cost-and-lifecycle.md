@@ -69,7 +69,7 @@ has been deployed.
 | Cosmos Cassandra API | periodic backup 24 h interval, 7 days | `platform-db-cosmos-cassandra` |
 | ACR untagged manifests | 7 days (Premium only) | `platform-shared` |
 | State storage | versioning + 30-day blob/container soft delete + 90-day change feed | `bootstrap` |
-| Key Vault | 7-day soft delete, purge protection on | `foundation-identity` |
+| Delinea DSV secrets | DSV keeps secret versions; nothing is deleted by teardown | operators (dsv CLI) |
 
 The profile `features.trace_sample_rate` (-> `trace_sample_ratio` of every deploy root), `rum_session_sample_rate` and
 `session_replay` (-> `obs-prereqs` RUM sample rates) set these defaults per profile (`minimal` 1.0 / 100, `enterprise`,
@@ -87,9 +87,9 @@ the pipeline retire mode or per-root `terraform destroy`: [runbooks/teardown.md]
 | 2 | `deploy-jobs`, `deploy-frontend`, `deploy-core-aks`, `deploy-durable`, other `deploy-*`, `obs-hosts`, `obs-kubernetes`, `obs-dbm` | app resources only; no data (data lives in platform databases) |
 | 3 | `obs-telemetry-transport` | Event Hubs buffer (<= 1 day) lost |
 | 4 | `platform-aks`, `platform-containerapps`, `platform-batch` | no persistent data in clusters/environments |
-| 5 | `platform-db-*`, `platform-data-analytics`, `platform-messaging`, `platform-functions`, `platform-shared`, other platform roots | **databases deleted** (synthetic data; SQL deleted databases restorable from backup until server deletion); Service Bus in-flight/dead-lettered messages lost; ACR images deleted (rebuildable); Log Analytics workspace soft-deleted 14 days; Functions packages and Durable task hub deleted; Key Vault secrets created by data roots deleted (vault soft delete applies) |
+| 5 | `platform-db-*`, `platform-data-analytics`, `platform-messaging`, `platform-functions`, `platform-shared`, other platform roots | **databases deleted** (synthetic data; SQL deleted databases restorable from backup until server deletion); Service Bus in-flight/dead-lettered messages lost; ACR images deleted (rebuildable); Log Analytics workspace soft-deleted 14 days; Functions packages and Durable task hub deleted |
 | 6 | `foundation-edge`, `foundation-deploy-agents` | switch network egress back to NAT **before** destroying the firewall; remove the Azure DevOps agent pool first; APIM v2 soft-deleted 48 h |
-| 7 | `foundation-identity` | Key Vault soft-deleted 7 days and **not purgeable** (purge protection) - its deterministic name blocks re-creation of the same environment for 7 days |
+| 7 | `foundation-secrets`, `foundation-identity` | identities deleted immediately; DSV users/permissions/secrets remain until removed with the dsv CLI |
 | 8 | `foundation-network` | no data; subnets with service association links (ACA, SQL MI, MDP, Flexible Servers) release slowly |
 | 9 | `foundation-governance` | last, so budget alerts cover the teardown |
 | 10 | `bootstrap` | **retained by design**: `prevent_destroy` + CanNotDelete lock; removal is a manual, local procedure (bootstrap README) |

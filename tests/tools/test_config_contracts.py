@@ -151,3 +151,46 @@ def test_secret_detection():
 
 def test_contract_schema_check_all_on_repository():
     assert validate_cli.main(["--repo", str(REPO_ROOT), "--all"]) == 0
+
+
+IDENTITY_V2 = {
+    "resource_group_name": "eh-rg-identity-dev-sec",
+    "tenant_id": "00000000-0000-0000-0000-000000000000",
+    "identities": {"hello-bff": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-identity-dev-sec/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-hello-bff-dev-sec",
+        "principal_id": "p", "client_id": "c", "name": "eh-id-hello-bff-dev-sec", "secrets": ["fault-token", "sqlvm-dbadapter-password"]}},
+    "secrets": {"provider": "delinea-dsv", "tenant": "example-lab", "tld": "com",
+                "base_url": "https://example-lab.secretsvaultcloud.com/v1", "base_path": "eh/dev", "auth_provider": "azure-eh",
+                "refs": {"fault-token": "dsv://eh/dev/fault-token#value",
+                         "sqlvm-dbadapter-password": "dsv://eh/dev/sqlvm-dbadapter-password#value"}},
+}
+
+
+def test_foundation_identity_v2_contract_with_real_schema(tmp_path):
+    """foundation-identity is at major v2 (v1 schema removed): publish writes v2, a v1 envelope is incompatible,
+    Key Vault fields are rejected and dsv:// references are not treated as secrets."""
+    from tools.contracts.lib import envelope_key, expected_major, validate_data
+    from tools.contracts.publish import build_envelope
+
+    tree = WorkTree(REPO_ROOT)
+    assert expected_major(tree, "foundation-identity") == 2
+    assert not (REPO_ROOT / "catalog/contracts/foundation-identity.v1.schema.json").exists()
+    assert validate_data(tree, "foundation-identity", 2, IDENTITY_V2) == []
+    comp = load_registry(tree).get("foundation-identity")
+    env = build_envelope(tree, "dev", comp, "foundation-identity", IDENTITY_V2, "abc", "1")
+    assert env["version"] == "2.0.0" and envelope_key("dev", "foundation-identity", 2) == "dev/foundation-identity/v2.json"
+    legacy = json.loads(json.dumps(IDENTITY_V2))
+    legacy["key_vault_id"] = "/subscriptions/x/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv"
+    assert validate_data(tree, "foundation-identity", 2, legacy)
+    leaky = json.loads(json.dumps(IDENTITY_V2))
+    leaky["secrets"]["refs"]["fault-token"] = "plain-value"
+    assert validate_data(tree, "foundation-identity", 2, leaky)
+    assert secret_like_keys(IDENTITY_V2) == []
+    with pytest.raises(ContractError):
+        build_envelope(tree, "dev", comp, "foundation-identity", dict(IDENTITY_V2, admin_password="x"), "abc", "1")
+
+
+def test_secret_detection_allows_dsv_refs():
+    assert secret_like_keys({"secrets": {"refs": {"sqlvm-admin-password": "dsv://eh/dev/sqlvm-admin-password#value"}}}) == []
+    assert secret_like_keys({"x": {"datadog-api-key": "abc123"}}) == ["x.datadog-api-key"]
+    assert secret_like_keys({"password_secret_id": "dsv://eh/dev/p#value"}) == []

@@ -11,7 +11,7 @@ Private Azure Confidential Ledger. Collections `order-audit` (hello-functions au
 | Contract | Fields used |
 |---|---|
 | `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v1 | `key_vault_id`, `key_vault_uri`, `secret_ids` (optional), `identities[<name>].{principal_id, client_id, name}` |
+| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
 
 ## Produced contract
 `platform-db-ledger` v1 — schema `catalog/contracts/platform-db-ledger.v1.schema.json` (output `contract`, no secrets).

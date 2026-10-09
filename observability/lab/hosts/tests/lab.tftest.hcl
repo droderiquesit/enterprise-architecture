@@ -1,8 +1,5 @@
 mock_provider "azurerm" {
   override_during = plan
-  mock_data "azurerm_key_vault_secret" {
-    defaults = { value = "mock-not-a-real-key" }
-  }
 }
 
 variables {
@@ -19,11 +16,9 @@ variables {
     tags            = {}
   }
   obs_telemetry_transport = {
-    datadog_site      = "datadoghq.com"
-    api_key_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
-  }
-  foundation_identity = {
-    key_vault_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.KeyVault/vaults/eh-kv-ident-dev-abcde"
+    datadog_site = "datadoghq.com"
+    api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+    secrets      = { tenant = "contoso", tld = "com", base_url = "https://contoso.secretsvaultcloud.com/v1" }
   }
   platform_vm = {
     location = "swedencentral"
@@ -57,7 +52,7 @@ variables {
     }
   }
   platform_db_sqlvm = {
-    vm = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-db/providers/Microsoft.Compute/virtualMachines/eh-vm-sql-dev-sec", name = "eh-vm-sql-dev-sec" }
+    vm = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-db/providers/Microsoft.Compute/virtualMachines/eh-vm-sql-dev-sec", name = "eh-vm-sql-dev-sec", identity_client_id = "55555555-5555-5555-5555-555555555555" }
   }
 }
 
@@ -72,12 +67,12 @@ run "lab_hosts" {
     error_message = "SQL VM: Agent only (setup still configures OTLP/logs-off), no Fluent Bit."
   }
   assert {
-    condition     = length(module.hosts.agent_extensions) == 4
-    error_message = "Agent on every host."
+    condition     = alltrue([for k, s in module.hosts.installer_scripts : strcontains(s, "dsv://eh/dev/datadog-api-key#value") && !strcontains(s, "vault.azure.net")])
+    error_message = "Every installer reads the key from DSV (reference only)."
   }
 }
 
-run "no_hosts_no_secret_read" {
+run "no_hosts" {
   command = plan
   variables {
     platform_vm       = null
@@ -85,18 +80,18 @@ run "no_hosts_no_secret_read" {
     platform_db_sqlvm = null
   }
   assert {
-    condition     = length(data.azurerm_key_vault_secret.api_key) == 0 && length(module.hosts.agent_extensions) == 0
+    condition     = length(module.hosts.setup) == 0
     error_message = "Nothing to do without hosts."
   }
 }
 
-run "kv_protected_settings_avoids_state_secret" {
+run "sqlvm_without_identity_is_skipped" {
   command = plan
   variables {
-    settings = { agent_protected_settings_secret_url = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-agent-protected/0123456789abcdef0123456789abcdef" }
+    platform_db_sqlvm = { vm = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-db/providers/Microsoft.Compute/virtualMachines/eh-vm-sql-dev-sec", name = "eh-vm-sql-dev-sec" } }
   }
   assert {
-    condition     = length(data.azurerm_key_vault_secret.api_key) == 0
-    error_message = "No data-source read of the key when the extension pulls it from Key Vault."
+    condition     = !contains(keys(output.hosts), "sqlvm") && length(module.hosts.setup) == 3
+    error_message = "A SQL VM without a DSV-mapped identity is skipped (it could not read the key)."
   }
 }

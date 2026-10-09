@@ -32,13 +32,6 @@ variable "foundation_network" {
   })
 }
 
-variable "foundation_identity" {
-  description = "foundation-identity contract v1 (fields used here)."
-  type = object({
-    key_vault_id = string
-  })
-}
-
 variable "settings" {
   description = "Component settings (components.foundation-edge). Everything is off by default. See README."
   type = object({
@@ -48,13 +41,12 @@ variable "settings" {
       max_capacity = optional(number, 2)
       zones        = optional(list(string), [])
       waf_mode     = optional(string, "Prevention")
-      # Versionless Key Vault *secret* id of the TLS certificate (https://<vault>.vault.azure.net/secrets/<cert>).
-      key_vault_certificate_secret_id = optional(string, "")
-      listener_host_name              = optional(string)
-      backend_fqdns                   = optional(list(string), [])
-      backend_port                    = optional(number, 443)
-      backend_protocol                = optional(string, "Https")
-      probe_path                      = optional(string, "/healthz")
+      # Listener certificate: var.tls_certificate_pfx / var.tls_certificate_password (DSV appgw-tls-pfx).
+      listener_host_name = optional(string)
+      backend_fqdns      = optional(list(string), [])
+      backend_port       = optional(number, 443)
+      backend_protocol   = optional(string, "Https")
+      probe_path         = optional(string, "/healthz")
     }), {})
 
     front_door = optional(object({
@@ -94,6 +86,8 @@ variable "settings" {
         "*.vsassets.io", "vstsagentpackage.azureedge.net", "*.vstoken.visualstudio.com", "github.com", "*.githubusercontent.com",
         "registry-1.docker.io", "auth.docker.io", "production.cloudflare.docker.com", "pypi.org", "files.pythonhosted.org",
         "api.nuget.org", "registry.npmjs.org",
+        # Delinea DSV (ADR-0001 section 14): every workload and agent reads its secrets from <tenant>.secretsvaultcloud.<tld>
+        "*.secretsvaultcloud.com", "*.secretsvaultcloud.eu", "*.secretsvaultcloud.com.au", "*.secretsvaultcloud.ca",
       ])
       allowed_fqdn_tags = optional(list(string), ["AzureKubernetesService"])
     }), {})
@@ -126,11 +120,32 @@ variable "settings" {
     error_message = "bastion.sku must be Developer, Basic or Standard."
   }
   validation {
-    condition     = !var.settings.app_gateway.enabled || (can(regex("^https://[^/]+/secrets/[^/]+/?$", var.settings.app_gateway.key_vault_certificate_secret_id)) && length(var.settings.app_gateway.backend_fqdns) > 0)
-    error_message = "app_gateway requires key_vault_certificate_secret_id (versionless secret id) and at least one backend FQDN."
+    condition     = !var.settings.app_gateway.enabled || length(var.settings.app_gateway.backend_fqdns) > 0
+    error_message = "app_gateway requires at least one backend FQDN."
   }
   validation {
     condition     = !var.settings.front_door.enabled || length(var.settings.front_door.origins) > 0
     error_message = "front_door requires at least one origin."
   }
+}
+
+# Application Gateway listener certificate from Delinea DSV (appgw-tls-pfx: element `value` = base64 PFX, element
+# `password`), passed by the pipeline (tools/secrets/fetch.py, registry secret_env). Sensitive but NOT ephemeral:
+# ssl_certificate.data/password have no write-only form in azurerm 5.9, so the values are stored in state.
+variable "tls_certificate_pfx" {
+  description = "Base64-encoded PFX of the App Gateway HTTPS listener (DSV appgw-tls-pfx#value). Only when app_gateway is enabled."
+  type        = string
+  default     = null
+  sensitive   = true
+  validation {
+    condition     = var.tls_certificate_pfx == null || can(base64decode(var.tls_certificate_pfx))
+    error_message = "tls_certificate_pfx must be base64 (PFX)."
+  }
+}
+
+variable "tls_certificate_password" {
+  description = "Password of the PFX (DSV appgw-tls-pfx#password)."
+  type        = string
+  default     = null
+  sensitive   = true
 }

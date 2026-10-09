@@ -13,6 +13,10 @@ Rules
           names computed by the naming module are not comparable statically and are skipped)
   OWN007  app resources and app settings only in applications/deployments/ (observability may own its
           telemetry-transport apps; foundation/deploy-agents may own agent container jobs/groups)
+  OWN008  no Azure Key Vault for secrets anywhere (ADR-0001 section 14: all keys/secrets live in Delinea DSV):
+          no azurerm_key_vault* resources/data sources, no `@Microsoft.KeyVault(` references, no
+          `key_vault_secret_id` / `key_vault_reference_identity_id` arguments (container app secrets, App Gateway
+          certificates, app settings). Also scans *.tftpl / *.yaml / *.json under the Terraform roots and charts.
 Suppress a finding with a comment on the line above the block: `# ownership:allow OWN00x <reason>`.
 """
 
@@ -48,6 +52,11 @@ APP_TYPES = {
 APP_OWNER_PREFIXES = ("applications/deployments/", "observability/")
 APP_EXCEPTIONS = {"foundation/deploy-agents/": {"azurerm_container_app_job", "azurerm_container_group"}}
 APP_SETTINGS_RE = re.compile(r'^\s*app_settings\s*=', re.M)
+KV_REF_RE = re.compile(r"@Microsoft\.KeyVault\(")
+KV_ARG_RE = re.compile(r'^\s*(key_vault_secret_id|key_vault_reference_identity_id)\s*=', re.M)
+KV_TEXT_SUFFIXES = (".tftpl", ".tpl", ".yaml", ".yml", ".json")
+KV_TEXT_PREFIXES = ("applications/deployments/", "applications/charts/", "observability/modules/", "observability/lab/",
+                    "foundation/", "platform/")
 
 
 def _block_body(text: str, start: int) -> str:
@@ -94,6 +103,8 @@ def scan(repo: Path) -> list[dict]:
                 add("OWN002", path, f"{where}: terraform_remote_state is forbidden; consume contracts")
             if typ.startswith("datadog_") and not in_obs and not _suppressed(text, pos, "OWN003"):
                 add("OWN003", path, f"{where}: Datadog resources belong to observability/")
+            if typ.startswith("azurerm_key_vault") and not _suppressed(text, pos, "OWN008"):
+                add("OWN008", path, f"{where}: secrets live in Delinea DSV, not Azure Key Vault (ADR-0001 section 14)")
             if typ == "azurerm_redis_cache" and not _suppressed(text, pos, "OWN005"):
                 add("OWN005", path, f"{where}: use azurerm_managed_redis (Azure Managed Redis)")
             if kind == "resource" and typ in APP_TYPES and not path.startswith(APP_OWNER_PREFIXES):
@@ -105,6 +116,13 @@ def scan(repo: Path) -> list[dict]:
                 nm = NAME_RE.search(body)
                 if nm and not _suppressed(text, pos, "OWN006"):
                     literal_names[(typ, nm.group(1))].add(root)
+        for m in list(KV_REF_RE.finditer(text)) + list(KV_ARG_RE.finditer(text)):
+            line_text = text[text.rfind("\n", 0, m.start()) + 1:m.start()].strip()
+            if line_text.startswith(("#", "//")):
+                continue  # documentation of the rule / history, not configuration
+            if not _suppressed(text, m.start(), "OWN008"):
+                line = text.count("\n", 0, m.start()) + 1
+                add("OWN008", path, f"line {line}: Key Vault reference ({m.group(0).strip()}); use a dsv:// reference")
         if not in_obs:
             for m in PROVIDER_RE.finditer(text):
                 if not _suppressed(text, m.start(), "OWN003"):
@@ -121,6 +139,12 @@ def scan(repo: Path) -> list[dict]:
                 target = posixpath.normpath(posixpath.join(base, m.group(1)))
                 if not target.startswith("observability/") and target != "observability":
                     add("OWN004", path, f"references '{m.group(1)}' outside observability/ (portable package)")
+    for path in sorted(p for p in tree.files() if p.endswith(KV_TEXT_SUFFIXES) and p.startswith(KV_TEXT_PREFIXES)
+                       and "/tests/" not in p and "/.terraform/" not in p):
+        text = tree.read_text(path) or ""
+        for m in KV_REF_RE.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            add("OWN008", path, f"line {line}: Key Vault reference (@Microsoft.KeyVault(...)); use a dsv:// reference")
     for (typ, name), roots in sorted(literal_names.items()):
         if len(roots) > 1:
             add("OWN006", ",".join(sorted(roots)), f"{typ} named '{name}' is declared in several roots: {', '.join(sorted(roots))}")

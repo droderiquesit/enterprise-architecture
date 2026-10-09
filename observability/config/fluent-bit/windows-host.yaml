@@ -23,8 +23,13 @@ service:
   storage.backlog.mem_limit: 16M
   storage.max_chunks_up: 64
 
+# Secret values (DD_API_KEY, FLB_FORWARD_SHARED_KEY, EVENTHUB_CONNECTION_STRING) are NOT in this file or in the
+# container env: dsv-fetch (observability/images/dsv-fetch) writes them from Delinea DSV into an `env:` YAML
+# file at C:/ProgramData/fluent-bit-eh/secrets/fluentbit-env.yaml (ACL SYSTEM + Administrators only, written by the installer) before Fluent Bit starts; the include below
+# makes them available to ${VAR} substitution. A missing file fails the start (fail fast, no silent key-less run).
 includes:
   - parsers.yaml
+  - C:/ProgramData/fluent-bit-eh/secrets/fluentbit-env.yaml
   - inputs-extra.yaml
 
 pipeline:

@@ -63,7 +63,7 @@ None of these procedures has been run against Azure.
 * **Contracts**: a breaking contract change publishes `v2` next to `v1`; rolling back a producer that already published
   `v2` leaves `v2` in the store - consumers pinned to `v1` are unaffected.
 * **State**: a corrupted or wrong state file is restored from blob versioning ([break-glass](break-glass.md)).
-* **Key Vault secrets**: re-enable the previous version ([secret rotation](secret-rotation.md)).
+* **Secrets (Delinea DSV)**: `dsv secret rollback --path <prefix>/<env>/<name> --version <n>`, then restart consumers ([secret rotation](secret-rotation.md)).
 * **Databases**: restore = point-in-time restore into a **new** database/server (SQL PITR 7 days, PostgreSQL 7-day
   backups), validate, then switch the connection settings in a reviewed change. Do not let Terraform replace a database
   to "roll back".

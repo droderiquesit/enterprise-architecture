@@ -32,18 +32,20 @@ variable "foundation_network" {
   })
 }
 
-# Upstream contract: catalog/contracts/foundation-identity.v1.schema.json (only the fields used here).
+# Upstream contract: catalog/contracts/foundation-identity.v2.schema.json (only the fields used here).
 variable "foundation_identity" {
   type = object({
-    key_vault_id  = string
-    key_vault_uri = string
-    secret_ids    = optional(map(string), {}) # versionless Key Vault secret IDs (values set out-of-band)
     identities = map(object({
       id           = string
       principal_id = string
       client_id    = string
       name         = string
     }))
+    # Delinea DSV references (ADR-0001 section 14): dsv://<base_path>/<name>#value - never values.
+    secrets = object({
+      base_path = string
+      refs      = optional(map(string), {})
+    })
   })
 }
 
@@ -55,7 +57,7 @@ variable "settings" {
     autoscale_max_throughput = optional(number, 1000)
     private_endpoint_enabled = optional(bool, true)
     mongo_server_version     = optional(string, "7.0")
-    # Key Vault secret (in foundation-identity's vault) that holds the connection string, set out-of-band.
+    # DSV secret name (<prefix>/<env>/<name>) that holds the connection string, set out-of-band.
     connection_string_secret_name = optional(string, "cosmos-mongo-connection-string")
   })
   default = {}

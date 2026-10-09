@@ -4,7 +4,7 @@
   "title": "Lab environment (environments/<env>/environment.yaml)",
   "description": "Globals and per-component settings of one lab environment. See ADR-0001 §6. Values are inputs, never secrets.",
   "type": "object",
-  "required": ["environment", "profile"],
+  "required": ["environment", "profile", "secrets"],
   "additionalProperties": true,
   "properties": {
     "environment": {
@@ -38,6 +38,19 @@
         "app_key_secret_name": {"type": "string"}
       },
       "not": {"anyOf": [{"required": ["api_key"]}, {"required": ["app_key"]}]}
+    },
+    "secrets": {
+      "description": "Delinea DevOps Secrets Vault (ADR-0001 section 14). Identifiers only: tenant/auth provider names are not secrets.",
+      "type": "object",
+      "required": ["provider", "tenant", "auth_provider"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {"const": "delinea-dsv"},
+        "tenant": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+        "tld": {"enum": ["com", "eu", "com.au", "ca"], "default": "com"},
+        "auth_provider": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+        "base_url": {"type": "string", "pattern": "^https?://[^/]+(:[0-9]+)?/v1$"}
+      }
     },
     "network": {
       "type": "object",

@@ -30,12 +30,15 @@ locals {
     service            = coalesce(v.workload, v.name)
     install_fluent_bit = true
   } }
-  sqlvm_hosts = var.platform_db_sqlvm == null ? {} : { "sqlvm" = {
+  # The SQL Server VM gets the Agent only; it needs a user-assigned identity mapped to DSV (contract field
+  # vm.identity_client_id, else settings.sqlvm_identity_client_id) - without one it is skipped.
+  sqlvm_identity = try(coalesce(try(var.platform_db_sqlvm.vm.identity_client_id, null), var.settings.sqlvm_identity_client_id), null)
+  sqlvm_hosts = var.platform_db_sqlvm == null || local.sqlvm_identity == null ? {} : { "sqlvm" = {
     resource_id        = var.platform_db_sqlvm.vm.id
     os_type            = var.settings.sqlvm_os_type
     kind               = "vm"
     location           = var.environment.location
-    identity_client_id = null
+    identity_client_id = local.sqlvm_identity
     log_dir            = ""
     service            = "sql-server"
     install_fluent_bit = false
@@ -53,30 +56,24 @@ locals {
     [h.os_type == "windows" ? "${h.log_dir}\\${var.settings.linux_log_glob}" : "${h.log_dir}/${var.settings.linux_log_glob}"])
     install_fluent_bit = h.install_fluent_bit
   } }
-
-  use_kv_protected = var.settings.agent_protected_settings_secret_url != null
-}
-
-# Fallback only (no versioned protected-settings secret): the key lands in state as a protected setting.
-data "azurerm_key_vault_secret" "api_key" {
-  count        = local.use_kv_protected || length(local.hosts) == 0 ? 0 : 1
-  name         = var.settings.api_key_secret_name
-  key_vault_id = var.foundation_identity.key_vault_id
 }
 
 module "hosts" {
   source = "../../modules/host-agents"
   hosts  = local.hosts
+  # every host reads the key from Delinea DSV itself (Agent secret backend / Fluent Bit ExecStartPre); no data
+  # source, nothing secret in this root's state
   datadog = {
-    site              = var.obs_telemetry_transport.datadog_site
-    agent_version     = var.settings.agent_version
-    api_key_secret_id = var.obs_telemetry_transport.api_key_secret_id
-    api_key_key_vault = local.use_kv_protected ? {
-      secret_url      = var.settings.agent_protected_settings_secret_url
-      source_vault_id = var.foundation_identity.key_vault_id
-    } : null
+    site          = var.obs_telemetry_transport.datadog_site
+    agent_version = var.settings.agent_version
+    api_key_ref   = var.obs_telemetry_transport.api_key_ref
   }
-  api_key            = local.use_kv_protected || length(local.hosts) == 0 ? null : data.azurerm_key_vault_secret.api_key[0].value
+  secrets = {
+    tenant   = var.obs_telemetry_transport.secrets.tenant
+    tld      = var.obs_telemetry_transport.secrets.tld
+    base_url = var.obs_telemetry_transport.secrets.base_url
+  }
+  setup_revision     = var.settings.setup_revision
   fluent_bit_version = var.settings.fluent_bit_version
   tags               = module.tags.tags
 }

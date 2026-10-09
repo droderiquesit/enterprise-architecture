@@ -11,7 +11,7 @@ Flexible Server **MySQL 8.4** (GA since 2025-09), `B_Standard_B1ms`, 20 GB, 7-da
 | Contract | Fields used |
 |---|---|
 | `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v1 | `key_vault_id`, `key_vault_uri`, `secret_ids` (optional), `identities[<name>].{principal_id, client_id, name}` |
+| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}`, `secrets.{base_path, refs}` (Delinea DSV references) |
 
 ## Produced contract
 `platform-db-mysql` v1 — schema `catalog/contracts/platform-db-mysql.v1.schema.json` (output `contract`, no secrets).
@@ -41,7 +41,7 @@ it with `az mysql flexible-server update --admin-password` for break-glass. Entr
 which needs Microsoft Graph read permissions (`User.Read.All`, `GroupMember.Read.All`, `Application.Read.All`) or the
 *Directory Readers* role granted by an Entra administrator out-of-band. Workload users: `scripts/grant-db-users.sql`
 (`CREATE AADUSER '<name>' IDENTIFIED BY '<client id>'`), run as the Entra admin after apply. The DBM user is created
-by obs-dbm with the password from Key Vault.
+by obs-dbm with the password from Delinea DSV (`dbm-mysql-password`).
 
 ## Teardown and data retention
 Destroy deletes the server and database.

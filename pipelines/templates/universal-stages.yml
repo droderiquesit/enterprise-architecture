@@ -135,7 +135,6 @@ stages:
           buildServiceConnection: ${{ variables.buildServiceConnection }}
           stateStorageAccount: ${{ variables.stateStorageAccount }}
           containerRegistry: ${{ variables.containerRegistry }}
-          datadogVariableGroup: ${{ variables.datadogVariableGroup }}
           datadogSite: ${{ variables.datadogSite }}
           promoteFrom: ${{ variables.promoteFrom }}
           promoteFromStateStorageAccount: ${{ variables.promoteFromStateStorageAccount }}

@@ -126,13 +126,20 @@ variables {
     acr_login_server = "ehcrshareddevabcde.azurecr.io"
   }
   obs_telemetry_transport = {
-    datadog_site      = "datadoghq.com"
-    api_key_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
+    datadog_site = "datadoghq.com"
+    api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+    secrets = {
+      provider    = "delinea-dsv"
+      tenant      = "contoso"
+      tld         = "com"
+      base_url    = "https://contoso.secretsvaultcloud.com/v1"
+      fetch_image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    }
     otlp = {
-      grpc_endpoint     = "http://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:4317"
-      http_endpoint     = "https://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
-      headers_secret_id = null
-      default_protocol  = "http/protobuf"
+      grpc_endpoint    = "http://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:4317"
+      http_endpoint    = "https://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
+      headers_ref      = null
+      default_protocol = "http/protobuf"
     }
     fluentbit = {
       forward_host           = "eh-ca-flbagg.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
@@ -171,8 +178,6 @@ variables {
     }
   }
   foundation_identity = {
-    key_vault_id  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.KeyVault/vaults/eh-kv-ident-dev-abcde"
-    key_vault_uri = "https://eh-kv-ident-dev-abcde.vault.azure.net/"
     identities = {
       "hello-bff" = {
         id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-hello-bff"
@@ -283,11 +288,19 @@ variables {
         name         = "id-deploy-agent"
       }
     }
-    secret_ids = {
-      "datadog-api-key"      = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
-      "datadog-app-key"      = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-app-key"
-      "fault-token"          = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token"
-      "datadog-client-token" = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-client-token"
+    secrets = {
+      provider      = "delinea-dsv"
+      tenant        = "contoso"
+      tld           = "com"
+      base_url      = "https://contoso.secretsvaultcloud.com/v1"
+      base_path     = "eh/dev"
+      auth_provider = "azure-eh"
+      refs = {
+        "datadog-api-key"      = "dsv://eh/dev/datadog-api-key#value"
+        "datadog-app-key"      = "dsv://eh/dev/datadog-app-key#value"
+        "fault-token"          = "dsv://eh/dev/fault-token#value"
+        "datadog-client-token" = "dsv://eh/dev/datadog-client-token#value"
+      }
     }
   }
   platform_appservice = {
@@ -392,9 +405,9 @@ variables {
     }
     databases = {
       adapter = {
-        name               = "adapter"
-        login              = "dbadapter"
-        password_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/sqlvm-dbadapter-password"
+        name         = "adapter"
+        login        = "dbadapter"
+        password_ref = "dsv://eh/dev/sqlvm-dbadapter-password#value"
       }
     }
   }
@@ -461,8 +474,8 @@ variables {
       name     = "eh-cosmos-mongo-dev-abcde"
       endpoint = "https://eh-cosmos-mongo-dev-abcde.mongo.cosmos.azure.com:443/"
     }
-    auth_mode     = "key"
-    key_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/cosmos-mongo-connection-string"
+    auth_mode = "key"
+    key_ref   = "dsv://eh/dev/cosmos-mongo-connection-string#value"
     databases = {
       adapter = {
         name = "adapter"
@@ -498,9 +511,9 @@ variables {
     }
     databases = {
       adapter = {
-        name               = "adapter"
-        login              = "dbadapter"
-        password_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/cassandra-mi-dbadapter-password"
+        name         = "adapter"
+        login        = "dbadapter"
+        password_ref = "dsv://eh/dev/cassandra-mi-dbadapter-password#value"
       }
     }
   }

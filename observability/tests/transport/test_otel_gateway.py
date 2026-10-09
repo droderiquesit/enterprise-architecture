@@ -15,7 +15,11 @@ import time
 
 import pytest
 
-from dockerutil import HERE, OTEL_CONFIG, OTELCOL_IMAGE, Stack, http_status, received, start_mock_intake, wait_for
+import hashlib
+
+from dockerutil import HERE, OTEL_CONFIG, OTELCOL_IMAGE, Stack, dsv_fetch_init, http_status, received, start_mock_intake, wait_for
+
+GATEWAY_KEY = "test-not-a-real-key"
 
 DDOT_IMAGE = "datadog/ddot-collector:7.84.2"
 pytestmark = pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
@@ -39,16 +43,21 @@ def _span_names(batches):
     return [s["name"] for b in batches for rs in b.get("resourceSpans", []) for ss in rs["scopeSpans"] for s in ss["spans"]]
 
 
-def _run_gateway(stack, image, outdir, extra_configs=(), extra_env=None, entry_cmd=None, overlay="test-overlay.yaml"):
+def _run_gateway(stack, image, outdir, extra_configs=(), extra_env=None, entry_cmd=None, overlay="test-overlay.yaml",
+                 secrets=None):
     outdir.mkdir(parents=True, exist_ok=True)
     outdir.chmod(0o777)
+    # the gateway reads its secrets as FILES (${file:/dsv-secrets/<name>}) written by the dsv-fetch image from the
+    # (mock) DSV - same command line as the ACA init container (files, 0444)
+    sec = dsv_fetch_init(outdir.parent / f"dsv-{outdir.name}", {"dd-api-key": GATEWAY_KEY, **(secrets or {})},
+                         fmt="files", extra=["--file-mode", "0444"])
     cfgs = ["--config=file:/cfg/gateway.yaml", *extra_configs, f"--config=file:/test/{overlay}"]
-    env = {"DD_API_KEY": "test-not-a-real-key", "DD_SITE": "datadoghq.com", "DD_ENV": "fallback-env",
+    env = {"DD_SITE": "datadoghq.com", "DD_ENV": "fallback-env",
            "TRACE_SAMPLING_PERCENTAGE": "100", "GATEWAY_MEMORY_LIMIT_MIB": "400", "GATEWAY_MEMORY_SPIKE_MIB": "100"}
     env.update(extra_env or {})
     cmd = (entry_cmd or []) + cfgs
     c = stack.run("gateway", image, env=env,
-                  volumes=[f"{OTEL_CONFIG}:/cfg:ro", f"{HERE / 'otel'}:/test:ro", f"{outdir}:/out"],
+                  volumes=[f"{OTEL_CONFIG}:/cfg:ro", f"{HERE / 'otel'}:/test:ro", f"{outdir}:/out", f"{sec}:/dsv-secrets:ro"],
                   ports=["127.0.0.1::4317", "127.0.0.1::4318", "127.0.0.1::13133"], user="0", cmd=cmd)
     hc = f"http://127.0.0.1:{stack.host_port(c, 13133)}/"
     try:
@@ -92,6 +101,8 @@ def test_gateway_pipeline_upstream(tmp_path):
         others = received(base)["others"]
         print(json.dumps(others, indent=1)[:3000])
         assert all(o["api_key_present"] for o in others)
+        # the exporter used the key from the dsv-fetch file (DSV value), not an env var
+        assert all(o["api_key_sha256"] == hashlib.sha256(GATEWAY_KEY.encode()).hexdigest() for o in others)
         # APM stats from the datadog connector (computed pre-sampling) are exported too
         wait_for(lambda: any("stats" in o["path"] for o in received(base)["others"]), 60, what="APM stats payload")
         # OTLP metrics reached the metrics pipeline
@@ -133,7 +144,7 @@ def test_gateway_bearer_token_auth(tmp_path):
         start_mock_intake(stack)
         _, gport, hport = _run_gateway(stack, OTELCOL_IMAGE, tmp_path / "out",
                                        extra_configs=["--config=file:/cfg/gateway-auth.yaml"],
-                                       extra_env={"OTLP_BEARER_TOKEN": "test-token-123"})
+                                       secrets={"otlp-bearer-token": "test-token-123"})
         bad = _send(gport, hport, token="wrong-token")
         time.sleep(2)
         assert _span_names(_read_json_lines(tmp_path / "out" / "traces.json")) == []
@@ -145,10 +156,11 @@ def test_gateway_bearer_token_auth(tmp_path):
         stack.close()
 
 
-def test_gateway_overlays_validate():
+def test_gateway_overlays_validate(tmp_path):
+    sec = dsv_fetch_init(tmp_path / "dsv", {"dd-api-key": "x", "otlp-bearer-token": "t"}, fmt="files", extra=["--file-mode", "0444"])
     res = subprocess.run(
-        ["docker", "run", "--rm", "-e", "DD_API_KEY=x", "-e", "OTLP_BEARER_TOKEN=t", "-e", "FLUENTBIT_METRICS_TARGET=fb:2020",
-         "-v", f"{OTEL_CONFIG}:/c:ro", OTELCOL_IMAGE, "validate", "--config=file:/c/gateway.yaml",
+        ["docker", "run", "--rm", "-e", "FLUENTBIT_METRICS_TARGET=fb:2020",
+         "-v", f"{OTEL_CONFIG}:/c:ro", "-v", f"{sec}:/dsv-secrets:ro", OTELCOL_IMAGE, "validate", "--config=file:/c/gateway.yaml",
          "--config=file:/c/gateway-auth.yaml", "--config=file:/c/gateway-tail-sampling.yaml",
          "--config=file:/c/gateway-scrape-fluentbit.yaml"],
         capture_output=True, text=True, timeout=120)
@@ -214,7 +226,7 @@ def _metric_points(batches):
 def test_gateway_self_and_fluentbit_metrics_naming(tmp_path):
     """Self-telemetry names without type suffix (otelcol_exporter_send_failed_spans), Fluent Bit names keep
     _total (fluentbit_output_errors_total); every scraped point carries env."""
-    from dockerutil import FLB_CONFIG, FLUENT_BIT_IMAGE, fluent_bit_env
+    from dockerutil import FLB_CONFIG, FLUENT_BIT_IMAGE, fluent_bit_env, fluent_bit_secrets
 
     stack = Stack("otelmetrics")
     try:
@@ -223,7 +235,7 @@ def test_gateway_self_and_fluentbit_metrics_naming(tmp_path):
         logs.mkdir()
         logs.chmod(0o777)
         stack.run("fluentbit", FLUENT_BIT_IMAGE, env=fluent_bit_env(LOG_FILE_PATH="/var/log/app/app.log"),
-                  volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logs}:/var/log/app"],
+                  volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logs}:/var/log/app", fluent_bit_secrets(tmp_path)],
                   cmd=["-c", "/fluent-bit/etc/eh/sidecar.yaml"])
         _, gport, hport = _run_gateway(stack, OTELCOL_IMAGE, tmp_path / "out",
                                        extra_configs=["--config=file:/cfg/gateway-scrape-fluentbit.yaml"],

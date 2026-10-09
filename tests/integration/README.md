@@ -8,7 +8,7 @@ asserts, against the telemetry actually captured, that
 
 > a browser journey produces a RUM event, correlated API traces, downstream service and database spans, application
 > logs transported through Fluent Bit, durable workflow/messaging telemetry; required telemetry is present, correctly
-> tagged and not duplicated.
+> tagged and not duplicated; every secret comes from (mock) Delinea DSV and no secret value reaches logs or the intake.
 
 Evidence is written to `docs/evidence/local/<UTC timestamp>/` and summarised in `docs/evidence/local/LATEST.md`.
 
@@ -19,7 +19,7 @@ Evidence is written to `docs/evidence/local/<UTC timestamp>/` and summarised in 
 | Docker Engine + Compose v2 | ~25 containers, ~6 GB RAM, ~8 GB disk for images (SQL Server 2.3 GB, Functions base 1.3 GB) |
 | python3.13, `pip install playwright==1.56.0` | Python Playwright 1.56 drives Chromium revision 1194; no browser download needed when one is installed |
 | Chromium | `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` (default used by the runner) or `PW_CHROMIUM_EXECUTABLE=/path/to/chrome` |
-| Images `hello-<svc>:0.1.0-e2e` | built from the current source by `build_images.sh` (automatically when missing) |
+| Images `hello-<svc>:0.1.0-e2e`, `dsv-fetch:0.1.0-e2e` | built from the current source by `build_images.sh` (automatically when missing; dsv-fetch from `observability/images/dsv-fetch`, base `gcr.io/distroless/python3-debian13` pinned by digest) |
 
 No Playwright docker image is used. Infrastructure images: `mcr.microsoft.com/mssql/server:2022-latest`,
 `mcr.microsoft.com/azure-messaging/servicebus-emulator:latest`, `mcr.microsoft.com/azure-storage/azurite:latest`,
@@ -48,7 +48,8 @@ with `--network host`. Images are tagged with the git revision label; the eviden
 source (`applications/services`, `applications/shared`) differs from the image revision.
 
 Host ports (127.0.0.1 only): frontend 18080, BFF 18081, catalog 18082, orders 18083, inventory 18084, partner-sim 18085,
-dbadapter-postgresql 18086, worker health 18087, durable 18088, mock intake 18090 (`GET /_received`), gateway health 18133.
+dbadapter-postgresql 18086, worker health 18087, durable 18088, mock intake 18090 (`GET /_received`), gateway health 18133,
+mock DSV 18200 (`GET /v1/__calls`: method, path, identity - never values).
 
 ## What is real, emulated, mocked
 
@@ -66,6 +67,9 @@ dbadapter-postgresql 18086, worker health 18087, durable 18088, mock intake 1809
 | Fluent Bit sidecar per app | `fluent/fluent-bit:5.1.3` running `observability/config/fluent-bit/sidecar.yaml` + `parsers.yaml` + `lua/` **unmodified**, tailing the app's `LOG_FILE_PATH` on a shared volume | real; only env differs: `FLB_DD_HOST=intake`, `FLB_DD_PORT=8080`, `FLB_DD_TLS=off` (test-only override) |
 | OTel gateway | collector-contrib 0.162.0 with `observability/config/otel/gateway.yaml` **unmodified** + `config/otel/e2e-overlay.yaml` (second `--config`) | real; overlay points the `datadog` exporter's `traces.endpoint`/`metrics.endpoint` at the mock intake (plain HTTP) and adds a `file` exporter for span/metric assertions |
 | Datadog logs / APM / metrics intake | `observability/tests/transport/mock_intake` (reused, unmodified) | **mocked** |
+| Delinea DSV | `tools/secrets/mock_dsv.py` in `python:3.13-slim` with `config/dsv/mock-dsv.json` (one DSV identity per workload, read on its own `eh/e2e/<workload>/*` paths only) | **mocked**. Apps authenticate with `DSV_AUTH=client_credentials` (the managed-identity `azure` grant needs IMDS/IDENTITY_ENDPOINT, absent locally; it is unit-tested against the same mock with fake Entra tokens) |
+| Secrets in app env | `FAULT_TOKEN`, `SQL_CONNECTION_STRING`, `SERVICEBUS_CONNECTION_STRING`, `TABLES_CONNECTION_STRING`, `PG_PASSWORD`, `PG_USER` (dbadapter) are `dsv://eh/e2e/...` references, resolved in-process at start-up by `hello_common.secrets.resolve_env()` / `Hello.Common` `AddDsvSecrets()` | real code. Exceptions (literal, read by the Functions **host**, which cannot resolve dsv://): hello-durable `AzureWebJobsStorage`, `ServiceBusConnection` - identity-based in Azure |
+| DD_API_KEY for Fluent Bit + OTel gateway | `dsv-fetch` init services (`dsv-fetch-flb`: `--format env-yaml` -> `/dsv-secrets/fluentbit-env.yaml`, included by the unmodified `sidecar.yaml`; `dsv-fetch-otel` as uid 10001: `--format files` -> `/dsv-secrets/dd-api-key` for `gateway.yaml` `${file:...}`) on tmpfs volumes; `depends_on: service_completed_successfully`; no `DD_API_KEY` env anywhere | real init-container pattern. `dsv-secrets-holder` keeps the tmpfs volumes mounted (docker drops a tmpfs volume's content when its last container exits; an ACA/k8s emptyDir lives with the pod) |
 | Datadog RUM intake | the frontend has no RUM `proxy` option, so a Playwright route on `https://browser-intake-datadoghq.com/**` records each RUM batch, forwards it unchanged (same path + query) to the mock intake and answers the browser `202` + CORS | **mocked** (interception documented in evidence: `forwarded_to_mock_intake`) |
 
 App telemetry env mirrors `observability/modules/instrumentation` for a gateway target (`OTEL_EXPORTER_OTLP_ENDPOINT`
@@ -104,9 +108,17 @@ path itself is tested by `observability/tests/transport`.
 11. **Exporter transport**: the gateway's datadog exporter delivered traces/stats/series/sketches to the mock intake with
     an API key; the gateway accepted OTLP logs (Functions host) and dropped them (`nop`), so logs reach the intake only
     via Fluent Bit.
+12. **Secrets from DSV**: the mock DSV call log shows each workload identity authenticating and reading exactly its
+    own paths (orders-api 3, durable 2, catalog-api 1, dbadapter 1, worker 2, observability 1 - shared by both dsv-fetch
+    inits), no unauthenticated reads; both dsv-fetch init services exited 0; the secret files are 0400, owned by the
+    consumer uid (65532 Fluent Bit env file, 10001 collector key file) on tmpfs; and no secret value (each mock DSV
+    value, the password/key parts of connection strings, the DSV client secrets) occurs in any intake payload, any
+    container log of our components or the gateway's file exports. Check 9 (FAULT_TOKEN), readiness (SQL/PG/Service
+    Bus/Tables) and check 5/11 (API keys) prove the resolved values are the ones in use.
 
 ## Known gaps
 
+- Real Delinea DSV and the managed-identity `azure` grant (mock DSV with `client_credentials`; see check 12).
 - Cosmos DB (inventory runs in memory), Cosmos emulator not used.
 - Entra ID everywhere: BFF `AUTH_MODE=none`, SQL/PostgreSQL password auth, connection strings for Service Bus/Storage
   instead of managed identity.

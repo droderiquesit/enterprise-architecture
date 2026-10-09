@@ -12,7 +12,11 @@
               `promote_from` environment recorded for the SAME source fingerprint; never builds; fails if missing
   tfvars      for a deploy root: write <root>/artifacts.auto.tfvars.json with
               artifacts = {<artifact component id> = {name, image, digest, package_url, package_sha256,
-              source_fp, tag}} when the root declares `variable "artifacts"`; print the sha256
+              source_fp, tag}} when the root declares `variable "artifacts"`; print the sha256.
+              Artifacts built by the OTHER pipeline scope (--recorded, e.g. img-dsv-fetch of the platform pipeline
+              consumed by applications roots) come from their deployment record <env>/<artifact>.json
+              (artifact_metadata), which must be `succeeded` for the artifact's CURRENT source fingerprint
+              (selection document) - otherwise the plan fails instead of deploying a stale digest.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from typing import List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -280,17 +285,44 @@ def cmd_promote(args) -> int:
     return 0
 
 
-def artifacts_tfvars(repo: Path, component: str, metadata_dir: Path, write: bool = True):
+class RecordError(Exception):
+    pass
+
+
+def recorded_metadata(component: str, records, env: str, selection: Optional[dict]) -> dict:
+    """build-metadata of an artifact built by the other pipeline, from its deployment record."""
+    rec = records.get_json(f"{env}/{component}.json") if records else None
+    if not rec or rec.get("status") != "succeeded" or not rec.get("artifact_metadata"):
+        raise RecordError(f"{component}: no succeeded artifact record in '{env}' - the "
+                          f"{'platform' if component.startswith('img-') else 'other'} pipeline must build it first")
+    meta = dict(rec["artifact_metadata"])
+    want = ((selection or {}).get("components") or {}).get(component, {}).get("deploy_fp")
+    if want and meta.get("source_fp") != want:
+        raise RecordError(f"{component}: recorded source fingerprint {str(meta.get('source_fp'))[:12]} != current "
+                          f"{want[:12]} - wait for the pipeline that builds it (selection marks this root waiting)")
+    return meta
+
+
+def artifacts_tfvars(repo: Path, component: str, metadata_dir: Path, write: bool = True,
+                     recorded: Optional[List[str]] = None, records=None, env: Optional[str] = None,
+                     selection: Optional[dict] = None):
     tree = WorkTree(repo)
     comp = load_registry(tree).get(component)
+    recorded = set(recorded or [])
     entries = {}
     missing = []
     for a in comp.artifacts:
         f = metadata_dir / a / "build-metadata.json"
-        if not f.exists():
+        if f.exists():
+            m = json.loads(f.read_text())
+        elif a in recorded:
+            try:
+                m = recorded_metadata(a, records, env or "", selection)
+            except RecordError as exc:
+                raise SystemExit(f"ERROR: {exc}") from None
+        else:
             missing.append(a)
             continue
-        m = json.loads(f.read_text())
         entries[a] = {k: m.get(k) for k in ("name", "image", "digest", "package_url", "package_sha256", "source_fp", "tag", "commit")}
         # Deployment roots set DD_VERSION / build metadata from these (version = immutable tag derived from source_fp).
         entries[a]["version"] = m.get("version") or m.get("tag")
@@ -303,7 +335,11 @@ def artifacts_tfvars(repo: Path, component: str, metadata_dir: Path, write: bool
 
 
 def cmd_tfvars(args) -> int:
-    _entries, digest = artifacts_tfvars(Path(args.repo).resolve(), args.component, Path(args.metadata_dir))
+    recorded = [a for a in (args.recorded or "").split(",") if a]
+    records = open_store(args.records_url) if recorded and args.records_url else None
+    selection = _selection(args.selection) if args.selection and Path(args.selection).exists() else None
+    _entries, digest = artifacts_tfvars(Path(args.repo).resolve(), args.component, Path(args.metadata_dir),
+                                        recorded=recorded, records=records, env=args.env, selection=selection)
     print(digest)
     return 0
 
@@ -345,6 +381,10 @@ def main(argv=None) -> int:
     v = sub.add_parser("tfvars")
     v.add_argument("--component", required=True)
     v.add_argument("--metadata-dir", required=True)
+    v.add_argument("--recorded", default="", help="comma separated artifacts read from deployment records (other scope)")
+    v.add_argument("--records-url", default="")
+    v.add_argument("--selection", default="")
+    v.add_argument("--env", default="")
     v.set_defaults(func=cmd_tfvars)
     args = ap.parse_args(argv)
     return args.func(args)

@@ -24,7 +24,8 @@
   subnet). Override with `outbound_type`.
 - System pool `system`: 1–2 × `Standard_D2s_v5` (cluster autoscaler), Azure Linux, no node public IPs.
   Optional user pool (`user_pool.enabled`); with it, the system pool is tainted `CriticalAddonsOnly`.
-- Secrets Store CSI driver (Key Vault provider, rotation every 2 min) for app secret references.
+- Secrets Store CSI driver (Key Vault provider) **off by default** (`key_vault_secrets_provider_enabled = false`): all lab
+  secrets live in Delinea DSV and pods read them directly with their workload identity (ADR-0001 section 14).
 - Azure RBAC grants for `deploy-agent` (+ `cluster_admin_principals`): *AKS RBAC Cluster Admin* and *AKS
   Cluster User Role* (Entra kubeconfig only), at cluster scope. Put the pipeline **apply** and **plan** identities'
   principal ids (bootstrap contract `identities.<id>.principal_id`) into `cluster_admin_principals`: deploy-core-aks

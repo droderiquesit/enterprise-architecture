@@ -8,19 +8,11 @@ locals {
   owner              = "hello-dbadapter"
   boundary           = "db adapter / collection records"
   owner_principal_id = try(local.identities[local.owner].principal_id, null)
-  secret_tags        = { for k, v in module.tags.tags : k => v if contains(["env", "application", "component", "layer", "owner", "team", "managed_by", "expires_on", "data_classification", "repository"], k) }
 }
 
-# Native authentication must be enabled at creation, so a built-in admin exists. Its password is kept
-# in state (no write-only argument on azurerm_mongo_cluster) and copied write-only to Key Vault.
-resource "random_password" "admin" {
-  length           = 32
-  min_lower        = 2
-  min_upper        = 2
-  min_numeric      = 2
-  min_special      = 2
-  override_special = "!#%*-_+=?"
-}
+# Native authentication must be enabled at creation, so a built-in admin exists. Its password comes from
+# Delinea DSV (documentdb-admin-password) as a pipeline input (var.admin_password); azurerm_mongo_cluster has no
+# write-only argument, so the value is stored in Terraform state (known limitation, README).
 
 module "naming" {
   source          = "../../../foundation/modules/naming"
@@ -52,7 +44,7 @@ resource "azurerm_mongo_cluster" "this" {
   resource_group_name    = azurerm_resource_group.this.name
   location               = azurerm_resource_group.this.location
   administrator_username = local.admin_login
-  administrator_password = random_password.admin.result
+  administrator_password = var.admin_password
   compute_tier           = var.settings.compute_tier
   storage_size_in_gb     = var.settings.storage_size_in_gb
   shard_count            = 1
@@ -89,14 +81,4 @@ module "private_endpoint" {
   subresource_names    = ["MongoCluster"]
   private_dns_zone_ids = compact([try(var.foundation_network.private_dns_zones["mongocluster"].id, var.foundation_network.private_dns_zones["documentdb"].id, null)])
   tags                 = module.tags.tags
-}
-
-resource "azurerm_key_vault_secret" "admin" {
-  name             = var.settings.admin_secret_name
-  key_vault_id     = var.foundation_identity.key_vault_id
-  value_wo         = random_password.admin.result
-  value_wo_version = var.settings.secret_version
-  content_type     = "password"
-  expiration_date  = "${var.environment.expires_on}T00:00:00Z"
-  tags             = local.secret_tags
 }

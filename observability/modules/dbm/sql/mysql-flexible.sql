@@ -2,7 +2,7 @@
 -- Entra managed identity is not supported by the MySQL DBM integration).
 -- Source: https://docs.datadoghq.com/database_monitoring/setup_mysql/azure/
 -- Server parameter required (MySQL platform root): performance_schema = ON (restart). Azure enables the
--- events_statements_* consumers by default. Replace __DATADOG_PASSWORD__ at execution time from Key Vault
+-- events_statements_* consumers by default. Replace __DATADOG_PASSWORD__ at execution time from Delinea DSV (dsv secret get, or tools/secrets/fetch.py on a self-hosted agent)
 -- (e.g. sed in the pipeline step); never commit the rendered file.
 CREATE USER IF NOT EXISTS datadog@'%' IDENTIFIED BY '__DATADOG_PASSWORD__';
 ALTER USER datadog@'%' IDENTIFIED BY '__DATADOG_PASSWORD__';

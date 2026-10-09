@@ -7,10 +7,10 @@ mock_provider "azurerm" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-obs-dev-sec-transport/providers/Microsoft.EventHub/namespaces/evhns" }
   }
   mock_resource "azurerm_eventhub_namespace_authorization_rule" {
-    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-obs-dev-sec-transport/providers/Microsoft.EventHub/namespaces/evhns/authorizationRules/diagnostic-settings-send" }
-  }
-  mock_resource "azurerm_key_vault_secret" {
-    defaults = { versionless_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/eventhub-fluentbit-listen" }
+    defaults = {
+      id                        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-obs-dev-sec-transport/providers/Microsoft.EventHub/namespaces/evhns/authorizationRules/diagnostic-settings-send"
+      primary_connection_string = "Endpoint=sb://mock/;SharedAccessKeyName=fluent-bit-listen;SharedAccessKey=mock"
+    }
   }
 }
 mock_provider "azapi" {
@@ -46,14 +46,23 @@ variables {
     }
   }
   foundation_identity = {
-    key_vault_id  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.KeyVault/vaults/eh-kv-ident-dev-abcde"
-    key_vault_uri = "https://eh-kv-ident-dev-abcde.vault.azure.net/"
     identities = {
       "obs-collector" = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-obs-collector-dev-sec", principal_id = "11111111-1111-1111-1111-111111111111", client_id = "22222222-2222-2222-2222-222222222222", name = "eh-id-obs-collector-dev-sec" }
     }
-    secret_ids = {
-      "datadog-api-key" = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
+    secrets = {
+      provider      = "delinea-dsv"
+      tenant        = "contoso"
+      tld           = "com"
+      base_url      = "https://contoso.secretsvaultcloud.com/v1"
+      base_path     = "eh/dev"
+      auth_provider = "azure-eh"
+      refs = {
+        "datadog-api-key" = "dsv://eh/dev/datadog-api-key#value"
+      }
     }
+  }
+  artifacts = {
+    "img-dsv-fetch" = { image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222" }
   }
   platform_containerapps = {
     environment_id    = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aca/providers/Microsoft.App/managedEnvironments/eh-cae-apps-dev-sec"
@@ -65,12 +74,24 @@ variables {
 run "lab_defaults" {
   command = plan
   assert {
-    condition     = output.contract.datadog_site == "datadoghq.com" && output.contract.api_key_secret_id == "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
-    error_message = "Site + API key reference from foundation-identity."
+    condition     = output.contract.datadog_site == "datadoghq.com" && output.contract.api_key_ref == "dsv://eh/dev/datadog-api-key#value"
+    error_message = "Site + API key DSV reference from foundation-identity v2."
   }
   assert {
-    condition     = output.contract.fluentbit.forward_shared_key_secret_id == "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fluentbit-shared-key"
-    error_message = "Shared key id derived from the vault when foundation does not publish it."
+    condition     = output.contract.fluentbit.forward_shared_key_ref == "dsv://eh/dev/fluentbit-shared-key#value"
+    error_message = "Shared key reference derived from the DSV base path when foundation does not list it."
+  }
+  assert {
+    condition     = output.contract.secrets.fetch_image == "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222" && output.contract.secrets.base_url == "https://contoso.secretsvaultcloud.com/v1" && output.contract.secrets.provider == "delinea-dsv"
+    error_message = "The contract publishes the DSV runtime settings and the dsv-fetch image (from artifacts img-dsv-fetch)."
+  }
+  assert {
+    condition     = nonsensitive(output.generated_secrets["eventhub-fluentbit-listen"]) == "Endpoint=sb://mock/;SharedAccessKeyName=fluent-bit-listen;SharedAccessKey=mock" && !strcontains(jsonencode(output.contract), "SharedAccessKey")
+    error_message = "generated_secrets carries the Event Hubs listen connection string for publish.py; the contract never does."
+  }
+  assert {
+    condition     = module.transport.aggregator_id != null && output.contract.fluentbit.sidecar_config != null
+    error_message = "Aggregator deployed; sidecar config published."
   }
   assert {
     condition     = module.transport.event_hub_namespace_id != null && output.contract.event_hub.app_logs_hub == "app-logs"
@@ -118,8 +139,8 @@ run "batch_log_setup_published" {
     error_message = "The Batch Fluent Bit setup script (pinned version, runtime path/identity overrides, no Agent) is published in the contract."
   }
   assert {
-    condition     = !strcontains(local.batch_setup_script, "DD_API_KEY=") || strcontains(local.batch_setup_script, "DD_API_KEY=$DD_API_KEY_VALUE")
-    error_message = "No API key value is rendered into the script (read from Key Vault on the node)."
+    condition     = strcontains(local.batch_setup_script, "--map DD_API_KEY=$API_KEY_REF") && strcontains(local.batch_setup_script, "API_KEY_REF='dsv://eh/dev/datadog-api-key#value'") && !strcontains(local.batch_setup_script, "vault.azure.net") && strcontains(local.batch_setup_script, "INSTALL_AGENT='false'")
+    error_message = "No API key value is rendered into the script: dsv-fetch reads it from DSV on the node with the pool identity."
   }
 }
 

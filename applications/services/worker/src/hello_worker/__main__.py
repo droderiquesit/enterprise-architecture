@@ -10,6 +10,7 @@ import time
 
 from hello_common.app import create_app
 from hello_common.config import service_info
+from hello_common.secrets import resolve_env
 from hello_common.telemetry import shutdown_telemetry
 
 from . import settings as settings_mod
@@ -103,6 +104,7 @@ async def amain() -> None:
 
 
 def main() -> None:
+    resolve_env()  # dsv:// references -> values (Delinea DSV) before any setting is read
     asyncio.run(amain())
 
 

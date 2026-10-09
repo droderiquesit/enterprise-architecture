@@ -1,5 +1,5 @@
 output "contract" {
-  description = "platform-db-sqlvm v1 (catalog/contracts/platform-db-sqlvm.v1.schema.json). No secrets."
+  description = "platform-db-sqlvm v1 (catalog/contracts/platform-db-sqlvm.v1.schema.json). No secrets: *_secret_id fields are Delinea DSV references (dsv://...)."
   value = {
     resource_group_name = azurerm_resource_group.this.name
     engine              = "sql-server-on-azure-vm"
@@ -22,7 +22,7 @@ output "contract" {
       connectivity                  = "PRIVATE"
       auth_mode                     = "sql-login"
       admin_login                   = local.admin_login
-      admin_password_secret_id      = azurerm_key_vault_secret.admin.versionless_id
+      admin_password_secret_id      = local.admin_ref
     }
     databases = {
       adapter = {
@@ -34,7 +34,7 @@ output "contract" {
         auth_mode           = "sql-login"
         owner_identity_name = "hello-dbadapter"
         login               = "dbadapter"
-        password_secret_id  = azurerm_key_vault_secret.dbadapter.versionless_id
+        password_secret_id  = local.dbadapter_ref
       }
     }
     dbm = {
@@ -45,14 +45,20 @@ output "contract" {
       auth_mode          = "sql-login"
       identity_name      = "obs-dbm"
       username           = "datadog"
-      password_secret_id = lookup(var.foundation_identity.secret_ids, "dbm-sqlvm-password", "${trimsuffix(var.foundation_identity.key_vault_uri, "/")}/secrets/${var.settings.dbm_secret_name}")
+      password_secret_id = local.dbm_ref
       host               = "localhost"
       port               = 1433
       resource_id        = azurerm_windows_virtual_machine.this.id
       databases          = ["adapter"]
       admin_login        = local.admin_login
-      admin_secret_id    = azurerm_key_vault_secret.admin.versionless_id
+      admin_secret_id    = local.admin_ref
       setup_reference    = "https://docs.datadoghq.com/database_monitoring/setup_sql_server/selfhosted/"
     }
   }
+}
+
+locals {
+  admin_ref     = lookup(var.foundation_identity.secrets.refs, var.settings.admin_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.admin_secret_name}#value")
+  dbadapter_ref = lookup(var.foundation_identity.secrets.refs, var.settings.dbadapter_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.dbadapter_secret_name}#value")
+  dbm_ref       = lookup(var.foundation_identity.secrets.refs, var.settings.dbm_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.dbm_secret_name}#value")
 }

@@ -5,11 +5,10 @@ locals {
   vnet_mode       = var.settings.network_mode == "vnet"
   mysql_zone      = try(var.foundation_network.private_dns_zones["mysql"].id, null)
   mysql_vnet_zone = try(var.foundation_network.private_dns_zones["mysql_vnet"].id, local.mysql_zone)
-  # DBM password secret published by foundation-identity (value set out-of-band); convention fallback.
-  dbm_password_secret_id = lookup(var.foundation_identity.secret_ids, "dbm-mysql-password", "${local.kv_uri}/secrets/${var.settings.dbm_password_secret_name}")
+  # DBM password reference published by foundation-identity (DSV, value set out-of-band); convention fallback.
+  dbm_password_secret_id = lookup(var.foundation_identity.secrets.refs, var.settings.dbm_password_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.dbm_password_secret_name}#value")
   server_uami            = coalesce(var.settings.server_identity_id, try(azurerm_user_assigned_identity.server[0].id, null))
   admin_login            = "ehadmin"
-  kv_uri                 = trimsuffix(var.foundation_identity.key_vault_uri, "/")
 
   # catalog/architecture-matrix.yaml databases.mysql-flexible
   databases = {
@@ -32,8 +31,11 @@ locals {
   }
 }
 
-# Break-glass administrator password: ephemeral + write-only, so it never lands in state or plans.
-# Recover by resetting it (az mysql flexible-server update --admin-password) as documented in README.
+# Break-glass administrator password: write-only, so it never lands in state or plans. Source:
+#   var.admin_password (ephemeral) = DSV <prefix>/<env>/mysql-admin-password, passed by the pipeline
+#     (tools/secrets/fetch.py -> TF_VAR_admin_password, registry secret_env) - DSV is the system of record;
+#     rotate: update the DSV value, bump settings.admin_password_version, apply.
+#   otherwise an ephemeral random value nobody knows (reset with az mysql flexible-server update --admin-password).
 ephemeral "random_password" "admin" {
   length      = 32
   special     = true
@@ -88,7 +90,7 @@ resource "azurerm_mysql_flexible_server" "this" {
   delegated_subnet_id               = local.vnet_mode ? var.foundation_network.subnets["mysql"].id : null
   private_dns_zone_id               = local.vnet_mode ? local.mysql_vnet_zone : null
   administrator_login               = local.admin_login
-  administrator_password_wo         = ephemeral.random_password.admin.result
+  administrator_password_wo         = coalesce(var.admin_password, ephemeral.random_password.admin.result)
   administrator_password_wo_version = var.settings.admin_password_version
   tags                              = module.tags.tags
 

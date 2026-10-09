@@ -21,8 +21,14 @@ output "env" {
   value       = local.env
 }
 
-output "secret_env_names" {
-  value = local.secret_env
+output "secret_files" {
+  description = "File names (in secrets_dir) the config reads with the confmap file provider; written by dsv-fetch init --format files."
+  value       = local.secret_files
+}
+
+output "secrets_dir" {
+  description = "Directory of the secret files (ephemeral volume shared with the dsv-fetch init container)."
+  value       = local.secrets_dir
 }
 
 output "ports" {

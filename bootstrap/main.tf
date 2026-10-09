@@ -41,7 +41,7 @@ resource "azurerm_resource_group" "bootstrap" {
 
 # ------------------------------------------------------------------ state storage account
 resource "azurerm_storage_account" "state" {
-  #checkov:skip=CKV2_AZURE_1:Microsoft-managed keys + infrastructure (double) encryption; a CMK would need a Key Vault that itself depends on this state.
+  #checkov:skip=CKV2_AZURE_1:Microsoft-managed keys + infrastructure (double) encryption; a CMK would need a key store that itself depends on this state.
   #checkov:skip=CKV_AZURE_33:Queue service is unused; state lives in blob containers only.
   #checkov:skip=CKV2_AZURE_33:Private endpoint is phase 2 (settings.private_endpoint) once the VNet exists; phase 1 uses the IP/subnet firewall.
   #checkov:skip=CKV_AZURE_59:Public network access is required in phase 1 (Microsoft-hosted agents) with default-deny firewall; set public_network_access = Disabled in phase 2.

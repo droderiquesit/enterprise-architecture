@@ -10,7 +10,7 @@ locals {
 
   # Exception (README): the Gremlin wire protocol authenticates with the account key; Cosmos DB does
   # not natively accept managed-identity tokens on the Gremlin endpoint.
-  key_secret_id = "${trimsuffix(var.foundation_identity.key_vault_uri, "/")}/secrets/${var.settings.key_secret_name}"
+  key_secret_id = lookup(var.foundation_identity.secrets.refs, var.settings.key_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.key_secret_name}#value")
 }
 
 module "naming" {

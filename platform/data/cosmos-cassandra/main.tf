@@ -10,8 +10,8 @@ locals {
 
   # Exception (README): CQL drivers authenticate with the account name + key. ARM exposes
   # cassandraRoleAssignments, but no documented driver-side Entra flow was found, so the key is
-  # stored out-of-band in Key Vault and only the versionless secret ID is published.
-  key_secret_id = "${trimsuffix(var.foundation_identity.key_vault_uri, "/")}/secrets/${var.settings.connection_string_secret_name}"
+  # stored out-of-band in Delinea DSV and only the dsv:// reference is published.
+  key_secret_id = lookup(var.foundation_identity.secrets.refs, var.settings.connection_string_secret_name, "dsv://${var.foundation_identity.secrets.base_path}/${var.settings.connection_string_secret_name}#value")
 }
 
 module "naming" {

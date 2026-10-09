@@ -5,7 +5,12 @@
 #              Fluent Bit 5.1.3 (observability/config/fluent-bit/sidecar.yaml, unmodified), OTel collector contrib
 #              0.162.0 (observability/config/otel/gateway.yaml + test overlay), Chromium + Datadog Browser RUM SDK
 #   emulated:  Azure Service Bus (official emulator), Azure Storage (Azurite)
-#   mocked:    Datadog intake (observability/tests/transport/mock_intake), Cosmos DB (inventory STORAGE_MODE=memory)
+#   mocked:    Datadog intake (observability/tests/transport/mock_intake), Cosmos DB (inventory STORAGE_MODE=memory),
+#              Delinea DSV (tools/secrets/mock_dsv.py + config/dsv/mock-dsv.json)
+#
+# Secrets (ADR-0001 §14): every app secret is a dsv:// reference resolved at start-up by hello_common / Hello.Common
+# against the mock DSV with DSV_AUTH=client_credentials (the azure managed-identity grant needs IMDS, absent locally).
+# Fluent Bit and the OTel gateway get DD_API_KEY from dsv-fetch init services writing to in-memory (tmpfs) volumes.
 #
 # Every published port binds to 127.0.0.1 only. Credentials below are throw-away local values (not secrets).
 name: eh-e2e
@@ -30,6 +35,10 @@ x-otel-env: &otel-env
   LOG_FILE_PATH: /var/log/app/app.log
   FAULTS_ENABLED: "false"
   GIT_COMMIT: ${E2E_GIT_COMMIT:-unknown}
+  # Delinea DSV (mock). Each app adds its own DSV_CLIENT_ID / DSV_CLIENT_SECRET (local-only bootstrap credential).
+  DSV_AUTH: client_credentials
+  DSV_BASE_URL: http://mock-dsv:8200/v1
+  DSV_ALLOW_INSECURE_HTTP: "true"   # TEST-ONLY: plain HTTP to the mock on the compose network; real DSV is https
 
 x-dotnet-env: &dotnet-env
   <<: *otel-env
@@ -51,6 +60,7 @@ x-flb: &flb
   depends_on:
     log-perms: { condition: service_completed_successfully }
     intake: { condition: service_started }
+    dsv-fetch-flb: { condition: service_completed_successfully }
 
 x-flb-env: &flb-env
   LOG_FILE_PATH: /var/log/app/app.log
@@ -59,12 +69,18 @@ x-flb-env: &flb-env
   FLB_DD_HOST: intake
   FLB_DD_PORT: "8080"
   FLB_DD_TLS: "off"
-  DD_API_KEY: test-not-a-real-key
+  # DD_API_KEY is NOT set here: sidecar.yaml includes /dsv-secrets/fluentbit-env.yaml written by dsv-fetch-flb
 
 x-flb-files: &flb-files ../../observability/config/fluent-bit:/fluent-bit/etc/eh:ro
+x-flb-secrets: &flb-secrets dsv-flb:/dsv-secrets:ro
 
-x-sql-conn-orders: &sql-orders "Server=tcp:mssql,1433;Database=orders;User Id=sa;Password=E2e-Local0nly!Pass;Encrypt=True;TrustServerCertificate=True;Connect Timeout=15"
-x-sql-conn-fulfillment: &sql-fulfillment "Server=tcp:mssql,1433;Database=fulfillment;User Id=sa;Password=E2e-Local0nly!Pass;Encrypt=True;TrustServerCertificate=True;Connect Timeout=15"
+x-dsv-fetch-env: &dsv-fetch-env
+  DSV_AUTH: client_credentials
+  DSV_BASE_URL: http://mock-dsv:8200/v1
+  DSV_ALLOW_INSECURE_HTTP: "true"
+  DSV_CLIENT_ID: e2e-observability
+  DSV_CLIENT_SECRET: e2e-dsv-client-secret-observability-local-only
+
 x-sb-conn: &sb-conn "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;"
 # Azurite's well-known development account (public, documented by Microsoft; not a secret)
 x-azurite-conn: &azurite-conn "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
@@ -85,6 +101,52 @@ services:
       - logs-durable:/v/durable
       - logs-dbadapter:/v/dbadapter
 
+  # ---- Delinea DSV (mock) + dsv-fetch init services (ADR-0001 §14)
+  mock-dsv:
+    image: python:3.13-slim
+    command: ["python", "-u", "/m/mock_dsv.py", "--config", "/cfg/mock-dsv.json", "--host", "0.0.0.0", "--port", "8200"]
+    volumes:
+      - ../../tools/secrets:/m:ro
+      - ./config/dsv:/cfg:ro
+    ports: ["127.0.0.1:18200:8200"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8200/v1/__calls', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  dsv-secrets-holder:
+    # Keeps the tmpfs volumes mounted for the stack's lifetime: a tmpfs-backed docker volume loses its content when the
+    # last container using it exits (an ACA/ACI/k8s emptyDir lives as long as the replica/pod - nothing like this there).
+    image: python:3.13-slim
+    init: true
+    command: ["sleep", "infinity"]
+    volumes: ["dsv-flb:/hold/flb:ro", "dsv-otel:/hold/otel:ro"]
+
+  dsv-fetch-flb:
+    # init: DD_API_KEY -> /dsv-secrets/fluentbit-env.yaml (Fluent Bit `env:` include, 0400) for every Fluent Bit sidecar
+    image: dsv-fetch:${E2E_VERSION:-0.1.0-e2e}
+    user: "65532:65532"
+    read_only: true
+    environment: *dsv-fetch-env
+    command: ["init", "--out", "/dsv-secrets", "--format", "env-yaml", "--map", "DD_API_KEY=dsv://eh/e2e/datadog-api-key#value"]
+    volumes: ["dsv-flb:/dsv-secrets"]
+    depends_on:
+      mock-dsv: { condition: service_healthy }
+      dsv-secrets-holder: { condition: service_started }
+
+  dsv-fetch-otel:
+    # init: /dsv-secrets/dd-api-key (0400, uid 10001 = the collector image user) for gateway.yaml ${file:/dsv-secrets/dd-api-key}
+    image: dsv-fetch:${E2E_VERSION:-0.1.0-e2e}
+    user: "10001:10001"
+    read_only: true
+    environment: *dsv-fetch-env
+    command: ["init", "--out", "/dsv-secrets", "--format", "files", "--map", "dd-api-key=dsv://eh/e2e/datadog-api-key#value"]
+    volumes: ["dsv-otel:/dsv-secrets"]
+    depends_on:
+      mock-dsv: { condition: service_healthy }
+      dsv-secrets-holder: { condition: service_started }
+
   intake:
     # mock Datadog intake, reused unmodified from the transport tests
     image: python:3.13-slim
@@ -97,7 +159,7 @@ services:
     image: otel/opentelemetry-collector-contrib:0.162.0
     command: ["--config=/etc/eh/gateway.yaml", "--config=/etc/eh/e2e-overlay.yaml"]
     environment:
-      DD_API_KEY: test-not-a-real-key
+      # api key: ${file:/dsv-secrets/dd-api-key} in gateway.yaml, written by dsv-fetch-otel (no DD_API_KEY env)
       DD_SITE: datadoghq.com
       DD_ENV: e2e
       DD_HOSTNAME: otel-gateway-e2e
@@ -110,8 +172,11 @@ services:
       - ../../observability/config/otel/gateway.yaml:/etc/eh/gateway.yaml:ro
       - ./config/otel/e2e-overlay.yaml:/etc/eh/e2e-overlay.yaml:ro
       - ${E2E_WORK_DIR:-./.work}/otel:/out
+      - dsv-otel:/dsv-secrets:ro
     ports: ["127.0.0.1:18133:13133"]
-    depends_on: [intake]
+    depends_on:
+      intake: { condition: service_started }
+      dsv-fetch-otel: { condition: service_completed_successfully }
 
   # ------------------------------------------------------------------------------------------ data + brokers
   mssql:
@@ -178,8 +243,10 @@ services:
       PG_DATABASE: catalog
       PG_USER: postgres
       PG_AUTH: password
-      PG_PASSWORD: e2e-local-only
+      PG_PASSWORD: dsv://eh/e2e/catalog-api/pg#value
       PG_SSLMODE: disable
+      DSV_CLIENT_ID: e2e-catalog-api
+      DSV_CLIENT_SECRET: e2e-dsv-client-secret-catalog-api-local-only
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_AUTH: none
@@ -189,6 +256,7 @@ services:
     volumes: [logs-catalog:/var/log/app]
     ports: ["127.0.0.1:18082:8080"]
     depends_on:
+      mock-dsv: { condition: service_healthy }
       log-perms: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
@@ -201,16 +269,19 @@ services:
       DD_SERVICE: hello-orders-api
       OTEL_SERVICE_NAME: hello-orders-api
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-orders,domain=orders,tier=backend,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
-      SQL_CONNECTION_STRING: *sql-orders
+      SQL_CONNECTION_STRING: dsv://eh/e2e/orders-api/sql-connection-string
       STORAGE_MODE: sql
       MESSAGING_MODE: servicebus
-      SERVICEBUS_CONNECTION_STRING: *sb-conn
+      SERVICEBUS_CONNECTION_STRING: dsv://eh/e2e/orders-api/servicebus-connection-string
       CATALOG_API_URL: http://catalog-api:8080
       FAULTS_ENABLED: "true"
-      FAULT_TOKEN: e2e-fault-token-local-only
+      FAULT_TOKEN: dsv://eh/e2e/orders-api/fault-token#value
+      DSV_CLIENT_ID: e2e-orders-api
+      DSV_CLIENT_SECRET: e2e-dsv-client-secret-orders-api-local-only
     volumes: [logs-orders:/var/log/app]
     ports: ["127.0.0.1:18083:8080"]
     depends_on:
+      mock-dsv: { condition: service_healthy }
       log-perms: { condition: service_completed_successfully }
       mssql-init: { condition: service_completed_successfully }
       servicebus-emulator: { condition: service_started }
@@ -256,13 +327,16 @@ services:
       DB_FAMILY: postgresql
       PG_HOST: postgres
       PG_DATABASE: adapter
-      PG_USER: postgres
+      PG_USER: dsv://eh/e2e/dbadapter-postgresql/pg#username
       PG_AUTH: password
-      PG_PASSWORD: e2e-local-only
+      PG_PASSWORD: dsv://eh/e2e/dbadapter-postgresql/pg
       PG_SSLMODE: disable
+      DSV_CLIENT_ID: e2e-dbadapter-postgresql
+      DSV_CLIENT_SECRET: e2e-dsv-client-secret-dbadapter-postgresql-local-only
     volumes: [logs-dbadapter:/var/log/app]
     ports: ["127.0.0.1:18086:8080"]
     depends_on:
+      mock-dsv: { condition: service_healthy }
       log-perms: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       otel-gateway: { condition: service_started }
@@ -278,15 +352,18 @@ services:
       OTEL_SERVICE_NAME: hello-worker
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=enterprise-hello,application=enterprise-hello,team=hello-notifications,domain=notifications,tier=worker,owner=e2e,region=local,deployment.environment.name=e2e,deployment.environment=e2e,service.version=0.1.0-e2e
       MESSAGING_MODE: servicebus
-      SERVICEBUS_CONNECTION_STRING: *sb-conn
+      SERVICEBUS_CONNECTION_STRING: dsv://eh/e2e/worker/servicebus-connection-string
       SB_TOPIC: order-events
       SB_SUBSCRIPTION: notifications
       TABLE_MODE: table
-      TABLES_CONNECTION_STRING: *azurite-conn
+      TABLES_CONNECTION_STRING: dsv://eh/e2e/worker/tables-connection-string
+      DSV_CLIENT_ID: e2e-worker
+      DSV_CLIENT_SECRET: e2e-dsv-client-secret-worker-local-only
       PORT: "8081"
     volumes: [logs-worker:/var/log/app]
     ports: ["127.0.0.1:18087:8081"]
     depends_on:
+      mock-dsv: { condition: service_healthy }
       log-perms: { condition: service_completed_successfully }
       servicebus-emulator: { condition: service_started }
       azurite: { condition: service_started }
@@ -307,9 +384,13 @@ services:
       AzureWebJobsStorage: *azurite-conn
       DURABLE_TASK_HUB: hellodurablee2e
       RECONCILE_SCHEDULE: "0 0 3 * * *"
+      # read by the Functions HOST itself (trigger bindings / task hub): cannot be dsv:// (in Azure: identity-based)
       ServiceBusConnection: *sb-conn
-      SERVICEBUS_CONNECTION_STRING: *sb-conn
-      SQL_CONNECTION_STRING: *sql-fulfillment
+      # read by the isolated worker: resolved from DSV by Hello.Common AddDsvSecrets() in Program.cs
+      SERVICEBUS_CONNECTION_STRING: dsv://eh/e2e/durable/servicebus-connection-string
+      SQL_CONNECTION_STRING: dsv://eh/e2e/durable/sql-connection-string
+      DSV_CLIENT_ID: e2e-durable
+      DSV_CLIENT_SECRET: e2e-dsv-client-secret-durable-local-only
       STORAGE_MODE: sql
       ORDERS_API_URL: http://orders-api:8080
       INVENTORY_API_URL: http://inventory-api:8080
@@ -318,6 +399,7 @@ services:
     volumes: [logs-durable:/var/log/app]
     ports: ["127.0.0.1:18088:8080"]
     depends_on:
+      mock-dsv: { condition: service_healthy }
       log-perms: { condition: service_completed_successfully }
       mssql-init: { condition: service_completed_successfully }
       servicebus-emulator: { condition: service_started }
@@ -356,37 +438,42 @@ services:
   flb-bff:
     <<: *flb
     environment: { <<: *flb-env, FLB_DD_SERVICE: hello-bff, FLB_DD_SOURCE: csharp, FLB_DD_TAGS: "env:e2e,service:hello-bff,version:0.1.0-e2e,team:hello-web,domain:web,tier:frontend-api,application:enterprise-hello,region:local" }
-    volumes: [*flb-files, logs-bff:/var/log/app]
+    volumes: [*flb-files, *flb-secrets, logs-bff:/var/log/app]
   flb-orders:
     <<: *flb
     environment: { <<: *flb-env, FLB_DD_SERVICE: hello-orders-api, FLB_DD_SOURCE: csharp, FLB_DD_TAGS: "env:e2e,service:hello-orders-api,version:0.1.0-e2e,team:hello-orders,domain:orders,tier:backend,application:enterprise-hello,region:local" }
-    volumes: [*flb-files, logs-orders:/var/log/app]
+    volumes: [*flb-files, *flb-secrets, logs-orders:/var/log/app]
   flb-inventory:
     <<: *flb
     environment: { <<: *flb-env, FLB_DD_SERVICE: hello-inventory-api, FLB_DD_SOURCE: csharp, FLB_DD_TAGS: "env:e2e,service:hello-inventory-api,version:0.1.0-e2e,team:hello-inventory,domain:inventory,tier:backend,application:enterprise-hello,region:local" }
-    volumes: [*flb-files, logs-inventory:/var/log/app]
+    volumes: [*flb-files, *flb-secrets, logs-inventory:/var/log/app]
   flb-durable:
     <<: *flb
     environment: { <<: *flb-env, FLB_DD_SERVICE: hello-durable, FLB_DD_SOURCE: csharp, FLB_DD_TAGS: "env:e2e,service:hello-durable,version:0.1.0-e2e,team:hello-fulfillment,domain:fulfillment,tier:workflow,application:enterprise-hello,region:local" }
-    volumes: [*flb-files, logs-durable:/var/log/app]
+    volumes: [*flb-files, *flb-secrets, logs-durable:/var/log/app]
   flb-catalog:
     <<: *flb
     environment: { <<: *flb-env, FLB_DD_SERVICE: hello-catalog-api, FLB_DD_SOURCE: python, FLB_DD_TAGS: "env:e2e,service:hello-catalog-api,version:0.1.0-e2e,team:hello-catalog,domain:catalog,tier:backend,application:enterprise-hello,region:local" }
-    volumes: [*flb-files, logs-catalog:/var/log/app]
+    volumes: [*flb-files, *flb-secrets, logs-catalog:/var/log/app]
   flb-partner:
     <<: *flb
     environment: { <<: *flb-env, FLB_DD_SERVICE: hello-partner-sim, FLB_DD_SOURCE: python, FLB_DD_TAGS: "env:e2e,service:hello-partner-sim,version:0.1.0-e2e,team:hello-payments,domain:payments,tier:external-sim,application:enterprise-hello,region:local" }
-    volumes: [*flb-files, logs-partner:/var/log/app]
+    volumes: [*flb-files, *flb-secrets, logs-partner:/var/log/app]
   flb-worker:
     <<: *flb
     environment: { <<: *flb-env, FLB_DD_SERVICE: hello-worker, FLB_DD_SOURCE: python, FLB_DD_TAGS: "env:e2e,service:hello-worker,version:0.1.0-e2e,team:hello-notifications,domain:notifications,tier:worker,application:enterprise-hello,region:local" }
-    volumes: [*flb-files, logs-worker:/var/log/app]
+    volumes: [*flb-files, *flb-secrets, logs-worker:/var/log/app]
   flb-dbadapter:
     <<: *flb
     environment: { <<: *flb-env, FLB_DD_SERVICE: hello-dbadapter-postgresql, FLB_DD_SOURCE: python, FLB_DD_TAGS: "env:e2e,service:hello-dbadapter-postgresql,version:0.1.0-e2e,team:hello-data,domain:data,tier:backend,application:enterprise-hello,region:local" }
-    volumes: [*flb-files, logs-dbadapter:/var/log/app]
+    volumes: [*flb-files, *flb-secrets, logs-dbadapter:/var/log/app]
 
 volumes:
+  # in-memory secret volumes (stand-ins for ACA/ACI EmptyDir / k8s emptyDir medium: Memory)
+  dsv-flb:
+    driver_opts: { type: tmpfs, device: tmpfs, o: "size=1m,mode=0700,uid=65532,gid=65532" }
+  dsv-otel:
+    driver_opts: { type: tmpfs, device: tmpfs, o: "size=1m,mode=0700,uid=10001,gid=10001" }
   logs-bff:
   logs-orders:
   logs-catalog:

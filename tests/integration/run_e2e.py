@@ -53,7 +53,19 @@ WORKER = "http://localhost:18087"
 DURABLE = "http://localhost:18088"
 INTAKE = "http://localhost:18090"
 GATEWAY_HEALTH = "http://localhost:18133"
-FAULT_TOKEN = "e2e-fault-token-local-only"  # noqa: S105 - throw-away lab token of the local stack
+MOCK_DSV = "http://localhost:18200"
+DSV_CONFIG = HERE / "config" / "dsv" / "mock-dsv.json"
+DSV_FETCH_IMAGE = f"dsv-fetch:{VERSION}"
+# identity -> DSV paths it must read at start-up (least privilege: its own prefix only; see config/dsv/mock-dsv.json)
+DSV_EXPECTED_READS = {
+    "e2e-orders-api": {"eh/e2e/orders-api/fault-token", "eh/e2e/orders-api/sql-connection-string", "eh/e2e/orders-api/servicebus-connection-string"},
+    "e2e-durable": {"eh/e2e/durable/sql-connection-string", "eh/e2e/durable/servicebus-connection-string"},
+    "e2e-catalog-api": {"eh/e2e/catalog-api/pg"},
+    "e2e-dbadapter-postgresql": {"eh/e2e/dbadapter-postgresql/pg"},
+    "e2e-worker": {"eh/e2e/worker/servicebus-connection-string", "eh/e2e/worker/tables-connection-string"},
+    "e2e-observability": {"eh/e2e/datadog-api-key"},  # dsv-fetch-flb + dsv-fetch-otel
+}
+FAULT_TOKEN = "e2e-fault-token-local-only"  # noqa: S105 - throw-away lab token; orders-api reads it from the mock DSV
 RUM_INTAKE_GLOB = "https://browser-intake-datadoghq.com/**"
 
 # service -> (compose service, expected ddsource, team tag) ; every app has its own Fluent Bit sidecar
@@ -93,6 +105,7 @@ CHECKS = [
     ("faults", "9. Fault injection: 201 + BFF errors + recovery after expiry; wrong token 403; FAULTS_ENABLED=false 404"),
     ("idempotency", "10. Idempotency-Key on POST /api/orders replays the same order"),
     ("exporter_transport", "11. OTel gateway datadog exporter delivers traces/metrics to the (mock) intake; OTLP logs not forwarded"),
+    ("secrets_dsv", "12. Secrets resolved from DSV (mock), no secret value in logs/intake"),
 ]
 
 
@@ -271,6 +284,8 @@ def mask(s: str) -> str:
 def ensure_images(rebuild: bool) -> None:
     missing = [s for s in IMAGES if sh("docker", "image", "inspect", f"hello-{s}:{VERSION}", check=False).returncode != 0]
     todo = IMAGES if rebuild else missing
+    if rebuild or sh("docker", "image", "inspect", DSV_FETCH_IMAGE, check=False).returncode != 0:
+        todo = [*todo, "dsv-fetch"]
     if todo:
         log(f"building images from source: {', '.join(todo)}")
         res = subprocess.run([str(HERE / "build_images.sh"), *todo], env={**os.environ, "E2E_VERSION": VERSION}, check=False)  # noqa: S603
@@ -1038,6 +1053,108 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
         x_ev,
     )
 
+    # ---------- 12. secrets from DSV
+    res_dsv = check_secrets_dsv(rcv)
+    d_ev = write("secrets-dsv.json", res_dsv)
+    res.set("secrets_dsv", "pass" if res_dsv["ok"] else "fail", {k: v for k, v in res_dsv.items() if k not in ("dsv_calls",)}, d_ev)
+
+
+def _secret_values() -> dict[str, str]:
+    """Every secret value held by the mock DSV (plus the password/key parts of connection strings and the DSV client
+    secrets), labelled by origin - the needles for the no-leak scan. Returned values are never written to evidence."""
+    cfg = json.loads(DSV_CONFIG.read_text())
+    out: dict[str, str] = {}
+    for path, data in cfg["secrets"].items():
+        for element, value in data.items():
+            if isinstance(value, str) and element != "username":
+                out[f"{path}#{element}"] = value
+                for part in value.split(";"):
+                    k, _, v = part.partition("=")
+                    if k.strip().lower() in ("password", "sharedaccesskey", "accountkey") and v:
+                        out[f"{path}#{element}:{k.strip()}"] = v
+    for client, c in cfg["clients"].items():
+        out[f"dsv-client-secret:{client}"] = c["secret"]
+    return out
+
+
+def check_secrets_dsv(rcv: dict) -> dict:
+    calls = http("GET", f"{MOCK_DSV}/v1/__calls")[2]["calls"]
+    reads: dict[str, set] = collections.defaultdict(set)
+    tokens = collections.Counter()
+    unauthenticated = []
+    for c in calls:
+        if c["path"] == "/v1/token":
+            tokens[c["identity"]] += 1
+        elif c["method"] == "GET":
+            if c["identity"] is None:
+                unauthenticated.append(c["path"])
+            reads[c["identity"]].add(c["path"])
+    per_identity = {
+        ident: {"token_requests": tokens.get(ident, 0), "read": sorted(reads.get(ident, set())), "expected": sorted(exp), "ok": reads.get(ident, set()) == exp}
+        for ident, exp in DSV_EXPECTED_READS.items()
+    }
+    unexpected = sorted(i for i in reads if i not in DSV_EXPECTED_READS)
+    # init containers: exit 0; secret files 0400 owned by the consumer uid on tmpfs (stat only, never read)
+    ps = {}
+    for line in compose("ps", "-a", "--format", "{{.Service}}\t{{.State}}\t{{.ExitCode}}", check=False).stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3:
+            ps[parts[0]] = {"state": parts[1], "exit_code": parts[2]}
+    probe = compose(
+        "exec",
+        "-T",
+        "dsv-secrets-holder",
+        "python",
+        "-c",
+        "import json,os,stat;m={l.split()[1]:l.split()[2] for l in open('/proc/mounts')};"
+        "print(json.dumps({p:{'mode':oct(stat.S_IMODE(os.stat(p).st_mode)),'uid':os.stat(p).st_uid,'fstype':m.get(os.path.dirname(p))} "
+        "for p in ['/hold/flb/fluentbit-env.yaml','/hold/otel/dd-api-key']}))",
+        check=False,
+    )
+    try:
+        files = json.loads(probe.stdout)
+    except ValueError:
+        files = {"error": probe.stderr[-300:]}
+    files_ok = (
+        files.get("/hold/flb/fluentbit-env.yaml", {}).get("mode") == "0o400"
+        and files.get("/hold/flb/fluentbit-env.yaml", {}).get("uid") == 65532
+        and files.get("/hold/otel/dd-api-key", {}).get("mode") == "0o400"
+        and files.get("/hold/otel/dd-api-key", {}).get("uid") == 10001
+        and all(f.get("fstype") == "tmpfs" for f in files.values() if isinstance(f, dict))
+    )
+    inits_ok = all(ps.get(s, {}).get("state") == "exited" and ps.get(s, {}).get("exit_code") == "0" for s in ("dsv-fetch-flb", "dsv-fetch-otel"))
+    # no-leak scan: intake payloads (logs/RUM events + request metadata), every container log, gateway file exports
+    needles = _secret_values()
+    services = [
+        s
+        for s in compose("config", "--services", check=False).stdout.split()
+        if s not in ("mssql", "mssql-init", "postgres", "mock-dsv", "servicebus-emulator", "azurite", "redis")
+    ]
+    haystacks = {"intake": json.dumps(rcv, default=str)}
+    for svc in services:
+        lg = compose("logs", "--no-color", svc, check=False)
+        haystacks[f"logs:{svc}"] = lg.stdout + lg.stderr
+    for f in (WORK / "otel").glob("*.jsonl"):
+        haystacks[f"otel-file:{f.name}"] = f.read_text(errors="replace")
+    leaks = sorted({f"{label} in {where}" for label, value in needles.items() for where, text in haystacks.items() if value and value in text})
+    ok = all(v["ok"] for v in per_identity.values()) and not unexpected and not unauthenticated and inits_ok and files_ok and not leaks
+    return {
+        "ok": ok,
+        "mode": "DSV_AUTH=client_credentials against tools/secrets/mock_dsv.py (azure managed-identity grant: unit-tested only, no IMDS locally)",
+        "per_identity": per_identity,
+        "unexpected_identities": unexpected,
+        "unauthenticated_reads": unauthenticated,
+        "init_services": {s: ps.get(s) for s in ("dsv-fetch-flb", "dsv-fetch-otel")},
+        "secret_files": files,
+        "leak_scan": {
+            "needles": len(needles),
+            "needle_labels": sorted(needles),
+            "haystacks": {k: len(v) for k, v in haystacks.items()},
+            "leaks": leaks,
+        },
+        "dsv_calls": calls,
+    }
+
 
 def _tid(tp: str | None) -> str | None:
     return tp.split("-")[1] if tp and tp.count("-") == 3 else None
@@ -1135,7 +1252,8 @@ def write_evidence(ev_dir: Path, meta: dict, res: Results) -> None:
         "",
         f"Status label: **{LABEL}**. This is NOT Datadog-verified and nothing was deployed: every Datadog endpoint is the",
         "local mock intake (`observability/tests/transport/mock_intake`), Azure Service Bus/Storage are the official emulators,",
-        "Cosmos DB is replaced by hello-inventory-api `STORAGE_MODE=memory`. See `tests/integration/README.md`.",
+        "Cosmos DB is replaced by hello-inventory-api `STORAGE_MODE=memory`, Delinea DSV is `tools/secrets/mock_dsv.py`",
+        "(apps: `DSV_AUTH=client_credentials`; Fluent Bit / OTel gateway: dsv-fetch init services). See `tests/integration/README.md`.",
         "",
         f"- Run: `{rel}` (UTC {meta['started_utc']} -> {meta['finished_utc']}), git HEAD `{meta['git_commit']}`, images `:{VERSION}` built from source "
         f"(revision label -> app source diff vs worktree: "
@@ -1155,7 +1273,8 @@ def write_evidence(ev_dir: Path, meta: dict, res: Results) -> None:
         "",
         "Known gaps (not covered locally): Cosmos DB (memory store), Entra ID auth (AUTH_MODE=none, SQL/PG password auth),",
         "Event Hubs/Kafka aggregator path for App Service/Functions logs (covered separately by observability/tests/transport),",
-        "Azure Monitor diagnostic settings, real Datadog ingestion/indexing/UI (mock intake only).",
+        "Azure Monitor diagnostic settings, real Datadog ingestion/indexing/UI (mock intake only), real DSV + the managed-identity",
+        "azure grant (mock DSV with client_credentials; the azure grant is unit-tested against the mock with fake Entra tokens).",
         "",
     ]
     (EVIDENCE_ROOT / "LATEST.md").write_text("\n".join(lines))

@@ -26,7 +26,7 @@
 
 - The managed cluster exposes a public IP for 19000/19080 (certificate/Entra-protected); azurerm does not
   expose managed-cluster NSG rules, so restricting sources needs `az sf managed-cluster network-security-rule`.
-- Certificates are not created here (bring a thumbprint from Key Vault).
+- Certificates are not created here (bring the client certificate thumbprint; the certificate itself is managed out of band, PFX kept in Delinea DSV if needed).
 
 ## Cost when enabled (approx.)
 

@@ -2,6 +2,9 @@
 # AzAPI gap (azurerm 5.9 azurerm_container_app): no ingress.additionalPortMappings and no secret-volume
 # item paths, both needed here (4317+4318 on one gateway, 24224+2020 on the aggregator; config files
 # mounted with real file names). API version Microsoft.App/containerApps@2025-07-01 (GA).
+# Secrets: dsv-fetch init containers read them from Delinea DSV with the collector identity into replica-scoped
+# EmptyDir volumes (Fluent Bit: env-yaml include; OTel: ${file:...}). Init containers can use managed identity
+# only in a workload-profiles environment on the Consumption profile (Microsoft Learn, ACA managed identity).
 module "aggregator_config" {
   source            = "../fluent-bit"
   role              = local.eh_enabled ? "aggregator" : "aggregator-forward"
@@ -42,29 +45,59 @@ locals {
   agg_config  = module.aggregator_config.files["fluent-bit.yaml"]
 
 
-  agg_secrets = concat(
-    [
-      { name = "dd-api-key", keyVaultUrl = var.datadog.api_key_secret_id, identity = local.identity_id },
-      { name = "flb-shared-key", keyVaultUrl = var.aggregator.forward_shared_key_secret_id, identity = local.identity_id },
-      { name = "flb-config", value = local.agg_config },
-      { name = "flb-parsers", value = local.flb_parsers },
-      { name = "flb-lua", value = local.flb_lua },
-    ],
-    local.eh_enabled ? [{ name = "eventhub-conn", keyVaultUrl = local.eh_listen_secret_id, identity = local.identity_id }] : [],
-    var.aggregator.forward_tls != null ? [
-      { name = "flb-tls-crt", keyVaultUrl = var.aggregator.forward_tls.cert_secret_id, identity = local.identity_id },
-      { name = "flb-tls-key", keyVaultUrl = var.aggregator.forward_tls.key_secret_id, identity = local.identity_id },
-    ] : [],
+  # ---------------------------------------------------------------- Delinea DSV (dsv-fetch init containers)
+  dsv_base_url = coalesce(var.secrets.base_url, "https://${coalesce(var.secrets.tenant, "unset")}.secretsvaultcloud.${coalesce(var.secrets.tld, "com")}/v1")
+  dsv_env = merge(
+    var.secrets.tenant == null ? {} : { DSV_TENANT = var.secrets.tenant },
+    var.secrets.tld == null ? {} : { DSV_TLD = var.secrets.tld },
+    { DSV_BASE_URL = local.dsv_base_url, DSV_AUTH = var.secrets.auth, DSV_TIMEOUT_SECONDS = "10" },
+    local.identity_id == null ? {} : { AZURE_CLIENT_ID = var.collector_identity.client_id },
   )
+  dsv_env_list = [for k in sort(keys(local.dsv_env)) : { name = k, value = local.dsv_env[k] }]
+  # private registry of the dsv-fetch image (pulled with the collector identity; public images need none)
+  fetch_registry = var.secrets.fetch_image == null ? null : (
+    can(regex("^[a-z0-9.-]+\\.[a-z]+(:[0-9]+)?/", var.secrets.fetch_image)) && !startswith(var.secrets.fetch_image, "docker.io/") ? split("/", var.secrets.fetch_image)[0] : null
+  )
+  registries = local.fetch_registry == null ? [] : [{ server = local.fetch_registry, identity = local.identity_id }]
+
+  # aggregator secrets: Fluent Bit env-yaml (included by aggregator.yaml) + optional TLS files
+  agg_secret_refs = merge(
+    { DD_API_KEY = var.datadog.api_key_ref },
+    var.aggregator.forward_shared_key_ref == null ? {} : { FLB_FORWARD_SHARED_KEY = var.aggregator.forward_shared_key_ref },
+    local.eh_enabled && local.eh_listen_ref != null ? { EVENTHUB_CONNECTION_STRING = local.eh_listen_ref } : {},
+  )
+  agg_init = concat(
+    [{
+      name         = "dsv-fetch"
+      image        = var.secrets.fetch_image
+      args         = concat(["init", "--out", "/dsv-secrets", "--format", "env-yaml", "--env-yaml-name", "fluentbit-env.yaml"], flatten([for k in sort(keys(local.agg_secret_refs)) : ["--map", "${k}=${local.agg_secret_refs[k]}"]]))
+      resources    = { cpu = 0.25, memory = "0.5Gi" }
+      env          = local.dsv_env_list
+      volumeMounts = [{ volumeName = "dsv-secrets", mountPath = "/dsv-secrets" }]
+    }],
+    var.aggregator.forward_tls != null ? [{
+      name         = "dsv-fetch-tls"
+      image        = var.secrets.fetch_image
+      args         = ["init", "--out", "/dsv-tls", "--format", "files", "--map", "tls.crt=${var.aggregator.forward_tls.cert_ref}", "--map", "tls.key=${var.aggregator.forward_tls.key_ref}"]
+      resources    = { cpu = 0.25, memory = "0.5Gi" }
+      env          = local.dsv_env_list
+      volumeMounts = [{ volumeName = "dsv-tls", mountPath = "/dsv-tls" }]
+    }] : [],
+  )
+
+  # ACA secrets carry only the (non-secret) config files mounted as a Secret volume
+  agg_secrets = [
+    { name = "flb-config", value = local.agg_config },
+    { name = "flb-parsers", value = local.flb_parsers },
+    { name = "flb-lua", value = local.flb_lua },
+  ]
 
   agg_env = concat(
     [for k in sort(keys(module.aggregator_config.env)) : { name = k, value = module.aggregator_config.env[k] }],
     [
-      { name = "DD_API_KEY", secretRef = "dd-api-key" },
-      { name = "FLB_FORWARD_SHARED_KEY", secretRef = "flb-shared-key" },
       { name = "FLB_FORWARD_TLS", value = var.aggregator.forward_tls != null ? "on" : "off" },
-      { name = "FLB_FORWARD_TLS_CRT", value = var.aggregator.forward_tls != null ? "/fluent-bit/etc/tls/tls.crt" : "" },
-      { name = "FLB_FORWARD_TLS_KEY", value = var.aggregator.forward_tls != null ? "/fluent-bit/etc/tls/tls.key" : "" },
+      { name = "FLB_FORWARD_TLS_CRT", value = var.aggregator.forward_tls != null ? "/dsv-tls/tls.crt" : "" },
+      { name = "FLB_FORWARD_TLS_KEY", value = var.aggregator.forward_tls != null ? "/dsv-tls/tls.key" : "" },
     ],
     local.eh_enabled ? [
       { name = "EVENTHUB_BROKERS", value = "${local.eh_fqdn}:9093" },
@@ -72,7 +105,6 @@ locals {
       { name = "FLB_EVENTHUB_APP_TOPIC", value = var.event_hub.app_logs_hub },
       { name = "EVENTHUB_CONSUMER_GROUP", value = var.event_hub.consumer_group },
       { name = "KAFKA_SECURITY_PROTOCOL", value = "SASL_SSL" },
-      { name = "EVENTHUB_CONNECTION_STRING", secretRef = "eventhub-conn" },
     ] : [],
   )
 
@@ -84,11 +116,9 @@ locals {
       ] },
       { name = "flb-lua", storageType = "Secret", secrets = [{ secretRef = "flb-lua", path = "enterprise_hello.lua" }] },
       { name = "flb-state", storageType = "EmptyDir" },
+      { name = "dsv-secrets", storageType = "EmptyDir" },
     ],
-    var.aggregator.forward_tls != null ? [{ name = "flb-tls", storageType = "Secret", secrets = [
-      { secretRef = "flb-tls-crt", path = "tls.crt" },
-      { secretRef = "flb-tls-key", path = "tls.key" },
-    ] }] : [],
+    var.aggregator.forward_tls != null ? [{ name = "dsv-tls", storageType = "EmptyDir" }] : [],
   )
 
   agg_mounts = concat(
@@ -96,8 +126,9 @@ locals {
       { volumeName = "flb-files", mountPath = "/fluent-bit/etc/eh" },
       { volumeName = "flb-lua", mountPath = "/fluent-bit/etc/eh/lua" },
       { volumeName = "flb-state", mountPath = "/var/fluent-bit/state" },
+      { volumeName = "dsv-secrets", mountPath = "/dsv-secrets" },
     ],
-    var.aggregator.forward_tls != null ? [{ volumeName = "flb-tls", mountPath = "/fluent-bit/etc/tls" }] : [],
+    var.aggregator.forward_tls != null ? [{ volumeName = "dsv-tls", mountPath = "/dsv-tls" }] : [],
   )
 
   # ------------------------------------------------------------------------------------------- gateway
@@ -107,15 +138,24 @@ locals {
   )
   gw_args = module.gateway_config.args
 
-  gw_secrets = concat(
-    [{ name = "dd-api-key", keyVaultUrl = var.datadog.api_key_secret_id, identity = local.identity_id }],
-    var.gateway.auth != null ? [{ name = "otlp-bearer-token", keyVaultUrl = var.gateway.auth.token_secret_id, identity = local.identity_id }] : [],
+  # gateway secrets: FILES read by the collector config (${file:/dsv-secrets/<name>})
+  gw_secret_refs = merge(
+    { "dd-api-key" = var.datadog.api_key_ref },
+    var.gateway.auth != null ? { "otlp-bearer-token" = var.gateway.auth.token_ref } : {},
   )
+  gw_init = [{
+    name  = "dsv-fetch"
+    image = var.secrets.fetch_image
+    # 0444: the collector images run as non-root uids (contrib 10001) other than dsv-fetch (65532) and ACA has no
+    # runAsUser/fsGroup; the replica-scoped EmptyDir is visible only to the containers of this replica
+    args         = concat(["init", "--out", "/dsv-secrets", "--format", "files", "--file-mode", "0444"], flatten([for k in sort(keys(local.gw_secret_refs)) : ["--map", "${k}=${local.gw_secret_refs[k]}"]]))
+    resources    = { cpu = 0.25, memory = "0.5Gi" }
+    env          = local.dsv_env_list
+    volumeMounts = [{ volumeName = "dsv-secrets", mountPath = "/dsv-secrets" }]
+  }]
   gw_env = concat(
-    [{ name = "DD_API_KEY", secretRef = "dd-api-key" }],
     [for k in sort(keys(module.gateway_config.env)) : { name = k, value = module.gateway_config.env[k] }],
     [for k in module.gateway_config.config_env_order : { name = k, value = module.gateway_config.config_env[k] }],
-    var.gateway.auth != null ? [{ name = "OTLP_BEARER_TOKEN", secretRef = "otlp-bearer-token" }] : [],
   )
 }
 
@@ -147,9 +187,11 @@ resource "azapi_resource" "aggregator" {
           additionalPortMappings = [{ external = false, targetPort = 2020, exposedPort = 2020 }]
           traffic                = [{ latestRevision = true, weight = 100 }]
         }
-        secrets = local.agg_secrets
+        secrets    = local.agg_secrets
+        registries = local.registries
       }
       template = {
+        initContainers = local.agg_init
         containers = [{
           name      = "fluent-bit"
           image     = var.aggregator.image
@@ -176,16 +218,22 @@ resource "azapi_resource" "aggregator" {
     fqdn = "properties.configuration.ingress.fqdn"
   }
 
-  depends_on = [azurerm_role_assignment.kv_secrets_user]
-
   lifecycle {
     precondition {
       condition     = var.container_apps != null && local.identity_id != null
       error_message = "aggregator.hosting = container_app needs container_apps.environment_id and collector_identity."
     }
     precondition {
-      condition     = !local.eh_enabled || local.eh_listen_secret_id != null
-      error_message = "The Kafka input needs the listen connection string in Key Vault: set event_hub.listen_secret_key_vault_id (create) or listen_connection_string_secret_id."
+      condition     = !local.eh_enabled || local.eh_listen_ref != null
+      error_message = "The Kafka input needs the listen connection string in DSV: set event_hub.listen_connection_string_ref (dsv://...)."
+    }
+    precondition {
+      condition     = var.container_apps == null || try(var.container_apps.workload_profile_name, "") == "Consumption"
+      error_message = "dsv-fetch init containers need managed identity, which ACA offers to init containers only on the Consumption profile of a workload-profiles environment."
+    }
+    precondition {
+      condition     = var.secrets.fetch_image != null
+      error_message = "The aggregator reads its keys from DSV with the dsv-fetch init container: set secrets.fetch_image."
     }
   }
 }
@@ -218,9 +266,10 @@ resource "azapi_resource" "gateway" {
           additionalPortMappings = [{ external = false, targetPort = 4317, exposedPort = 4317 }]
           traffic                = [{ latestRevision = true, weight = 100 }]
         }
-        secrets = local.gw_secrets
+        registries = local.registries
       }
       template = {
+        initContainers = local.gw_init
         containers = [{
           name      = "otel-gateway"
           image     = local.gw_image
@@ -231,12 +280,14 @@ resource "azapi_resource" "gateway" {
             { type = "Liveness", httpGet = { path = "/", port = 13133 }, periodSeconds = 30, failureThreshold = 3 },
             { type = "Readiness", httpGet = { path = "/", port = 13133 }, periodSeconds = 10 },
           ]
+          volumeMounts = [{ volumeName = "dsv-secrets", mountPath = "/dsv-secrets" }]
         }]
         scale = {
           minReplicas = var.gateway.min_replicas
           maxReplicas = var.gateway.max_replicas
           rules       = [{ name = "http-concurrency", http = { metadata = { concurrentRequests = "100" } } }]
         }
+        volumes = [{ name = "dsv-secrets", storageType = "EmptyDir" }]
       }
     }
   }
@@ -245,20 +296,18 @@ resource "azapi_resource" "gateway" {
     fqdn = "properties.configuration.ingress.fqdn"
   }
 
-  depends_on = [azurerm_role_assignment.kv_secrets_user]
-
   lifecycle {
     precondition {
       condition     = var.container_apps != null && local.identity_id != null
       error_message = "gateway.hosting = container_app needs container_apps.environment_id and collector_identity."
     }
+    precondition {
+      condition     = var.container_apps == null || try(var.container_apps.workload_profile_name, "") == "Consumption"
+      error_message = "dsv-fetch init containers need managed identity, which ACA offers to init containers only on the Consumption profile of a workload-profiles environment."
+    }
+    precondition {
+      condition     = var.secrets.fetch_image != null
+      error_message = "The gateway reads its keys from DSV with the dsv-fetch init container: set secrets.fetch_image."
+    }
   }
-}
-
-resource "azurerm_role_assignment" "kv_secrets_user" {
-  count                = var.key_vault.grant_secrets_user && var.key_vault.id != null && var.collector_identity != null ? 1 : 0
-  scope                = var.key_vault.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = var.collector_identity.principal_id
-  principal_type       = "ServicePrincipal"
 }

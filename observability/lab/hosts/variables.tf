@@ -1,17 +1,14 @@
 variable "settings" {
   description = "obs-hosts settings."
   type = object({
-    agent_version       = optional(string, "7.84.2")
-    fluent_bit_version  = optional(string, "5.1.3")
-    api_key_secret_name = optional(string, "datadog-api-key")
-    # VERSIONED Key Vault secret whose value is {"api_key":"<key>"} for the extension's
-    # protectedSettingsFromKeyVault (vault needs enabled_for_deployment). Null -> the API key is read with
-    # a data source and passed as a protected setting (stored, encrypted, in state: documented exception).
-    agent_protected_settings_secret_url = optional(string)
-    linux_log_glob                      = optional(string, "*.log")
-    default_linux_log_dir               = optional(string, "/var/log/enterprise-hello")
-    default_windows_log_dir             = optional(string, "C:\\ProgramData\\enterprise-hello\\logs")
-    sqlvm_os_type                       = optional(string, "windows")
+    agent_version            = optional(string, "7.84.2")
+    fluent_bit_version       = optional(string, "5.1.3")
+    setup_revision           = optional(number, 1) # bump to re-run the installers (e.g. once after the 2.0 upgrade)
+    linux_log_glob           = optional(string, "*.log")
+    default_linux_log_dir    = optional(string, "/var/log/enterprise-hello")
+    default_windows_log_dir  = optional(string, "C:\\ProgramData\\enterprise-hello\\logs")
+    sqlvm_os_type            = optional(string, "windows")
+    sqlvm_identity_client_id = optional(string) # user-assigned identity on the SQL VM (DSV reader) when the contract has none
     # per-workload application log files (as written by the app deployment, LOG_FILE_PATH); wins over log_dir
     workload_log_paths = optional(map(list(string)), {
       "hello-worker" = ["/var/log/hello-worker/*.log"]
@@ -24,15 +21,13 @@ variable "settings" {
 variable "obs_telemetry_transport" {
   description = "obs-telemetry-transport contract (fields used)."
   type = object({
-    datadog_site      = string
-    api_key_secret_id = string
-  })
-}
-
-variable "foundation_identity" {
-  description = "foundation-identity contract (fields used)."
-  type = object({
-    key_vault_id = string
+    datadog_site = string
+    api_key_ref  = string
+    secrets = object({
+      tenant   = optional(string)
+      tld      = optional(string)
+      base_url = string
+    })
   })
 }
 
@@ -72,8 +67,9 @@ variable "platform_db_sqlvm" {
   description = "platform-db-sqlvm contract (optional): the SQL Server VM gets the Agent only (no app logs)."
   type = object({
     vm = object({
-      id   = string
-      name = string
+      id                 = string
+      name               = string
+      identity_client_id = optional(string)
     })
   })
   default = null

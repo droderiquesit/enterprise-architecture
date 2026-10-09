@@ -54,8 +54,9 @@ target settings path exists in the root's `settings` type).
 ### Prerequisites the mapping cannot supply
 
 - `app_gateway: true` (profiles `full`, `specialized`) enables Application Gateway in foundation-edge, whose validation
-  requires `components.foundation-edge.app_gateway.key_vault_certificate_secret_id` and `backend_fqdns` in the
-  environment file; plan fails with that message until they are set (or set the feature to `false`).
+  requires `components.foundation-edge.app_gateway.backend_fqdns` in the environment file and the listener
+  certificate in Delinea DSV (`<prefix>/<env>/appgw-tls-pfx`, passed by the pipeline); plan fails with that message
+  until they are set (or set the feature to `false`).
 - `front_door: true` likewise requires `components.foundation-edge.front_door.origins`.
 - `egress: firewall` requires `topology: hub-spoke` and `firewall: true` (foundation-network validation).
 

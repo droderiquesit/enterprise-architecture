@@ -67,7 +67,7 @@ def build_envelope(tree, env: str, component, contract: str, data, commit: str, 
     problems = validate_envelope(tree, envelope, contract, env, major)
     secrets = secret_like_keys(data)
     if secrets:
-        problems.append("contract contains secret-looking values (use *_secret_id Key Vault references): "
+        problems.append("contract contains secret-looking values (publish dsv:// references, never values - ADR-0001 section 14): "
                         + ", ".join(secrets))
     if problems:
         raise ContractError(f"contract {contract} rejected:\n  " + "\n  ".join(problems))

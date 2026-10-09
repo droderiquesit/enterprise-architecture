@@ -28,8 +28,7 @@ locals {
     )
   ]...) : {}
 
-  pull_secret_name = var.settings.pull_secret_secret_id == null ? null : regex("/secrets/([^/]+)", var.settings.pull_secret_secret_id)[0]
-  domain           = coalesce(var.settings.domain, "${var.environment.name_prefix}${var.environment.name}${module.naming.suffix}")
+  domain = coalesce(var.settings.domain, "${var.environment.name_prefix}${var.environment.name}${module.naming.suffix}")
 }
 
 resource "azurerm_resource_group" "this" {
@@ -82,12 +81,6 @@ resource "azurerm_role_assignment" "aro_rp" {
   principal_type     = "ServicePrincipal"
 }
 
-data "azurerm_key_vault_secret" "pull_secret" {
-  count        = local.enabled && local.pull_secret_name != null ? 1 : 0
-  name         = local.pull_secret_name
-  key_vault_id = var.foundation_identity.key_vault_id
-}
-
 # ---------------------------------------------------------------- cluster
 resource "azurerm_redhat_openshift_cluster" "this" {
   count = local.enabled ? 1 : 0
@@ -102,7 +95,7 @@ resource "azurerm_redhat_openshift_cluster" "this" {
     version                     = var.settings.version
     managed_resource_group_name = "${local.names.resource_group}-managed"
     fips_enabled                = var.settings.fips_enabled
-    pull_secret                 = try(data.azurerm_key_vault_secret.pull_secret[0].value, null)
+    pull_secret                 = var.pull_secret # DSV aro-pull-secret via the pipeline (stored in state: no write-only form)
   }
 
   network_profile {

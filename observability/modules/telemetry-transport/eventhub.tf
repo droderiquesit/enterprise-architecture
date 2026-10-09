@@ -81,19 +81,9 @@ resource "azurerm_eventhub_namespace_authorization_rule" "fluentbit_listen" {
   manage              = false
 }
 
-# The connection string is written write-only (value_wo: not persisted in this resource's state; the
-# authorization rule itself necessarily holds its keys in state - see README "Secrets in state").
-resource "azurerm_key_vault_secret" "fluentbit_listen" {
-  #checkov:skip=CKV_AZURE_41:The value is the Event Hubs listen rule connection string; it is rotated by regenerating the rule key and bumping listen_secret_version (runbook docs/runbooks/secret-rotation.md), so a fixed expiry date would only create drift.
-  count            = local.eh_create && var.event_hub.listen_secret_key_vault_id != null ? 1 : 0
-  name             = var.event_hub.listen_secret_name
-  key_vault_id     = var.event_hub.listen_secret_key_vault_id
-  value_wo         = azurerm_eventhub_namespace_authorization_rule.fluentbit_listen[0].primary_connection_string
-  value_wo_version = var.event_hub.listen_secret_version
-  content_type     = "eventhub-connection-string"
-  # Key Vault objects accept at most 15 tags
-  tags = { for k, v in var.tags : k => v if contains(["env", "application", "component", "layer", "owner", "team", "managed_by", "expires_on", "data_classification"], k) }
-}
+# The generated listen connection string is NOT written to any vault by Terraform: it is exposed only as the
+# sensitive output generated_secrets (tools/secrets/publish.py copies it to DSV after apply) and read by the
+# aggregator from DSV. The authorization rule itself necessarily holds its keys in state (README "Secrets in state").
 
 resource "azurerm_private_endpoint" "eventhub" {
   count               = local.eh_create && var.event_hub.private_endpoint != null ? 1 : 0
@@ -123,7 +113,5 @@ locals {
   ) : null
   eh_fqdn         = local.eh_enabled ? coalesce(var.event_hub.namespace_fqdn, "${local.eh_namespace_name_effective}.servicebus.windows.net") : null
   eh_send_rule_id = local.eh_create ? azurerm_eventhub_namespace_authorization_rule.diagnostics[0].id : var.event_hub.send_authorization_rule_id
-  eh_listen_secret_id = local.eh_create ? (
-    var.event_hub.listen_secret_key_vault_id != null ? azurerm_key_vault_secret.fluentbit_listen[0].versionless_id : var.event_hub.listen_connection_string_secret_id
-  ) : var.event_hub.listen_connection_string_secret_id
+  eh_listen_ref   = var.event_hub.listen_connection_string_ref
 }

@@ -30,7 +30,7 @@ Shared code: `platform/modules/data-cosmos-account` (Cosmos account + capabiliti
 
 ## Ownership boundaries (ADR-0001 §3)
 - Here: servers/accounts/clusters, logical databases/containers/keyspaces/tables where ARM manages them,
-  private endpoints, data-plane RBAC for workload identities, Key Vault secrets this layer generates.
+  private endpoints, data-plane RBAC for workload identities (secret values live in Delinea DSV).
 - Not here: diagnostic settings (obs-diagnostics), Datadog resources and DBM users (obs-dbm), app settings,
   business tables (application migrations). Each root's `contract.dbm` tells obs-dbm the engine, deployment
   type, auth mode, host/port, resource ID, Entra admin and database list.
@@ -40,11 +40,13 @@ Shared code: `platform/modules/data-cosmos-account` (Cosmos account + capabiliti
   `cassandra-mi/scripts/create-keyspace.cql`. `sqlvm/scripts/init-adapter-db.ps1` runs via VM run command.
 
 ## Secrets
-Contracts never contain secret values — only versionless Key Vault secret IDs. Generated passwords:
-MySQL admin and HorizonDB admin are **ephemeral/write-only** (never in state); SQL VM, DocumentDB and
-Cassandra MI admin passwords are `random_password` in state (the azurerm arguments have no write-only variant)
-and are written write-only to the foundation Key Vault (apply identity needs *Key Vault Secrets Officer*).
-Key-based Cosmos APIs (Mongo RU, Cassandra, Gremlin) expect operators to store keys out-of-band (root READMEs).
+Contracts never contain secret values — only Delinea DSV references (`*_secret_id` = `dsv://<prefix>/<env>/<name>#value`,
+ADR-0001 section 14). DSV is the system of record; operators create/rotate the values with the dsv CLI and the pipeline
+passes apply-time inputs with `tools/secrets/fetch.py` (registry `secret_env`) as `TF_VAR_*` for the terraform process only:
+MySQL admin (`mysql-admin-password`, optional) and HorizonDB admin are **ephemeral/write-only** (never in state);
+SQL VM (`sqlvm-admin-password`, `sqlvm-dbadapter-password`), DocumentDB (`documentdb-admin-password`) and Cassandra MI
+(`cassandra-mi-admin-password`) arguments have no write-only variant, so those values **are stored in state** (known
+limitation). Key-based Cosmos APIs (Mongo RU, Cassandra, Gremlin) expect operators to store keys in DSV (root READMEs).
 
 ## AzAPI gaps (to add to catalog/provider-gaps.yaml)
 | Resource type | API version | Root | Reason |

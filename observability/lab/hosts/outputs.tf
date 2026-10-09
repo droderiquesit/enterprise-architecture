@@ -1,8 +1,4 @@
 # obs-hosts publishes no contract; outputs are evidence for the deployment record.
-output "agent_extensions" {
-  value = module.hosts.agent_extensions
-}
-
 output "setup" {
   value = module.hosts.setup
 }

@@ -53,6 +53,22 @@ run "aggregator_secrets" {
     condition     = contains(output.secret_env_names, "EVENTHUB_CONNECTION_STRING") && contains(output.secret_env_names, "DD_API_KEY")
     error_message = "Aggregator secret env names."
   }
+  assert {
+    condition     = output.secrets_env_file == "/dsv-secrets/fluentbit-env.yaml" && strcontains(output.main_config, "- /dsv-secrets/fluentbit-env.yaml") && strcontains(output.main_config, "apikey: $${DD_API_KEY}")
+    error_message = "Aggregator config includes the dsv-fetch env file and keeps $${DD_API_KEY}."
+  }
+}
+
+run "host_secret_files" {
+  command = plan
+  variables {
+    role      = "linux-host"
+    log_paths = ["/var/log/app/*.log"]
+  }
+  assert {
+    condition     = output.secrets_env_file == "/run/fluent-bit-eh/fluentbit-env.yaml" && strcontains(output.main_config, "- /run/fluent-bit-eh/fluentbit-env.yaml")
+    error_message = "Linux hosts include the tmpfs env file written by ExecStartPre."
+  }
 }
 
 run "reject_tls_off" {

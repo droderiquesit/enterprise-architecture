@@ -4,15 +4,6 @@ mock_provider "azurerm" {
   mock_resource "azurerm_resource_group" {
     defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-identity-dev-sec" }
   }
-  mock_resource "azurerm_key_vault" {
-    defaults = {
-      id        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv"
-      vault_uri = "https://eh-kv-identi-dev-abcde.vault.azure.net/"
-    }
-  }
-  mock_resource "azurerm_private_endpoint" {
-    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Network/privateEndpoints/pep-kv" }
-  }
   mock_resource "azurerm_user_assigned_identity" {
     defaults = {
       id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id"
@@ -36,31 +27,17 @@ variables {
     expires_on      = "2026-12-31"
     tags            = {}
   }
-  foundation_network = {
-    subnets = {
-      "private-endpoints" = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/v/subnets/private-endpoints" }
-    }
-    private_dns_zones = {
-      vault = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net" }
-    }
+  secrets = {
+    provider      = "delinea-dsv"
+    tenant        = "example-lab"
+    tld           = "com"
+    auth_provider = "azure-eh"
   }
 }
 
 run "defaults" {
   command = plan
 
-  assert {
-    condition     = azurerm_key_vault.this.public_network_access_enabled == false && azurerm_key_vault.this.network_acls[0].default_action == "Deny" && azurerm_key_vault.this.network_acls[0].bypass == "AzureServices"
-    error_message = "Key Vault must have public access disabled and a deny-by-default firewall"
-  }
-  assert {
-    condition     = azurerm_key_vault.this.rbac_authorization_enabled && azurerm_key_vault.this.purge_protection_enabled && azurerm_key_vault.this.soft_delete_retention_days == 7
-    error_message = "RBAC authorization, purge protection and 7-day soft delete expected"
-  }
-  assert {
-    condition     = module.key_vault_private_endpoint.id != null
-    error_message = "Key Vault private endpoint expected"
-  }
   assert {
     condition = alltrue([for k in [
       "hello-bff", "hello-orders-api", "hello-inventory-api", "hello-catalog-api", "hello-dbadapter", "hello-worker",
@@ -70,42 +47,78 @@ run "defaults" {
     error_message = "all catalogue identities must exist"
   }
   assert {
-    condition     = contains(keys(azurerm_role_assignment.workload_secrets_user), "obs-collector") && contains(keys(azurerm_role_assignment.workload_secrets_user), "hello-orders-api") && !contains(keys(azurerm_role_assignment.workload_secrets_user), "aks-kubelet") && !contains(keys(azurerm_role_assignment.workload_secrets_user), "deploy-agent")
-    error_message = "only identities that need secrets get Key Vault Secrets User"
+    condition     = output.contract.secrets.provider == "delinea-dsv" && output.contract.secrets.base_url == "https://example-lab.secretsvaultcloud.com/v1" && output.contract.secrets.base_path == "eh/dev" && output.contract.secrets.auth_provider == "azure-eh"
+    error_message = "DSV connection block expected"
   }
   assert {
-    condition     = alltrue([for r in azurerm_role_assignment.workload_secrets_user : r.role_definition_name == "Key Vault Secrets User"])
-    error_message = "workloads only get Secrets User"
+    condition     = output.contract.secrets.refs["datadog-api-key"] == "dsv://eh/dev/datadog-api-key#value" && output.contract.secrets.refs["eventhub-fluentbit-listen"] == "dsv://eh/dev/eventhub-fluentbit-listen#value"
+    error_message = "dsv:// references expected"
   }
   assert {
-    condition     = output.contract.secret_ids["datadog-api-key"] == "https://eh-kv-identi-dev-abcde.vault.azure.net/secrets/datadog-api-key" && contains(keys(output.contract.secret_ids), "dbm-mysql-password") && contains(keys(output.contract.secret_ids), "fault-token") && contains(keys(output.contract.secret_ids), "datadog-client-token")
-    error_message = "versionless secret IDs expected"
+    condition     = contains(keys(output.contract.secrets.refs), "dbm-mysql-password") && contains(keys(output.contract.secrets.refs), "dbm-sqlvm-password") && !contains(keys(output.contract.secrets.refs), "dbm-postgres-password")
+    error_message = "DBM password refs only for SQL-auth engines"
+  }
+  assert {
+    condition     = alltrue([for k, v in output.contract.secrets.refs : startswith(v, "dsv://eh/dev/${k}#")])
+    error_message = "every ref is under the env base path"
+  }
+  assert {
+    condition     = contains(output.contract.identities["obs-collector"].secrets, "fluentbit-shared-key") && contains(output.contract.identities["obs-collector"].secrets, "eventhub-fluentbit-listen") && !contains(output.contract.identities["obs-collector"].secrets, "fault-token")
+    error_message = "collector reads API key, forward shared key and the Event Hubs listen string, not the fault token"
+  }
+  assert {
+    condition     = contains(output.contract.identities["deploy-agent"].secrets, "datadog-app-key") && !contains(output.contract.identities["hello-bff"].secrets, "datadog-app-key")
+    error_message = "datadog-app-key is pipeline-only"
+  }
+  assert {
+    condition     = length(output.contract.identities["aks-kubelet"].secrets) == 0 && length(output.contract.identities["hello-frontend"].secrets) == 0
+    error_message = "identities without runtime secrets"
+  }
+  assert {
+    condition     = alltrue(flatten([for k, v in output.contract.identities : [for s in v.secrets : contains(keys(output.contract.secrets.refs), s)]]))
+    error_message = "every identity secret has a reference"
   }
   assert {
     condition     = alltrue([for k, v in output.contract.identities : can(regex("^/subscriptions/[^/]+/", v.id))])
     error_message = "identity ids must be ARM ids"
   }
+  assert {
+    condition     = length(azurerm_role_assignment.package_readers) == 0
+    error_message = "no package readers without a packages container"
+  }
 }
 
-run "secret_scoped_assignments" {
+run "extra_identity_and_engines" {
   command = plan
   variables {
-    settings = { secret_scoped_assignments = true }
+    settings = {
+      extra_identities       = { "hello-extra" = "extra test workload" }
+      extra_identity_secrets = { "hello-extra" = ["fault-token"] }
+      dbm_sql_auth_engines   = ["postgres"]
+    }
   }
   assert {
-    condition     = azurerm_role_assignment.workload_secrets_user["obs-dbm/dbm-mysql-password"].scope == "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv/secrets/dbm-mysql-password"
-    error_message = "secret-scoped assignment expected"
+    condition     = length(output.contract.identities["hello-extra"].secrets) == 1 && contains(output.contract.identities["hello-extra"].secrets, "fault-token")
+    error_message = "extra identity secrets"
   }
   assert {
-    condition     = !contains(keys(azurerm_role_assignment.workload_secrets_user), "obs-collector/fault-token")
-    error_message = "collector must not read fault-token"
+    condition     = contains(keys(output.contract.secrets.refs), "dbm-postgres-password") && !contains(keys(output.contract.secrets.refs), "dbm-mysql-password")
+    error_message = "DBM refs follow dbm_sql_auth_engines"
   }
-  assert {
-    condition     = alltrue([for k in ["obs-collector/fluentbit-shared-key", "obs-collector/datadog-api-key", "hello-jobs/datadog-api-key", "hello-worker/datadog-api-key", "hello-inventory-api/datadog-api-key"] : contains(keys(azurerm_role_assignment.workload_secrets_user), k)]) && !contains(keys(azurerm_role_assignment.workload_secrets_user), "hello-durable/datadog-api-key")
-    error_message = "Fluent Bit readers: collector (API key + forward shared key), VM/VMSS host identities and the Batch pool identity."
+}
+
+run "uncatalogued_secret_rejected" {
+  command = plan
+  variables {
+    settings = { extra_identity_secrets = { "hello-bff" = ["not-in-catalogue"] } }
   }
-  assert {
-    condition     = contains(keys(output.contract.secret_ids), "fluentbit-shared-key")
-    error_message = "fluentbit-shared-key is published as a versionless secret id."
+  expect_failures = [azurerm_resource_group.identity]
+}
+
+run "wrong_tld_rejected" {
+  command = plan
+  variables {
+    secrets = { tenant = "example-lab", tld = "org", auth_provider = "azure-eh" }
   }
+  expect_failures = [var.secrets]
 }

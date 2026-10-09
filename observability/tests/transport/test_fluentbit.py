@@ -13,6 +13,7 @@ Requires a docker daemon. Synthetic data only.
 from __future__ import annotations
 
 import collections
+import hashlib
 import json
 import shutil
 import subprocess
@@ -28,6 +29,8 @@ from dockerutil import (
     KAFKA_IMAGE,
     Stack,
     fluent_bit_env,
+    fluent_bit_secrets,
+    TEST_SECRETS,
     http_json,
     http_status,
     received,
@@ -128,6 +131,8 @@ def _requests_ok(reqs: list[dict]) -> None:
         assert r["path"] == "/api/v2/logs"
         assert r["content_encoding"] == "gzip"
         assert r["api_key_present"]
+        # the key Fluent Bit sent is the value stored in (mock) DSV, delivered by the dsv-fetch env-yaml include
+        assert r["api_key_sha256"] == hashlib.sha256(TEST_SECRETS["DD_API_KEY"].encode()).hexdigest()
 
 
 def _write_log(dir_: Path) -> Path:
@@ -160,7 +165,7 @@ def test_dry_run_all_configs():
     res = subprocess.run([str(HERE / "dryrun.sh")], capture_output=True, text=True)
     print(res.stdout, res.stderr)
     assert res.returncode == 0
-    assert res.stdout.count("PASS") == 8
+    assert res.stdout.count("PASS") == 9
 
 
 def test_sidecar_direct_to_datadog(stack, tmp_path):
@@ -171,7 +176,7 @@ def test_sidecar_direct_to_datadog(stack, tmp_path):
     fb = stack.run(
         "sidecar", FLUENT_BIT_IMAGE,
         env=fluent_bit_env(LOG_FILE_PATH="/var/log/app/app.log"),
-        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logdir}:/var/log/app"],
+        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logdir}:/var/log/app", fluent_bit_secrets(tmp_path)],
         ports=["127.0.0.1::2020"],
         cmd=["-c", "/fluent-bit/etc/eh/sidecar.yaml"],
     )
@@ -260,11 +265,11 @@ def test_aggregator_forward_and_eventhub_kafka(stack, tmp_path):
             EVENTHUB_TOPICS="app-logs,platform-logs",
             EVENTHUB_CONSUMER_GROUP="fluent-bit",
             KAFKA_SECURITY_PROTOCOL="SASL_PLAINTEXT",  # Event Hubs: SASL_SSL (TLS) - only the local broker is plaintext
-            EVENTHUB_CONNECTION_STRING=conn,
             FLB_DD_TAGS="env:test,collector:aggregator",
             FLB_ACA_CONSOLE_ALLOW="eh-caj-*",  # only jobs (no sidecar) - sidecar apps' stdout is a duplicate
         ),
-        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro"],
+        # DD_API_KEY, FLB_FORWARD_SHARED_KEY and the Kafka connection string: DSV -> dsv-fetch env-yaml include
+        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", fluent_bit_secrets(tmp_path, EVENTHUB_CONNECTION_STRING=conn)],
         cmd=["-c", "/fluent-bit/etc/eh/aggregator.yaml"],
     )
     logdir = tmp_path / "applogs"
@@ -273,7 +278,7 @@ def test_aggregator_forward_and_eventhub_kafka(stack, tmp_path):
     stack.run(
         "sidecarfwd", FLUENT_BIT_IMAGE,
         env=fluent_bit_env(LOG_FILE_PATH="/var/log/app/app.log", FLB_FORWARD_HOST="aggregator", FLB_FORWARD_PORT="24224"),
-        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logdir}:/var/log/app"],
+        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logdir}:/var/log/app", fluent_bit_secrets(tmp_path)],
         cmd=["-c", "/fluent-bit/etc/eh/sidecar-forward.yaml"],
     )
     _write_log(logdir)
@@ -335,7 +340,9 @@ def test_linux_host_config_with_canary(stack, tmp_path):
         "host", FLUENT_BIT_IMAGE,
         env=fluent_bit_env(FLB_LOG_PATHS="/var/log/enterprise-hello/*.log", HOSTNAME="vm-test",
                            FLB_METRICS_INTERVAL_SEC="2", FLB_OTLP_HOST="agent", FLB_ENV="test"),
-        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logdir}:/var/log/enterprise-hello"],
+        # hosts: dsv-fetch writes the env file into the unit's RuntimeDirectory /run/fluent-bit-eh (ExecStartPre)
+        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", f"{logdir}:/var/log/enterprise-hello",
+                 fluent_bit_secrets(tmp_path).replace(":/dsv-secrets:ro", ":/run/fluent-bit-eh:ro")],
         cmd=["-c", "/fluent-bit/etc/eh/linux-host.yaml"],
     )
     target = logdir / "hello-worker.log"
@@ -403,14 +410,13 @@ def test_aggregator_azure_platform_and_control_plane_logs(stack, tmp_path):
             EVENTHUB_TOPICS="app-logs,platform-logs,activity-logs",
             EVENTHUB_CONSUMER_GROUP="fluent-bit",
             KAFKA_SECURITY_PROTOCOL="SASL_PLAINTEXT",
-            EVENTHUB_CONNECTION_STRING=conn,
             FLB_DD_TAGS="env:test,collector:aggregator",
             FLB_ACA_CONSOLE_ALLOW="eh-caj-*",
             FLB_EVENTHUB_APP_TOPIC="app-logs",
             FLB_AZURE_ENV_BY_SUBSCRIPTION=f"{SUB}=lab",
             FLB_AZURE_MAX_RECORD_BYTES="20000",  # production default 900000 (Datadog: 1 MB per log)
         ),
-        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro"],
+        volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro", fluent_bit_secrets(tmp_path, EVENTHUB_CONNECTION_STRING=conn)],
         cmd=["-c", "/fluent-bit/etc/eh/aggregator.yaml"],
     )
     _produce(kafka, "activity-logs", SAMPLES / "eventhub-activity-logs.jsonl")

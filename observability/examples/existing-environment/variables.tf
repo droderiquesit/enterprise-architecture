@@ -22,12 +22,19 @@ variable "synthetics" {
 variable "telemetry" {
   description = <<-EOT
     The existing telemetry transport (equivalent of the obs-telemetry-transport contract), supplied by hand:
-    OTLP endpoints of your collector/agents, Fluent Bit forward target, Datadog API key as a Key Vault
-    versionless secret id. Used only to compute instrumentation patches for the application owners.
+    OTLP endpoints of your collector/agents, Fluent Bit forward target, the Datadog API key as a Delinea DSV
+    reference (dsv://...) and the DSV endpoint + dsv-fetch image your workloads use. Used only to compute
+    instrumentation patches for the application owners.
   EOT
   type = object({
-    datadog_site      = string
-    api_key_secret_id = string
+    datadog_site = string
+    api_key_ref  = string
+    secrets = object({
+      tenant      = optional(string)
+      tld         = optional(string, "com")
+      base_url    = string
+      fetch_image = optional(string)
+    })
     otlp = object({
       grpc_endpoint = string
       http_endpoint = string
@@ -38,8 +45,13 @@ variable "telemetry" {
     })
   })
   default = {
-    datadog_site      = "datadoghq.com"
-    api_key_secret_id = "https://kv-observability-prod.vault.azure.net/secrets/datadog-api-key"
+    datadog_site = "datadoghq.com"
+    api_key_ref  = "dsv://monitoring/prod/datadog-api-key#value"
+    secrets = {
+      tenant      = "contoso"
+      base_url    = "https://contoso.secretsvaultcloud.com/v1"
+      fetch_image = "acrplatformprod.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    }
     otlp = {
       grpc_endpoint = "http://otel-gateway.observability.internal:4317"
       http_endpoint = "http://otel-gateway.observability.internal:4318"
@@ -156,11 +168,16 @@ variable "azure_integration" {
 variable "kubernetes" {
   description = <<-EOT
     Existing AKS cluster for the Datadog Agent (DaemonSet + Cluster Agent) and the Fluent Bit DaemonSet
-    (modules/kubernetes). api_key_mode = existing: the Secret "datadog-api-key" is synced by your secret operator
-    (Secrets Store CSI / External Secrets) - no key passes through Terraform.
+    (modules/kubernetes). api_key_mode = dsv_secret_backend (default): the Agents and Fluent Bit read the key from
+    Delinea DSV with workload identity (identity_client_id, federated with the service accounts datadog/datadog,
+    datadog/datadog-cluster-checks and fluent-bit/fluent-bit by your identity team); existing: a Secret
+    "datadog-api-key" synced by the Delinea dsv-k8s syncer. No key passes through Terraform either way.
   EOT
   type = object({
-    enabled                = optional(bool, true)
+    enabled                   = optional(bool, true)
+    api_key_mode              = optional(string, "dsv_secret_backend")
+    identity_client_id        = optional(string, "00000000-0000-0000-0000-000000000000")
+    cluster_agent_secret_name = optional(string)
     cluster_name           = optional(string, "aks-prod-weu")
     host                   = optional(string, "https://aks-prod-weu.hcp.westeurope.azmk8s.io:443")
     cluster_ca_certificate = optional(string, "")
@@ -172,13 +189,14 @@ variable "dbm" {
   description = <<-EOT
     Datadog Database Monitoring for the existing PostgreSQL server, run as cluster checks by the Cluster Agent on the
     existing AKS cluster (no new compute). The DBM user/grants are created by the DBA with the package SQL
-    (modules/dbm/sql/postgres-flexible.sql); the password lives in the Kubernetes Secret named below.
+    (modules/dbm/sql/postgres-flexible.sql); the password lives in Delinea DSV and is resolved by the cluster-checks
+    runners' dsv-fetch secret backend (ENC[dsv://...]).
   EOT
   type = object({
     enabled         = optional(bool, true)
     host            = optional(string, "psql-orders-prod.postgres.database.azure.com")
     resource_id     = optional(string, "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data-prod/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-orders-prod")
-    password_secret = optional(string, "datadog-dbm-postgres")
+    password_ref    = optional(string, "dsv://monitoring/prod/dbm-orders-postgresql#value")
   })
   default = {}
 }

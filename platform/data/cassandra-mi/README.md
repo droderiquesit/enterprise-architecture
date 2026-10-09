@@ -11,7 +11,7 @@ Cassandra 5.0 managed cluster + datacenter `dc1` (3 × `Standard_D8s_v4`, 1 P30 
 | Contract | Fields used |
 |---|---|
 | `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v1 | `key_vault_id`, `key_vault_uri`, `secret_ids` (optional), `identities[<name>].{principal_id, client_id, name}` |
+| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}`, `secrets.{base_path, refs}` (Delinea DSV references) |
 
 ## Produced contract
 `platform-db-cassandra-mi` v1 — schema `catalog/contracts/platform-db-cassandra-mi.v1.schema.json` (output `contract`, no secrets).
@@ -34,7 +34,7 @@ Disabled: 0. Enabled: roughly USD 1,500+/month (3 × D8s_v4 VMs + P30 disks + se
 Datacenter VMs are injected into subnet `cassandra-mi` (private IPs only, no public endpoint). The first-party *Azure Cosmos DB* service principal (app ID `a232010e-820c-4083-83bb-3ace5fc29d0b`) needs `Microsoft.Network/virtualNetworks/subnets/join/action`: this root assigns **Network Contributor** to the object ID given in settings (`az ad sp show --id a232010e-820c-4083-83bb-3ace5fc29d0b --query id -o tsv`), scoped to the subnet by default. The apply identity needs User Access Administrator (or RBAC Administrator) on that scope. Outbound rules required by the service must be allowed by foundation-network.
 
 ## Authentication and data-plane access
-Cassandra native authentication (`authentication_method = Cassandra`); Entra ID is not supported. Admin password: `random_password` (state; no write-only argument) copied write-only to Key Vault. The adapter login `dbadapter` is created by `create-keyspace.cql`; its password is set out-of-band as Key Vault secret `cassandra-mi-dbadapter-password` and substituted into the script by the pipeline.
+Cassandra native authentication (`authentication_method = Cassandra`); Entra ID is not supported. Admin password: Delinea DSV `cassandra-mi-admin-password`, passed by the pipeline as `TF_VAR_admin_password` (stored in state: `default_admin_password` has no write-only argument). The adapter login `dbadapter` is created by `create-keyspace.cql`; its password is set out-of-band as DSV secret `cassandra-mi-dbadapter-password` and substituted into the script by the pipeline.
 
 ## Teardown and data retention
 Destroy deletes the datacenter and cluster (and the Network Contributor assignment). Snapshot backups (24 h) are deleted with the cluster.

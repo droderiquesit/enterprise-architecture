@@ -77,8 +77,8 @@ module "env" {
   telemetry          = var.obs_telemetry_transport
   identity_client_id = local.identity.client_id
   faults = {
-    enabled         = var.settings.faults_enabled
-    token_secret_id = lookup(var.foundation_identity.secret_ids, "fault-token", null)
+    enabled   = var.settings.faults_enabled
+    token_ref = lookup(var.foundation_identity.secrets.refs, "fault-token", null)
   }
   port               = null
   log_level          = var.settings.log_level

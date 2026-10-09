@@ -80,7 +80,7 @@ variable "settings" {
       owners       = optional(list(string), []) # Entra object IDs of app owners
       # Datadog "Secretless Auth" (recommended): issuer + subject shown in the Datadog Azure integration tile.
       # When empty, no federated credential is created and a client secret must be created out-of-band
-      # (az ad app credential reset ... | az keyvault secret set ...) - never through Terraform.
+      # (az ad app credential reset ... | dsv secret create ..., Delinea DSV) - never through Terraform.
       federated_issuer  = optional(string, "")
       federated_subject = optional(string, "")
       # Additional subscription IDs to grant Monitoring Reader on (the lab subscription is always included).

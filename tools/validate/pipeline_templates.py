@@ -17,7 +17,14 @@ Template contract
         universal template builds (no silently empty compile-time values)
   TC007 stage names unique after expansion; stage `dependsOn` targets exist
   TC008 job names unique within each stage after expansion; job `dependsOn` targets exist in the stage
-  TC009 scripts never enable xtrace or echo secret variables (datadog-*, *secret*, *_KEY env vars)
+  TC009 scripts never enable xtrace or echo secret variables (datadog-*, *secret*, *_KEY env vars, every
+        registry secret_env variable and TF_VAR_*) and never dump the environment (printenv / bare env / set)
+Secrets (Delinea DSV, ADR-0001 section 14)
+  SEC001 no AzureKeyVault@ task and no variable group (`group:`) anywhere: secrets come only from
+         tools/secrets/fetch.py on the self-hosted deploy pool
+  SEC002 the PR-reachable templates (Select/Validate/Security: universal-stages.yml Select stage, validate.yml,
+         security-scan.yml, helm-charts.yml) never call a tools/secrets tool that talks to DSV
+  SEC003 every tools/secrets/fetch.py call names --env and wraps a command (exec) or emits masked variables (ado)
 Azure Pipelines limits (Learn, "Templates - imposed limits"; "Stages" - a stage can have up to 256 jobs)
   LIM001 distinct YAML files per pipeline        limit 100   -> fail above 80
   LIM002 template nesting depth                  limit 100   -> fail above 20
@@ -37,6 +44,8 @@ Environments / promotion
          `mode` values == the union of allowed_modes
   ENV003 pipelines/variables/<env>.yml promoteFrom / promoteFromStateStorageAccount / promoteFromContainerRegistry
          match the chain and the source environment's own variables
+  ENV004 pipelines/variables/<env>.yml dsvTenant / dsvTld / dsvAuthProvider equal environments/<env>/environment.yaml
+         `secrets` (tenant, tld, auth_provider)
 """
 
 from __future__ import annotations
@@ -61,7 +70,23 @@ LIMITS = {"files": 80, "depth": 20, "size_fail": 1_000_000, "size_warn": 600_000
           "stages_warn": 300}
 PARAM_USE_RE = re.compile(r"parameters(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*'([^']+)'\s*\])")
 SETTINGS_USE_RE = re.compile(r"parameters\.settings\.([A-Za-z_][A-Za-z0-9_]*)")
-SECRET_ECHO_RE = re.compile(r"\b(echo|printf)\b[^\n]*(\$\((datadog-[a-z-]+|[A-Za-z_.-]*[Ss]ecret[A-Za-z_.-]*)\)|\$\{?(DD_API_KEY|DD_APP_KEY|SYSTEM_ACCESSTOKEN|ARM_CLIENT_SECRET|TF_VAR_datadog_api_key)\b)")
+SECRET_VARS = ["DD_API_KEY", "DD_APP_KEY", "SYSTEM_ACCESSTOKEN", "ARM_CLIENT_SECRET", "TF_VAR_[A-Za-z0-9_]+",
+               "DSV_CLIENT_SECRET"]
+
+
+def secret_echo_re(extra=()):
+    names = "|".join(SECRET_VARS + [re.escape(v) for v in extra])
+    return re.compile(r"\b(echo|printf|cat\s+<<<)\b[^\n]*(\$\((datadog-[a-z-]+|[A-Za-z_.-]*[Ss]ecret[A-Za-z_.-]*)\)|"
+                      r"\$\{?(" + names + r")\b|\$\((" + names + r")\))")
+
+
+SECRET_ECHO_RE = secret_echo_re()
+ENV_DUMP_RE = re.compile(r"^\s*(printenv\b|env\s*(\||>|$)|set\s*(\||>|$)|export\s+-p\b)")
+KEYVAULT_TASK_RE = re.compile(r"^\s*-?\s*task:\s*AzureKeyVault@", re.M)
+GROUP_RE = re.compile(r"^\s*-\s*group:\s*\S", re.M)
+DSV_TOOLS_RE = re.compile(r"tools/secrets/(fetch|check|dsv_apply|publish|hooks)\.py")
+PR_TEMPLATES = ("pipelines/templates/validate.yml", "pipelines/templates/security-scan.yml",
+                "pipelines/templates/helm-charts.yml")
 XTRACE_RE = re.compile(r"^\s*set\s+(-[A-Za-wyz]*x[A-Za-z]*|-o\s+xtrace)\b", re.M)
 
 
@@ -263,12 +288,38 @@ class Walker:
                 self.report.add("TC003", where, f"required parameter '{name}' (no default) is not passed")
 
 
+def _registry_secret_vars(repo: Path) -> List[str]:
+    try:
+        from tools.changeset.registry import load_registry
+        from tools.changeset.trees import WorkTree
+
+        return sorted({v for c in load_registry(WorkTree(repo)) for v in c.secret_env})
+    except Exception:  # noqa: BLE001 - registry errors are reported by tools/changeset
+        return []
+
+
+def _scan_secrets(rel: str, body: str, report: Report, echo_re) -> None:
+    for m in XTRACE_RE.finditer(body):
+        report.add("TC009", rel, f"enables xtrace: {m.group(0).strip()}")
+    for line in body.splitlines():
+        if echo_re.search(line):
+            report.add("TC009", rel, f"echoes a secret: {line.strip()}")
+        if ENV_DUMP_RE.search(line):
+            report.add("TC009", rel, f"dumps the environment (would print fetched secrets): {line.strip()}")
+        code = re.split(r"\s#", line, maxsplit=1)[0]
+        if "tools/secrets/fetch.py" in code and not code.strip().startswith("#"):
+            if "--env" not in line or not re.search(r"fetch\.py\s+(exec|ado)\b", line):
+                report.add("SEC003", rel, f"fetch.py needs `exec ... --env <env> ... -- <cmd>` or `ado --env`: {line.strip()}")
+
+
 def check_template_files(repo: Path, report: Report) -> None:
-    """TC005 (undeclared parameters used) and TC009 (secrets/xtrace) for every template/entry file."""
+    """TC005 (undeclared parameters used), TC009/SEC00x (secrets/xtrace) for every template/entry file."""
+    echo_re = secret_echo_re(_registry_secret_vars(repo))
     paths = [repo / f for f in ENTRY_FILES if (repo / f).exists()]
     for d in TEMPLATE_DIRS:
         paths += sorted((repo / d).glob("*.yml"))
     paths += sorted((repo / "pipelines/generated").glob("*.yml"))
+    paths += sorted((repo / "pipelines/variables").glob("*.yml"))
     for p in paths:
         rel = p.relative_to(repo).as_posix()
         text = p.read_text()
@@ -279,19 +330,22 @@ def check_template_files(repo: Path, report: Report) -> None:
             name = m.group(1) or m.group(2)
             if name not in declared:
                 report.add("TC005", rel, f"uses parameters.{name} which it does not declare")
-        for m in XTRACE_RE.finditer(body):
-            report.add("TC009", rel, f"enables xtrace: {m.group(0).strip()}")
-        for line in body.splitlines():
-            if SECRET_ECHO_RE.search(line):
-                report.add("TC009", rel, f"echoes a secret: {line.strip()}")
+        _scan_secrets(rel, body, report, echo_re)
+        if KEYVAULT_TASK_RE.search(body):
+            report.add("SEC001", rel, "AzureKeyVault@ task: secrets live in Delinea DSV (tools/secrets/fetch.py)")
+        if GROUP_RE.search(body):
+            report.add("SEC001", rel, "variable groups are not used (Key Vault-linked groups are forbidden; DSV + fetch.py)")
+        if "datadogVariableGroup" in body:
+            report.add("SEC001", rel, "datadogVariableGroup is obsolete (Datadog keys come from DSV)")
+        if rel in PR_TEMPLATES and DSV_TOOLS_RE.search(body):
+            report.add("SEC002", rel, "PR-reachable template calls a DSV tool (PR builds never fetch secrets)")
+        if rel == "pipelines/templates/universal-stages.yml":
+            select = body.split("- stage: Validate", 1)[0]
+            if DSV_TOOLS_RE.search(select):
+                report.add("SEC002", rel, "the Select stage (also run for PRs) calls a DSV tool")
     for p in sorted((repo / "pipelines/scripts").glob("*.sh")):
-        text = p.read_text()
         rel = p.relative_to(repo).as_posix()
-        for m in XTRACE_RE.finditer(strip_comments(text)):
-            report.add("TC009", rel, f"enables xtrace: {m.group(0).strip()}")
-        for line in strip_comments(text).splitlines():
-            if SECRET_ECHO_RE.search(line):
-                report.add("TC009", rel, f"echoes a secret: {line.strip()}")
+        _scan_secrets(rel, strip_comments(p.read_text()), report, echo_re)
 
 
 def check_settings_keys(repo: Path, report: Report) -> None:
@@ -512,6 +566,26 @@ def check_environments(repo: Path, report: Report) -> None:
                     report.add("ENV003", f"pipelines/variables/{name}.yml", f"{k} must be empty for a building environment")
 
 
+def check_dsv_variables(repo: Path, report: Report) -> None:
+    from tools.config.promotion import PromotionError, load
+
+    try:
+        envs = load(repo)
+    except PromotionError:
+        return
+    for name in envs:
+        env_file = repo / f"environments/{name}/environment.yaml"
+        if not env_file.exists():
+            continue
+        sec = (load_yaml(env_file) or {}).get("secrets") or {}
+        v = _variables(repo, name)
+        for var, key, default in (("dsvTenant", "tenant", None), ("dsvTld", "tld", "com"), ("dsvAuthProvider", "auth_provider", None)):
+            want = sec.get(key, default)
+            if str(v.get(var, "")) != str(want or ""):
+                report.add("ENV004", f"pipelines/variables/{name}.yml",
+                           f"{var} {v.get(var)!r} != environments/{name}/environment.yaml secrets.{key} {want!r}")
+
+
 # ------------------------------------------------------------------- driver
 def run(repo: Path) -> Report:
     _cache.clear()
@@ -538,6 +612,7 @@ def run(repo: Path) -> Report:
     check_settings_keys(repo, report)
     report.metrics["structure"] = check_structure(repo, report)
     check_environments(repo, report)
+    check_dsv_variables(repo, report)
     return report
 
 

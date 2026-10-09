@@ -7,7 +7,7 @@ locals {
 
   password_value = {
     for k, d in var.databases : k => d.password_ref == null ? null : (
-      d.password_ref.kind == "key_vault" ? "ENC[${d.password_ref.name}]" :
+      d.password_ref.kind == "dsv" ? "ENC[${d.password_ref.name}]" :
       d.password_ref.kind == "k8s_secret" ? "ENC[k8s_secret@${d.password_ref.name}]" :
       d.password_ref.kind == "file" ? "ENC[file@${d.password_ref.name}]" :
       "%%env_${d.password_ref.name}%%"
@@ -76,9 +76,19 @@ locals {
     })
   }
 
-  # Agent main config for the ACI host: no secret values, only ENC[] references resolved from Key Vault
+  # ACI host: the Agent resolves every ENC[dsv://...] (API key, DB passwords) itself with dsv-fetch agent-backend,
+  # authenticating to Delinea DSV with the container group's user-assigned identity (IMDS). No secret values in
+  # this config, the container group definition or Terraform state. (ACI init containers cannot use managed
+  # identities - Microsoft Learn - so the reader runs inside the Agent container as its secret backend.)
+  dsv_fetch_source = coalesce(try(var.aci.dsv_fetch_source, null), "${path.module}/../../images/dsv-fetch/dsv_fetch.py")
+  aci_dsv_config = var.aci == null ? null : jsonencode(merge(
+    var.aci.dsv.tenant == null ? {} : { DSV_TENANT = var.aci.dsv.tenant },
+    var.aci.dsv.tld == null ? {} : { DSV_TLD = var.aci.dsv.tld },
+    var.aci.dsv.base_url == null ? {} : { DSV_BASE_URL = var.aci.dsv.base_url },
+    { DSV_AUTH = "azure", AZURE_CLIENT_ID = var.aci.identity_client_id, DSV_TIMEOUT_SECONDS = "10" },
+  ))
   aci_datadog_yaml = var.aci == null ? null : yamlencode({
-    api_key                    = "ENC[${var.aci.api_key_secret_name}]"
+    api_key                    = "ENC[${var.aci.api_key_ref}]"
     site                       = var.datadog.site
     env                        = var.datadog.env
     hostname                   = var.aci.name
@@ -86,11 +96,9 @@ locals {
     apm_config                 = { enabled = false }
     process_config             = { process_collection = { enabled = false } }
     enable_metadata_collection = true
-    secret_backend_type        = "azure.keyvault"
-    secret_backend_config = {
-      keyvaulturl   = var.aci.key_vault_uri
-      azure_session = { azure_client_id = var.aci.identity_client_id }
-    }
+    secret_backend_command     = "/opt/dsv-fetch/dsv-fetch"
+    secret_backend_arguments   = ["agent-backend", "--config", "/eh/dsv/dsv.json"]
+    secret_backend_timeout     = 30
   })
 }
 
@@ -115,14 +123,15 @@ resource "azurerm_container_group" "dbm" {
     image  = var.aci.image
     cpu    = var.aci.cpu
     memory = var.aci.memory_gb
-    # place the rendered datadog.yaml + check configs, then hand over to the image entrypoint
-    commands = ["/bin/sh", "-c", "cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml && for d in /eh/confd/*; do n=$(basename $d); mkdir -p /etc/datadog-agent/conf.d/$n.d && cp $d /etc/datadog-agent/conf.d/$n.d/conf.yaml; done && exec /bin/entrypoint.sh"]
+    # install dsv-fetch as the secret backend (root-owned, 0500, embedded python3 - what the Agent requires), place
+    # the rendered datadog.yaml + check configs, then hand over to the image entrypoint
+    commands = ["/bin/sh", "-c", "python3 -I /eh/dsv/dsv_fetch.py install --dest /opt/dsv-fetch/dsv-fetch --python /opt/datadog-agent/embedded/bin/python3 && cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml && for d in /eh/confd/*; do n=$(basename $d); mkdir -p /etc/datadog-agent/conf.d/$n.d && cp $d /etc/datadog-agent/conf.d/$n.d/conf.yaml; done && exec /bin/entrypoint.sh"]
     environment_variables = {
       DD_SITE     = var.datadog.site
       DD_HOSTNAME = var.aci.name
       # the image's init script requires a non-empty DD_API_KEY; an ENC[] reference is resolved by the
-      # secret backend like any config value (verified locally with Agent 7.84.2, file backend)
-      DD_API_KEY = "ENC[${var.aci.api_key_secret_name}]"
+      # secret backend like any config value (observability/tests/transport/test_dbm_local.py)
+      DD_API_KEY = "ENC[${var.aci.api_key_ref}]"
     }
 
     ports {
@@ -135,6 +144,16 @@ resource "azurerm_container_group" "dbm" {
       mount_path = "/eh/agent"
       read_only  = true
       secret     = { "datadog.yaml" = base64encode(local.aci_datadog_yaml) }
+    }
+
+    volume {
+      name       = "dsv"
+      mount_path = "/eh/dsv"
+      read_only  = true
+      secret = {
+        "dsv_fetch.py" = base64encode(file(local.dsv_fetch_source))
+        "dsv.json"     = base64encode(local.aci_dsv_config)
+      }
     }
 
     volume {
@@ -155,11 +174,11 @@ resource "azurerm_container_group" "dbm" {
   lifecycle {
     precondition {
       condition     = var.aci != null
-      error_message = "hosting = aci requires var.aci (subnet, identity, Key Vault URI)."
+      error_message = "hosting = aci requires var.aci (subnet, identity, DSV reference of the API key)."
     }
     precondition {
-      condition     = alltrue([for d in values(var.databases) : d.auth != "password" || contains(["key_vault", "file"], d.password_ref.kind)])
-      error_message = "On ACI, DB passwords must come from Key Vault (password_ref.kind = key_vault)."
+      condition     = alltrue([for d in values(var.databases) : d.auth != "password" || contains(["dsv", "file"], d.password_ref.kind)])
+      error_message = "On ACI, DB passwords must come from Delinea DSV (password_ref.kind = dsv, name = dsv://...)."
     }
   }
 }

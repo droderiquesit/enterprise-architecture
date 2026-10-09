@@ -4,6 +4,7 @@ using Hello.Common.Faults;
 using Hello.Common.Logging;
 using Hello.Common.Operational;
 using Hello.Common.Problems;
+using Hello.Common.Secrets;
 using Hello.Common.Telemetry;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -31,7 +32,7 @@ public static class HelloWebApplicationExtensions
     }
 
     /// <summary>
-    /// Common service wiring: identity, PORT binding, JSON logging, OpenTelemetry, metrics, faults, problem details.
+    /// Common service wiring: dsv:// secret references (Delinea DSV, resolved first), identity, PORT binding, JSON logging, OpenTelemetry, metrics, faults, problem details.
     /// </summary>
     public static WebApplicationBuilder AddHelloServiceDefaults(
         this WebApplicationBuilder builder,
@@ -39,6 +40,10 @@ public static class HelloWebApplicationExtensions
         Action<HelloTelemetryOptions>? telemetry = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
+
+        // ADR-0001 §14: every configuration value starting with dsv:// is resolved from Delinea DSV right here, before
+        // anything reads configuration (fails fast naming the key; values are never logged).
+        builder.Configuration.AddDsvSecrets();
         var info = HelloServiceInfo.FromConfiguration(builder.Configuration, defaultServiceName);
         builder.Services.AddSingleton(info);
 

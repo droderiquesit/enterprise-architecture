@@ -1,8 +1,5 @@
 mock_provider "azurerm" {
   override_during = plan
-  mock_data "azurerm_key_vault_secret" {
-    defaults = { value = "mock-not-a-real-secret" }
-  }
 }
 mock_provider "azapi" {
   override_during = plan
@@ -30,7 +27,6 @@ variables {
     expires_on      = "2026-12-31"
     tags            = {}
   }
-  foundation_identity = { key_vault_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.KeyVault/vaults/eh-kv-ident-dev-abcde" }
 }
 
 run "default_without_app_is_none" {
@@ -55,14 +51,26 @@ run "app_registration" {
   }
 }
 
-run "secretless_reads_no_secret" {
+run "secretless_is_default" {
   command = plan
   variables {
-    settings = { app_client_id = "11111111-1111-1111-1111-111111111111", app_auth = "secretless" }
+    settings = { app_client_id = "11111111-1111-1111-1111-111111111111" }
   }
   assert {
-    condition     = length(data.azurerm_key_vault_secret.client_secret) == 0
-    error_message = "Secretless auth needs no Key Vault read."
+    condition     = module.integration.auth == "secretless"
+    error_message = "Secretless (federated) auth is the default: no client secret anywhere."
+  }
+}
+
+run "secret_mode_takes_pipeline_input" {
+  command = plan
+  variables {
+    settings                    = { app_client_id = "11111111-1111-1111-1111-111111111111", app_auth = "secret" }
+    datadog_azure_client_secret = "mock-not-a-real-secret"
+  }
+  assert {
+    condition     = module.integration.auth == "secret"
+    error_message = "Secret mode uses the pipeline-provided (DSV) client secret."
   }
 }
 

@@ -18,7 +18,7 @@ on 2026-10-09. Each item names its source so it can be re-checked. Status words 
 
 | Item | Status | Exact prerequisite / reason | Source |
 |---|---|---|---|
-| ARO (`platform-aro`) | disabled (implemented; prerequisites block enabling) | 44 vCPU quota (Standard DSv5), providers registered (`Microsoft.RedHatOpenShift`, ...), empty `aro-master`/`aro-worker` subnets, ARO RP service principal object id, `version` from `az aro get-versions`, Red Hat pull secret in Key Vault, extra network resource ids for operator roles | platform/compute/aro/README.md |
+| ARO (`platform-aro`) | disabled (implemented; prerequisites block enabling) | 44 vCPU quota (Standard DSv5), providers registered (`Microsoft.RedHatOpenShift`, ...), empty `aro-master`/`aro-worker` subnets, ARO RP service principal object id, `version` from `az aro get-versions`, Red Hat pull secret in Delinea DSV (`aro-pull-secret`), extra network resource ids for operator roles | platform/compute/aro/README.md |
 | HorizonDB (`platform-db-horizondb`) | disabled (implemented; preview access required) | preview access + `Microsoft.HorizonDb` registered, preview region, `entra_admin`, `preview_access_confirmed = true`, private-link group id read after creation; azapi schema validation off | platform/data/horizondb/README.md |
 | Azure VMware Solution | blocked (cataloged) | host quota via support request, >= 3 hosts (~USD 25k/month), ExpressRoute/Global Reach, /22 block | platform/compute/specialized/README.md, catalog |
 | Oracle Database@Azure | blocked (cataloged) | Marketplace offer purchase, linked OCI tenancy, My Oracle Support registration, policy exemption for the auto-created OracleSubscription | catalog/services/partner-and-fabric.yaml |
@@ -55,22 +55,42 @@ via `virtual_network_type = "External"` not covered by provider docs; Datadog pr
 
 ## Secrets in Terraform state
 
-State lives in the private, Entra-only, versioned state account, but these values are in state:
+All lab keys and secrets live in Delinea DSV (ADR-0001 section 14); Terraform reads no DSV secret with a data source.
+A DSV value reaches Terraform only as a pipeline input (`tools/secrets/fetch.py exec`, registry `secret_env`, the
+terraform process only). Where the receiving azurerm 5.9 argument has a **write-only** form the input is `ephemeral` and
+never stored; where it has none, the value **is stored in state and in the saved plan** (private, Entra-only, versioned
+state account; `plans` container readable only by the apply identity):
 
-| Value | Root | Why |
+| Value (DSV path `<prefix>/<env>/...`) | Root | Why it is in state |
 |---|---|---|
-| admin passwords (`random_password`) of SQL Server VM, DocumentDB, Cassandra MI | platform/data | azurerm arguments have no write-only variant (copied write-only to Key Vault) |
-| VM / VMSS / Service Fabric / specialized VM break-glass passwords | platform/compute | used when no SSH key is set |
-| Event Hubs authorization rule keys | observability `telemetry-transport` | the rule resource holds its keys; the connection string is written to Key Vault write-only. SAS stays enabled because Fluent Bit's Kafka input cannot get Entra tokens on Container Apps |
-| Logic Apps Standard storage access key | `deploy-logicapps` (fallback when `storage_connection_secret_id` is unset) | Azure Files content share has no identity-based access |
-| `fault-token`, `datadog-api-key` | `deploy-partner-sim` (read at plan time) | ACI has no Key Vault references (`resolve_secrets = false` disables it) |
-| Red Hat pull secret | `platform-aro` (when enabled) | read by reference |
-| Datadog Azure integration client secret | `obs-azure-integration` with `app_auth = secret` | read by a data source; use `secretless` to avoid it |
-| Datadog API key as VM extension protected setting | `obs-hosts` when `agent_protected_settings_secret_url` is not set | read by a data source and passed as protected setting (encrypted in state) |
+| `sqlvm-admin-password`, `sqlvm-dbadapter-password` | `platform-db-sqlvm` | `azurerm_windows_virtual_machine.admin_password`, `azurerm_mssql_virtual_machine.sql_connectivity_update_password` and run-command protected parameters have no write-only variant |
+| `documentdb-admin-password` | `platform-db-documentdb` | `azurerm_mongo_cluster.administrator_password` has no write-only variant |
+| `cassandra-mi-admin-password` | `platform-db-cassandra-mi` | `azurerm_cosmosdb_cassandra_cluster.default_admin_password` (required) has no write-only variant |
+| `appgw-tls-pfx` (`value`, `password`) | `foundation-edge` (App Gateway only) | `ssl_certificate.data` / `password` have no write-only variant; Front Door managed certificates avoid it |
+| `aro-pull-secret` | `platform-aro` (when enabled) | `cluster_profile.pull_secret` has no write-only variant |
+| VM / VMSS / Service Fabric / specialized VM break-glass passwords | platform/compute | used when no SSH key is set (`random_password`) |
+| Event Hubs authorization rule keys | `obs-telemetry-transport` | the rule resource holds its keys; the listen connection string is published to DSV (`eventhub-fluentbit-listen`) by `tools/secrets/publish.py` from the sensitive output `generated_secrets` |
 
-The Event Hubs listen secret is written write-only; its `value_wo_version` is the setting
-`components.obs-telemetry-transport.eventhub_secret_version` (default 1) - increment it after renewing the rule keys
-([secret-rotation.md](runbooks/secret-rotation.md)).
+Never stored: `mysql-admin-password` (`administrator_password_wo`, ephemeral input) and the HorizonDB admin password
+(ephemeral). Observability and application roots document their own remaining items (e.g. Logic Apps Standard storage
+key fallback) in their READMEs.
+
+## Delinea DSV
+
+* Not run against a real DSV tenant. The REST endpoints, methods and request bodies used by `tools/secrets/*`
+  (`/v1/token`, `/v1/secrets/<path>`, `::description`, `/v1/config/auth`, `/v1/users`, `/v1/config/policies`) are taken
+  from Delinea's dsv-cli v1.41.1 / dsv-sdk-go v2.3.0 source and docs and exercised against `tools/secrets/mock_dsv.py`.
+  Unverified details: the GET response shape of policies, addressing federated users as `<provider>:<username>`, and
+  which action (`read` or `list`) DSV requires for the metadata-only `describe` call used by `check.py`.
+* AKS workload identity: DSV maps Azure users by the managed identity resource id (`xms_mirid` claim). Whether DSV accepts
+  tokens obtained through workload identity federation is **not verified**; fallback: Delinea's dsv-k8s syncer or
+  host-level agents.
+* DSV is a public SaaS endpoint (no Private Link): every reader needs HTTPS egress to `<tenant>.secretsvaultcloud.<tld>`.
+* No secondary vault: a DSV outage blocks new starts and pipeline steps that need secrets (running processes keep cached
+  values) - by design (no copies of DSV secrets elsewhere).
+* `foundation-secrets` never deletes DSV objects; managed users of removed identities are reported, not removed.
+* One DSV policy per environment path with one least-privilege permission per identity (DSV allows one policy per path
+  and validates permission resources against it).
 
 ## Public-endpoint and authentication exceptions
 
@@ -123,18 +143,18 @@ The Event Hubs listen secret is written write-only; its `value_wo_version` is th
   account ([bootstrap guide](guides/prerequisites-and-bootstrap.md#5-before-private-agents-exist)).
 * Roots needing data-plane access to private resources require VNet-connected agents: Flex deployment container
   uploads, SQL/PostgreSQL/MySQL grant scripts, Cassandra keyspace script, `kubernetes_manifest` (SecretProviderClass) on
-  the private AKS API at plan time, Key Vault secret values, smoke tests of internal apps.
+  the private AKS API at plan time, smoke tests of internal apps. Steps that need secrets run on the self-hosted deploy
+  pool (deploy agent managed identity -> Delinea DSV).
 * `userAssignedNATGateway` for AKS requires the NAT gateway association on `aks-nodes` before cluster creation.
 * Subnets with service association links (ACA, SQL MI, MDP, Flexible Servers) cannot be deleted while the service
   exists; SQL MI subnets release slowly. SQL MI with firewall egress keeps its service-managed route table.
 * `track_activity_query_size` (PostgreSQL) and `performance_schema` (MySQL) are static parameters - a server restart is
   needed and not automated; Datadog Query Activity / Wait Events are not supported on MySQL Flexible.
-* Key Vault purge protection blocks re-creating the same environment for 7 days after destroy.
 * `obs-dbm` ACI hosting runs in foundation-network's delegated `aci` subnet (default `subnet_key = "aci"`, shared with
   partner-sim); database firewalls / NSGs must admit that range.
 * `obs-hosts`: destroy removes extensions but does not uninstall packages from hosts. The VM / VMSS identities
   (`hello-worker`, `hello-inventory-api`, `hello-dbadapter`) and the Batch pool identity (`hello-jobs`) read
-  `datadog-api-key`; with `secret_scoped_assignments = true` those grants are per secret.
+  `datadog-api-key` from DSV (one read permission per identity, `foundation-secrets`).
 * Batch log collection is set up per **job** (job preparation task): a job created before a change of the
   observability setup keeps the old preparation task until it is deleted and re-created (`submit-batch-job.sh` warns).
   The script travels in a job-preparation environment setting (size limits not verified on Azure).
@@ -146,8 +166,8 @@ The Event Hubs listen secret is written write-only; its `value_wo_version` is th
 * Profile `features` are mapped to component settings by `tools/config/render.py` (table in
   [environments/profiles/README.md](../environments/profiles/README.md)); `private_endpoints` and
   `deploy_lab_infrastructure` are documented-only. `app_gateway: true` (profiles `full`, `specialized`) enables
-  Application Gateway in foundation-edge, whose validation then requires a Key Vault certificate secret id and backend
-  FQDNs in the environment file - plan fails until they are set.
+  Application Gateway in foundation-edge, which then requires backend FQDNs in the environment file and the listener
+  certificate in DSV (`appgw-tls-pfx`) - plan fails until they are set.
 * Upstream URLs are derived from optional contracts (`deploy-durable`: orders/inventory/partner; `deploy-jobs`:
   durable), but AKS-hosted APIs publish Kubernetes-internal URLs that Functions / Container Apps cannot resolve; with
   `deploy-core-aks` only, set `components.deploy-durable.orders_api_url` (e.g. an internal load balancer or App

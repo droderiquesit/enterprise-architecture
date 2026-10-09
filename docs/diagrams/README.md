@@ -18,7 +18,7 @@ Every diagram uses the same legend:
 
 | Diagram | Shows | Source |
 |---|---|---|
-| ![foundation](svg/01-foundation.svg) **Foundation** | bootstrap state + pipeline identities, hub/spoke VNets, subnets with delegations, private endpoints, private DNS, NAT / firewall egress, Key Vault + identities, governance, deployment-agent access (Microsoft-hosted agents cannot reach private endpoints) | [01-foundation.mmd](src/01-foundation.mmd) |
+| ![foundation](svg/01-foundation.svg) **Foundation** | bootstrap state + pipeline identities, hub/spoke VNets, subnets with delegations, private endpoints, private DNS, NAT / firewall egress, identities + Delinea DSV secret access (foundation-secrets), governance, deployment-agent access (Microsoft-hosted agents cannot reach private endpoints) | [01-foundation.mmd](src/01-foundation.mmd) |
 | ![platform](svg/02-platform.svg) **Platform** | compute platforms, databases, storage, messaging and how workloads reach them (private endpoints vs VNet injection vs public exceptions) | [02-platform.mmd](src/02-platform.mmd) |
 | ![application](svg/03-application.svg) **Application** | frontend, BFF, APIs, adapters, data ownership boundaries, Service Bus topic/subscriptions/queue, durable workflows and jobs | [03-application.mmd](src/03-application.mmd) |
 | ![telemetry](svg/04-telemetry.svg) **Telemetry** | Fluent Bit routes (DaemonSet, sidecar, host, Event Hubs -> aggregator), OTel SDK -> Agent OTLP / OTel gateway, Azure integration, diagnostic settings, RUM, DBM | [04-telemetry.mmd](src/04-telemetry.mmd) |

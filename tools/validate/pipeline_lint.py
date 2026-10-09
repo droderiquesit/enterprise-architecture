@@ -22,6 +22,8 @@ Rules
   PL012  every agent job declares cancelTimeoutInMinutes (cleanup / failure records get time to run)
   PL013  every job on a self-hosted pool declares `workspace: clean: all` (no state leaks between runs)
   PL014  entry pipelines (azure-pipelines.yml, azure-pipelines.applications.yml) only `extends:` the universal template
+  PL015  no AzureKeyVault@ task and no variable group anywhere (Delinea DSV via tools/secrets/fetch.py only;
+         ADR-0001 section 14); PL009 also covers the variables fetch.py sets (registry secret_env, DD_*, TF_VAR_*)
   (PL003 per stage kind: P_<x> checks every dependency's result (Build: its artifacts' readiness outputs);
    C_<x> depends on and checks P_<x> result + has_changes and is skipped on dry runs)
 """
@@ -44,6 +46,7 @@ RETRY_OK_TASKS = ("DownloadPipelineArtifact@", "UseDotNet@", "NodeTool@", "UsePy
 RETRY_OK_NAMES = {"init", "resolve"}
 RETRY_OK_SCRIPT = re.compile(r"(pip install|install-tools\.sh|setup-agent\.sh|npm ci)")
 SECRET_ECHO = re.compile(r"echo[^\n]*\$\((datadog-[a-z-]+|[A-Za-z_.]*[Ss]ecret[A-Za-z_.]*)\)")
+FETCHED_ECHO = re.compile(r"\b(echo|printf)\b[^\n]*\$(\{|\()?(DD_API_KEY|DD_APP_KEY|TF_VAR_[A-Za-z0-9_]+|DSV_CLIENT_SECRET)\b")
 
 
 def files(repo: Path) -> list[Path]:
@@ -153,6 +156,11 @@ def lint(repo: Path, check_generated: bool = True) -> list[str]:
                 errors.append(f"PL012 {rel}: {kind} {name}: missing cancelTimeoutInMinutes")
             if kind in ("job", "deployment") and not server and not hosted and not _has_clean_workspace(node):
                 errors.append(f"PL013 {rel}: {kind} {name}: self-hosted job without `workspace: clean: all`")
+            task_name = str(node.get("task", ""))
+            if task_name.startswith("AzureKeyVault@"):
+                errors.append(f"PL015 {rel}: AzureKeyVault@ task is forbidden (secrets come from Delinea DSV via tools/secrets/fetch.py)")
+            if "group" in node and len(node) == 1:
+                errors.append(f"PL015 {rel}: variable group '{node['group']}' is forbidden (no Key Vault-linked groups; DSV + fetch.py)")
             if "retryCountOnTaskFailure" in node:
                 task = str(node.get("task", ""))
                 script = str(node.get("script", "") or node.get("bash", ""))
@@ -210,7 +218,7 @@ def _scan_script(rel: str, body: str, errors: list[str]) -> None:
         s = line.strip()
         if re.match(r"^set\s+-[a-wyz]*x", s) or s == "set -x" or "set -o xtrace" in s:
             errors.append(f"PL009 {rel}: script enables xtrace: {s}")
-        if SECRET_ECHO.search(s):
+        if SECRET_ECHO.search(s) or FETCHED_ECHO.search(s):
             errors.append(f"PL009 {rel}: script echoes a secret variable: {s}")
 
 

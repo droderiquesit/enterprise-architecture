@@ -29,6 +29,7 @@ here (MSBuild discovers them by walking up from the project directory).
 | HTTP clients | `AddHelloHttpClient<T>` — `SocketsHttpHandler` pooling (5 min lifetime), `hello.http.dependency.duration` handler, `AddStandardResilienceHandler` (total/attempt timeouts, retries with exponential backoff + jitter **for safe methods only** unless opted in, circuit breaker), innermost `dependency_timeout` fault handler |
 | Problems | RFC 7807 everywhere (`AddProblemDetails`, `HelloExceptionHandler`, status-code pages), `type = urn:enterprise-hello:problem:<code>`, `trace_id` extension |
 | Idempotency | `IdempotencyKey` (header validation, request fingerprint) |
+| Secrets (Delinea DSV, ADR-0001 §14) | `builder.Configuration.AddDsvSecrets()` (called first by `AddHelloServiceDefaults`; explicitly in hello-durable `Program.cs`) — every configuration value starting with `dsv://<path>#<element>` is resolved at host build time and overlaid under the same key; fail-fast `DsvSecretResolutionException` naming keys only; values never logged. `DsvSecretResolver`: `ManagedIdentityCredential(AZURE_CLIENT_ID)` / `WorkloadIdentityCredential` (when `AZURE_FEDERATED_TOKEN_FILE`) → token for `https://management.azure.com/.default` → DSV `POST /v1/token` azure grant (or `client_credentials` locally) → `GET /v1/secrets/<path>`; DSV token refreshed at 80 % of `expiresIn`, secret cache `DSV_CACHE_TTL_SECONDS` (900), `DSV_TIMEOUT_SECONDS` (5), bounded jittered retries on connection errors/timeouts/429/5xx only (`DSV_MAX_ATTEMPTS` 3), optional `DSV_REFRESH_SECONDS` periodic re-resolution with configuration reload. `DSV_AUTH=none` + any dsv:// value = start-up error; `http://` base URL only for loopback or `DSV_ALLOW_INSECURE_HTTP=true`. Functions: only worker-read settings may be dsv:// (the host reads `AzureWebJobsStorage`/trigger connections itself — use identity-based connections) |
 | Identity | `AzureCredentialFactory` — WorkloadIdentityCredential (AKS) → ManagedIdentityCredential(`AZURE_CLIENT_ID`) → DefaultAzureCredential |
 | Metrics | `HelloMetrics` (meter `Hello.App`): `hello.orders.created`, `hello.orders.publish_failures`, `hello.orders.status_transitions`, `hello.http.dependency.duration` (s), `hello.inventory.reservations`, `hello.workflow.completed`, `hello.workflow.duration` (ms), `hello.faults.injected`, `hello.idempotency.replays` — bounded attributes only |
 | Web defaults | `AddHelloServiceDefaults` / `UseHelloServiceDefaults` / `MapHelloServiceEndpoints` (PORT binding, Kestrel limits, snake_case JSON, `traceparent` response header) |
@@ -37,7 +38,9 @@ here (MSBuild discovers them by walking up from the project directory).
 
 `PORT` (8080), `DD_ENV`, `DD_SERVICE`, `DD_VERSION`, `GIT_COMMIT`, `BUILD_TIME`, `OTEL_SERVICE_NAME`,
 `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` (`grpc` | `http/protobuf`),
-`OTEL_TRACES_SAMPLER(_ARG)`, `LOG_LEVEL`, `LOG_FILE_PATH`, `FAULTS_ENABLED`, `FAULT_TOKEN`, `AZURE_CLIENT_ID`.
+`OTEL_TRACES_SAMPLER(_ARG)`, `LOG_LEVEL`, `LOG_FILE_PATH`, `FAULTS_ENABLED`, `FAULT_TOKEN`, `AZURE_CLIENT_ID`,
+`DSV_AUTH`, `DSV_TENANT`, `DSV_TLD`, `DSV_BASE_URL`, `DSV_TIMEOUT_SECONDS`, `DSV_CACHE_TTL_SECONDS`, `DSV_MAX_ATTEMPTS`, `DSV_REFRESH_SECONDS`
+(any value may be a `dsv://` reference — secrets such as `FAULT_TOKEN` and connection strings must be).
 
 ## Build, test, package
 

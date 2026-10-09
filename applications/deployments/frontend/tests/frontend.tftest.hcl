@@ -125,8 +125,6 @@ variables {
     }
   }
   foundation_identity = {
-    key_vault_id  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.KeyVault/vaults/eh-kv-ident-dev-abcde"
-    key_vault_uri = "https://eh-kv-ident-dev-abcde.vault.azure.net/"
     identities = {
       "hello-bff" = {
         id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-hello-bff"
@@ -237,11 +235,19 @@ variables {
         name         = "id-deploy-agent"
       }
     }
-    secret_ids = {
-      "datadog-api-key"      = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-api-key"
-      "datadog-app-key"      = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-app-key"
-      "fault-token"          = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token"
-      "datadog-client-token" = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/datadog-client-token"
+    secrets = {
+      provider      = "delinea-dsv"
+      tenant        = "contoso"
+      tld           = "com"
+      base_url      = "https://contoso.secretsvaultcloud.com/v1"
+      base_path     = "eh/dev"
+      auth_provider = "azure-eh"
+      refs = {
+        "datadog-api-key"      = "dsv://eh/dev/datadog-api-key#value"
+        "datadog-app-key"      = "dsv://eh/dev/datadog-app-key#value"
+        "fault-token"          = "dsv://eh/dev/fault-token#value"
+        "datadog-client-token" = "dsv://eh/dev/datadog-client-token#value"
+      }
     }
   }
 }

@@ -7,7 +7,9 @@
 #   gateway-tail-sampling.yaml      tail sampling instead of probabilistic (single replica only)
 #   gateway-scrape-fluentbit.yaml   scrape the Fluent Bit aggregator self-metrics
 #
-# Environment: DD_API_KEY (secret ref), DD_SITE, DD_ENV (default env when a client sends none),
+# Secrets: the Datadog API key is read from the FILE /dsv-secrets/dd-api-key (confmap file provider), written by the
+#          dsv-fetch init container from Delinea DSV into an ephemeral volume (never an env var / ACA secret).
+# Environment: DD_SITE, DD_ENV (default env when a client sends none),
 #              TRACE_SAMPLING_PERCENTAGE (0-100, default 100), GATEWAY_MEMORY_LIMIT_MIB
 extensions:
   health_check:
@@ -86,7 +88,7 @@ exporters:
   nop: {}
   datadog:
     api:
-      key: ${env:DD_API_KEY}
+      key: ${file:/dsv-secrets/dd-api-key}
       site: ${env:DD_SITE:-datadoghq.com}
       fail_on_invalid_key: false
     host_metadata:

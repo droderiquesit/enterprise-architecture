@@ -7,6 +7,7 @@ import sys
 
 from hello_common.config import service_info
 from hello_common.logging import configure_logging
+from hello_common.secrets import SecretResolutionError, resolve_env
 from hello_common.telemetry import setup_telemetry, shutdown_telemetry
 
 from . import settings as settings_mod
@@ -16,6 +17,11 @@ log = logging.getLogger("hello_traffic")
 
 
 def main() -> int:
+    try:
+        resolve_env()  # dsv:// references -> values (Delinea DSV) before any setting is read
+    except SecretResolutionError as exc:  # message names variables only, never values
+        print(f"startup failed: {exc}", file=sys.stderr)
+        return 1
     info = service_info("hello-traffic")
     configure_logging(info)
     setup_telemetry(info)

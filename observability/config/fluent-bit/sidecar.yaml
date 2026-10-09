@@ -8,7 +8,7 @@
 #   FLB_DD_HOST          http-intake.logs.<site>  (datadoghq.com -> http-intake.logs.datadoghq.com)
 #   FLB_DD_PORT          443
 #   FLB_DD_TLS           on   (only the local docker test sets off, against a mock intake)
-#   DD_API_KEY           from a secret reference (Key Vault) - never a literal in config
+#   DD_API_KEY           from DSV via the dsv-fetch env file (include below) - never a literal in config
 #   FLB_DD_SERVICE       fallback service when a line carries none (plain-text stack traces)
 #   FLB_DD_SOURCE        ddsource (csharp | python | nodejs ...)
 #   FLB_DD_TAGS          static tags, comma separated (env:dev,version:1.2.3,team:...)
@@ -29,8 +29,13 @@ service:
   storage.backlog.mem_limit: 8M
   storage.max_chunks_up: 32
 
+# Secret values (DD_API_KEY, FLB_FORWARD_SHARED_KEY, EVENTHUB_CONNECTION_STRING) are NOT in this file or in the
+# container env: dsv-fetch (observability/images/dsv-fetch) writes them from Delinea DSV into an `env:` YAML
+# file at /dsv-secrets/fluentbit-env.yaml (ephemeral pod/replica volume: k8s emptyDir medium Memory, ACA/ACI EmptyDir; mode 0400) before Fluent Bit starts; the include below
+# makes them available to ${VAR} substitution. A missing file fails the start (fail fast, no silent key-less run).
 includes:
   - parsers.yaml
+  - /dsv-secrets/fluentbit-env.yaml
 
 pipeline:
   inputs:

@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: applications pipeline.
-# Source: catalog/components.yaml (sha256 prefix e5be3fc51e806f01)
+# Source: catalog/components.yaml (sha256 prefix 20078edd5cecfe4f)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -210,7 +210,7 @@ stages:
             - svc-catalog-api
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_deploy_appservice
     displayName: apply deploy-appservice
@@ -229,7 +229,7 @@ stages:
           artifacts: *id002
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_core_aca
@@ -253,8 +253,10 @@ stages:
             - svc-catalog-api
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
+          recordedArtifacts: &id004
+            - img-dsv-fetch
   - stage: C_deploy_core_aca
     displayName: apply deploy-core-aca
     dependsOn:
@@ -272,8 +274,9 @@ stages:
           artifacts: *id003
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
+          recordedArtifacts: *id004
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_dbadapters
     displayName: plan deploy-dbadapters
@@ -290,12 +293,14 @@ stages:
         parameters:
           component: deploy-dbadapters
           componentPath: applications/deployments/dbadapters
-          artifacts: &id004
+          artifacts: &id005
             - svc-dbadapter
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
+          recordedArtifacts: &id006
+            - img-dsv-fetch
   - stage: C_deploy_dbadapters
     displayName: apply deploy-dbadapters
     dependsOn:
@@ -310,11 +315,12 @@ stages:
         parameters:
           component: deploy-dbadapters
           componentPath: applications/deployments/dbadapters
-          artifacts: *id004
+          artifacts: *id005
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
+          recordedArtifacts: *id006
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_functions
     displayName: plan deploy-functions
@@ -331,11 +337,11 @@ stages:
         parameters:
           component: deploy-functions
           componentPath: applications/deployments/functions
-          artifacts: &id005
+          artifacts: &id007
             - svc-functions
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_deploy_functions
     displayName: apply deploy-functions
@@ -351,10 +357,10 @@ stages:
         parameters:
           component: deploy-functions
           componentPath: applications/deployments/functions
-          artifacts: *id005
+          artifacts: *id007
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_logicapps
@@ -372,11 +378,11 @@ stages:
         parameters:
           component: deploy-logicapps
           componentPath: applications/deployments/logicapps
-          artifacts: &id006
+          artifacts: &id008
             - svc-logicapps
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_deploy_logicapps
     displayName: apply deploy-logicapps
@@ -392,10 +398,10 @@ stages:
         parameters:
           component: deploy-logicapps
           componentPath: applications/deployments/logicapps
-          artifacts: *id006
+          artifacts: *id008
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_partner_sim
@@ -413,12 +419,14 @@ stages:
         parameters:
           component: deploy-partner-sim
           componentPath: applications/deployments/partner-sim
-          artifacts: &id007
+          artifacts: &id009
             - svc-partner-sim
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
+          recordedArtifacts: &id010
+            - img-dsv-fetch
   - stage: C_deploy_partner_sim
     displayName: apply deploy-partner-sim
     dependsOn:
@@ -433,11 +441,12 @@ stages:
         parameters:
           component: deploy-partner-sim
           componentPath: applications/deployments/partner-sim
-          artifacts: *id007
+          artifacts: *id009
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
+          recordedArtifacts: *id010
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_specialized
     displayName: plan deploy-specialized
@@ -454,13 +463,13 @@ stages:
         parameters:
           component: deploy-specialized
           componentPath: applications/deployments/specialized
-          artifacts: &id008
+          artifacts: &id011
             - svc-catalog-api
             - svc-inventory-api
             - svc-jobs
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_deploy_specialized
     displayName: apply deploy-specialized
@@ -476,10 +485,10 @@ stages:
         parameters:
           component: deploy-specialized
           componentPath: applications/deployments/specialized
-          artifacts: *id008
+          artifacts: *id011
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_vm_workloads
@@ -497,12 +506,12 @@ stages:
         parameters:
           component: deploy-vm-workloads
           componentPath: applications/deployments/vm-workloads
-          artifacts: &id009
+          artifacts: &id012
             - svc-worker
             - svc-inventory-api
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_deploy_vm_workloads
     displayName: apply deploy-vm-workloads
@@ -518,10 +527,10 @@ stages:
         parameters:
           component: deploy-vm-workloads
           componentPath: applications/deployments/vm-workloads
-          artifacts: *id009
+          artifacts: *id012
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_core_aks
@@ -539,14 +548,14 @@ stages:
         parameters:
           component: deploy-core-aks
           componentPath: applications/deployments/core-aks
-          artifacts: &id010
+          artifacts: &id013
             - svc-bff
             - svc-orders-api
             - svc-catalog-api
             - svc-worker
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_deploy_core_aks
     displayName: apply deploy-core-aks
@@ -562,10 +571,10 @@ stages:
         parameters:
           component: deploy-core-aks
           componentPath: applications/deployments/core-aks
-          artifacts: *id010
+          artifacts: *id013
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_hosts
@@ -584,10 +593,10 @@ stages:
         parameters:
           component: obs-hosts
           componentPath: observability/lab/hosts
-          artifacts: &id011 []
+          artifacts: &id014 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_obs_hosts
     displayName: apply obs-hosts
@@ -602,10 +611,10 @@ stages:
         parameters:
           component: obs-hosts
           componentPath: observability/lab/hosts
-          artifacts: *id011
+          artifacts: *id014
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_durable
@@ -631,11 +640,11 @@ stages:
         parameters:
           component: deploy-durable
           componentPath: applications/deployments/durable
-          artifacts: &id012
+          artifacts: &id015
             - svc-durable
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_deploy_durable
     displayName: apply deploy-durable
@@ -651,10 +660,10 @@ stages:
         parameters:
           component: deploy-durable
           componentPath: applications/deployments/durable
-          artifacts: *id012
+          artifacts: *id015
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_frontend
@@ -676,11 +685,11 @@ stages:
         parameters:
           component: deploy-frontend
           componentPath: applications/deployments/frontend
-          artifacts: &id013
+          artifacts: &id016
             - svc-frontend
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_deploy_frontend
     displayName: apply deploy-frontend
@@ -696,10 +705,10 @@ stages:
         parameters:
           component: deploy-frontend
           componentPath: applications/deployments/frontend
-          artifacts: *id013
+          artifacts: *id016
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_jobs
@@ -725,13 +734,15 @@ stages:
         parameters:
           component: deploy-jobs
           componentPath: applications/deployments/jobs
-          artifacts: &id014
+          artifacts: &id017
             - svc-jobs
             - svc-traffic
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
+          recordedArtifacts: &id018
+            - img-dsv-fetch
   - stage: C_deploy_jobs
     displayName: apply deploy-jobs
     dependsOn:
@@ -746,11 +757,12 @@ stages:
         parameters:
           component: deploy-jobs
           componentPath: applications/deployments/jobs
-          artifacts: *id014
+          artifacts: *id017
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
+          recordedArtifacts: *id018
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_diagnostics
     displayName: plan obs-diagnostics
@@ -790,10 +802,10 @@ stages:
         parameters:
           component: obs-diagnostics
           componentPath: observability/lab/diagnostics
-          artifacts: &id015 []
+          artifacts: &id019 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
   - stage: C_obs_diagnostics
     displayName: apply obs-diagnostics
@@ -808,10 +820,10 @@ stages:
         parameters:
           component: obs-diagnostics
           componentPath: observability/lab/diagnostics
-          artifacts: *id015
+          artifacts: *id019
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: none
+          secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_monitoring
@@ -852,10 +864,10 @@ stages:
         parameters:
           component: obs-monitoring
           componentPath: observability/lab/monitoring
-          artifacts: &id016 []
+          artifacts: &id020 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: provider
+          secretEnv: true
           settings: ${{ parameters.settings }}
   - stage: C_obs_monitoring
     displayName: apply obs-monitoring
@@ -870,10 +882,10 @@ stages:
         parameters:
           component: obs-monitoring
           componentPath: observability/lab/monitoring
-          artifacts: *id016
+          artifacts: *id020
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          datadog: provider
+          secretEnv: true
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - template: ../templates/retire.yml

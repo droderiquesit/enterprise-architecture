@@ -28,7 +28,8 @@ locals {
       fluent_bit = var.charts.fluent_bit_version
       agent_tag  = var.charts.agent_tag
     }
-    api_key_secret_name = var.api_key.secret_name
+    # dsv mode: the chart Secret "datadog" holds only the ENC[dsv://...] reference; existing: the synced Secret
+    api_key_secret_name = local.dsv_mode ? local.release : var.api_key.secret_name
   }
 }
 

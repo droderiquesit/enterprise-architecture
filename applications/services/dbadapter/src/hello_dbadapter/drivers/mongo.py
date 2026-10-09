@@ -3,7 +3,7 @@
 
 Environment:
   MONGO_URI          connection string. cosmos-mongo (RU) has no Entra data-plane auth -> secret
-                     reference (Key Vault) injected by the deployment. documentdb + MONGO_AUTH=entra:
+                     reference (dsv://..., Delinea DSV) resolved at start-up. documentdb + MONGO_AUTH=entra:
                      mongodb+srv://<cluster>.global.mongocluster.cosmos.azure.com/ (no credentials)
   MONGO_AUTH         connection_string (default) | entra  (documentdb only: MONGODB-OIDC with an
                      Azure Identity callback, scope https://ossrdbms-aad.database.windows.net/.default)

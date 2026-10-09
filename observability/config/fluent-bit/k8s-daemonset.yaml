@@ -4,7 +4,7 @@
 # Mounted by the fluent-bit Helm chart at /fluent-bit/etc/eh/ (config + parsers + lua) through
 # observability/modules/kubernetes. Environment contract:
 #   FLB_EXCLUDE_PATHS   comma list, e.g. /var/log/containers/*_kube-system_*.log,/var/log/containers/*_datadog_*.log
-#   FLB_DD_HOST / FLB_DD_PORT / FLB_DD_TLS / DD_API_KEY (secretKeyRef) / FLB_DD_TAGS (cluster-level static tags)
+#   FLB_DD_HOST / FLB_DD_PORT / FLB_DD_TLS / DD_API_KEY (dsv-fetch env file) / FLB_DD_TAGS (cluster-level static tags)
 #   FLB_DD_SOURCE       default ddsource when a pod has no logs.datadoghq.com/source label
 #   FLB_THROTTLE_RATE   records per interval per node before throttling (e.g. 2000)
 # Pods can opt out with the annotation fluentbit.io/exclude: "true" (k8s-logging.exclude).
@@ -25,8 +25,13 @@ service:
   storage.backlog.mem_limit: 16M
   storage.max_chunks_up: 64
 
+# Secret values (DD_API_KEY, FLB_FORWARD_SHARED_KEY, EVENTHUB_CONNECTION_STRING) are NOT in this file or in the
+# container env: dsv-fetch (observability/images/dsv-fetch) writes them from Delinea DSV into an `env:` YAML
+# file at /dsv-secrets/fluentbit-env.yaml (ephemeral pod/replica volume: k8s emptyDir medium Memory, ACA/ACI EmptyDir; mode 0400) before Fluent Bit starts; the include below
+# makes them available to ${VAR} substitution. A missing file fails the start (fail fast, no silent key-less run).
 includes:
   - parsers.yaml
+  - /dsv-secrets/fluentbit-env.yaml
 
 pipeline:
   inputs:

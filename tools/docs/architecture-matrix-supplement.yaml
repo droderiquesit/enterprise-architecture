@@ -22,18 +22,18 @@ architectures:
     runtime_config: KEDA azure-servicebus scaler on queue batch-items authenticated with the user-assigned identity (rules.identity_id), no connection string
     source: applications/deployments/jobs/README.md
   container-instances:
-    runtime_config: container group env; FAULT_TOKEN and sidecar DD_API_KEY read from Key Vault at plan time into secure_environment_variables (ACI has no Key Vault references)
+    runtime_config: container group env; FAULT_TOKEN as a dsv:// reference resolved by the app at start-up; sidecar DD_API_KEY written by the dsv-fetch init container to an in-memory volume (no secret in state)
     source: applications/deployments/partner-sim/README.md
   app-service-linux-code:
-    runtime_config: app settings (MYSQL_HOST/PORT/DATABASE/USER, MYSQL_AUTH=entra) + Key Vault references, VNet integration on appsvc-integration
+    runtime_config: app settings (MYSQL_HOST/PORT/DATABASE/USER, MYSQL_AUTH=entra) + dsv:// references (resolved at start-up by hello_common), VNet integration on appsvc-integration
     smoke: scripts/smoke.sh on the contract health/readiness/version paths
     source: applications/deployments/dbadapters/README.md
   app-service-linux-container:
-    runtime_config: app settings PG_*, REDIS_*, WEBSITES_PORT=8080, Key Vault references
+    runtime_config: app settings PG_*, REDIS_*, WEBSITES_PORT=8080, dsv:// references
     smoke: scripts/smoke.sh on the contract health/readiness/version paths
     source: applications/deployments/appservice/README.md
   app-service-windows-code:
-    runtime_config: app settings STORAGE_MODE, COSMOS_ENDPOINT/DATABASE/CONTAINER, FAULT_TOKEN as @Microsoft.KeyVault reference; PORT not set (ANCM)
+    runtime_config: app settings STORAGE_MODE, COSMOS_ENDPOINT/DATABASE/CONTAINER, FAULT_TOKEN as a dsv:// reference (Hello.Common); PORT not set (ANCM)
     smoke: deploy-zip.sh probes /healthz on the staging slot before swap; scripts/smoke.sh afterwards
     source: applications/deployments/appservice/README.md
   app-service-windows-container:
@@ -62,7 +62,7 @@ architectures:
     source: applications/deployments/durable/README.md
   functions-on-container-apps:
     artifact: container-image (svc-functions)
-    runtime_config: azapi Microsoft.App/containerApps kind=functionapp; env + Key Vault secret refs + Fluent Bit sidecar
+    runtime_config: azapi Microsoft.App/containerApps kind=functionapp; env + dsv:// references + Fluent Bit sidecar (dsv-fetch init container)
     rollback: previous image digest
     source: applications/deployments/functions/README.md
   durable-functions:
@@ -90,7 +90,7 @@ architectures:
     source: applications/deployments/vm-workloads/README.md
   vm-windows:
     artifact: zip-package (svc-inventory-api) via VM run command (install-windows-service.ps1.tftpl)
-    runtime_config: Windows service environment; FAULT_TOKEN fetched from Key Vault on the host
+    runtime_config: Windows service environment; FAULT_TOKEN as a dsv:// reference resolved with the VM identity
     smoke: installer health check (/healthz)
     rollback: re-apply with the previous package (installers keep 3 releases)
     source: applications/deployments/vm-workloads/README.md
@@ -101,7 +101,7 @@ architectures:
     source: applications/deployments/vm-workloads/README.md
   vmss-uniform:
     artifact: zip-package (svc-dbadapter) via CustomScript extension
-    runtime_config: SQL_AUTH=password, SQL_PASSWORD fetched from Key Vault on the host, SQL_TRUST_SERVER_CERTIFICATE=yes
+    runtime_config: SQL_AUTH=password, SQL_PASSWORD as a dsv:// reference resolved with the host identity, SQL_TRUST_SERVER_CERTIFICATE=yes
     smoke: none from the pipeline (no load balancer, contract url = null)
     source: applications/deployments/dbadapters/README.md
   batch:

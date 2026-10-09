@@ -4,7 +4,7 @@
 |---|---|
 | Component id | `platform-aro` |
 | Owner | platform team (compute) |
-| Consumes | `foundation-network` (`spoke_vnet_id`, `subnets.aro-master`, `subnets.aro-worker`), `foundation-identity` (`key_vault_id` for the pull secret) |
+| Consumes | `foundation-network` (`spoke_vnet_id`, `subnets.aro-master`, `subnets.aro-worker`); pull secret from Delinea DSV (`aro-pull-secret`, pipeline input) |
 | Produces | `platform-aro` v1 (`status = blocked` unless enabled) |
 | Status | **`blocked`** by default — prerequisites below cannot be satisfied by Terraform in this repo |
 
@@ -20,9 +20,10 @@
 4. **ARO RP service principal** object id (`az ad sp list --display-name "Azure Red Hat OpenShift RP" --query "[0].id" -o tsv`)
    → `aro_rp_principal_id`.
 5. **Version**: `az aro get-versions --location <region>` → `version` (no static default; versions move fast).
-6. **Red Hat pull secret** (optional but needed for Red Hat content): store the JSON in the foundation Key Vault
-   and set `pull_secret_secret_id` (versionless secret id). Terraform reads it by reference (value ends up only
-   in state, never in outputs).
+6. **Red Hat pull secret** (optional but needed for Red Hat content): store the JSON in Delinea DSV at
+   `<prefix>/<env>/aro-pull-secret` (element `value`). The pipeline passes it as `TF_VAR_pull_secret`
+   (`tools/secrets/fetch.py`, registry `secret_env`); `cluster_profile.pull_secret` has no write-only form in
+   azurerm 5.9, so the value is stored in Terraform state (never in outputs or contracts).
 7. If NSGs/NAT gateways/route tables are attached to the ARO subnets, add their ids to
    `extra_network_resource_ids` so operator identities get the same scoped roles (Learn requirement).
 

@@ -26,6 +26,7 @@ variables {
   ]
   app_registration = {
     client_id                   = "11111111-1111-1111-1111-111111111111"
+    auth                        = "secret"
     service_principal_object_id = "44444444-4444-4444-4444-444444444444"
   }
   client_secret = "mock-secret-not-real"
@@ -125,6 +126,10 @@ run "reject_secret_mode_without_secret" {
   command = plan
   variables {
     client_secret = null
+    app_registration = {
+      client_id = "11111111-1111-1111-1111-111111111111"
+      auth      = "secret"
+    }
   }
   expect_failures = [datadog_integration_azure.this]
 }

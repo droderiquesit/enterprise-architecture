@@ -1,34 +1,30 @@
-# One Container App with: user-assigned identity (ACR pull + Key Vault references), digest-pinned image,
-# env + Key Vault secret references, /healthz + /readyz probes, HTTP scale rule, optional Fluent Bit sidecar
-# tailing a shared EmptyDir (ADR-0001 §10), multiple-revision traffic weights for rollback.
+# One Container App with: user-assigned identity (ACR pull + Delinea DSV reads), digest-pinned image, env (secret
+# settings carry dsv:// references the app resolves at start-up - ADR-0001 §14), /healthz + /readyz probes, HTTP
+# scale rule, optional Fluent Bit sidecar tailing a shared EmptyDir (ADR-0001 §10) whose Datadog key is written by
+# a dsv-fetch init container into an EmptyDir, multiple-revision traffic weights for rollback.
+# No Key Vault references, no secret values: Container Apps "secrets" carry only the (non-secret) sidecar config files.
 locals {
   patch       = var.sidecar_patch
   has_sidecar = local.patch != null && try(length(local.patch.sidecars), 0) > 0
 
-  app_secrets = {
-    for k, id in var.secret_env : var.secret_names[k] => { key_vault_secret_id = id, value = null }
-  }
-  patch_secrets = local.has_sidecar ? {
-    for s in local.patch.secrets : s.name => { key_vault_secret_id = s.key_vault_secret_id, value = s.value }
-  } : {}
-  secrets = merge(local.patch_secrets, local.app_secrets)
+  secrets = local.has_sidecar ? { for s in local.patch.secrets : s.name => s.value } : {}
+  inits   = local.has_sidecar ? try(local.patch.init_containers, []) : []
 
-  volumes       = local.has_sidecar ? local.patch.volumes : []
-  app_mounts    = local.has_sidecar ? local.patch.app_container.volume_mounts : []
-  sidecars      = local.has_sidecar ? local.patch.sidecars : []
-  sorted_env    = sort(keys(var.env))
-  sorted_secret = sort(keys(var.secret_env))
+  volumes    = local.has_sidecar ? local.patch.volumes : []
+  app_mounts = local.has_sidecar ? local.patch.app_container.volume_mounts : []
+  sidecars   = local.has_sidecar ? local.patch.sidecars : []
+  sorted_env = sort(keys(var.env))
 
   # Deterministic revision suffix: changes whenever the template changes, so every template change
   # creates a new, addressable revision (rollback target). Lowercase alphanumerics, starts with a letter.
   revision_suffix = "r${substr(sha1(jsonencode({
     image   = var.container.image
     env     = var.env
-    secrets = var.secret_env
     cpu     = var.container.cpu
     memory  = var.container.memory
     scale   = var.scale
     sidecar = local.sidecars
+    init    = local.inits
   })), 0, 9)}"
 
   traffic = concat(
@@ -56,13 +52,12 @@ resource "azurerm_container_app" "this" {
     identity = var.identity.id
   }
 
+  # sidecar config files only (mounted as a Secret volume); no secret values, no Key Vault references
   dynamic "secret" {
     for_each = local.secrets
     content {
-      name                = secret.key
-      key_vault_secret_id = secret.value.key_vault_secret_id
-      identity            = secret.value.key_vault_secret_id == null ? null : var.identity.id
-      value               = secret.value.value
+      name  = secret.key
+      value = secret.value
     }
   }
 
@@ -98,6 +93,17 @@ resource "azurerm_container_app" "this" {
     }
   }
 
+  lifecycle {
+    precondition {
+      condition     = length(local.inits) == 0 || var.workload_profile_name == "Consumption"
+      error_message = "The dsv-fetch init container needs managed identity, which Container Apps offers to init containers only on the Consumption profile of a workload-profiles environment."
+    }
+    precondition {
+      condition     = !anytrue([for k, v in var.env : can(regex("(?i)(password|secret|token|apikey|api_key|connectionstring)", k)) && !startswith(v, "dsv://") && v != "" && !contains(["false", "true"], v)])
+      error_message = "A secret-looking setting carries a literal value; secret settings must be dsv:// references."
+    }
+  }
+
   template {
     min_replicas                     = var.scale.min_replicas
     max_replicas                     = var.scale.max_replicas
@@ -125,13 +131,6 @@ resource "azurerm_container_app" "this" {
         content {
           name  = env.value
           value = var.env[env.value]
-        }
-      }
-      dynamic "env" {
-        for_each = local.sorted_secret
-        content {
-          name        = env.value
-          secret_name = var.secret_names[env.value]
         }
       }
 
@@ -169,6 +168,37 @@ resource "azurerm_container_app" "this" {
       }
     }
 
+    # dsv-fetch (ADR-0001 §14): writes the sidecar's Datadog key from DSV into the dsv-secrets EmptyDir before the
+    # containers start, with the app's managed identity (init containers get managed identity on the Consumption
+    # profile of a workload-profiles environment only - see the precondition).
+    dynamic "init_container" {
+      for_each = local.inits
+      content {
+        name    = init_container.value.name
+        image   = init_container.value.image
+        cpu     = init_container.value.cpu
+        memory  = init_container.value.memory
+        command = init_container.value.command
+        args    = init_container.value.args
+
+        dynamic "env" {
+          for_each = init_container.value.env
+          content {
+            name  = env.value.name
+            value = env.value.value
+          }
+        }
+        dynamic "volume_mounts" {
+          for_each = init_container.value.volume_mounts
+          content {
+            name     = volume_mounts.value.name
+            path     = volume_mounts.value.path
+            sub_path = volume_mounts.value.sub_path
+          }
+        }
+      }
+    }
+
     # Fluent Bit sidecar (ADR-0001 §10): tails LOG_FILE_PATH on the shared EmptyDir volume.
     dynamic "container" {
       for_each = local.sidecars
@@ -182,9 +212,8 @@ resource "azurerm_container_app" "this" {
         dynamic "env" {
           for_each = container.value.env
           content {
-            name        = env.value.name
-            value       = env.value.value
-            secret_name = env.value.secret_name
+            name  = env.value.name
+            value = env.value.value
           }
         }
         dynamic "volume_mounts" {

@@ -133,8 +133,10 @@ def _scope_filter(ctx: Context, doc: dict) -> None:
     if ctx.scope is None:
         return
     comps = doc["components"]
+    # out-of-scope work this scope must wait for: changed infrastructure AND artifacts the other pipeline still has
+    # to build (e.g. img-dsv-fetch, scope platform, consumed by applications roots by its recorded digest)
     pending = {cid for cid, e in comps.items()
-               if e["scope"] != ctx.scope and e["plan"] and e.get("direct") and doc["mode"] not in ("drift",)}
+               if e["scope"] != ctx.scope and (e["plan"] or e["build"]) and e.get("direct") and doc["mode"] not in ("drift",)}
     for cid, e in comps.items():
         if e["scope"] != ctx.scope:
             if e["plan"] or e["build"] or e["resolve"] or e["validate"]:

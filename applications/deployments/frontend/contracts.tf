@@ -22,17 +22,23 @@ variable "obs_prereqs" {
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract v1 (required)."
+  description = "foundation-identity contract v2 (required): identities + Delinea DSV secrets block (refs). No Key Vault."
   type = object({
-    key_vault_id  = string
-    key_vault_uri = string
     identities = map(object({
       id           = string
       principal_id = string
       client_id    = string
       name         = string
+      secrets      = optional(list(string), [])
     }))
-    secret_ids = map(string)
+    secrets = object({
+      provider  = optional(string, "delinea-dsv")
+      tenant    = optional(string)
+      tld       = optional(string, "com")
+      base_url  = optional(string)
+      base_path = string
+      refs      = optional(map(string), {})
+    })
   })
 }
 

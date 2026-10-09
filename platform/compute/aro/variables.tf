@@ -29,13 +29,6 @@ variable "foundation_network" {
   })
 }
 
-variable "foundation_identity" {
-  description = "foundation-identity contract v1 (only the fields this root uses)."
-  type = object({
-    key_vault_id = string
-  })
-}
-
 variable "settings" {
   description = "platform-aro settings (environment.yaml components.platform-aro). Blocked by default - see README prerequisites."
   type = object({
@@ -46,18 +39,16 @@ variable "settings" {
     # Object id of the tenant's "Azure Red Hat OpenShift RP" service principal
     # (`az ad sp list --display-name "Azure Red Hat OpenShift RP" --query "[0].id"`).
     aro_rp_principal_id = optional(string)
-    # Versionless Key Vault secret id (foundation Key Vault) holding the Red Hat pull secret JSON.
-    pull_secret_secret_id = optional(string)
-    api_visibility        = optional(string, "Private")
-    ingress_visibility    = optional(string, "Private")
-    master_vm_size        = optional(string, "Standard_D8s_v5")
-    worker_vm_size        = optional(string, "Standard_D4s_v5")
-    worker_count          = optional(number, 3)
-    worker_disk_size_gb   = optional(number, 128)
-    pod_cidr              = optional(string, "10.128.0.0/14")
-    service_cidr          = optional(string, "172.30.0.0/16")
-    outbound_type         = optional(string, "Loadbalancer")
-    fips_enabled          = optional(bool, false)
+    api_visibility      = optional(string, "Private")
+    ingress_visibility  = optional(string, "Private")
+    master_vm_size      = optional(string, "Standard_D8s_v5")
+    worker_vm_size      = optional(string, "Standard_D4s_v5")
+    worker_count        = optional(number, 3)
+    worker_disk_size_gb = optional(number, 128)
+    pod_cidr            = optional(string, "10.128.0.0/14")
+    service_cidr        = optional(string, "172.30.0.0/16")
+    outbound_type       = optional(string, "Loadbalancer")
+    fips_enabled        = optional(bool, false)
     # NSGs / NAT gateways / route tables attached to the ARO subnets also need operator role
     # assignments (Learn: "Understand managed identities in ARO").
     extra_network_resource_ids = optional(list(string), [])
@@ -75,5 +66,18 @@ variable "settings" {
   validation {
     condition     = contains(["Loadbalancer", "UserDefinedRouting"], var.settings.outbound_type)
     error_message = "outbound_type must be Loadbalancer or UserDefinedRouting."
+  }
+}
+
+# Red Hat pull secret JSON from Delinea DSV (aro-pull-secret; pipeline: tools/secrets/fetch.py -> TF_VAR_pull_secret,
+# optional). cluster_profile.pull_secret has no write-only form in azurerm 5.9, so the value is stored in state.
+variable "pull_secret" {
+  description = "Red Hat pull secret JSON (optional; DSV aro-pull-secret)."
+  type        = string
+  default     = null
+  sensitive   = true
+  validation {
+    condition     = var.pull_secret == null || can(jsondecode(var.pull_secret).auths)
+    error_message = "pull_secret must be the Red Hat pull secret JSON ({\"auths\": {...}})."
   }
 }

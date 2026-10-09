@@ -1,11 +1,3 @@
-output "agent_extensions" {
-  description = "host key -> extension id."
-  value = merge(
-    { for k, e in azurerm_virtual_machine_extension.datadog : k => e.id },
-    { for k, e in azurerm_virtual_machine_scale_set_extension.datadog : k => e.id },
-  )
-}
-
 output "setup" {
   description = "host key -> run command / CustomScript extension id."
   value = merge(
@@ -24,6 +16,6 @@ output "scripts_sha256" {
 }
 
 output "installer_scripts" {
-  description = "Rendered installers (no secrets: the API key is fetched at run time). Useful for image baking."
+  description = "Rendered installers (no secrets: the API key is read from DSV on the host). Useful for image baking."
   value       = local.scripts
 }

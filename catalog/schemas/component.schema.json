@@ -156,6 +156,27 @@
               "applications"
             ],
             "description": "Owning pipeline (default derived from layer; see catalog/components.yaml header)."
+          },
+          "secret_env": {
+            "description": "Environment variables resolved from Delinea DSV for this component's Terraform step only (tools/secrets/fetch.py). Value: <secret-name>[#element][?] (? = optional).",
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{1,62}(#[A-Za-z0-9_-]+)?\\??$"
+            }
+          },
+          "dsv_state_output": {
+            "description": "Terraform output with the desired Delinea DSV state (tools/secrets/dsv_apply.py).",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "secret_outputs": {
+            "description": "Sensitive Terraform output {secret-name: value} written to DSV after apply (tools/secrets/publish.py).",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
           }
         }
       }

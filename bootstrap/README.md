@@ -31,7 +31,7 @@
 | operators (`operator_principal_ids`) | (their own) | `tfstate` + `contracts` Contributor | first-run migration, break-glass |
 
 *Why RBAC Administrator rather than User Access Administrator:* platform roots must create role assignments (AcrPull,
-Key Vault Secrets User, SQL/Cosmos/Service Bus data roles, Network Contributor for AKS/ARO/MDP). RBAC Administrator only
+SQL/Cosmos/Service Bus data roles, Network Contributor for AKS/ARO/MDP). RBAC Administrator only
 has `roleAssignments/write|delete` (+ read), and the condition (version 2.0, from Microsoft's
 [delegation examples](https://learn.microsoft.com/azure/role-based-access-control/delegate-role-assignments-examples))
 forbids assigning or removing **Owner**, **User Access Administrator** and **RBAC Administrator** — so the apply identity
@@ -77,13 +77,62 @@ issuer (audience `api://AzureADTokenExchange`), marked *recommended*, requires a
 `federated_issuer`/`federated_subject`; Datadog's side (`datadog_integration_azure` with `secretless_auth_enabled = true`,
 `client_id`/`tenant_name` from this contract) is owned by `obs-azure-integration`.
 Secretless Auth is not available on US1-FED/US2-FED or sovereign clouds. There, create the secret **out of band** so it
-never enters Terraform state:
+never enters Terraform state, straight into Delinea DSV (ADR-0001 section 14; path `<prefix>/<env>/datadog-azure-client-secret`):
 
 ```bash
 APP_ID=$(terraform output -json contract | jq -r .datadog_integration.client_id)
 az ad app credential reset --id "$APP_ID" --display-name datadog --years 1 --query password -o tsv \
-  | (read -r s; az keyvault secret set --vault-name <lab-kv> --name datadog-azure-client-secret --value "$s" >/dev/null)
+  | (read -r s; printf '{"value":"%s"}' "$s" > /dev/shm/dd.json; chmod 600 /dev/shm/dd.json
+     dsv secret create --path eh/dev/datadog-azure-client-secret --data @/dev/shm/dd.json >/dev/null; rm -f /dev/shm/dd.json)
 ```
+
+## Delinea DSV prerequisites (all keys and secrets)
+
+All lab keys and secrets live in **Delinea DevOps Secrets Vault** (ADR-0001 section 14); Azure Key Vault is not used for
+secrets. Workloads and pipelines authenticate to DSV with their own **user-assigned managed identity** (Azure auth
+provider: the Entra token's `xms_mirid` = identity resource id is matched to a DSV user's `externalId`), so no bootstrap
+secret exists anywhere. One-time operator steps per environment (DSV CLI `dsv`, signed in as a DSV administrator):
+
+1. **Tenant.** A DSV tenant `<tenant>.secretsvaultcloud.<tld>` (tld `com`, `eu`, `com.au`, `ca`). Put its name in
+   `environments/<env>/environment.yaml` → `secrets: {provider: delinea-dsv, tenant, tld, auth_provider}` and the same
+   identifiers in `pipelines/variables/<env>.yml` (`dsvTenant`, `dsvTld`, `dsvAuthProvider`; lint checks they match).
+2. **Azure auth provider** (name = `secrets.auth_provider`, e.g. `azure-eh`) bound to the lab's Entra tenant:
+   `dsv config auth-provider create --name azure-eh --type azure --azure-tenant-id <environment.tenant_id>`.
+   (`foundation-secrets` verifies it and would create it if missing, but the admin mapping in step 3 needs it first.)
+3. **Pipeline admin mapping (the only manual mapping).** After `foundation-identity` is applied, map the
+   `deploy-agent` identity (contract `identities.deploy-agent.id`) to a DSV user and give that user DSV administration
+   rights for this environment's objects (users, `config:auth`, `config:policies:secrets:<prefix>:<env>`, and
+   `secrets:<prefix>:<env>:<.*>`):
+   ```bash
+   dsv user create --username <prefix>-<env>-deploy-agent --provider azure-eh \
+     --external-id /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/<prefix>-id-deploy-agent-<env>-<region>
+   dsv config edit --encoding yaml   # add the subject below to the administrative policy, e.g. the Default Admin Policy
+   #   subjects: [..., 'users:<azure-eh:<prefix>-<env>-deploy-agent>']
+   ```
+   This is exactly Delinea's documented Azure flow ("Authentication: Azure"); Delinea notes that the Default Admin
+   Policy is broad, so prefer a dedicated admin policy limited to `users`, `config:auth:<azure-eh>`,
+   `config:policies:secrets:<prefix>:<env>` and `secrets:<prefix>:<env>:<.*>` if your tenant has one.
+   The username must be exactly `<prefix>-<env>-deploy-agent`: `foundation-secrets` then recognises it as the same user
+   (it never modifies or deletes users it did not create). `tools/secrets/dsv_apply.py` (plan stage = diff, apply stage
+   = converge) runs with this identity on the self-hosted deploy pool and creates every other DSV user and the
+   least-privilege permissions. Narrow or extend the admin policy to your tenant's conventions; DSV validates policy
+   resources against the policy path (Delinea "Policy" docs).
+4. **Seed the operator-owned values** listed in [`foundation/identity/secrets.yaml`](../foundation/identity/secrets.yaml)
+   (`source: operator`): `datadog-api-key`, `datadog-app-key`, `datadog-client-token`, `fault-token`,
+   `fluentbit-shared-key`, the adapter/DBM passwords of enabled engines and the platform apply inputs
+   (`sqlvm-admin-password`, `documentdb-admin-password`, `cassandra-mi-admin-password`, optional
+   `mysql-admin-password`, `appgw-tls-pfx`, `aro-pull-secret`). Element `value` (plus `password` for `appgw-tls-pfx`):
+   ```bash
+   umask 077; printf '{"value":"%s"}' "$(openssl rand -base64 36)" > /dev/shm/v.json
+   dsv secret create --path <prefix>/<env>/fault-token --data @/dev/shm/v.json; rm -f /dev/shm/v.json
+   ```
+   `python3 tools/secrets/check.py --env <env>` lists what is still missing (names only, never values); the pipeline
+   runs it after `foundation-secrets` and in the Verify stage. Generated values (`eventhub-fluentbit-listen`) are
+   written by `tools/secrets/publish.py` after `obs-telemetry-transport` applies.
+5. **Egress.** Every reader needs HTTPS to `<tenant>.secretsvaultcloud.<tld>` (the Azure Firewall default allow-list of
+   `foundation-edge` includes `*.secretsvaultcloud.*`; NAT-only spokes reach it directly).
+
+Rotation and break-glass: [docs/runbooks/secret-rotation.md](../docs/runbooks/secret-rotation.md).
 
 ## First run (local state → migrate)
 
@@ -187,6 +236,8 @@ Phase 2 adds a private endpoint (≈ 7.3/month).
 - Blob versioning restore: https://learn.microsoft.com/azure/storage/blobs/versioning-overview
 - Delegated role assignment conditions: https://learn.microsoft.com/azure/role-based-access-control/delegate-role-assignments-overview
 - Datadog Azure manual setup / Secretless Auth: https://docs.datadoghq.com/integrations/guide/azure-manual-setup/
+- Delinea DSV Azure authentication: https://docs.delinea.com/dsv/current/usage/auth-general/authazure
+- Delinea DSV policies: https://docs.delinea.com/online-help/devops-secrets-vault/tutorials/policy.htm
 
 ### Promotion readers (multi-environment)
 

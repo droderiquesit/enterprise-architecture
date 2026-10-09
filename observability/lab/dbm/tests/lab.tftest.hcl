@@ -21,7 +21,11 @@ variables {
     expires_on      = "2026-12-31"
     tags            = {}
   }
-  obs_telemetry_transport = { datadog_site = "datadoghq.com" }
+  obs_telemetry_transport = {
+    datadog_site = "datadoghq.com"
+    api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+    secrets      = { tenant = "contoso", tld = "com", base_url = "https://contoso.secretsvaultcloud.com/v1" }
+  }
   foundation_network = {
     subnets = {
       observability = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet/subnets/observability", name = "observability" }
@@ -29,7 +33,7 @@ variables {
     }
   }
   foundation_identity = {
-    key_vault_uri = "https://eh-kv-ident-dev-abcde.vault.azure.net/"
+    secrets = { base_path = "eh/dev" }
     identities = {
       "obs-dbm" = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-obs-dbm-dev-sec", client_id = "33333333-3333-3333-3333-333333333333", name = "eh-id-obs-dbm-dev-sec" }
     }
@@ -38,21 +42,25 @@ variables {
     dbm = { supported = true, engine = "postgres", deployment_type = "flexible_server", auth_mode = "entra-managed-identity", identity_name = "obs-dbm", identity_client_id = "33333333-3333-3333-3333-333333333333", host = "eh-psql-dev.postgres.database.azure.com", port = 5432, databases = ["catalog"] }
   }
   platform_db_mysql = {
-    dbm = { supported = true, engine = "mysql", deployment_type = "flexible_server", auth_mode = "native-password", host = "eh-mysql-dev.mysql.database.azure.com", port = 3306, databases = ["adapter"], password_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/dbm-mysql-password" }
+    dbm = { supported = true, engine = "mysql", deployment_type = "flexible_server", auth_mode = "native-password", host = "eh-mysql-dev.mysql.database.azure.com", port = 3306, databases = ["adapter"], password_ref = "dsv://eh/dev/dbm-mysql-password#value" }
   }
   platform_db_sql = {
     dbm = { supported = true, engine = "sqlserver", deployment_type = "sql_database", auth_mode = "entra-managed-identity", identity_name = "obs-dbm", host = "eh-sql-dev.database.windows.net", port = 1433, databases = ["orders", "fulfillment"] }
   }
   platform_db_sqlvm = {
-    dbm = { supported = true, engine = "sqlserver", deployment_type = "self_hosted_azure_vm", auth_mode = "sql-login", host = "10.41.1.10", port = 1433, databases = ["adapter"], password_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/dbm-sqlvm-password" }
+    dbm = { supported = true, engine = "sqlserver", deployment_type = "self_hosted_azure_vm", auth_mode = "sql-login", host = "10.41.1.10", port = 1433, databases = ["adapter"], password_secret_name = "dbm-sqlvm-password" }
   }
 }
 
 run "lab_dbm_from_contracts" {
   command = plan
   assert {
-    condition     = output.configured["postgresql"].auth == "managed_identity" && output.configured["mysql"].password_source == "key_vault"
-    error_message = "Entra for PostgreSQL, Key Vault password for MySQL."
+    condition     = output.configured["postgresql"].auth == "managed_identity" && output.configured["mysql"].password_source == "dsv"
+    error_message = "Entra for PostgreSQL, DSV password for MySQL."
+  }
+  assert {
+    condition     = strcontains(module.dbm.confd["mysql.d"], "ENC[dsv://eh/dev/dbm-mysql-password#value]") && strcontains(module.dbm.confd["sqlserver.d"], "ENC[dsv://eh/dev/dbm-sqlvm-password#value]")
+    error_message = "Passwords are ENC[] DSV references (published ref, or derived from the secret name)."
   }
   assert {
     condition     = contains(keys(output.configured), "sql-orders") && contains(keys(output.configured), "sql-fulfillment") && output.configured["sqlvm"].deployment_type == "virtual_machine"

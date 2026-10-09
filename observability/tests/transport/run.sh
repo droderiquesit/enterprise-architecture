@@ -19,8 +19,8 @@ for d in modules/{instrumentation,fluent-bit,otel-collector,telemetry-transport,
   fi
 done
 rm -f /tmp/tf-test-$$.log
-python3 "$HERE/contract_check.py" "$ROOT/observability/modules/telemetry-transport" "$ROOT/catalog/contracts/obs-telemetry-transport.v1.schema.json" --require-runs 4 || rc=1
-python3 "$HERE/contract_check.py" "$ROOT/observability/lab/telemetry-transport" "$ROOT/catalog/contracts/obs-telemetry-transport.v1.schema.json" --require-runs 1 || rc=1
+python3 "$HERE/contract_check.py" "$ROOT/observability/modules/telemetry-transport" "$ROOT/catalog/contracts/obs-telemetry-transport.v2.schema.json" --require-runs 4 || rc=1
+python3 "$HERE/contract_check.py" "$ROOT/observability/lab/telemetry-transport" "$ROOT/catalog/contracts/obs-telemetry-transport.v2.schema.json" --require-runs 1 || rc=1
 python3 "$HERE/contract_check.py" "$ROOT/observability/modules/kubernetes" "$ROOT/catalog/contracts/obs-kubernetes.v1.schema.json" --require-runs 1 || rc=1
 python3 "$HERE/contract_check.py" "$ROOT/observability/lab/kubernetes" "$ROOT/catalog/contracts/obs-kubernetes.v1.schema.json" --require-runs 1 || rc=1
 (cd "$HERE" && python3 -m pytest -q -p no:cacheprovider .) || rc=1

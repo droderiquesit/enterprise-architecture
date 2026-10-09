@@ -6,7 +6,7 @@
 #
 # Environment contract:
 #   FLB_STATE_DIR               writable dir (buffer); ephemeral storage on ACA
-#   FLB_FORWARD_SHARED_KEY      secret ref; FLB_FORWARD_TLS on|off; FLB_FORWARD_TLS_CRT / FLB_FORWARD_TLS_KEY file paths
+#   FLB_FORWARD_SHARED_KEY      DSV (env file); FLB_FORWARD_TLS on|off; FLB_FORWARD_TLS_CRT / FLB_FORWARD_TLS_KEY file paths
 #   FLB_DD_HOST/FLB_DD_PORT/FLB_DD_TLS/DD_API_KEY/FLB_DD_TAGS as in sidecar.yaml
 service:
   flush: 1
@@ -24,8 +24,13 @@ service:
   storage.backlog.mem_limit: 32M
   storage.max_chunks_up: 128
 
+# Secret values (DD_API_KEY, FLB_FORWARD_SHARED_KEY, EVENTHUB_CONNECTION_STRING) are NOT in this file or in the
+# container env: dsv-fetch (observability/images/dsv-fetch) writes them from Delinea DSV into an `env:` YAML
+# file at /dsv-secrets/fluentbit-env.yaml (ephemeral pod/replica volume: k8s emptyDir medium Memory, ACA/ACI EmptyDir; mode 0400) before Fluent Bit starts; the include below
+# makes them available to ${VAR} substitution. A missing file fails the start (fail fast, no silent key-less run).
 includes:
   - parsers.yaml
+  - /dsv-secrets/fluentbit-env.yaml
 
 pipeline:
   inputs:

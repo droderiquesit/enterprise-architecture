@@ -1,12 +1,11 @@
 variable "settings" {
   description = "obs-dbm settings."
   type = object({
-    hosting             = optional(string, "aci") # aci | cluster_checks (render for obs-kubernetes settings.dbm_cluster_checks) | none
-    subnet_key          = optional(string, "aci") # ACI needs a Microsoft.ContainerInstance/containerGroups-delegated subnet (foundation-network `aci`)
-    identity_key        = optional(string, "obs-dbm")
-    api_key_secret_name = optional(string, "datadog-api-key")
-    cpu                 = optional(number, 1)
-    memory_gb           = optional(number, 2)
+    hosting      = optional(string, "aci") # aci | cluster_checks (render for obs-kubernetes settings.dbm_cluster_checks) | none
+    subnet_key   = optional(string, "aci") # ACI needs a Microsoft.ContainerInstance/containerGroups-delegated subnet (foundation-network `aci`)
+    identity_key = optional(string, "obs-dbm")
+    cpu          = optional(number, 1)
+    memory_gb    = optional(number, 2)
   })
   default = {}
   validation {
@@ -19,6 +18,12 @@ variable "obs_telemetry_transport" {
   description = "obs-telemetry-transport contract (fields used)."
   type = object({
     datadog_site = string
+    api_key_ref  = string
+    secrets = object({
+      tenant   = optional(string)
+      tld      = optional(string)
+      base_url = string
+    })
   })
 }
 
@@ -33,14 +38,16 @@ variable "foundation_network" {
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract (fields used)."
+  description = "foundation-identity contract v2 (fields used): the obs-dbm identity (DSV reader on ACI) and the DSV base path."
   type = object({
-    key_vault_uri = string
     identities = map(object({
       id        = string
       client_id = string
       name      = string
     }))
+    secrets = object({
+      base_path = string
+    })
   })
 }
 

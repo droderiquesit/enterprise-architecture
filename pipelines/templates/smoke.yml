@@ -26,6 +26,11 @@ jobs:
           artifact: selection
           path: $(Pipeline.Workspace)/selection
       - template: steps-setup.yml
+      - script: |
+          set -euo pipefail
+          # names/paths only, never values (metadata-only DSV calls with the deploy agent identity)
+          python3 tools/secrets/check.py --env "$LAB_ENV"
+        displayName: Check required Delinea DSV secret paths exist
       - task: AzureCLI@2
         displayName: Run smoke tests (bounded polling)
         inputs:

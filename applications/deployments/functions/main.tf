@@ -73,14 +73,13 @@ module "env" {
     tier    = local.meta.tier
     region  = local.fx_loc
   }
-  runtime               = "python"
-  architecture          = each.value
-  telemetry             = var.obs_telemetry_transport
-  identity_client_id    = local.identity.client_id
-  key_vault_identity_id = local.identity.id
+  runtime            = "python"
+  architecture       = each.value
+  telemetry          = var.obs_telemetry_transport
+  identity_client_id = local.identity.client_id
   faults = {
-    enabled         = var.settings.faults_enabled
-    token_secret_id = lookup(var.foundation_identity.secret_ids, "fault-token", null)
+    enabled   = var.settings.faults_enabled
+    token_ref = lookup(var.foundation_identity.secrets.refs, "fault-token", null)
   }
   port               = each.value == "aca" ? 80 : null
   log_level          = var.settings.log_level

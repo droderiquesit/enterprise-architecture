@@ -11,7 +11,7 @@ Azure DocumentDB (formerly Azure Cosmos DB for MongoDB vCore, `azurerm_mongo_clu
 | Contract | Fields used |
 |---|---|
 | `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v1 | `key_vault_id`, `key_vault_uri`, `secret_ids` (optional), `identities[<name>].{principal_id, client_id, name}` |
+| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}`, `secrets.{base_path, refs}` (Delinea DSV references) |
 
 ## Produced contract
 `platform-db-documentdb` v1 — schema `catalog/contracts/platform-db-documentdb.v1.schema.json` (output `contract`, no secrets).
@@ -33,7 +33,7 @@ Cluster (id, host `<name>.global.mongocluster.cosmos.azure.com`, port 10260, aut
 `public_network_access = Disabled`; private endpoint group `MongoCluster`, zone key `mongocluster` (fallback alias `documentdb`).
 
 ## Authentication and data-plane access
-Native auth must be enabled at creation (built-in admin `ehdocdbadmin`); its password is a `random_password` (state) copied write-only to Key Vault `documentdb-admin-password`. hello-dbadapter is registered as a Microsoft Entra principal (`azurerm_mongo_cluster_user`) — **least-privilege gap:** azurerm accepts only role `root` on `admin`, so the adapter receives root (lab-only; narrow via AzAPI/`mongoClusters/users` roles when available). The free tier is rejected because it does not support Entra ID.
+Native auth must be enabled at creation (built-in admin `ehdocdbadmin`); its password comes from Delinea DSV `documentdb-admin-password` (pipeline input `TF_VAR_admin_password`; stored in state because `administrator_password` has no write-only argument). hello-dbadapter is registered as a Microsoft Entra principal (`azurerm_mongo_cluster_user`) — **least-privilege gap:** azurerm accepts only role `root` on `admin`, so the adapter receives root (lab-only; narrow via AzAPI/`mongoClusters/users` roles when available). The free tier is rejected because it does not support Entra ID.
 
 ## Teardown and data retention
 Destroy deletes the cluster; backups of deleted clusters are kept 7 days by the service.

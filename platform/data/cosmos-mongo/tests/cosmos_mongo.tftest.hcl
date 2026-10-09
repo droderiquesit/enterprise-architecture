@@ -78,8 +78,13 @@ variables {
     }
   }
   foundation_identity = {
-    key_vault_id  = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.KeyVault/vaults/eh-kv-id-dev-abcde"
-    key_vault_uri = "https://eh-kv-id-dev-abcde.vault.azure.net/"
+    secrets = {
+      base_path = "eh/dev"
+      refs = {
+        "dbm-mysql-password" = "dsv://eh/dev/dbm-mysql-password#value"
+        "dbm-sqlvm-password" = "dsv://eh/dev/dbm-sqlvm-password#value"
+      }
+    }
     identities = {
       "hello-orders-api"    = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.ManagedIdentity/userAssignedIdentities/hello-orders-api", principal_id = "aaaaaaaa-0000-0000-0000-000000000001", client_id = "bbbbbbbb-0000-0000-0000-000000000001", name = "hello-orders-api" }
       "hello-inventory-api" = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.ManagedIdentity/userAssignedIdentities/hello-inventory-api", principal_id = "aaaaaaaa-0000-0000-0000-000000000002", client_id = "bbbbbbbb-0000-0000-0000-000000000002", name = "hello-inventory-api" }
@@ -106,8 +111,8 @@ run "defaults" {
     error_message = "Public access disabled and MongoDB private endpoint created."
   }
   assert {
-    condition     = output.contract.auth_mode == "key" && output.contract.key_secret_id == "https://eh-kv-id-dev-abcde.vault.azure.net/secrets/cosmos-mongo-connection-string"
-    error_message = "Key-based exception must expose only a versionless Key Vault secret ID."
+    condition     = output.contract.auth_mode == "key" && output.contract.key_secret_id == "dsv://eh/dev/cosmos-mongo-connection-string#value"
+    error_message = "Key-based exception must expose only a DSV reference."
   }
   assert {
     condition     = output.contract.databases.adapter.containers.records.name == "records" && output.contract.databases.adapter.owner_identity_name == "hello-dbadapter"

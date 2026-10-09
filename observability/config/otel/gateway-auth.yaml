@@ -1,9 +1,10 @@
 # Overlay: require a bearer token on OTLP (defence in depth on top of VNet-only internal ingress).
-# Clients send "Authorization: Bearer <token>" (OTEL_EXPORTER_OTLP_HEADERS), token from Key Vault.
+# Clients send "Authorization: Bearer <token>" (OTEL_EXPORTER_OTLP_HEADERS), token read from the
+# file /dsv-secrets/otlp-bearer-token written by the dsv-fetch init container (Delinea DSV).
 extensions:
   bearertokenauth/otlp:
     scheme: Bearer
-    token: ${env:OTLP_BEARER_TOKEN}
+    token: ${file:/dsv-secrets/otlp-bearer-token}
 receivers:
   otlp:
     protocols:

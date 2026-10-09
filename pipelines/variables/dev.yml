@@ -24,8 +24,12 @@ variables:
   containerRegistry: ehacrdev00000
   # agent pool on the deploy-agents subnet (foundation-deploy-agents) reaching private endpoints
   deployPool: foundation-deploy-agents
-  # Key Vault-linked variable group holding the Datadog keys (secrets: datadog-api-key, datadog-app-key)
-  datadogVariableGroup: lab-dev-datadog
+  # Delinea DevOps Secrets Vault (ADR-0001 section 14) - identifiers, not secrets; must equal the `secrets` section of
+  # environments/dev/environment.yaml (pipeline_templates ENV004). No variable group carries secrets: steps that need
+  # one resolve it with tools/secrets/fetch.py on the self-hosted deploy pool (deploy agent managed identity).
+  dsvTenant: example-lab
+  dsvTld: com
+  dsvAuthProvider: azure-eh
   datadogSite: datadoghq.com
   # Promotion (environments/promotion.yaml): '' = this environment builds artifacts from source.
   # Otherwise the Build stage promotes the exact digests recorded by `promoteFrom` (never rebuilds); the

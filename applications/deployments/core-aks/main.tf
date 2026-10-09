@@ -87,8 +87,8 @@ module "env" {
   # explicitly as well so non-SDK code paths see the same value.
   identity_client_id = local.wi[each.key].client_id
   faults = {
-    enabled         = var.settings.faults_enabled
-    token_secret_id = local.csi && each.key != "hello-worker" ? lookup(var.foundation_identity.secret_ids, "fault-token", null) : null
+    enabled   = var.settings.faults_enabled
+    token_ref = local.csi && each.key != "hello-worker" ? lookup(var.foundation_identity.secrets.refs, "fault-token", null) : null
   }
   port               = local.port[each.key]
   log_level          = var.settings.log_level

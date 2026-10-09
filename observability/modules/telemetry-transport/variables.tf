@@ -39,25 +39,51 @@ variable "tags" {
 }
 
 variable "datadog" {
-  description = "Datadog site + Key Vault reference of the API key (never the key itself)."
+  description = "Datadog site + Delinea DSV reference of the API key (never the key itself)."
   type = object({
-    site              = string
-    api_key_secret_id = string
-    env               = string
-    extra_tags        = optional(map(string), {})
+    site        = string
+    api_key_ref = string
+    env         = string
+    extra_tags  = optional(map(string), {})
   })
   validation {
     condition     = contains(["datadoghq.com", "us3.datadoghq.com", "us5.datadoghq.com", "datadoghq.eu", "ap1.datadoghq.com", "ap2.datadoghq.com", "ddog-gov.com"], var.datadog.site)
     error_message = "datadog.site must be a Datadog site domain (datadoghq.com, us3/us5.datadoghq.com, datadoghq.eu, ap1/ap2.datadoghq.com, ddog-gov.com)."
   }
   validation {
-    condition     = can(regex("^https://[^/]+/secrets/[^/]+/?$", var.datadog.api_key_secret_id))
-    error_message = "datadog.api_key_secret_id must be a VERSIONLESS Key Vault secret id (https://<vault>/secrets/<name>)."
+    condition     = can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", var.datadog.api_key_ref))
+    error_message = "datadog.api_key_ref must be a Delinea DSV reference (dsv://<path>#<element>)."
+  }
+}
+
+variable "secrets" {
+  description = <<-EOT
+    Delinea DSV runtime settings (ADR-0001 section 14). Collectors and app sidecars read their keys directly from
+    DSV with their managed identity through the dsv-fetch helper (init container), never from Key Vault:
+      tenant / tld / base_url : DSV endpoint (base_url default https://<tenant>.secretsvaultcloud.<tld>/v1)
+      auth                    : DSV_AUTH for workloads (azure = managed identity)
+      fetch_image             : digest-pinned dsv-fetch image (registry artifact img-dsv-fetch); pulled with the
+                                collector identity when it lives in a private registry
+  EOT
+  type = object({
+    tenant      = optional(string)
+    tld         = optional(string, "com")
+    base_url    = optional(string)
+    auth        = optional(string, "azure")
+    fetch_image = optional(string)
+  })
+  validation {
+    condition     = var.secrets.base_url != null || var.secrets.tenant != null
+    error_message = "secrets needs tenant (base_url derived) or base_url."
+  }
+  validation {
+    condition     = contains(["azure", "client_credentials", "none"], var.secrets.auth)
+    error_message = "secrets.auth must be azure, client_credentials or none."
   }
 }
 
 variable "collector_identity" {
-  description = "Existing user-assigned identity the collectors run as (reads Key Vault secret references)."
+  description = "Existing user-assigned identity the collectors run as (dsv-fetch authenticates to DSV with it; it is mapped to a DSV user with read on the collector secret paths)."
   type = object({
     id           = string
     principal_id = string
@@ -66,22 +92,16 @@ variable "collector_identity" {
   default = null
 }
 
-variable "key_vault" {
-  description = "Key Vault holding the referenced secrets. grant_secrets_user assigns 'Key Vault Secrets User' to the collector identity (RBAC vaults)."
-  type = object({
-    id                 = optional(string)
-    grant_secrets_user = optional(bool, false)
-  })
-  default = {}
-}
-
 variable "event_hub" {
   description = <<-EOT
     Event Hubs used by diagnostic settings (app-logs / platform-logs hubs, read by the aggregator Kafka input).
     mode = create   : Standard namespace (Kafka endpoint), 3 hubs (app-logs, platform-logs, activity-logs),
                       consumer group per hub, SAS rules
-    mode = existing : bring your own namespace; provide namespace_id, send_authorization_rule_id and
-                      listen_connection_string_secret_id (Key Vault) plus the hub names
+    mode = existing : bring your own namespace; provide namespace_id, send_authorization_rule_id plus the hub names
+    listen_connection_string_ref : DSV reference of the Listen-rule connection string the aggregator reads
+                      (mode = create: the module outputs the generated value as the SENSITIVE output
+                      generated_secrets["eventhub-fluentbit-listen"]; tools/secrets/publish.py writes it to DSV
+                      at this path after apply)
     mode = none     : no Event Hub route (App Service/Functions app logs then need another collector)
   EOT
   type = object({
@@ -95,18 +115,12 @@ variable "event_hub" {
     platform_logs_hub                 = optional(string, "platform-logs")
     # control-plane logs (subscription Activity Log, optional Entra ID): a dedicated hub so a data-plane burst on
     # platform-logs never delays/throttles audit events; "" = share platform_logs_hub (no extra hub)
-    activity_logs_hub                  = optional(string, "activity-logs")
-    consumer_group                     = optional(string, "fluent-bit")
-    namespace_id                       = optional(string)
-    namespace_fqdn                     = optional(string)
-    send_authorization_rule_id         = optional(string)
-    listen_connection_string_secret_id = optional(string)
-    # where the module stores the generated listen connection string (mode = create)
-    listen_secret_key_vault_id = optional(string)
-    listen_secret_name         = optional(string, "eventhub-fluentbit-listen")
-    # value_wo_version of the write-only listen secret: increment to re-write the Key Vault secret after
-    # regenerating the authorization rule keys (runbook docs/runbooks/secret-rotation.md in the lab).
-    listen_secret_version = optional(number, 1)
+    activity_logs_hub            = optional(string, "activity-logs")
+    consumer_group               = optional(string, "fluent-bit")
+    namespace_id                 = optional(string)
+    namespace_fqdn               = optional(string)
+    send_authorization_rule_id   = optional(string)
+    listen_connection_string_ref = optional(string)
     private_endpoint = optional(object({
       subnet_id           = string
       private_dns_zone_id = string
@@ -126,8 +140,12 @@ variable "event_hub" {
     error_message = "partition_count must be 1-32 and message_retention_days 1-7."
   }
   validation {
-    condition     = var.event_hub.mode != "existing" || (var.event_hub.namespace_id != null && var.event_hub.send_authorization_rule_id != null && var.event_hub.listen_connection_string_secret_id != null)
-    error_message = "event_hub.mode = existing requires namespace_id, send_authorization_rule_id and listen_connection_string_secret_id."
+    condition     = var.event_hub.mode != "existing" || (var.event_hub.namespace_id != null && var.event_hub.send_authorization_rule_id != null)
+    error_message = "event_hub.mode = existing requires namespace_id and send_authorization_rule_id."
+  }
+  validation {
+    condition     = var.event_hub.listen_connection_string_ref == null || can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", coalesce(var.event_hub.listen_connection_string_ref, "x")))
+    error_message = "event_hub.listen_connection_string_ref must be a dsv:// reference."
   }
 }
 
@@ -150,16 +168,17 @@ variable "container_apps" {
 variable "aggregator" {
   description = "Fluent Bit aggregator (forward + kafka inputs -> Datadog)."
   type = object({
-    hosting                      = optional(string, "container_app")
-    image                        = optional(string, "fluent/fluent-bit:5.1.3")
-    cpu                          = optional(number, 0.5)
-    memory                       = optional(string, "1Gi")
-    min_replicas                 = optional(number, 1)
-    max_replicas                 = optional(number, 2)
-    forward_shared_key_secret_id = optional(string)
+    hosting                = optional(string, "container_app")
+    image                  = optional(string, "fluent/fluent-bit:5.1.3")
+    cpu                    = optional(number, 0.5)
+    memory                 = optional(string, "1Gi")
+    min_replicas           = optional(number, 1)
+    max_replicas           = optional(number, 2)
+    forward_shared_key_ref = optional(string)
+    # TLS for the forward input: PEM cert/key read from DSV as FILES by dsv-fetch (/dsv-tls/tls.crt|tls.key)
     forward_tls = optional(object({
-      cert_secret_id = string
-      key_secret_id  = string
+      cert_ref = string
+      key_ref  = string
     }))
     # hosting = none: endpoints of an aggregator you already run
     external_endpoint = optional(object({
@@ -177,8 +196,8 @@ variable "aggregator" {
     error_message = "aggregator.hosting = none requires aggregator.external_endpoint (the caller provides the aggregator)."
   }
   validation {
-    condition     = var.aggregator.hosting != "container_app" || var.aggregator.forward_shared_key_secret_id != null
-    error_message = "The aggregator Forward input requires forward_shared_key_secret_id (Key Vault secret id)."
+    condition     = var.aggregator.hosting != "container_app" || can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", coalesce(var.aggregator.forward_shared_key_ref, "x")))
+    error_message = "The aggregator Forward input requires forward_shared_key_ref (dsv:// reference)."
   }
   validation {
     condition     = var.aggregator.min_replicas >= 1 && var.aggregator.max_replicas >= var.aggregator.min_replicas && var.aggregator.max_replicas <= 10
@@ -200,10 +219,11 @@ variable "gateway" {
     sampling_percentage = optional(number, 100)
     # OTLP logs: drop (default; app logs only via Fluent Bit) | forward (opt-in, duplicates if a Fluent Bit route exists)
     otlp_logs = optional(string, "drop")
-    # optional bearertokenauth on OTLP: token for the server, full header string for clients
+    # optional bearertokenauth on OTLP: token for the server (file via dsv-fetch), full header string for
+    # clients (published in the contract as otlp.headers_ref; apps resolve it at start-up)
     auth = optional(object({
-      token_secret_id          = string
-      client_headers_secret_id = string
+      token_ref          = string
+      client_headers_ref = string
     }))
     external_endpoints = optional(object({
       grpc_endpoint = string

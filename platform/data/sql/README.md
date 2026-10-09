@@ -22,7 +22,7 @@ PITR 7 days, no LTR, locally redundant backup storage. Business tables are creat
 | Contract | Fields used |
 |---|---|
 | `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v1 | `key_vault_id`, `key_vault_uri`, `secret_ids` (optional), `identities[<name>].{principal_id, client_id, name}` |
+| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
 
 ## Produced contract
 `platform-db-sql` v1 — schema `catalog/contracts/platform-db-sql.v1.schema.json` (output `contract`, no secrets).

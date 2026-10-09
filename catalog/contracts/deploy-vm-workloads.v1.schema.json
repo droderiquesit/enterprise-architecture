@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "deploy-vm-workloads.v1.schema.json",
   "title": "deploy-vm-workloads contract v1",
-  "description": "Produced by applications/deployments/vm-workloads (output \"contract\"). Application resources, endpoints, log routes and scale-to-zero flags for observability and the smoke tooling. No secrets: no deployment tokens, keys or connection strings; secrets appear only as Key Vault references inside resources.",
+  "description": "Produced by applications/deployments/vm-workloads (output \"contract\"). Application resources, endpoints, log routes and scale-to-zero flags for observability and the smoke tooling. No secrets: no deployment tokens, keys or connection strings; secrets appear only as Delinea DSV references (dsv://...) inside resources.",
   "type": "object",
   "required": [
     "component",

@@ -17,31 +17,55 @@ variable "datadog" {
 
 variable "api_key" {
   description = <<-EOT
-    How the Datadog API key reaches the cluster:
-      write_only : this module creates Secret "<secret_name>" (key api-key) in both namespaces from the
-                   EPHEMERAL input api_key_wo (kubernetes_secret_v1.data_wo: the value is never stored in
-                   Terraform state or plan). Bump revision to rotate.
-      existing   : the caller manages the Secret (e.g. Secrets Store CSI driver + Azure Key Vault provider
-                   with secretObjects sync, External Secrets) in both namespaces.
+    How the Datadog API key reaches the cluster (never through Terraform: no key in variables, plan or state):
+      dsv_secret_backend : (default) the chart Secret holds only the reference ENC[<dsv.api_key_ref>]. Node Agents
+                           (all containers) and cluster-checks runners resolve it with secret_backend_command =
+                           dsv-fetch agent-backend (ConfigMap-mounted stdlib script, mode 0500, run by the Agent
+                           image's python3), authenticating to DSV with AKS workload identity on the service account
+                           "datadog". Fluent Bit gets the key from a dsv-fetch init container (env-yaml on an
+                           in-memory emptyDir). The Cluster Agent image has no Python interpreter, so it cannot run
+                           dsv-fetch: set cluster_agent_secret_name to a Secret synced by the Delinea dsv-k8s syncer
+                           (otherwise Cluster Agent features that need the key - orchestrator explorer, its own
+                           telemetry - fail to authenticate; cluster-check dispatch keeps working).
+      existing           : documented fallback - a Kubernetes Secret "<secret_name>" (key api-key) maintained in both
+                           namespaces by the Delinea DSV Kubernetes syncer (dsv-k8s) or another operator-run sync.
   EOT
   type = object({
-    mode        = optional(string, "write_only")
-    secret_name = optional(string, "datadog-api-key")
-    revision    = optional(number, 1)
+    mode                      = optional(string, "dsv_secret_backend")
+    secret_name               = optional(string, "datadog-api-key")
+    cluster_agent_secret_name = optional(string)
   })
   default = {}
   validation {
-    condition     = contains(["write_only", "existing"], var.api_key.mode)
-    error_message = "api_key.mode must be write_only or existing."
+    condition     = contains(["dsv_secret_backend", "existing"], var.api_key.mode)
+    error_message = "api_key.mode must be dsv_secret_backend or existing."
   }
 }
 
-variable "api_key_wo" {
-  description = "Datadog API key (ephemeral: read it with `ephemeral \"azurerm_key_vault_secret\"` in the caller)."
-  type        = string
-  default     = null
-  ephemeral   = true
-  sensitive   = true
+variable "dsv" {
+  description = <<-EOT
+    Delinea DSV settings (non-secret): api_key_ref (dsv://...), tenant/tld or base_url, the dsv-fetch image for the
+    Fluent Bit init container, the dsv_fetch.py source for the Agent secret backend ConfigMap (null = this package's
+    observability/images/dsv-fetch/dsv_fetch.py), and the workload identity client id (user-assigned identity
+    federated with the service accounts datadog/datadog and fluent-bit/fluent-bit, mapped to a DSV user).
+  EOT
+  type = object({
+    api_key_ref        = string
+    tenant             = optional(string)
+    tld                = optional(string, "com")
+    base_url           = optional(string)
+    fetch_image        = optional(string)
+    script_source      = optional(string)
+    identity_client_id = optional(string)
+  })
+  validation {
+    condition     = can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", var.dsv.api_key_ref))
+    error_message = "dsv.api_key_ref must be a dsv:// reference."
+  }
+  validation {
+    condition     = var.dsv.tenant != null || var.dsv.base_url != null
+    error_message = "dsv needs tenant or base_url."
+  }
 }
 
 variable "namespaces" {

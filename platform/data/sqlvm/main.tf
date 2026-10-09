@@ -5,31 +5,14 @@ locals {
   admin_login = "ehsqladmin"
   vm_name     = substr(module.naming.names.virtual_machine, 0, 64)
   # Windows computer names are limited to 15 characters.
-  # Key Vault secrets accept at most 15 tags; keep the identifying subset.
-  secret_tags   = { for k, v in module.tags.tags : k => v if contains(["env", "application", "component", "layer", "owner", "team", "managed_by", "expires_on", "data_classification", "repository"], k) }
   computer_name = substr(replace("${var.environment.name_prefix}sqlvm${var.environment.name}", "-", ""), 0, 15)
 }
 
-# Passwords are stored in Terraform state (azurerm_windows_virtual_machine.admin_password and
-# azurerm_mssql_virtual_machine.sql_connectivity_update_password have no write-only variants);
-# state is encrypted and RBAC-restricted (ADR-0001 §4). Quotes are excluded so values are safe in T-SQL.
-resource "random_password" "admin" {
-  length           = 32
-  min_lower        = 2
-  min_upper        = 2
-  min_numeric      = 2
-  min_special      = 2
-  override_special = "!#%*-_+=?"
-}
-
-resource "random_password" "dbadapter" {
-  length           = 32
-  min_lower        = 2
-  min_upper        = 2
-  min_numeric      = 2
-  min_special      = 2
-  override_special = "!#%*-_+=?"
-}
+# Passwords come from Delinea DSV (sqlvm-admin-password, sqlvm-dbadapter-password) as pipeline inputs
+# (var.admin_password / var.dbadapter_password). azurerm_windows_virtual_machine.admin_password,
+# azurerm_mssql_virtual_machine.sql_connectivity_update_password and run-command protected parameters have no
+# write-only variants, so the values are stored in Terraform state (encrypted, RBAC-restricted - ADR-0001 §4).
+# Quotes are not allowed in the values (T-SQL safety, validated).
 
 module "naming" {
   source          = "../../../foundation/modules/naming"
@@ -77,7 +60,7 @@ resource "azurerm_windows_virtual_machine" "this" {
   location                   = azurerm_resource_group.this.location
   size                       = var.settings.vm_size
   admin_username             = local.admin_login
-  admin_password             = random_password.admin.result
+  admin_password             = var.admin_password
   network_interface_ids      = [azurerm_network_interface.this.id]
   patch_mode                 = "AutomaticByPlatform"
   patch_assessment_mode      = "AutomaticByPlatform"
@@ -137,7 +120,7 @@ resource "azurerm_mssql_virtual_machine" "this" {
   sql_connectivity_type            = "PRIVATE"
   sql_connectivity_port            = 1433
   sql_connectivity_update_username = local.admin_login
-  sql_connectivity_update_password = random_password.admin.result
+  sql_connectivity_update_password = var.admin_password
   tags                             = module.tags.tags
 
   storage_configuration {
@@ -178,11 +161,11 @@ resource "azurerm_virtual_machine_run_command" "init_adapter_db" {
   }
   protected_parameter {
     name  = "AdminPassword"
-    value = random_password.admin.result
+    value = var.admin_password
   }
   protected_parameter {
     name  = "AdapterPassword"
-    value = random_password.dbadapter.result
+    value = var.dbadapter_password
   }
 
   depends_on = [azurerm_mssql_virtual_machine.this]
@@ -200,25 +183,4 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "this" {
   notification_settings {
     enabled = false
   }
-}
-
-# Write-only Key Vault secrets (values never re-read into state from Key Vault; contracts carry IDs only).
-resource "azurerm_key_vault_secret" "admin" {
-  name             = var.settings.admin_secret_name
-  key_vault_id     = var.foundation_identity.key_vault_id
-  value_wo         = random_password.admin.result
-  value_wo_version = var.settings.secret_version
-  content_type     = "password"
-  expiration_date  = "${var.environment.expires_on}T00:00:00Z"
-  tags             = local.secret_tags
-}
-
-resource "azurerm_key_vault_secret" "dbadapter" {
-  name             = var.settings.dbadapter_secret_name
-  key_vault_id     = var.foundation_identity.key_vault_id
-  value_wo         = random_password.dbadapter.result
-  value_wo_version = var.settings.secret_version
-  content_type     = "password"
-  expiration_date  = "${var.environment.expires_on}T00:00:00Z"
-  tags             = local.secret_tags
 }

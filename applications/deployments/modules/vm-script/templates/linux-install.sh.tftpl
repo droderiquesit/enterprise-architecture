@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Rendered by applications/deployments/modules/vm-script (deployment root: ${component}).
 # Installs ${app} ${version} from an immutable package read with the VM's user-assigned identity (IMDS token,
-# no SAS), writes /etc/${app}/${app}.env (non-secret values rendered by Terraform + secrets fetched from Key
-# Vault on the host), and (re)starts the systemd unit with a health check. Idempotent; safe to re-run.
+# no SAS), writes /etc/${app}/${app}.env (values rendered by Terraform; secret settings are dsv:// references the
+# service resolves from Delinea DSV at start-up), and (re)starts the systemd unit with a health check. Idempotent.
 set -euo pipefail
 APP='${app}'
 export AZURE_CLIENT_ID='${client_id}'
@@ -33,14 +33,6 @@ echo "$PACKAGE_SHA256  $WORK/pkg.zip" | sha256sum -c --status || die "package sh
 umask 027
 install -d -m 0750 "$ETC"
 echo '${env_b64}' | base64 -d > "$WORK/app.env"
-%{ if length(secrets) > 0 ~}
-KTOKEN=$(imds_token https%3A%2F%2Fvault.azure.net)
-%{ for name, id in secrets ~}
-val=$(curl -fsS --retry 3 --max-time 10 -H "Authorization: Bearer $KTOKEN" '${id}?api-version=7.4' | json_field value) || die "Key Vault read failed for ${name}"
-printf '%s="%s"\n' '${name}' "$(printf '%s' "$val" | sed 's/\\/\\\\/g; s/"/\\"/g')" >> "$WORK/app.env"
-%{ endfor ~}
-unset val KTOKEN
-%{ endif ~}
 
 %{ if mode == "package-install-sh" ~}
 # ---- service install (installer shipped in the package: deploy/install.sh) --------------------------

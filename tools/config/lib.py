@@ -29,7 +29,7 @@ ENVIRONMENT_KEYS = [
     "owner", "team", "cost_center", "expires_on", "tags",
 ]
 # Global sections a root may opt into by declaring a variable with the same name.
-OPTIONAL_GLOBALS = ["network", "datadog", "budget", "features", "profile_name"]
+OPTIONAL_GLOBALS = ["network", "datadog", "budget", "features", "profile_name", "secrets"]
 
 VARIABLE_RE = re.compile(r'^\s*variable\s+"([A-Za-z0-9_]+)"', re.MULTILINE)
 
@@ -196,7 +196,7 @@ def render_component(tree: Tree, registry: Registry, env_doc: dict, profile_doc:
     `environment` is the ADR §6 object; `settings` is the deep merge of (lowest to highest precedence)
     the profile `features` mapped by tools/config/features.py, the profile's component_settings.<id>
     and environment.components.<id>.
-    Optional globals (network, datadog, budget, features, profile_name) are included only when the
+    Optional globals (network, datadog, budget, features, profile_name, secrets) are included only when the
     root declares a variable of that name, so unrelated global edits never change this component.
     """
     c = registry.get(component_id)
@@ -218,6 +218,7 @@ def render_component(tree: Tree, registry: Registry, env_doc: dict, profile_doc:
         "network": env_doc.get("network"),
         "datadog": env_doc.get("datadog"),
         "budget": env_doc.get("budget"),
+        "secrets": env_doc.get("secrets"),
         "features": profile_doc.get("features") or {},
         "profile_name": env_doc.get("profile"),
     }
