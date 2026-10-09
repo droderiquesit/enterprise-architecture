@@ -179,6 +179,10 @@ class Verifier:
                     return res
             except AuthError:
                 raise
+            except TerminalFailure as exc:  # waiting cannot fix it: fail now, keep the evidence
+                res.status = "fail"
+                res.details = str(exc)
+                return res
             except Exception as exc:  # transient API/parse errors are retried until the deadline
                 res.details = f"error: {exc}"
             if self.clock() + interval > deadline:

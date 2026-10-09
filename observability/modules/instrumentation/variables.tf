@@ -49,25 +49,25 @@ variable "telemetry" {
     datadog_site      = string
     api_key_secret_id = string
     otlp = object({
-      grpc_endpoint           = string
-      http_endpoint           = string
-      headers_secret_id       = optional(string)
-      default_protocol        = optional(string, "http/protobuf")
-      node_agent_grpc_port    = optional(number, 4317)
-      node_agent_http_port    = optional(number, 4318)
+      grpc_endpoint            = string
+      http_endpoint            = string
+      headers_secret_id        = optional(string)
+      default_protocol         = optional(string, "http/protobuf")
+      node_agent_grpc_port     = optional(number, 4317)
+      node_agent_http_port     = optional(number, 4318)
       host_agent_grpc_endpoint = optional(string, "http://localhost:4317")
     })
     fluentbit = object({
-      forward_host                  = string
-      forward_port                  = number
-      sidecar_image                 = optional(string, "fluent/fluent-bit:5.1.3")
-      sidecar_config                = optional(string)
-      sidecar_forward_config        = optional(string)
-      sidecar_parsers               = optional(string)
-      sidecar_lua                   = optional(string)
-      sidecar_mode                  = optional(string, "datadog")
-      logs_intake_host              = optional(string)
-      forward_shared_key_secret_id  = optional(string)
+      forward_host                 = string
+      forward_port                 = number
+      sidecar_image                = optional(string, "fluent/fluent-bit:5.1.3")
+      sidecar_config               = optional(string)
+      sidecar_forward_config       = optional(string)
+      sidecar_parsers              = optional(string)
+      sidecar_lua                  = optional(string)
+      sidecar_mode                 = optional(string, "datadog")
+      logs_intake_host             = optional(string)
+      forward_shared_key_secret_id = optional(string)
     })
     env = optional(map(map(string)), {})
   })
@@ -92,8 +92,8 @@ variable "log_file_path" {
   type        = string
   default     = "/var/log/app/app.log"
   validation {
-    condition     = can(regex("^/[A-Za-z0-9._/-]+$", var.log_file_path))
-    error_message = "log_file_path must be an absolute POSIX path."
+    condition     = can(regex("^(/|[A-Za-z]:\\\\)[A-Za-z0-9._/\\\\ -]+$", var.log_file_path))
+    error_message = "log_file_path must be an absolute path (POSIX, or C:\\... on Windows hosts)."
   }
 }
 

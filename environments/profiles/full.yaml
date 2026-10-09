@@ -157,3 +157,14 @@ groups:
   - obs-kubernetes
   - obs-dbm
   - obs-monitoring
+component_settings:
+  platform-containerapps:
+    ingress_mode: internal
+  platform-messaging:
+    sku: Premium
+  platform-shared:
+    acr_sku: Premium
+    acr_private_endpoint_enabled: true
+    acr_public_network_access_enabled: false
+  foundation-network:
+    topology: hub-spoke

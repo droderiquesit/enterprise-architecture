@@ -47,3 +47,8 @@ features:
   session_replay: false
   rum_session_sample_rate: 100
   trace_sample_rate: 1.0
+component_settings:
+  foundation-network:
+    topology: single-spoke
+  platform-containerapps:
+    ingress_mode: external
