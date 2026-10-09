@@ -8,6 +8,8 @@ variable "settings" {
     event_hub_mode                 = optional(string, "create")
     event_hub_capacity             = optional(number, 1)
     event_hub_private_endpoint     = optional(bool, true)
+    eventhub_secret_version        = optional(number, 1)  # increment to re-write the listen secret (secret-rotation runbook)
+    batch_log_setup_enabled        = optional(bool, true) # publish the Batch Fluent Bit setup script in the contract
     aggregator_hosting             = optional(string, "container_app")
     gateway_hosting                = optional(string, "container_app")
     gateway_distribution           = optional(string, "upstream")
@@ -25,6 +27,10 @@ variable "settings" {
   validation {
     condition     = contains(["create", "existing", "none"], var.settings.event_hub_mode) && contains(["container_app", "none"], var.settings.aggregator_hosting) && contains(["container_app", "none"], var.settings.gateway_hosting)
     error_message = "event_hub_mode: create|existing|none; aggregator_hosting/gateway_hosting: container_app|none."
+  }
+  validation {
+    condition     = var.settings.eventhub_secret_version >= 1 && floor(var.settings.eventhub_secret_version) == var.settings.eventhub_secret_version
+    error_message = "eventhub_secret_version must be a positive integer (increment it to rotate)."
   }
   validation {
     condition     = var.settings.event_hub_capacity >= 1 && var.settings.event_hub_capacity <= 2 && var.settings.gateway_max_replicas <= 5 && var.settings.aggregator_max_replicas <= 5

@@ -178,7 +178,7 @@ def _layer_doc(arch_doc: dict) -> dict:
         out["metadata"] = defaults["metadata"]
     if "spec" in defaults:
         out["spec"] = defaults["spec"]
-    for key in ("params", "monitors", "synthetics", "slo_burn_rate"):
+    for key in ("params", "monitors", "synthetics", "slo_burn_rate", "runbook_base_url"):
         if key in arch_doc:
             out[key] = arch_doc[key]
     return out
@@ -433,7 +433,17 @@ def render_manifest(
             item["url"] = resolved
         endpoints.append(item)
 
-    runbook = meta["runbook_url"]
+    runbook = meta.get("runbook_url")
+    if not runbook:
+        base = effective.get("runbook_base_url")
+        if not base:
+            raise OnboardingError(f"{source}: metadata.runbook_url is not set and no archetype defines runbook_base_url")
+        rb_ctx = {"service": service, "env": env, "team": meta["team"]}
+        if meta.get("repository"):
+            rb_ctx["repository"] = meta["repository"].rstrip("/")
+        runbook = expand(base, rb_ctx, f"{source}: runbook_base_url (set metadata.repository or metadata.runbook_url)")
+    if not re.match(r"^https?://", runbook):
+        raise OnboardingError(f"{source}: runbook URL must be http(s): {runbook}")
     tier = meta.get("tier", "medium")
     base_tags = sorted({
         f"env:{env}", f"service:{service}", f"team:{meta['team']}", f"tier:{tier}",

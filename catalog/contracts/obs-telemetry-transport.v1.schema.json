@@ -262,6 +262,46 @@
           ]
         }
       }
+    },
+    "batch_log_setup": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Azure Batch node log setup published by observability (ADR-0001 \u00a713): gzip+base64 Linux installer (pinned Fluent Bit, linux-host config, API key read from Key Vault on the node). Run by the job's job preparation task (deploy-jobs) with the env vars named here. No secrets.",
+      "required": [
+        "script_gzip_base64",
+        "script_sha256",
+        "fluent_bit_version",
+        "log_paths_template"
+      ],
+      "properties": {
+        "script_gzip_base64": {
+          "type": "string",
+          "minLength": 1
+        },
+        "script_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "fluent_bit_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "log_paths_template": {
+          "type": "string"
+        },
+        "identity_env": {
+          "type": "string"
+        },
+        "log_paths_env": {
+          "type": "string"
+        },
+        "run_elevated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

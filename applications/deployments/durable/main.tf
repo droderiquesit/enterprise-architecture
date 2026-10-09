@@ -25,7 +25,14 @@ locals {
   private = var.settings.network_mode == "private-endpoint" || (var.settings.network_mode == "auto" && var.foundation_network != null)
   pe_zone = try(var.foundation_network.private_dns_zones["webapps"].id, null)
 
-  partner_url = coalesce(var.settings.partner_api_url, try(var.deploy_partner_sim.url, null), "unset")
+  # Upstream URLs: settings override > optional deploy contracts > unset (the code then simulates the call).
+  # Kubernetes-internal URLs (*.svc.cluster.local) are not resolvable from Functions and are ignored.
+  core_urls             = { for k, a in merge(try(var.deploy_core_aks.apps, {}), try(var.deploy_core_aca.apps, {})) : k => a.url if a.url != null && !can(regex("\\.svc\\.cluster\\.local", coalesce(a.url, "x"))) }
+  appsvc_apps           = try(var.deploy_appservice.apps, {})
+  appsvc_inventory_urls = [for k in sort(keys(local.appsvc_apps)) : local.appsvc_apps[k].url if local.appsvc_apps[k].service == "hello-inventory-api" && local.appsvc_apps[k].url != null]
+  orders_url            = coalesce(var.settings.orders_api_url, lookup(local.core_urls, "hello-orders-api", null), "unset")
+  inventory_url         = coalesce(var.settings.inventory_api_url, try(local.appsvc_inventory_urls[0], null), lookup(local.core_urls, "hello-inventory-api", null), "unset")
+  partner_url           = coalesce(var.settings.partner_api_url, try(var.deploy_partner_sim.url, null), "unset")
 
   # Functions that run on the Windows Consumption app only (Reconciliation) are disabled on Flex and vice versa.
   reconciliation_functions = ["ReconciliationTimer", "StartReconciliation"]
@@ -45,8 +52,8 @@ locals {
       ServiceBusConnection__fullyQualifiedNamespace = var.platform_messaging.fqdn
       ServiceBusConnection__credential              = "managedidentity"
     },
-    var.settings.orders_api_url == null ? {} : { ORDERS_API_URL = var.settings.orders_api_url },
-    var.settings.inventory_api_url == null ? {} : { INVENTORY_API_URL = var.settings.inventory_api_url },
+    local.orders_url == "unset" ? {} : { ORDERS_API_URL = local.orders_url },
+    local.inventory_url == "unset" ? {} : { INVENTORY_API_URL = local.inventory_url },
     local.partner_url == "unset" ? {} : { PARTNER_API_URL = local.partner_url },
     var.settings.faults_enabled ? { FAULT_ACTIVITY_FAILURE_RATE = tostring(var.settings.activity_failure_rate) } : {},
   )

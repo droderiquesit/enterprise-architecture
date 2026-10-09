@@ -17,7 +17,8 @@ RUN npm run build && rm -f dist/config.json
 
 FROM ${NGINX_IMAGE}
 ARG VERSION=0.0.0-dev
-LABEL org.opencontainers.image.title="hello-frontend" org.opencontainers.image.version="${VERSION}"
+ARG GIT_COMMIT=unknown
+LABEL org.opencontainers.image.title="hello-frontend" org.opencontainers.image.version="${VERSION}" org.opencontainers.image.revision="${GIT_COMMIT}"
 COPY --chown=101:101 services/frontend/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY --chown=101:101 services/frontend/nginx/templates/ /etc/nginx/templates/
 COPY --chown=101:101 services/frontend/nginx/15-hello-env.envsh /docker-entrypoint.d/15-hello-env.envsh

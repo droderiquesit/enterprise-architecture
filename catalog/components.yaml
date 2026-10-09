@@ -268,12 +268,14 @@ components:
     layer: observability
     kind: terraform
     path: observability/lab/azure-integration
+    catalog_refs: [datadog-azure-native-integration]
   - id: obs-telemetry-transport
     layer: observability
     kind: terraform
     path: observability/lab/telemetry-transport
     consumes: [foundation-network, foundation-identity, platform-containerapps]
     produces: [obs-telemetry-transport]
+    inputs: [observability/modules/host-agents/scripts/**]   # Batch log setup script (templatefile, not a module source)
   - id: obs-diagnostics
     layer: observability
     kind: terraform
@@ -415,7 +417,7 @@ components:
     kind: terraform
     path: applications/deployments/durable
     consumes: [platform-functions, platform-messaging, platform-db-sql, obs-telemetry-transport, foundation-identity, foundation-network]
-    optional_consumes: [deploy-partner-sim]
+    optional_consumes: [deploy-partner-sim, deploy-core-aks, deploy-core-aca, deploy-appservice]
     artifacts: [svc-durable]
   - id: deploy-functions
     produces: [deploy-functions]
@@ -454,7 +456,7 @@ components:
     kind: terraform
     path: applications/deployments/jobs
     consumes: [platform-containerapps, platform-shared, platform-messaging, platform-db-sql, obs-telemetry-transport, foundation-identity]
-    optional_consumes: [platform-batch, deploy-core-aks, deploy-core-aca, deploy-frontend]
+    optional_consumes: [platform-batch, deploy-core-aks, deploy-core-aca, deploy-frontend, deploy-durable]
     artifacts: [svc-jobs, svc-traffic]
   - id: deploy-vm-workloads
     produces: [deploy-vm-workloads]

@@ -42,7 +42,7 @@
       "manifest"
     ],
     "manifest": "dev/hello-inventory-api.yaml",
-    "sha256": "9af13f96f7acbec195d0497181aafc7ec7a3c15e723567935bbf7f2cac7ef499"
+    "sha256": "008e81e21c1326a0a89387df83170669d14398f004aaadc200211706704320c3"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -68,7 +68,7 @@
     ],
     "owner": "orders@example.com",
     "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md",
     "team": "orders",
     "tier": "high"
   },
@@ -76,7 +76,7 @@
     "apm.error_rate": {
       "evaluation_delay": null,
       "key": "apm.error_rate",
-      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. APM -> Service hello-inventory-api -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#error-rate",
+      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. APM -> Service hello-inventory-api -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#error-rate",
       "name": "[dev] hello-inventory-api error rate above 5%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -95,7 +95,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#error-rate",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#error-rate",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -117,7 +117,7 @@
     "apm.http_5xx": {
       "evaluation_delay": null,
       "key": "apm.http_5xx",
-      "message": "{{#is_alert}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. Filter traces by http.status_code:5* for hello-inventory-api; open the error span.\n2. 503 from /readyz-gated dependencies means a dependency is down; 500 means an unhandled exception.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#http-5xx",
+      "message": "{{#is_alert}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. Filter traces by http.status_code:5* for hello-inventory-api; open the error span.\n2. 503 from /readyz-gated dependencies means a dependency is down; 500 means an unhandled exception.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#http-5xx",
       "name": "[dev] hello-inventory-api returning HTTP 5xx",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -135,7 +135,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#http-5xx",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#http-5xx",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -157,7 +157,7 @@
     "apm.latency_p95": {
       "evaluation_delay": null,
       "key": "apm.latency_p95",
-      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#latency",
+      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#latency",
       "name": "[dev] hello-inventory-api p95 latency above 1.5s",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -175,7 +175,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#latency",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#latency",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -197,7 +197,7 @@
     "apm.no_traffic": {
       "evaluation_delay": null,
       "key": "apm.no_traffic",
-      "message": "{{#is_alert}}**CRITICAL**: No server spans were received although this service is declared always-on.{{/is_alert}}\n{{#is_warning}}**WARNING**: No server spans were received although this service is declared always-on.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. Is the pipeline healthy? Check the \"telemetry pipeline canary\" monitor first - if it is also alerting, the problem is the collector/agent, not the service.\n2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?\n3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#missing-telemetry",
+      "message": "{{#is_alert}}**CRITICAL**: No server spans were received although this service is declared always-on.{{/is_alert}}\n{{#is_warning}}**WARNING**: No server spans were received although this service is declared always-on.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. Is the pipeline healthy? Check the \"telemetry pipeline canary\" monitor first - if it is also alerting, the problem is the collector/agent, not the service.\n2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?\n3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#missing-telemetry",
       "name": "[dev] hello-inventory-api stopped reporting traces",
       "new_group_delay": 60,
       "no_data_timeframe": 30,
@@ -216,7 +216,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#missing-telemetry",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#missing-telemetry",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -237,7 +237,7 @@
     "appsvc.http_5xx_ratio@app": {
       "evaluation_delay": 900,
       "key": "appsvc.http_5xx_ratio@app",
-      "message": "{{#is_alert}}**CRITICAL**: The App Service front end reports a high share of HTTP 5xx responses.{{/is_alert}}\n{{#is_warning}}**WARNING**: The App Service front end reports a high share of HTTP 5xx responses.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Compare with APM: platform-only 5xx (APM healthy) usually means worker crash/restart or 502/503 from the front end.\n2. Check AppServiceConsoleLogs and AppServiceHTTPLogs in the log pipeline.\n3. az webapp log tail -n <app> -g <rg>.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#appservice-5xx",
+      "message": "{{#is_alert}}**CRITICAL**: The App Service front end reports a high share of HTTP 5xx responses.{{/is_alert}}\n{{#is_warning}}**WARNING**: The App Service front end reports a high share of HTTP 5xx responses.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Compare with APM: platform-only 5xx (APM healthy) usually means worker crash/restart or 502/503 from the front end.\n2. Check AppServiceConsoleLogs and AppServiceHTTPLogs in the log pipeline.\n3. az webapp log tail -n <app> -g <rg>.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#appservice-5xx",
       "name": "[dev] hello-inventory-api App Service [[resource.name]] 5xx ratio above 5%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -256,7 +256,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "app",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#appservice-5xx",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#appservice-5xx",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -277,7 +277,7 @@
     "appsvc.response_time@app": {
       "evaluation_delay": 900,
       "key": "appsvc.response_time@app",
-      "message": "{{#is_alert}}**WARNING**: Average platform response time is high.{{/is_alert}}\n{{#is_warning}}**WARNING**: Average platform response time is high.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check the plan CPU/memory (azure.web_serverfarms.cpu_percentage / memory_percentage).\n2. Check downstream latency in the APM service map.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#appservice-latency",
+      "message": "{{#is_alert}}**WARNING**: Average platform response time is high.{{/is_alert}}\n{{#is_warning}}**WARNING**: Average platform response time is high.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check the plan CPU/memory (azure.web_serverfarms.cpu_percentage / memory_percentage).\n2. Check downstream latency in the APM service map.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#appservice-latency",
       "name": "[dev] hello-inventory-api App Service [[resource.name]] response time above 4s",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -295,7 +295,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "app",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#appservice-latency",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#appservice-latency",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -316,7 +316,7 @@
     "cosmos.availability@inventory-db": {
       "evaluation_delay": 900,
       "key": "cosmos.availability@inventory-db",
-      "message": "{{#is_alert}}**CRITICAL**: The account reports reduced service availability.{{/is_alert}}\n{{#is_warning}}**WARNING**: The account reports reduced service availability.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check Azure Service Health and Resource Health for the account region.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#cosmos-availability",
+      "message": "{{#is_alert}}**CRITICAL**: The account reports reduced service availability.{{/is_alert}}\n{{#is_warning}}**WARNING**: The account reports reduced service availability.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check Azure Service Health and Resource Health for the account region.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#cosmos-availability",
       "name": "[dev] hello-inventory-api Cosmos DB [[resource.name]] availability below 99.9%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -335,7 +335,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "inventory-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#cosmos-availability",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#cosmos-availability",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -356,7 +356,7 @@
     "cosmos.ru_saturation@inventory-db": {
       "evaluation_delay": 900,
       "key": "cosmos.ru_saturation@inventory-db",
-      "message": "{{#is_alert}}**WARNING**: Provisioned throughput is exhausted on at least one partition; expect 429 throttling.{{/is_alert}}\n{{#is_warning}}**WARNING**: Provisioned throughput is exhausted on at least one partition; expect 429 throttling.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check hot partitions (PartitionKeyRUConsumption diagnostic logs).\n2. Raise RU/s or autoscale max; check retry-after handling in the SDK.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#cosmos-ru",
+      "message": "{{#is_alert}}**WARNING**: Provisioned throughput is exhausted on at least one partition; expect 429 throttling.{{/is_alert}}\n{{#is_warning}}**WARNING**: Provisioned throughput is exhausted on at least one partition; expect 429 throttling.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check hot partitions (PartitionKeyRUConsumption diagnostic logs).\n2. Raise RU/s or autoscale max; check retry-after handling in the SDK.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#cosmos-ru",
       "name": "[dev] hello-inventory-api Cosmos DB [[resource.name]] normalized RU above 95%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -374,7 +374,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "inventory-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#cosmos-ru",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#cosmos-ru",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -395,7 +395,7 @@
     "logs.error_spike": {
       "evaluation_delay": null,
       "key": "logs.error_spike",
-      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. Open Logs for service:hello-inventory-api env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-inventory-api in the last hour (a new version is the usual cause).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#error-logs",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders` | owner: orders@example.com | tier: high\n\nTroubleshooting:\n1. Open Logs for service:hello-inventory-api env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-inventory-api in the last hour (a new version is the usual cause).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#error-logs",
       "name": "[dev] hello-inventory-api error log volume above 50 in 10m",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -413,7 +413,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#error-logs",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#error-logs",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -472,7 +472,7 @@
       "burn_rate_alerts": [
         {
           "long_window": "1h",
-          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-burn-rate",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-burn-rate",
           "name": "[dev] hello-inventory-api availability SLO burn rate critical (1h/5m)",
           "notify": {
             "alert": [
@@ -480,28 +480,28 @@
               "oncall"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-burn-rate",
           "severity": "critical",
           "short_window": "5m",
           "threshold": 14.4
         },
         {
           "long_window": "6h",
-          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-burn-rate",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-burn-rate",
           "name": "[dev] hello-inventory-api availability SLO burn rate warning (6h/30m)",
           "notify": {
             "alert": [
               "team-orders"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-burn-rate",
           "severity": "warning",
           "short_window": "30m",
           "threshold": 6.0
         }
       ],
       "denominator": "sum:trace.http.server.request.hits{service:hello-inventory-api,env:dev}.as_count()",
-      "description": "availability SLO for hello-inventory-api (dev). Runbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-availability",
+      "description": "availability SLO for hello-inventory-api (dev). Runbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-availability",
       "display_name": "[dev] hello-inventory-api availability",
       "name": "availability",
       "numerator": "sum:trace.http.server.request.hits{service:hello-inventory-api,env:dev}.as_count() - sum:trace.http.server.request.errors{service:hello-inventory-api,env:dev}.as_count()",
@@ -523,7 +523,7 @@
       "burn_rate_alerts": [
         {
           "long_window": "1h",
-          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `latency` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-burn-rate",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `latency` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-burn-rate",
           "name": "[dev] hello-inventory-api latency SLO burn rate critical (1h/5m)",
           "notify": {
             "alert": [
@@ -531,27 +531,27 @@
               "oncall"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-burn-rate",
           "severity": "critical",
           "short_window": "5m",
           "threshold": 14.4
         },
         {
           "long_window": "6h",
-          "message": "{{#is_alert}}**WARNING**: error budget of SLO `latency` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-burn-rate",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `latency` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-inventory-api` | env: `dev` | team: `orders`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-burn-rate",
           "name": "[dev] hello-inventory-api latency SLO burn rate warning (6h/30m)",
           "notify": {
             "alert": [
               "team-orders"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-burn-rate",
           "severity": "warning",
           "short_window": "30m",
           "threshold": 6.0
         }
       ],
-      "description": "latency SLO for hello-inventory-api (dev). Runbook: https://runbooks.example.com/enterprise-hello/hello-inventory-api#slo-latency",
+      "description": "latency SLO for hello-inventory-api (dev). Runbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-inventory-api.md#slo-latency",
       "display_name": "[dev] hello-inventory-api latency",
       "name": "latency",
       "tags": [

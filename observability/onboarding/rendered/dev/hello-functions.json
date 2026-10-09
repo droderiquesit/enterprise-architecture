@@ -23,7 +23,7 @@
       "manifest"
     ],
     "manifest": "dev/hello-functions.yaml",
-    "sha256": "c4a8129cf0c51fe4f3b4aaf033dbfe9e4de5437ca7b9e7e26ba4ad83f31ddf8d"
+    "sha256": "28e2e1f847f01e24dab39f1228ddb05f709b6a1b967b75d21631a04a3fda3abf"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -49,7 +49,7 @@
     ],
     "owner": "platform-engineering@example.com",
     "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-functions",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md",
     "team": "platform-engineering",
     "tier": "medium"
   },
@@ -57,7 +57,7 @@
     "apm.consumer_error_rate": {
       "evaluation_delay": null,
       "key": "apm.consumer_error_rate",
-      "message": "{{#is_alert}}**CRITICAL**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\n\nTroubleshooting:\n1. APM consumer spans for hello-functions; follow the span link to the producer trace.\n2. Check the dead-letter monitor of the Service Bus namespace.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-functions#consumer-errors",
+      "message": "{{#is_alert}}**CRITICAL**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\n\nTroubleshooting:\n1. APM consumer spans for hello-functions; follow the span link to the producer trace.\n2. Check the dead-letter monitor of the Service Bus namespace.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#consumer-errors",
       "name": "[dev] hello-functions message processing failure rate above 10%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -76,7 +76,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-functions#consumer-errors",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#consumer-errors",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -97,7 +97,7 @@
     "func.http_5xx_ratio@app": {
       "evaluation_delay": 900,
       "key": "func.http_5xx_ratio@app",
-      "message": "{{#is_alert}}**WARNING**: HTTP-triggered functions return server errors.{{/is_alert}}\n{{#is_warning}}**WARNING**: HTTP-triggered functions return server errors.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.\n2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-functions#functions-5xx",
+      "message": "{{#is_alert}}**WARNING**: HTTP-triggered functions return server errors.{{/is_alert}}\n{{#is_warning}}**WARNING**: HTTP-triggered functions return server errors.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.\n2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#functions-5xx",
       "name": "[dev] hello-functions Function App [[resource.name]] 5xx ratio above 5%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -115,7 +115,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "app",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-functions#functions-5xx",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#functions-5xx",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -136,7 +136,7 @@
     "logs.error_spike": {
       "evaluation_delay": null,
       "key": "logs.error_spike",
-      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\n\nTroubleshooting:\n1. Open Logs for service:hello-functions env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-functions in the last hour (a new version is the usual cause).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-functions#error-logs",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-functions` | env: `dev` | team: `platform-engineering` | owner: platform-engineering@example.com | tier: medium\n\nTroubleshooting:\n1. Open Logs for service:hello-functions env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-functions in the last hour (a new version is the usual cause).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#error-logs",
       "name": "[dev] hello-functions error log volume above 50 in 10m",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -154,7 +154,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-functions#error-logs",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-functions.md#error-logs",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",

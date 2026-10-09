@@ -1,22 +1,63 @@
 {
   "label": "locally-verified (docker, mock Datadog intake)",
-  "started_utc": "2026-10-09T18:15:21+00:00",
-  "git_commit": "6a9ab0d",
+  "started_utc": "2026-10-09T18:29:27+00:00",
+  "git_commit": "a598a63",
   "version": "0.1.0-e2e",
-  "command": "python3 tests/integration/run_e2e.py --reuse --keep",
+  "command": "python3 tests/integration/run_e2e.py",
   "images": {
-    "hello-bff:0.1.0-e2e": "sha256:4dc6b746d468c4442ff08d1edf377fb51d66854a1893273c99667210d3563471 6a9ab0d 2026-10-09T17:59:25.791473855Z",
-    "hello-orders-api:0.1.0-e2e": "sha256:6636665afead0353d89bfcfb3c1eff34f5cba257a84131588a2b556c79df2733 6a9ab0d 2026-10-09T17:59:57.542422103Z",
-    "hello-inventory-api:0.1.0-e2e": "sha256:7cb49861dbfc8a62a68ee27a2919a54f740c08fd1c665d3cec203c28d772a3c3 6a9ab0d 2026-10-09T18:00:15.939428162Z",
-    "hello-durable:0.1.0-e2e": "sha256:2653ee879cae4d765c140bc8779332521245c7d495987f7cddc4df59cfa6c7c5 6a9ab0d 2026-10-09T18:00:47.287554912Z",
-    "hello-catalog-api:0.1.0-e2e": "sha256:4435187553ef953f21b824990a44333cb82f1640d41ef9cdde0b2e77ead11c25 unknown 2026-10-09T18:02:09.682869943Z",
-    "hello-dbadapter:0.1.0-e2e": "sha256:e0ddce03f95f6b04b5af9cc79fd7f95ccb52be3307cc10b7a7ed02c449ac00a8 6a9ab0d 2026-10-09T18:03:08.36712203Z",
-    "hello-worker:0.1.0-e2e": "sha256:ceb218052d6498173da67725d6a246c9566b5318a1c731122202def0b3eae91f 6a9ab0d 2026-10-09T18:03:54.660830429Z",
-    "hello-partner-sim:0.1.0-e2e": "sha256:e25c75c12d74d0bedcef4707baf6c47f31f1173d737e5a46823a0d5fcbfc22c6 6a9ab0d 2026-10-09T18:04:31.979603941Z",
-    "hello-frontend:0.1.0-e2e": "sha256:d3542e378320af670861454f99cf3fa11bbc3475c99e9af3ee0fb5207f29272e c4edb2fc1a693a7bdae4ab2bbc1c7fe63622290f 2026-10-09T18:04:50.065914459Z"
+    "hello-bff:0.1.0-e2e": "sha256:a8e21430d827db6ee42dc25efc3e6690bc4ce0c65d3fcfdc3aa6be185ba37f39 a598a63 2026-10-09T18:22:23.75118359Z",
+    "hello-orders-api:0.1.0-e2e": "sha256:5370ce92f3cafda6367b3e8af27df65d6292fc5a0cf26e56e2e6d9679b2f5443 a598a63 2026-10-09T18:22:37.951531556Z",
+    "hello-inventory-api:0.1.0-e2e": "sha256:25d3eda16772de1f369337029b45ef0dc94f4cada48a86b3ba9a8a5c8a924654 a598a63 2026-10-09T18:22:56.813561657Z",
+    "hello-durable:0.1.0-e2e": "sha256:a92573116563eaada510bc9a0258dc61e70a93d52a106bce6773d2aeddd52c6d a598a63 2026-10-09T18:23:28.381417996Z",
+    "hello-catalog-api:0.1.0-e2e": "sha256:d18887b6351cab610cc27568bf3f59d7b6d362fb8ade389b3a587249a5fc01f3 a598a63 2026-10-09T18:24:09.676463432Z",
+    "hello-dbadapter:0.1.0-e2e": "sha256:1d95a9fe24a8493d64b552391e0a3839bb5580de028a2bec5d9b2cf76aefa2c2 a598a63 2026-10-09T18:25:01.594023647Z",
+    "hello-worker:0.1.0-e2e": "sha256:ab3f3322135924d84666975dfcc94dca6e94611f14c8448e281f5fea3e070b63 a598a63 2026-10-09T18:25:47.346940997Z",
+    "hello-partner-sim:0.1.0-e2e": "sha256:0f33a5e47fbd18e06b59a5f72aaffdf355ed979bbb918cfbc1eebf5ef5779571 a598a63 2026-10-09T18:26:24.224826901Z",
+    "hello-frontend:0.1.0-e2e": "sha256:bd060d1136e379680af343222848486e83b8fc528b74b1ae276dcc94a6c6931b c4edb2fc1a693a7bdae4ab2bbc1c7fe63622290f 2026-10-09T18:26:41.415739059Z"
+  },
+  "image_source_check": {
+    "head": "a598a63",
+    "per_image": {
+      "hello-bff:0.1.0-e2e": {
+        "revision_label": "a598a63",
+        "app_source_diff_to_worktree": "none"
+      },
+      "hello-orders-api:0.1.0-e2e": {
+        "revision_label": "a598a63",
+        "app_source_diff_to_worktree": "none"
+      },
+      "hello-inventory-api:0.1.0-e2e": {
+        "revision_label": "a598a63",
+        "app_source_diff_to_worktree": "none"
+      },
+      "hello-durable:0.1.0-e2e": {
+        "revision_label": "a598a63",
+        "app_source_diff_to_worktree": "none"
+      },
+      "hello-catalog-api:0.1.0-e2e": {
+        "revision_label": "a598a63",
+        "app_source_diff_to_worktree": "none"
+      },
+      "hello-dbadapter:0.1.0-e2e": {
+        "revision_label": "a598a63",
+        "app_source_diff_to_worktree": "none"
+      },
+      "hello-worker:0.1.0-e2e": {
+        "revision_label": "a598a63",
+        "app_source_diff_to_worktree": "none"
+      },
+      "hello-partner-sim:0.1.0-e2e": {
+        "revision_label": "a598a63",
+        "app_source_diff_to_worktree": "none"
+      },
+      "hello-frontend:0.1.0-e2e": {
+        "revision_label": "c4edb2fc1a693a7bdae4ab2bbc1c7fe63622290f",
+        "app_source_diff_to_worktree": "unknown (label is not a commit of this repo)"
+      }
+    }
   },
   "readiness": {
-    "ready_after_s": 0.5
+    "ready_after_s": 32.6
   },
   "seed": {
     "inventory_seed": {
@@ -24,65 +65,70 @@
     },
     "catalog_products": 20
   },
-  "order_id": "5f43c0a8-faf5-4576-8cba-90dc8c000e77",
+  "order_id": "53d509c8-56fc-4137-a56f-199e66384b14",
   "order_status": "Fulfilled",
-  "trace_id": "0000000000000000623891c6762c4567",
+  "trace_id": "0000000000000000ddadfb384d69ffb7",
   "journey": {
     "timeline": [
-      "Pending 6:15:23 PM",
-      "Fulfilled 6:15:24 PM"
+      "Pending 6:30:17 PM",
+      "Fulfilled 6:30:20 PM"
     ],
     "footer": "hello-frontend 0.1.0-e2e \u00b7 env e2e \u00b7 api hello-bff 0.1.0-e2e \u00b7 RUM on",
     "product_rows": 20,
-    "seconds_to_terminal_status": 2.6,
-    "adapter_result": "ok write 5.2ms \u00b7 read 1.14ms \u00b7 update 1.63ms \u00b7 delete 2.27ms",
+    "seconds_to_terminal_status": 4.4,
+    "adapter_result": "ok write 4.14ms \u00b7 read 1.93ms \u00b7 update 2.16ms \u00b7 delete 4.35ms",
     "console_errors": [],
-    "traceparent": "00-0000000000000000623891c6762c4567-7144395baf1e8ad9-01",
-    "adapter_traceparent": "00-000000000000000011ef9cce2c38ef68-4bbced7186f026fb-01",
+    "traceparent": "00-0000000000000000ddadfb384d69ffb7-1e5c0a5b0f26afc3-01",
+    "adapter_traceparent": "00-00000000000000008bf0ee7e36fbeb0e-2976f60ebc36ff76-01",
     "api_requests": [
       {
         "method": "GET",
         "url": "/api/catalog/products",
-        "traceparent": "00-00000000000000006fcf97ee6cacd3b2-1fdf12f672e79015-01"
+        "traceparent": "00-0000000000000000157cbf92af8bc703-49425b89b2b82f0d-01"
       },
       {
         "method": "GET",
         "url": "/api/version",
-        "traceparent": "00-0000000000000000a1b6f3303a4f9fb0-7efeef9fec8cf314-01"
+        "traceparent": "00-00000000000000001ccfa6d520d44cf6-33d3c5e39044adf9-01"
       },
       {
         "method": "POST",
         "url": "/api/orders",
-        "traceparent": "00-0000000000000000623891c6762c4567-7144395baf1e8ad9-01"
+        "traceparent": "00-0000000000000000ddadfb384d69ffb7-1e5c0a5b0f26afc3-01"
       },
       {
         "method": "GET",
-        "url": "/api/orders/5f43c0a8-faf5-4576-8cba-90dc8c000e77",
-        "traceparent": "00-0000000000000000d1ad68f44d0ce4bc-7d57e6fa17b0a1b1-01"
+        "url": "/api/orders/53d509c8-56fc-4137-a56f-199e66384b14",
+        "traceparent": "00-0000000000000000213d575f5605529d-0b328e316de71995-01"
       },
       {
         "method": "GET",
-        "url": "/api/orders/5f43c0a8-faf5-4576-8cba-90dc8c000e77",
-        "traceparent": "00-000000000000000002b06401c613e636-4b20100ce82be1cb-01"
+        "url": "/api/orders/53d509c8-56fc-4137-a56f-199e66384b14",
+        "traceparent": "00-0000000000000000f2d954c92b9256c1-4087d9572593f471-01"
+      },
+      {
+        "method": "GET",
+        "url": "/api/orders/53d509c8-56fc-4137-a56f-199e66384b14",
+        "traceparent": "00-0000000000000000c7f2a571e2922617-2039c70f33c05849-01"
       },
       {
         "method": "GET",
         "url": "/api/adapters",
-        "traceparent": "00-0000000000000000653fbce37a360c42-5c423fa4bd5dc3e8-01"
+        "traceparent": "00-0000000000000000f58745a9665f4791-001f4d461a8b5554-01"
       },
       {
         "method": "POST",
         "url": "/api/adapters/postgresql/roundtrip",
-        "traceparent": "00-000000000000000011ef9cce2c38ef68-4bbced7186f026fb-01"
+        "traceparent": "00-00000000000000008bf0ee7e36fbeb0e-2976f60ebc36ff76-01"
       },
       {
         "method": "GET",
         "url": "/api/catalog/products",
-        "traceparent": "00-00000000000000001fe25890273ab76d-69a3b1006a438f9f-01"
+        "traceparent": "00-000000000000000037ad166f1b5b9fd3-496f23c27783eb83-01"
       }
     ]
   },
-  "finished_utc": "2026-10-09T18:16:08+00:00",
+  "finished_utc": "2026-10-09T18:31:35+00:00",
   "results": [
     {
       "id": "rum",
@@ -90,12 +136,12 @@
       "result": "pass",
       "detail": {
         "event_types": {
-          "resource": 7,
-          "action": 2,
-          "view": 2
+          "resource": 12,
+          "action": 4,
+          "view": 5
         },
-        "bff_resource_events": 3,
-        "rum_requests_forwarded_to_mock": 1,
+        "bff_resource_events": 8,
+        "rum_requests_forwarded_to_mock": 2,
         "post_orders_resource_trace_id_matches_traceparent": true
       },
       "evidence": "rum-events.sample.json"
@@ -105,7 +151,7 @@
       "check": "2. Browser traceparent trace_id in hello-bff, hello-orders-api, hello-catalog-api spans + DB client span",
       "result": "pass",
       "detail": {
-        "trace_id": "0000000000000000623891c6762c4567",
+        "trace_id": "0000000000000000ddadfb384d69ffb7",
         "services_in_trace": [
           "hello-bff",
           "hello-catalog-api",
@@ -115,11 +161,21 @@
           "hello-partner-sim"
         ],
         "bff_server_parent_is_browser_span": true,
-        "sql_server_client_spans_in_trace": 9,
+        "sql_server_client_spans_in_trace": 10,
+        "orders_api_sql_spans": [
+          "INSERT orders.idempotency orders.orders",
+          "SELECT orders.idempotency",
+          "SELECT orders.orders",
+          "UPDATE"
+        ],
         "postgresql_client_spans_in_trace": 2,
+        "catalog_postgresql_spans": [
+          "SELECT",
+          "catalog"
+        ],
         "redis_spans_in_trace": 2,
         "postgresql_client_spans_in_products_list_trace": 2,
-        "span_count": 74
+        "span_count": 75
       },
       "evidence": "trace-journey.json"
     },
@@ -128,7 +184,7 @@
       "check": "3. hello-durable orchestration/activity spans exist and are tied to the order's trace",
       "result": "pass",
       "detail": {
-        "instance_id": "order-5f43c0a8-faf5-4576-8cba-90dc8c000e77",
+        "instance_id": "order-53d509c8-56fc-4137-a56f-199e66384b14",
         "orchestration_spans": 1,
         "activities": {
           "activity:ReserveInventory": 2,
@@ -141,12 +197,12 @@
         "spans_with_link_to_browser_trace": 3,
         "status": "Fulfilled",
         "downstream_server_spans": {
-          "hello-inventory-api POST /inventory/{sku}/reserve": 1,
           "hello-catalog-api GET /products/{sku}": 1,
+          "hello-bff POST /api/orders": 1,
           "hello-orders-api POST /orders/": 1,
           "hello-orders-api PATCH /orders/{id:guid}/status": 3,
-          "hello-bff POST /api/orders": 1,
-          "hello-partner-sim POST /payments": 1
+          "hello-partner-sim POST /payments": 1,
+          "hello-inventory-api POST /inventory/{sku}/reserve": 1
         }
       },
       "evidence": "durable-workflow.json"
@@ -156,7 +212,7 @@
       "check": "4. hello-worker servicebus.process consumer span links to the producer span",
       "result": "pass",
       "detail": {
-        "servicebus_process_spans": 3,
+        "servicebus_process_spans": 2,
         "linked_to_browser_trace": 1,
         "link_targets_a_producer_span": 1,
         "new_trace_not_parent": true,
@@ -173,44 +229,44 @@
       "detail": {
         "per_service": {
           "hello-bff": {
-            "events": 48,
-            "with_required_ddtags": 48,
-            "with_ddsource": 48
+            "events": 45,
+            "with_required_ddtags": 45,
+            "with_ddsource": 45
           },
           "hello-orders-api": {
-            "events": 39,
-            "with_required_ddtags": 39,
-            "with_ddsource": 39
+            "events": 31,
+            "with_required_ddtags": 31,
+            "with_ddsource": 31
           },
           "hello-inventory-api": {
-            "events": 8,
-            "with_required_ddtags": 8,
-            "with_ddsource": 8
-          },
-          "hello-durable": {
-            "events": 481,
-            "with_required_ddtags": 481,
-            "with_ddsource": 481
-          },
-          "hello-catalog-api": {
-            "events": 18,
-            "with_required_ddtags": 18,
-            "with_ddsource": 18
-          },
-          "hello-partner-sim": {
-            "events": 13,
-            "with_required_ddtags": 13,
-            "with_ddsource": 13
-          },
-          "hello-worker": {
-            "events": 8,
-            "with_required_ddtags": 8,
-            "with_ddsource": 8
-          },
-          "hello-dbadapter-postgresql": {
             "events": 7,
             "with_required_ddtags": 7,
             "with_ddsource": 7
+          },
+          "hello-durable": {
+            "events": 394,
+            "with_required_ddtags": 394,
+            "with_ddsource": 394
+          },
+          "hello-catalog-api": {
+            "events": 15,
+            "with_required_ddtags": 15,
+            "with_ddsource": 15
+          },
+          "hello-partner-sim": {
+            "events": 11,
+            "with_required_ddtags": 11,
+            "with_ddsource": 11
+          },
+          "hello-worker": {
+            "events": 7,
+            "with_required_ddtags": 7,
+            "with_ddsource": 7
+          },
+          "hello-dbadapter-postgresql": {
+            "events": 6,
+            "with_required_ddtags": 6,
+            "with_ddsource": 6
           }
         },
         "journey_log_services_with_trace_id": [
@@ -242,7 +298,8 @@
           "hello-dbadapter-postgresql": 1
         },
         "identical_structured_app_events": 0,
-        "identical_plaintext_events (durable host console)": 20,
+        "repeated_plaintext_host_lines (also repeated in source file)": 30,
+        "transport_duplicates_vs_source_file": 0,
         "duplicate_span_ids": 0
       },
       "evidence": "duplicates.json"
@@ -250,7 +307,7 @@
     {
       "id": "tags",
       "check": "7. Required tags / resource attributes on spans, metrics, logs and RUM",
-      "result": "fail",
+      "result": "pass",
       "detail": {
         "span_problems": [],
         "metrics_resource_missing": {
@@ -263,8 +320,8 @@
           "hello-worker": [],
           "hello-dbadapter-postgresql": []
         },
-        "rum_tags_ok": false,
-        "workflow_metric_points": 3,
+        "rum_tags_ok": true,
+        "workflow_metric_points": 2,
         "order_id_in_metric_attributes": []
       },
       "evidence": "tags.json"
@@ -297,7 +354,7 @@
           503,
           503
         ],
-        "recovered_after_s": 33.7,
+        "recovered_after_s": 33.6,
         "fault_trace_spans": 7,
         "fault_trace_logs": 8
       },
@@ -310,11 +367,11 @@
       "detail": {
         "first": {
           "status": 202,
-          "order_id": "4ac4231b-0655-471b-8ded-a022a644a5ce"
+          "order_id": "dfa2458b-dad7-46e1-b902-8fea9e674077"
         },
         "replay": {
           "status": 202,
-          "order_id": "4ac4231b-0655-471b-8ded-a022a644a5ce",
+          "order_id": "dfa2458b-dad7-46e1-b902-8fea9e674077",
           "replayed_header": {
             "Idempotent-Replayed": "true"
           }
@@ -327,7 +384,7 @@
             "status": 409,
             "detail": "The Idempotency-Key was already used with a different request body.",
             "instance": "/orders",
-            "trace_id": "704bf1a779573dbff2d32b256582386f"
+            "trace_id": "7068e880d27d61a1c5e7d72e479c814c"
           }
         },
         "orders_with_customer_ref": 1
@@ -340,19 +397,18 @@
       "result": "pass",
       "detail": {
         "other_requests_by_path": {
-          "/api/beta/sketches": 93,
-          "/api/v2/series": 173,
-          "/api/v0.2/traces": 79,
-          "/api/v0.2/stats": 40,
-          "/api/v2/rum": 1
+          "/api/v2/series": 31,
+          "/api/v0.2/traces": 13,
+          "/api/beta/sketches": 17,
+          "/api/v0.2/stats": 7,
+          "/api/v2/rum": 2
         },
-        "gateway_otlp_log_records_accepted_then_dropped_by_nop": 2167.0
+        "gateway_otlp_log_records_accepted_then_dropped_by_nop": 391.0
       },
       "evidence": "intake-requests.json"
     }
   ],
   "totals": {
-    "pass": 10,
-    "fail": 1
+    "pass": 11
   }
 }

@@ -32,7 +32,7 @@ Locally verified: SASL PLAIN with `$ConnectionString` against Apache Kafka 4.1 (
 ## Inputs (abridged)
 `name_prefix`, `names`, `resource_group {name,id}`, `location`, `tags`, `datadog {site, api_key_secret_id
 (versionless), env, extra_tags}`, `collector_identity {id, principal_id, client_id}`, `key_vault {id,
-grant_secrets_user}`, `event_hub {...}`, `container_apps {environment_id, workload_profile_name,
+grant_secrets_user}`, `event_hub {..., listen_secret_version (write-only `value_wo_version`; increment to rotate)}`, `container_apps {environment_id, workload_profile_name,
 external_ingress=false}`, `aggregator {...}`, `gateway {distribution, sampling, sampling_percentage, otlp_logs,
 auth, replicas}`, `sidecar_mode`, `aca_console_allow`, `images`.
 

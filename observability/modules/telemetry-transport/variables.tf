@@ -100,6 +100,9 @@ variable "event_hub" {
     # where the module stores the generated listen connection string (mode = create)
     listen_secret_key_vault_id = optional(string)
     listen_secret_name         = optional(string, "eventhub-fluentbit-listen")
+    # value_wo_version of the write-only listen secret: increment to re-write the Key Vault secret after
+    # regenerating the authorization rule keys (runbook docs/runbooks/secret-rotation.md in the lab).
+    listen_secret_version = optional(number, 1)
     private_endpoint = optional(object({
       subnet_id           = string
       private_dns_zone_id = string

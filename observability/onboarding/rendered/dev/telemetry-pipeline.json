@@ -24,7 +24,7 @@
       "manifest"
     ],
     "manifest": "dev/telemetry-pipeline.yaml",
-    "sha256": "df6cf414b7c63b4b28bcbb1138aa2bd065b7c2efac1fc4acf4a0d0d7d8a4b00b"
+    "sha256": "47981f6af84e03f1ae77fcc92023d0ef03d80704b42f5c043f353fdeee677433"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -46,7 +46,7 @@
     "languages": [],
     "owner": "observability@example.com",
     "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md",
     "team": "observability",
     "tier": "critical"
   },
@@ -54,7 +54,7 @@
     "eventhub.throttled@log-export": {
       "evaluation_delay": 900,
       "key": "eventhub.throttled@log-export",
-      "message": "{{#is_alert}}**WARNING**: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).{{/is_alert}}\n{{#is_warning}}**WARNING**: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Increase throughput units / enable auto-inflate.\n2. Check the Fluent Bit kafka input lag on the telemetry pipeline dashboard.\n\nRunbook: https://runbooks.example.com/enterprise-hello/telemetry-pipeline#eventhub-throttled",
+      "message": "{{#is_alert}}**WARNING**: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).{{/is_alert}}\n{{#is_warning}}**WARNING**: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Increase throughput units / enable auto-inflate.\n2. Check the Fluent Bit kafka input lag on the telemetry pipeline dashboard.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#eventhub-throttled",
       "name": "[dev] telemetry-pipeline Event Hubs [[resource.name]] throttled requests",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -72,7 +72,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "log-export",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline#eventhub-throttled",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#eventhub-throttled",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -93,7 +93,7 @@
     "pipeline.canary_logs_missing": {
       "evaluation_delay": null,
       "key": "pipeline.canary_logs_missing",
-      "message": "{{#is_alert}}**CRITICAL**: The heartbeat record emitted every minute by Fluent Bit did not arrive. Application \"no data\" alerts during this window are pipeline failures, not idleness.{{/is_alert}}\n{{#is_warning}}**WARNING**: The heartbeat record emitted every minute by Fluent Bit did not arrive. Application \"no data\" alerts during this window are pipeline failures, not idleness.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Fluent Bit health: GET http://<fluent-bit>:2020/api/v2/health on the aggregator / DaemonSet / sidecars.\n2. Check fluentbit_output_errors_total and retries below; 403 from Datadog = wrong API key or site.\n3. Check egress (NAT/firewall) to the Datadog logs intake for the configured site.\n\nRunbook: https://runbooks.example.com/enterprise-hello/telemetry-pipeline#pipeline-canary",
+      "message": "{{#is_alert}}**CRITICAL**: The heartbeat record emitted every minute by Fluent Bit did not arrive. Application \"no data\" alerts during this window are pipeline failures, not idleness.{{/is_alert}}\n{{#is_warning}}**WARNING**: The heartbeat record emitted every minute by Fluent Bit did not arrive. Application \"no data\" alerts during this window are pipeline failures, not idleness.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Fluent Bit health: GET http://<fluent-bit>:2020/api/v2/health on the aggregator / DaemonSet / sidecars.\n2. Check fluentbit_output_errors_total and retries below; 403 from Datadog = wrong API key or site.\n3. Check egress (NAT/firewall) to the Datadog logs intake for the configured site.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#pipeline-canary",
       "name": "[dev] telemetry pipeline canary logs missing",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -112,7 +112,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline#pipeline-canary",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#pipeline-canary",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -133,7 +133,7 @@
     "pipeline.fluentbit_dropped": {
       "evaluation_delay": null,
       "key": "pipeline.fluentbit_dropped",
-      "message": "{{#is_alert}}**CRITICAL**: Log records were lost after exhausting retries.{{/is_alert}}\n{{#is_warning}}**WARNING**: Log records were lost after exhausting retries.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Check storage.total_limit_size / filesystem buffering and Datadog intake reachability.\n\nRunbook: https://runbooks.example.com/enterprise-hello/telemetry-pipeline#fluentbit-dropped",
+      "message": "{{#is_alert}}**CRITICAL**: Log records were lost after exhausting retries.{{/is_alert}}\n{{#is_warning}}**WARNING**: Log records were lost after exhausting retries.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Check storage.total_limit_size / filesystem buffering and Datadog intake reachability.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#fluentbit-dropped",
       "name": "[dev] Fluent Bit dropped or retry-exhausted records",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -152,7 +152,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline#fluentbit-dropped",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#fluentbit-dropped",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -173,7 +173,7 @@
     "pipeline.fluentbit_not_reporting": {
       "evaluation_delay": null,
       "key": "pipeline.fluentbit_not_reporting",
-      "message": "{{#is_alert}}**CRITICAL**: No Fluent Bit metrics arrive (Fluent Bit down, or the gateway stopped scraping it).{{/is_alert}}\n{{#is_warning}}**WARNING**: No Fluent Bit metrics arrive (Fluent Bit down, or the gateway stopped scraping it).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Check the OTel gateway prometheus receiver target list and Fluent Bit HTTP server (port 2020).\n\nRunbook: https://runbooks.example.com/enterprise-hello/telemetry-pipeline#fluentbit-not-reporting",
+      "message": "{{#is_alert}}**CRITICAL**: No Fluent Bit metrics arrive (Fluent Bit down, or the gateway stopped scraping it).{{/is_alert}}\n{{#is_warning}}**WARNING**: No Fluent Bit metrics arrive (Fluent Bit down, or the gateway stopped scraping it).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Check the OTel gateway prometheus receiver target list and Fluent Bit HTTP server (port 2020).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#fluentbit-not-reporting",
       "name": "[dev] Fluent Bit metrics not reporting",
       "new_group_delay": 60,
       "no_data_timeframe": 20,
@@ -192,7 +192,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline#fluentbit-not-reporting",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#fluentbit-not-reporting",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -213,7 +213,7 @@
     "pipeline.fluentbit_output_errors": {
       "evaluation_delay": null,
       "key": "pipeline.fluentbit_output_errors",
-      "message": "{{#is_alert}}**WARNING**: Fluent Bit outputs return errors (records are retried).{{/is_alert}}\n{{#is_warning}}**WARNING**: Fluent Bit outputs return errors (records are retried).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. kubectl logs / container logs of Fluent Bit; look for \"[output:datadog\" or \"[output:http\" errors.\n\nRunbook: https://runbooks.example.com/enterprise-hello/telemetry-pipeline#fluentbit-errors",
+      "message": "{{#is_alert}}**WARNING**: Fluent Bit outputs return errors (records are retried).{{/is_alert}}\n{{#is_warning}}**WARNING**: Fluent Bit outputs return errors (records are retried).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. kubectl logs / container logs of Fluent Bit; look for \"[output:datadog\" or \"[output:http\" errors.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#fluentbit-errors",
       "name": "[dev] Fluent Bit output errors",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -231,7 +231,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline#fluentbit-errors",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#fluentbit-errors",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -252,7 +252,7 @@
     "pipeline.otel_export_failures": {
       "evaluation_delay": null,
       "key": "pipeline.otel_export_failures",
-      "message": "{{#is_alert}}**CRITICAL**: The collector fails to export telemetry to Datadog.{{/is_alert}}\n{{#is_warning}}**WARNING**: The collector fails to export telemetry to Datadog.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Collector logs: look for 403 (API key), 413 (payload), DNS/TLS errors.\n2. otelcol_exporter_queue_size close to otelcol_exporter_queue_capacity = backpressure.\n\nRunbook: https://runbooks.example.com/enterprise-hello/telemetry-pipeline#otel-export",
+      "message": "{{#is_alert}}**CRITICAL**: The collector fails to export telemetry to Datadog.{{/is_alert}}\n{{#is_warning}}**WARNING**: The collector fails to export telemetry to Datadog.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Collector logs: look for 403 (API key), 413 (payload), DNS/TLS errors.\n2. otelcol_exporter_queue_size close to otelcol_exporter_queue_capacity = backpressure.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#otel-export",
       "name": "[dev] OTel gateway export failures",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -271,7 +271,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline#otel-export",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#otel-export",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -292,7 +292,7 @@
     "pipeline.otel_not_reporting": {
       "evaluation_delay": null,
       "key": "pipeline.otel_not_reporting",
-      "message": "{{#is_alert}}**CRITICAL**: The collector stopped reporting its own metrics (collector down or metrics path broken).{{/is_alert}}\n{{#is_warning}}**WARNING**: The collector stopped reporting its own metrics (collector down or metrics path broken).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Check the gateway replicas (Container App / Deployment) and its internal telemetry endpoint :8888.\n\nRunbook: https://runbooks.example.com/enterprise-hello/telemetry-pipeline#otel-not-reporting",
+      "message": "{{#is_alert}}**CRITICAL**: The collector stopped reporting its own metrics (collector down or metrics path broken).{{/is_alert}}\n{{#is_warning}}**WARNING**: The collector stopped reporting its own metrics (collector down or metrics path broken).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Check the gateway replicas (Container App / Deployment) and its internal telemetry endpoint :8888.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#otel-not-reporting",
       "name": "[dev] OTel gateway self-metrics missing",
       "new_group_delay": 60,
       "no_data_timeframe": 20,
@@ -311,7 +311,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline#otel-not-reporting",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#otel-not-reporting",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -332,7 +332,7 @@
     "pipeline.otel_refused": {
       "evaluation_delay": null,
       "key": "pipeline.otel_refused",
-      "message": "{{#is_alert}}**WARNING**: Receivers refuse data (memory_limiter engaged or invalid payloads).{{/is_alert}}\n{{#is_warning}}**WARNING**: Receivers refuse data (memory_limiter engaged or invalid payloads).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Check otelcol_process_memory_rss against the memory_limiter settings; scale the gateway.\n\nRunbook: https://runbooks.example.com/enterprise-hello/telemetry-pipeline#otel-refused",
+      "message": "{{#is_alert}}**WARNING**: Receivers refuse data (memory_limiter engaged or invalid payloads).{{/is_alert}}\n{{#is_warning}}**WARNING**: Receivers refuse data (memory_limiter engaged or invalid payloads).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\n\nTroubleshooting:\n1. Check otelcol_process_memory_rss against the memory_limiter settings; scale the gateway.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#otel-refused",
       "name": "[dev] OTel gateway refusing data",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -350,7 +350,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/telemetry-pipeline#otel-refused",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#otel-refused",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",

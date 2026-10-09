@@ -17,8 +17,8 @@ variable "settings" {
       messages_per_job = optional(number, 50)
       polling_seconds  = optional(number, 30)
     }), {})
-    durable_api_url = optional(string) # deploy-durable function app URL (not a consumed contract)
-    orders_api_url  = optional(string)
+    durable_api_url = optional(string) # override; default https://<deploy-durable function_app.hostname>
+    orders_api_url  = optional(string) # override; default deploy-core-aca/aks apps["hello-orders-api"].url
     adapters = optional(list(object({
       family = string
       url    = string

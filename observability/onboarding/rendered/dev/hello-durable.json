@@ -26,7 +26,7 @@
       "manifest"
     ],
     "manifest": "dev/hello-durable.yaml",
-    "sha256": "03ff9c3bdbd718bded4e0fbf3e7fe7e83189975ba0d9f3da7277b8d62309300e"
+    "sha256": "a5ce1c04e601cda4ff4065206087fd7d1ab6b8da702f177ae4ed2c10918ea730"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -55,7 +55,7 @@
     ],
     "owner": "fulfillment@example.com",
     "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md",
     "team": "fulfillment",
     "tier": "critical"
   },
@@ -63,7 +63,7 @@
     "apm.error_rate": {
       "evaluation_delay": null,
       "key": "apm.error_rate",
-      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. APM -> Service hello-durable -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#error-rate",
+      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. APM -> Service hello-durable -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#error-rate",
       "name": "[dev] hello-durable error rate above 5%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -82,7 +82,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#error-rate",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#error-rate",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -104,7 +104,7 @@
     "apm.latency_p95": {
       "evaluation_delay": null,
       "key": "apm.latency_p95",
-      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#latency",
+      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#latency",
       "name": "[dev] hello-durable p95 latency above 1.5s",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -122,7 +122,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#latency",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#latency",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -144,7 +144,7 @@
     "func.http_5xx_ratio@app": {
       "evaluation_delay": 900,
       "key": "func.http_5xx_ratio@app",
-      "message": "{{#is_alert}}**WARNING**: HTTP-triggered functions return server errors.{{/is_alert}}\n{{#is_warning}}**WARNING**: HTTP-triggered functions return server errors.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.\n2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#functions-5xx",
+      "message": "{{#is_alert}}**WARNING**: HTTP-triggered functions return server errors.{{/is_alert}}\n{{#is_warning}}**WARNING**: HTTP-triggered functions return server errors.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.\n2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#functions-5xx",
       "name": "[dev] hello-durable Function App [[resource.name]] 5xx ratio above 5%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -162,7 +162,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "app",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#functions-5xx",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#functions-5xx",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -183,7 +183,7 @@
     "logs.error_spike": {
       "evaluation_delay": null,
       "key": "logs.error_spike",
-      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. Open Logs for service:hello-durable env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-durable in the last hour (a new version is the usual cause).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#error-logs",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. Open Logs for service:hello-durable env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-durable in the last hour (a new version is the usual cause).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#error-logs",
       "name": "[dev] hello-durable error log volume above 50 in 10m",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -201,7 +201,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#error-logs",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#error-logs",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -222,7 +222,7 @@
     "queue.backlog@servicebus": {
       "evaluation_delay": 900,
       "key": "queue.backlog@servicebus",
-      "message": "{{#is_alert}}**WARNING**: Active (deliverable) messages are accumulating in a topic subscription.{{/is_alert}}\n{{#is_warning}}**WARNING**: Active (deliverable) messages are accumulating in a topic subscription.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Is the consumer running? Check its APM consumer spans and replica/instance count.\n2. Compare incoming_messages vs outgoing_messages on the namespace.\n3. Check consumer errors and abandon/dead-letter rate.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#queue-backlog",
+      "message": "{{#is_alert}}**WARNING**: Active (deliverable) messages are accumulating in a topic subscription.{{/is_alert}}\n{{#is_warning}}**WARNING**: Active (deliverable) messages are accumulating in a topic subscription.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Is the consumer running? Check its APM consumer spans and replica/instance count.\n2. Compare incoming_messages vs outgoing_messages on the namespace.\n3. Check consumer errors and abandon/dead-letter rate.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-backlog",
       "name": "[dev] hello-durable Service Bus [[resource.name]] backlog above 200 on {{entityname.name}}",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -240,7 +240,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "servicebus",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#queue-backlog",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-backlog",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -261,7 +261,7 @@
     "queue.dead_letters_queue@servicebus": {
       "evaluation_delay": 900,
       "key": "queue.dead_letters_queue@servicebus",
-      "message": "{{#is_alert}}**WARNING**: Messages were dead-lettered in a queue.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages were dead-lettered in a queue.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Peek the DLQ and read DeadLetterReason.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#queue-dead-letter",
+      "message": "{{#is_alert}}**WARNING**: Messages were dead-lettered in a queue.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages were dead-lettered in a queue.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Peek the DLQ and read DeadLetterReason.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-dead-letter",
       "name": "[dev] hello-durable Service Bus [[resource.name]] dead-lettered messages in queue {{entityname.name}}",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -279,7 +279,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "servicebus",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#queue-dead-letter",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-dead-letter",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -300,7 +300,7 @@
     "queue.dead_letters_subscription@servicebus": {
       "evaluation_delay": 900,
       "key": "queue.dead_letters_subscription@servicebus",
-      "message": "{{#is_alert}}**WARNING**: Messages were dead-lettered (poison message or MaxDeliveryCount exceeded).{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages were dead-lettered (poison message or MaxDeliveryCount exceeded).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Peek the DLQ (Service Bus Explorer) and read DeadLetterReason / DeadLetterErrorDescription.\n2. Find the consumer span via the traceparent application property of the message.\n3. Fix and resubmit, or purge with change approval.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#queue-dead-letter",
+      "message": "{{#is_alert}}**WARNING**: Messages were dead-lettered (poison message or MaxDeliveryCount exceeded).{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages were dead-lettered (poison message or MaxDeliveryCount exceeded).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Peek the DLQ (Service Bus Explorer) and read DeadLetterReason / DeadLetterErrorDescription.\n2. Find the consumer span via the traceparent application property of the message.\n3. Fix and resubmit, or purge with change approval.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-dead-letter",
       "name": "[dev] hello-durable Service Bus [[resource.name]] dead-lettered messages on {{entityname.name}}",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -318,7 +318,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "servicebus",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#queue-dead-letter",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-dead-letter",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -339,7 +339,7 @@
     "queue.processing_lag@servicebus": {
       "evaluation_delay": 900,
       "key": "queue.processing_lag@servicebus",
-      "message": "{{#is_alert}}**CRITICAL**: Consumers are not keeping up; messages have waited for at least 30 minutes.{{/is_alert}}\n{{#is_warning}}**WARNING**: Consumers are not keeping up; messages have waited for at least 30 minutes.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Scale out the consumer (KEDA / Functions scale) or fix the failing dependency.\n2. Check for lock-lost errors (processing longer than the lock duration).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#queue-lag",
+      "message": "{{#is_alert}}**CRITICAL**: Consumers are not keeping up; messages have waited for at least 30 minutes.{{/is_alert}}\n{{#is_warning}}**WARNING**: Consumers are not keeping up; messages have waited for at least 30 minutes.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Scale out the consumer (KEDA / Functions scale) or fix the failing dependency.\n2. Check for lock-lost errors (processing longer than the lock duration).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-lag",
       "name": "[dev] hello-durable Service Bus [[resource.name]] backlog not draining on {{entityname.name}}",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -358,7 +358,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "servicebus",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#queue-lag",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-lag",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -379,7 +379,7 @@
     "queue.server_errors@servicebus": {
       "evaluation_delay": 900,
       "key": "queue.server_errors@servicebus",
-      "message": "{{#is_alert}}**WARNING**: The namespace returns server errors or throttles requests.{{/is_alert}}\n{{#is_warning}}**WARNING**: The namespace returns server errors or throttles requests.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Standard tier throttling: check operation rate; consider Premium.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#queue-errors",
+      "message": "{{#is_alert}}**WARNING**: The namespace returns server errors or throttles requests.{{/is_alert}}\n{{#is_warning}}**WARNING**: The namespace returns server errors or throttles requests.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Standard tier throttling: check operation rate; consider Premium.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-errors",
       "name": "[dev] hello-durable Service Bus [[resource.name]] server errors / throttling",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -397,7 +397,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "servicebus",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#queue-errors",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#queue-errors",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -418,7 +418,7 @@
     "sql.connection_failures@fulfillment-db": {
       "evaluation_delay": 900,
       "key": "sql.connection_failures@fulfillment-db",
-      "message": "{{#is_alert}}**CRITICAL**: Clients fail to connect (firewall/private endpoint, Entra auth, or exhausted workers).{{/is_alert}}\n{{#is_warning}}**WARNING**: Clients fail to connect (firewall/private endpoint, Entra auth, or exhausted workers).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check the app logs for SqlException numbers (18456 login failed, 40613 unavailable, 10928 limits).\n2. Verify the managed identity still has a database user (CREATE USER ... FROM EXTERNAL PROVIDER).\n3. Verify private endpoint DNS resolves to a private IP from the workload subnet.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#sql-connections",
+      "message": "{{#is_alert}}**CRITICAL**: Clients fail to connect (firewall/private endpoint, Entra auth, or exhausted workers).{{/is_alert}}\n{{#is_warning}}**WARNING**: Clients fail to connect (firewall/private endpoint, Entra auth, or exhausted workers).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check the app logs for SqlException numbers (18456 login failed, 40613 unavailable, 10928 limits).\n2. Verify the managed identity still has a database user (CREATE USER ... FROM EXTERNAL PROVIDER).\n3. Verify private endpoint DNS resolves to a private IP from the workload subnet.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#sql-connections",
       "name": "[dev] hello-durable SQL database [[resource.name]] connection failures",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -437,7 +437,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "fulfillment-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#sql-connections",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#sql-connections",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -458,7 +458,7 @@
     "sql.cpu@fulfillment-db": {
       "evaluation_delay": 900,
       "key": "sql.cpu@fulfillment-db",
-      "message": "{{#is_alert}}**WARNING**: Database CPU is saturated (vCore/serverless); queries will queue.{{/is_alert}}\n{{#is_warning}}**WARNING**: Database CPU is saturated (vCore/serverless); queries will queue.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Open Database Monitoring -> Query metrics for this database; sort by CPU.\n2. Check azure.sql_servers_databases.workers_percent and sessions_percent.\n3. Serverless: confirm max vCores; DTU SKU: see the DTU monitor.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#sql-cpu",
+      "message": "{{#is_alert}}**WARNING**: Database CPU is saturated (vCore/serverless); queries will queue.{{/is_alert}}\n{{#is_warning}}**WARNING**: Database CPU is saturated (vCore/serverless); queries will queue.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Open Database Monitoring -> Query metrics for this database; sort by CPU.\n2. Check azure.sql_servers_databases.workers_percent and sessions_percent.\n3. Serverless: confirm max vCores; DTU SKU: see the DTU monitor.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#sql-cpu",
       "name": "[dev] hello-durable SQL database [[resource.name]] CPU above 90%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -476,7 +476,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "fulfillment-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#sql-cpu",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#sql-cpu",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -498,7 +498,7 @@
     "sql.deadlocks@fulfillment-db": {
       "evaluation_delay": 900,
       "key": "sql.deadlocks@fulfillment-db",
-      "message": "{{#is_alert}}**WARNING**: Deadlocks were detected.{{/is_alert}}\n{{#is_warning}}**WARNING**: Deadlocks were detected.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Read the deadlock graph from the SQL diagnostic logs (Deadlocks category) or DBM samples.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#sql-deadlocks",
+      "message": "{{#is_alert}}**WARNING**: Deadlocks were detected.{{/is_alert}}\n{{#is_warning}}**WARNING**: Deadlocks were detected.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Read the deadlock graph from the SQL diagnostic logs (Deadlocks category) or DBM samples.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#sql-deadlocks",
       "name": "[dev] hello-durable SQL database [[resource.name]] deadlocks",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -516,7 +516,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "fulfillment-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#sql-deadlocks",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#sql-deadlocks",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -537,7 +537,7 @@
     "sql.storage@fulfillment-db": {
       "evaluation_delay": 900,
       "key": "sql.storage@fulfillment-db",
-      "message": "{{#is_alert}}**WARNING**: The database is close to its max size.{{/is_alert}}\n{{#is_warning}}**WARNING**: The database is close to its max size.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check retention jobs (history purge) and raise max size if growth is expected.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#sql-storage",
+      "message": "{{#is_alert}}**WARNING**: The database is close to its max size.{{/is_alert}}\n{{#is_warning}}**WARNING**: The database is close to its max size.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check retention jobs (history purge) and raise max size if growth is expected.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#sql-storage",
       "name": "[dev] hello-durable SQL database [[resource.name]] storage above 90%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -555,7 +555,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "fulfillment-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#sql-storage",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#sql-storage",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -576,7 +576,7 @@
     "workflow.duration_p95": {
       "evaluation_delay": null,
       "key": "workflow.duration_p95",
-      "message": "{{#is_alert}}**WARNING**: Orchestrations take longer than expected (retries, durable timers, slow partner API).{{/is_alert}}\n{{#is_warning}}**WARNING**: Orchestrations take longer than expected (retries, durable timers, slow partner API).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. Check partner-sim latency and the retry policy (3 attempts, exponential backoff).\n2. Check the Durable task hub storage throttling.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#workflow-duration",
+      "message": "{{#is_alert}}**WARNING**: Orchestrations take longer than expected (retries, durable timers, slow partner API).{{/is_alert}}\n{{#is_warning}}**WARNING**: Orchestrations take longer than expected (retries, durable timers, slow partner API).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. Check partner-sim latency and the retry policy (3 attempts, exponential backoff).\n2. Check the Durable task hub storage throttling.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#workflow-duration",
       "name": "[dev] hello-durable workflow {{workflow.name}} p95 duration above 60000ms",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -594,7 +594,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#workflow-duration",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#workflow-duration",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -615,7 +615,7 @@
     "workflow.failure_rate": {
       "evaluation_delay": null,
       "key": "workflow.failure_rate",
-      "message": "{{#is_alert}}**CRITICAL**: Orchestrations end in the failed state (compensation ran).{{/is_alert}}\n{{#is_warning}}**WARNING**: Orchestrations end in the failed state (compensation ran).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. GET /api/workflows/{instanceId} for a failed instance; read the failure details and history.\n2. Check the activity that failed (partner API, SQL fulfillment, inventory reservation) in APM.\n3. Replay-safe logs: filter logs by workflow instance id.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#workflow-failures",
+      "message": "{{#is_alert}}**CRITICAL**: Orchestrations end in the failed state (compensation ran).{{/is_alert}}\n{{#is_warning}}**WARNING**: Orchestrations end in the failed state (compensation ran).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: critical\n\nTroubleshooting:\n1. GET /api/workflows/{instanceId} for a failed instance; read the failure details and history.\n2. Check the activity that failed (partner API, SQL fulfillment, inventory reservation) in APM.\n3. Replay-safe logs: filter logs by workflow instance id.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#workflow-failures",
       "name": "[dev] hello-durable workflow {{workflow.name}} failure rate above 5%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -634,7 +634,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#workflow-failures",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#workflow-failures",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -706,7 +706,7 @@
       "burn_rate_alerts": [
         {
           "long_window": "1h",
-          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#slo-burn-rate",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#slo-burn-rate",
           "name": "[dev] hello-durable availability SLO burn rate critical (1h/5m)",
           "notify": {
             "alert": [
@@ -714,28 +714,28 @@
               "oncall"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#slo-burn-rate",
           "severity": "critical",
           "short_window": "5m",
           "threshold": 14.4
         },
         {
           "long_window": "6h",
-          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-durable#slo-burn-rate",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-durable` | env: `dev` | team: `fulfillment`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#slo-burn-rate",
           "name": "[dev] hello-durable availability SLO burn rate warning (6h/30m)",
           "notify": {
             "alert": [
               "team-fulfillment"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-durable#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#slo-burn-rate",
           "severity": "warning",
           "short_window": "30m",
           "threshold": 6.0
         }
       ],
       "denominator": "sum:trace.http.server.request.hits{service:hello-durable,env:dev}.as_count()",
-      "description": "availability SLO for hello-durable (dev). Runbook: https://runbooks.example.com/enterprise-hello/hello-durable#slo-availability",
+      "description": "availability SLO for hello-durable (dev). Runbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-durable.md#slo-availability",
       "display_name": "[dev] hello-durable availability",
       "name": "availability",
       "numerator": "sum:trace.http.server.request.hits{service:hello-durable,env:dev}.as_count() - sum:trace.http.server.request.errors{service:hello-durable,env:dev}.as_count()",

@@ -245,7 +245,7 @@ if has_step image && [[ ",$SERVICES," == *",frontend,"* ]]; then
   log "frontend: image"
   image="${IMAGE_PREFIX}hello-frontend:$VERSION"
   # shellcheck disable=SC2086
-  if docker build ${DOCKER_BUILD_ARGS:-} --build-arg VERSION="$VERSION" -f "$APPS/services/frontend/Dockerfile" -t "$image" "$APPS"; then
+  if docker build ${DOCKER_BUILD_ARGS:-} --build-arg VERSION="$VERSION" --build-arg GIT_COMMIT="$GIT_COMMIT" -f "$APPS/services/frontend/Dockerfile" -t "$image" "$APPS"; then
     printf '{"image": "%s", "id": "%s", "version": "%s"}\n' "$image" "$(docker image inspect "$image" --format '{{.Id}}')" "$VERSION" > "$ARTIFACTS_DIR/frontend/image.json"
   else
     FAILED+=("frontend:image")

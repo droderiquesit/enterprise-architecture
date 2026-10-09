@@ -12,7 +12,6 @@ metadata:
   tier: low
   env: dev
   repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
-  runbook_url: https://runbooks.example.com/enterprise-hello/hello-dbadapter-adls
   description: Database adapter for family adls.
   languages:
   - python

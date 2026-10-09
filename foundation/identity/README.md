@@ -25,9 +25,13 @@ re-create of the same environment within 7 days fails. Either wait, use a differ
 
 | Key | Runtime secrets (Key Vault Secrets User) |
 |---|---|
-| hello-bff, hello-orders-api, hello-inventory-api, hello-catalog-api, hello-dbadapter, hello-durable, hello-functions, hello-partner-sim, hello-traffic | `fault-token` |
-| hello-worker, hello-jobs, hello-frontend | — |
-| obs-collector (Fluent Bit / OTel gateway) | `datadog-api-key` |
+| hello-bff, hello-orders-api, hello-catalog-api, hello-functions | `fault-token`, `datadog-api-key` (Fluent Bit sidecar on Container Apps, `sidecar_mode = datadog`) |
+| hello-inventory-api, hello-dbadapter | `fault-token`, `datadog-api-key` (ACA sidecar and the VM/VMSS Fluent Bit installer of obs-hosts, which reads the key with the host identity); hello-dbadapter also the adapter secrets |
+| hello-durable, hello-partner-sim, hello-traffic | `fault-token` (partner-sim's ACI sidecar key is resolved by the pipeline at plan time) |
+| hello-worker | `datadog-api-key` (VM/VMSS Fluent Bit installer, obs-hosts) |
+| hello-jobs | `datadog-api-key` (Batch job preparation task installs Fluent Bit with the pool identity, ADR-0001 §13) |
+| hello-frontend | — |
+| obs-collector (Fluent Bit aggregator / OTel gateway) | `datadog-api-key`, `fluentbit-shared-key` (aggregator forward input) |
 | obs-dbm (Datadog Agent DBM) | `datadog-api-key`, `dbm-<engine>-password` |
 | aks-control-plane, aks-kubelet, deploy-agent | — |
 
@@ -46,6 +50,7 @@ assignment per identity × secret (true least privilege; the vault-scoped ones a
 | `datadog-app-key` | pipeline only (Datadog Terraform provider) | grant with `pipeline_reader_principal_ids` |
 | `fault-token` | HTTP services + traffic generator | `X-Fault-Token` for `POST /admin/faults` |
 | `datadog-client-token` | deploy pipeline injects into the frontend build | browser-safe RUM token, still stored centrally |
+| `fluentbit-shared-key` | obs-collector (aggregator forward input); app identities only when `sidecar_mode = forward` | Fluent Bit forward protocol shared key; `set-secrets.sh <vault> generate fluentbit-shared-key` |
 | `dbm-mysql-password` | obs-dbm | MySQL Flexible: the Datadog DBM check has no Entra managed-identity auth → SQL auth |
 | `dbm-sqlvm-password` | obs-dbm | SQL Server on VM: no Entra-joined SQL by default → SQL login |
 
@@ -55,7 +60,7 @@ DBM authentication per engine (Datadog [managed authentication guide](https://do
 **MySQL Flexible** and **SQL Server on VM** → SQL auth passwords above (`settings.dbm_sql_auth_engines`).
 
 Set and rotate values with [`scripts/set-secrets.sh`](scripts/set-secrets.sh) from a host on the VNet (the vault has no
-public access): `set-secrets.sh <vault> set datadog-api-key`, `... generate fault-token`, `... rotate dbm-mysql-password`
+public access): `set-secrets.sh <vault> set datadog-api-key`, `... generate fault-token`, `... generate fluentbit-shared-key`, `... rotate dbm-mysql-password`
 (rotation disables old versions; consumers use versionless IDs and pick up the new version on their refresh cycle).
 The operator needs Key Vault Secrets Officer (`secret_officer_principal_ids`).
 

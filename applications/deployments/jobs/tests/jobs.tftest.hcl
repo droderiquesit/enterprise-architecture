@@ -200,6 +200,12 @@ variables {
       sidecar_mode           = "datadog"
       logs_intake_host       = "http-intake.logs.datadoghq.com"
     }
+    batch_log_setup = {
+      script_gzip_base64 = "H4sIAAAAAAAA/0tMSlYoyS9JLCpRSM7PS8ss4uUCAA8i5CsRAAAA"
+      script_sha256      = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      fluent_bit_version = "5.1.3"
+      log_paths_template = "$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt"
+    }
     env = {
       common = {
         DD_SITE                    = "datadoghq.com"
@@ -366,6 +372,8 @@ run "traffic_and_batch" {
   variables {
     deploy_frontend = { url = "https://gentle-sky-0123456.azurestaticapps.net" }
     deploy_core_aca = { public_api = { origin = "https://bff.example" }, apps = { "hello-catalog-api" = { url = "https://catalog.internal.example" } } }
+    deploy_core_aks = { apps = { "hello-orders-api" = { url = "http://hello-orders-api.hello.svc.cluster.local" } } }
+    deploy_durable  = { function_app = { hostname = "eh-func-durable-dev.azurewebsites.net" } }
     platform_batch = {
       account_name     = "ehbabatchdevabcde"
       account_endpoint = "https://ehbabatchdevabcde.swedencentral.batch.azure.com"
@@ -379,7 +387,15 @@ run "traffic_and_batch" {
     error_message = "Traffic job bounded by duration + margin."
   }
   assert {
+    condition     = contains([for e in azurerm_container_app_job.this["reconcile"].template[0].container[0].env : "${e.name}=${e.value}"], "DURABLE_API_URL=https://eh-func-durable-dev.azurewebsites.net") && !contains([for e in azurerm_container_app_job.this["seed"].template[0].container[0].env : e.name], "ORDERS_API_URL")
+    error_message = "DURABLE_API_URL derived from deploy-durable; cluster-local AKS URLs are not used by ACA jobs."
+  }
+  assert {
     condition     = output.contract.batch.pool_id == "hello" && output.contract.deploy_steps[0].kind == "batch-job"
     error_message = "Batch submission described in the contract (pipeline script)."
+  }
+  assert {
+    condition     = output.contract.batch.job_preparation.script_sha256 == var.obs_telemetry_transport.batch_log_setup.script_sha256 && output.contract.batch.job_preparation.environment["EH_IDENTITY_CLIENT_ID"] == "c" && output.contract.batch.job_preparation.environment["EH_LOG_PATHS"] == "$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt"
+    error_message = "Batch job preparation task carries the observability Fluent Bit setup with the pool identity and the Batch task stdout paths."
   }
 }

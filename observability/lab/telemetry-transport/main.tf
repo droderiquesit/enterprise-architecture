@@ -62,6 +62,7 @@ module "transport" {
     mode                       = var.settings.event_hub_mode
     capacity                   = var.settings.event_hub_capacity
     listen_secret_key_vault_id = var.settings.event_hub_mode == "create" ? var.foundation_identity.key_vault_id : null
+    listen_secret_version      = var.settings.eventhub_secret_version
     private_endpoint = local.use_pe ? {
       subnet_id           = local.pe_subnet
       private_dns_zone_id = local.servicebus_dns

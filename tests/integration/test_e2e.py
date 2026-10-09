@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import run_e2e  # noqa: E402
+import run_e2e
 
 pytestmark = pytest.mark.skipif(os.environ.get("E2E") != "1", reason="local docker e2e run is opt-in: set E2E=1")
 

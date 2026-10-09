@@ -23,6 +23,7 @@
 #   datadog-app-key       Datadog application key (pipeline only, Terraform provider) source: Datadog org settings
 #   datadog-client-token  Browser RUM client token                                    source: Datadog RUM application
 #   fault-token           X-Fault-Token for POST /admin/faults                         source: generate
+#   fluentbit-shared-key  Fluent Bit forward shared key (aggregator / forward sidecars) source: generate
 #   dbm-mysql-password    datadog user password on MySQL Flexible (SQL auth only)      source: generate, then ALTER USER
 #   dbm-sqlvm-password    datadog login password on SQL Server VM (SQL auth only)      source: generate, then ALTER LOGIN
 set -euo pipefail
@@ -73,7 +74,7 @@ case "$CMD" in
     set_value "$NAME" "$(openssl rand -base64 48 | tr -d '\n')" ;;
   rotate)
     [[ -n "$NAME" ]] || usage
-    if [[ "$NAME" == "fault-token" || "$NAME" == dbm-*-password ]]; then
+    if [[ "$NAME" == "fault-token" || "$NAME" == "fluentbit-shared-key" || "$NAME" == dbm-*-password ]]; then
       set_value "$NAME" "$(openssl rand -base64 48 | tr -d '\n/+=' | cut -c1-48)"
       [[ "$NAME" == dbm-*-password ]] && echo "NOW update the database user password to the new value (ALTER USER/LOGIN) before agents restart."
     else

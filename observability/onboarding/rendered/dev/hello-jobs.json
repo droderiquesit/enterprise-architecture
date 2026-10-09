@@ -23,7 +23,7 @@
       "manifest"
     ],
     "manifest": "dev/hello-jobs.yaml",
-    "sha256": "8a7d5e265c87d375a9d2e751362b978be0b1a0c7b35f45e76a95b543f19853df"
+    "sha256": "7e178e32a5c1376e52c3d658d50b7a3f4faba5ccb779c39cdbef939573a4f3b4"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -50,7 +50,7 @@
     ],
     "owner": "fulfillment@example.com",
     "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-jobs",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-jobs.md",
     "team": "fulfillment",
     "tier": "low"
   },
@@ -58,7 +58,7 @@
     "job.errors": {
       "evaluation_delay": null,
       "key": "job.errors",
-      "message": "{{#is_alert}}**WARNING**: The job logged errors in its last run.{{/is_alert}}\n{{#is_warning}}**WARNING**: The job logged errors in its last run.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-jobs` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: low\n\nTroubleshooting:\n1. Open the job logs and the job's root span in APM.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-jobs#job-errors",
+      "message": "{{#is_alert}}**WARNING**: The job logged errors in its last run.{{/is_alert}}\n{{#is_warning}}**WARNING**: The job logged errors in its last run.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-jobs` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: low\n\nTroubleshooting:\n1. Open the job logs and the job's root span in APM.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-jobs.md#job-errors",
       "name": "[dev] hello-jobs job logged errors",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -76,7 +76,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-jobs#job-errors",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-jobs.md#job-errors",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -97,7 +97,7 @@
     "job.missed_run": {
       "evaluation_delay": null,
       "key": "job.missed_run",
-      "message": "{{#is_alert}}**WARNING**: The job did not run (or its logs are not reaching Datadog) within the expected schedule window.{{/is_alert}}\n{{#is_warning}}**WARNING**: The job did not run (or its logs are not reaching Datadog) within the expected schedule window.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-jobs` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: low\n\nTroubleshooting:\n1. az containerapp job execution list -n <job> -g <rg> -o table\n2. If executions succeeded, check the Fluent Bit sidecar of the job (telemetry pipeline dashboard).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-jobs#job-missed",
+      "message": "{{#is_alert}}**WARNING**: The job did not run (or its logs are not reaching Datadog) within the expected schedule window.{{/is_alert}}\n{{#is_warning}}**WARNING**: The job did not run (or its logs are not reaching Datadog) within the expected schedule window.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-jobs` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: low\n\nTroubleshooting:\n1. az containerapp job execution list -n <job> -g <rg> -o table\n2. If executions succeeded, check the Fluent Bit sidecar of the job (telemetry pipeline dashboard).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-jobs.md#job-missed",
       "name": "[dev] hello-jobs job produced no logs in 1h",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -115,7 +115,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-jobs#job-missed",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-jobs.md#job-missed",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",

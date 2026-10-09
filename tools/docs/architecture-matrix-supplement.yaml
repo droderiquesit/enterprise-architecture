@@ -47,7 +47,7 @@ architectures:
     smoke: /api/healthz and /api/version via scripts/smoke.sh (hello-durable has no /readyz)
     source: applications/deployments/durable/README.md
   functions-premium:
-    runtime_config: identity-based host storage, WEBSITE_RUN_FROM_PACKAGE=<package URL> + WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID, ServiceBusConnection__*, AUDIT_STORE
+    runtime_config: identity-based host storage, WEBSITE_RUN_FROM_PACKAGE=<package URL> + WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID, ServiceBusConnection__*, AUDIT_SINK
     rollback: re-apply with the previous svc-functions package
     source: applications/deployments/functions/README.md
   functions-dedicated:

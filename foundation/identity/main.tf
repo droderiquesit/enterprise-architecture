@@ -23,20 +23,22 @@ locals {
   # Workload identity catalogue. `secrets` = Key Vault secrets the identity reads at runtime.
   # Fault injection (ADR §9) is on every HTTP service and the traffic generator (chaos scenarios).
   identity_catalogue = {
-    "hello-bff"           = { purpose = "BFF API (AKS/ACA)", secrets = ["fault-token"] }
-    "hello-orders-api"    = { purpose = "orders API, Azure SQL", secrets = ["fault-token"] }
-    "hello-inventory-api" = { purpose = "inventory API, Cosmos DB NoSQL", secrets = ["fault-token"] }
-    "hello-catalog-api"   = { purpose = "catalog API, PostgreSQL + Managed Redis", secrets = ["fault-token"] }
-    "hello-dbadapter"     = { purpose = "per-family DB adapters", secrets = concat(["fault-token"], local.adapter_secret_names) }
-    "hello-worker"        = { purpose = "notifications worker, Table Storage", secrets = [] }
+    # datadog-api-key: read by the identity's own Fluent Bit (ACA sidecar in sidecar_mode = datadog, the default;
+    # VM/VMSS host installer of obs-hosts; Batch job preparation task of deploy-jobs). See README table.
+    "hello-bff"           = { purpose = "BFF API (AKS/ACA)", secrets = ["fault-token", "datadog-api-key"] }
+    "hello-orders-api"    = { purpose = "orders API, Azure SQL", secrets = ["fault-token", "datadog-api-key"] }
+    "hello-inventory-api" = { purpose = "inventory API, Cosmos DB NoSQL", secrets = ["fault-token", "datadog-api-key"] }
+    "hello-catalog-api"   = { purpose = "catalog API, PostgreSQL + Managed Redis", secrets = ["fault-token", "datadog-api-key"] }
+    "hello-dbadapter"     = { purpose = "per-family DB adapters", secrets = concat(["fault-token", "datadog-api-key"], local.adapter_secret_names) }
+    "hello-worker"        = { purpose = "notifications worker, Table Storage", secrets = ["datadog-api-key"] }
     "hello-durable"       = { purpose = "Durable Functions orchestrations", secrets = ["fault-token"] }
-    "hello-functions"     = { purpose = "audit/event functions", secrets = ["fault-token"] }
-    "hello-jobs"          = { purpose = "ACA jobs / Batch reconciliation", secrets = [] }
+    "hello-functions"     = { purpose = "audit/event functions", secrets = ["fault-token", "datadog-api-key"] }
+    "hello-jobs"          = { purpose = "ACA jobs / Batch reconciliation", secrets = ["datadog-api-key"] }
     "hello-partner-sim"   = { purpose = "simulated partner API (ACI)", secrets = ["fault-token"] }
     "hello-traffic"       = { purpose = "synthetic traffic + chaos scenarios", secrets = ["fault-token"] }
     "hello-logicapps"     = { purpose = "Logic Apps Consumption/Standard workflows (Service Bus, Blob)", secrets = [] }
     "hello-frontend"      = { purpose = "frontend hosting (SWA/nginx); RUM client token is injected at deploy time", secrets = [] }
-    "obs-collector"       = { purpose = "Fluent Bit / OTel gateway", secrets = ["datadog-api-key"] }
+    "obs-collector"       = { purpose = "Fluent Bit / OTel gateway", secrets = ["datadog-api-key", "fluentbit-shared-key"] }
     "obs-dbm"             = { purpose = "Datadog Agent DBM checks", secrets = concat(["datadog-api-key"], local.dbm_secret_names) }
     "aks-control-plane"   = { purpose = "AKS cluster (control plane) identity", secrets = [] }
     "aks-kubelet"         = { purpose = "AKS kubelet identity (AcrPull granted by platform-aks)", secrets = [] }
@@ -56,6 +58,7 @@ locals {
     "datadog-app-key",      # pipeline only (Datadog Terraform provider in observability roots)
     "fault-token",          # X-Fault-Token for POST /admin/faults
     "datadog-client-token", # browser RUM token (browser-safe, still stored centrally and injected at deploy)
+    "fluentbit-shared-key", # Fluent Bit forward protocol shared key (aggregator forward input; sidecar_mode = forward)
   ], local.dbm_secret_names, local.adapter_secret_names)
   pipeline_secrets = ["datadog-api-key", "datadog-app-key", "datadog-client-token", "fault-token"]
 

@@ -19,8 +19,11 @@ locals {
   names           = module.naming.names
   tags            = module.tags.tags
   subscription_id = "/subscriptions/${var.environment.subscription_id}"
-  budget          = var.settings.budget
-  policy          = var.settings.policy
+  budget = merge(var.settings.budget, {
+    amount         = coalesce(var.settings.budget.amount, try(var.budget.monthly_amount, null), 300)
+    contact_emails = length(var.settings.budget.contact_emails) > 0 ? var.settings.budget.contact_emails : try(coalesce(var.budget.contact_emails, []), [])
+  })
+  policy = var.settings.policy
 
   contact_emails = length(local.budget.contact_emails) > 0 ? local.budget.contact_emails : (
     can(regex("^[^@\\s]+@[^@\\s]+$", var.environment.owner)) ? [var.environment.owner] : []

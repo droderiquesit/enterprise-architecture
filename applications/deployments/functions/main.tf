@@ -48,7 +48,7 @@ locals {
       ServiceBusConnection__clientId                = local.identity.client_id
       AUDIT_TOPIC                                   = var.platform_messaging.topic.name
       AUDIT_SUBSCRIPTION                            = try(var.platform_messaging.subscriptions["audit"].name, "audit")
-      AUDIT_STORE                                   = local.ledger != null ? "ledger" : (local.table != null ? "table" : "log")
+      AUDIT_SINK                                    = local.ledger != null ? "ledger" : (local.table != null ? "table" : "log")
       CACHE_WARM_SCHEDULE                           = var.settings.cache_warm_schedule
     },
     local.ledger == null ? {} : { LEDGER_ENDPOINT = local.ledger.ledger.ledger_endpoint, LEDGER_COLLECTION = "order-audit" },

@@ -438,3 +438,35 @@ run "private_endpoint_and_y1" {
     error_message = "Lab fault rate only when faults are enabled."
   }
 }
+
+run "upstream_urls_from_contracts" {
+  command = plan
+  variables {
+    deploy_core_aks    = { apps = { "hello-orders-api" = { url = "http://hello-orders-api.hello.svc.cluster.local" } } }
+    deploy_core_aca    = { apps = { "hello-orders-api" = { url = "https://hello-orders-api.internal.example.azurecontainerapps.io" } } }
+    deploy_appservice  = { apps = { "hello-inventory-api" = { service = "hello-inventory-api", url = "https://app-inv.azurewebsites.net" } } }
+    deploy_partner_sim = { url = "http://partner.hello.internal:8080" }
+  }
+
+  assert {
+    condition     = azurerm_function_app_flex_consumption.this.app_settings["ORDERS_API_URL"] == "https://hello-orders-api.internal.example.azurecontainerapps.io" && azurerm_function_app_flex_consumption.this.app_settings["INVENTORY_API_URL"] == "https://app-inv.azurewebsites.net" && azurerm_function_app_flex_consumption.this.app_settings["PARTNER_API_URL"] == "http://partner.hello.internal:8080"
+    error_message = "Upstream URLs are derived from the optional deploy contracts."
+  }
+  assert {
+    condition     = output.contract.endpoints["hello-durable"] == "https://${azurerm_function_app_flex_consumption.this.default_hostname}/api" && output.contract.apps["hello-durable"].readiness_path == "/api/readyz"
+    error_message = "Smoke endpoint is the /api base path (healthz/readyz/version)."
+  }
+}
+
+run "upstream_url_settings_override_and_cluster_local_ignored" {
+  command = plan
+  variables {
+    deploy_core_aks = { apps = { "hello-orders-api" = { url = "http://hello-orders-api.hello.svc.cluster.local" } } }
+    settings        = { inventory_api_url = "https://inventory.override.example" }
+  }
+
+  assert {
+    condition     = !contains(keys(azurerm_function_app_flex_consumption.this.app_settings), "ORDERS_API_URL") && azurerm_function_app_flex_consumption.this.app_settings["INVENTORY_API_URL"] == "https://inventory.override.example" && !contains(keys(azurerm_function_app_flex_consumption.this.app_settings), "PARTNER_API_URL")
+    error_message = "Cluster-local URLs are ignored; settings override the contracts."
+  }
+}

@@ -82,7 +82,7 @@ resource "azurerm_key_vault_secret" "fluentbit_listen" {
   name             = var.event_hub.listen_secret_name
   key_vault_id     = var.event_hub.listen_secret_key_vault_id
   value_wo         = azurerm_eventhub_namespace_authorization_rule.fluentbit_listen[0].primary_connection_string
-  value_wo_version = 1
+  value_wo_version = var.event_hub.listen_secret_version
   content_type     = "eventhub-connection-string"
   # Key Vault objects accept at most 15 tags
   tags = { for k, v in var.tags : k => v if contains(["env", "application", "component", "layer", "owner", "team", "managed_by", "expires_on", "data_classification"], k) }

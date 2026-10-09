@@ -291,6 +291,81 @@ services:
   references:
   - https://learn.microsoft.com/en-us/azure/container-registry/container-registry-intro
   - https://docs.datadoghq.com/integrations/azure_container_registry/
+- id: datadog-azure-native-integration
+  family: datadog
+  hosting_variant: Datadog - An Azure Native ISV Service (Microsoft.Datadog/monitors) linked to an existing Datadog organization
+  category: platform-support
+  display_name: Datadog Azure Native Integration
+  lifecycle:
+    status: ga
+    notes: Generally available Azure Native ISV Service; the lab default is the app-registration integration (datadog_integration_azure), native mode is opt-in.
+    verified_on: '2026-10-09'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: true
+      westeurope: true
+    region_notes: the monitor resource is created in a supported region independent of the monitored resources' regions
+    quotas: []
+    registrations:
+    - Microsoft.Datadog
+    licensing:
+    - Azure Marketplace Datadog plan (or an existing Datadog organization linked via SSO)
+  networking:
+    private_support: n/a
+    notes: control-plane integration; no data-plane endpoint in the lab network
+  iac:
+    terraform_resources:
+    - azurerm_datadog_monitor
+    - azurerm_datadog_monitor_tag_rule
+    azapi:
+    - type: Microsoft.Datadog/monitors/monitoredSubscriptions
+      api_version: '2025-06-11'
+      reason: no azurerm resource for additional monitored subscriptions of a native monitor
+    component: obs-azure-integration
+    implemented: true
+    notes: observability/modules/azure-integration mode = native (settings.mode = native); default mode is app_registration / none
+  workload:
+    exercised_by: []
+    operations:
+    - Azure metrics and resource collection for the lab subscription(s) through the native monitor
+  telemetry:
+    azure_metric_namespace: null
+    signals:
+      metrics:
+        supported: n/a
+        method: this entry is the metrics collection path (Azure Monitor metrics -> Datadog) for other services
+      logs:
+        supported: n/a
+        method: native resource-log forwarding is kept off (application logs flow through Fluent Bit, ADR-0001 section 10)
+      traces:
+        supported: n/a
+        method: not applicable
+      dbm:
+        supported: n/a
+        method: not applicable
+      rum:
+        supported: n/a
+        method: not applicable
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - Native mode and the app-registration integration must not both monitor the same subscription (duplicate metrics)
+  cost:
+    profile: low
+    approx_monthly_usd_default: 0
+    assumptions: no Azure charge for the monitor resource; Datadog bills monitored hosts/containers (default off)
+    teardown: terraform destroy of obs-azure-integration
+    data_retention: no data stored in Azure
+  status:
+    implementation: disabled
+    live_validation: not-run
+    default_profiles: []
+  references:
+  - https://learn.microsoft.com/en-us/azure/partner-solutions/datadog/overview
+  - https://learn.microsoft.com/en-us/azure/templates/microsoft.datadog/2025-06-11/monitors/monitoredsubscriptions
+  - https://docs.datadoghq.com/integrations/guide/azure-native-integration/
 - id: log-analytics
   family: log-analytics
   hosting_variant: Log Analytics workspace (PerGB2018)

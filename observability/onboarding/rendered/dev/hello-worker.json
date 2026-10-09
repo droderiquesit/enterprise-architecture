@@ -25,7 +25,7 @@
       "manifest"
     ],
     "manifest": "dev/hello-worker.yaml",
-    "sha256": "d95e876284618014505bd1bd15fcc870b59904289701729fa051e98d4e20879f"
+    "sha256": "5b8e0505a1440ce8e0d05270be07a81af44ac7e017d5e6a47264b62dbcbf1e79"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -52,7 +52,7 @@
     ],
     "owner": "fulfillment@example.com",
     "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-worker",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md",
     "team": "fulfillment",
     "tier": "medium"
   },
@@ -60,7 +60,7 @@
     "apm.consumer_error_rate": {
       "evaluation_delay": null,
       "key": "apm.consumer_error_rate",
-      "message": "{{#is_alert}}**CRITICAL**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. APM consumer spans for hello-worker; follow the span link to the producer trace.\n2. Check the dead-letter monitor of the Service Bus namespace.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-worker#consumer-errors",
+      "message": "{{#is_alert}}**CRITICAL**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. APM consumer spans for hello-worker; follow the span link to the producer trace.\n2. Check the dead-letter monitor of the Service Bus namespace.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#consumer-errors",
       "name": "[dev] hello-worker message processing failure rate above 10%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -79,7 +79,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-worker#consumer-errors",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#consumer-errors",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -100,7 +100,7 @@
     "k8s.container_restarts": {
       "evaluation_delay": null,
       "key": "k8s.container_restarts",
-      "message": "{{#is_alert}}**WARNING**: Containers of this service restarted repeatedly in the last 10 minutes (crash loop or OOM).{{/is_alert}}\n{{#is_warning}}**WARNING**: Containers of this service restarted repeatedly in the last 10 minutes (crash loop or OOM).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. kubectl -n <namespace> logs <pod> --previous to read the last crash.\n2. Check kubernetes_state.container.status_report.count.waiting by reason (CrashLoopBackOff / OOMKilled).\n3. Compare memory limits with container.memory.usage.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-worker#container-restarts",
+      "message": "{{#is_alert}}**WARNING**: Containers of this service restarted repeatedly in the last 10 minutes (crash loop or OOM).{{/is_alert}}\n{{#is_warning}}**WARNING**: Containers of this service restarted repeatedly in the last 10 minutes (crash loop or OOM).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. kubectl -n <namespace> logs <pod> --previous to read the last crash.\n2. Check kubernetes_state.container.status_report.count.waiting by reason (CrashLoopBackOff / OOMKilled).\n3. Compare memory limits with container.memory.usage.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#container-restarts",
       "name": "[dev] hello-worker containers restarting",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -118,7 +118,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-worker#container-restarts",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#container-restarts",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -139,7 +139,7 @@
     "k8s.replicas_unavailable": {
       "evaluation_delay": null,
       "key": "k8s.replicas_unavailable",
-      "message": "{{#is_alert}}**CRITICAL**: One or more replicas of the Deployment have been unavailable for 15 minutes.{{/is_alert}}\n{{#is_warning}}**WARNING**: One or more replicas of the Deployment have been unavailable for 15 minutes.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. kubectl -n <namespace> describe deployment <deployment>; check events for ImagePullBackOff / FailedScheduling.\n2. kubectl -n <namespace> get pods -l app=<deployment> -o wide; inspect readiness probe failures (/readyz).\n3. Check node pressure in the Kubernetes overview dashboard.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-worker#replicas-unavailable",
+      "message": "{{#is_alert}}**CRITICAL**: One or more replicas of the Deployment have been unavailable for 15 minutes.{{/is_alert}}\n{{#is_warning}}**WARNING**: One or more replicas of the Deployment have been unavailable for 15 minutes.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. kubectl -n <namespace> describe deployment <deployment>; check events for ImagePullBackOff / FailedScheduling.\n2. kubectl -n <namespace> get pods -l app=<deployment> -o wide; inspect readiness probe failures (/readyz).\n3. Check node pressure in the Kubernetes overview dashboard.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#replicas-unavailable",
       "name": "[dev] hello-worker has unavailable replicas",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -158,7 +158,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-worker#replicas-unavailable",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#replicas-unavailable",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -179,7 +179,7 @@
     "logs.error_spike": {
       "evaluation_delay": null,
       "key": "logs.error_spike",
-      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. Open Logs for service:hello-worker env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-worker in the last hour (a new version is the usual cause).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-worker#error-logs",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. Open Logs for service:hello-worker env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-worker in the last hour (a new version is the usual cause).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#error-logs",
       "name": "[dev] hello-worker error log volume above 50 in 10m",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -197,7 +197,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-worker#error-logs",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#error-logs",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -218,7 +218,7 @@
     "storage.table_availability@table-store": {
       "evaluation_delay": 900,
       "key": "storage.table_availability@table-store",
-      "message": "{{#is_alert}}**WARNING**: Table service requests are failing (availability counts server and auth/network errors).{{/is_alert}}\n{{#is_warning}}**WARNING**: Table service requests are failing (availability counts server and auth/network errors).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check StorageRead/StorageWrite diagnostic logs for status codes (403 = RBAC / firewall).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-worker#storage-availability",
+      "message": "{{#is_alert}}**WARNING**: Table service requests are failing (availability counts server and auth/network errors).{{/is_alert}}\n{{#is_warning}}**WARNING**: Table service requests are failing (availability counts server and auth/network errors).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check StorageRead/StorageWrite diagnostic logs for status codes (403 = RBAC / firewall).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#storage-availability",
       "name": "[dev] hello-worker Table storage [[resource.name]] availability below 99%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -236,7 +236,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "table-store",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-worker#storage-availability",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#storage-availability",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",

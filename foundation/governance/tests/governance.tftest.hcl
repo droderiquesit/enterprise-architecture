@@ -107,3 +107,26 @@ run "too_many_notifications_rejected" {
   }
   expect_failures = [var.settings]
 }
+
+run "environment_budget_global" {
+  command = plan
+  variables {
+    budget = { monthly_amount = 500, currency = "USD", contact_emails = ["finops@example.com"] }
+  }
+  assert {
+    condition     = azurerm_consumption_budget_subscription.this[0].amount == 500 && alltrue([for n in azurerm_consumption_budget_subscription.this[0].notification : contains(n.contact_emails, "finops@example.com")])
+    error_message = "environment.yaml budget.monthly_amount / contact_emails apply when settings.budget does not override them."
+  }
+}
+
+run "settings_override_budget_global" {
+  command = plan
+  variables {
+    budget   = { monthly_amount = 500 }
+    settings = { budget = { amount = 120 } }
+  }
+  assert {
+    condition     = azurerm_consumption_budget_subscription.this[0].amount == 120
+    error_message = "settings.budget.amount overrides the environment global."
+  }
+}

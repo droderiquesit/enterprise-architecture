@@ -16,6 +16,7 @@ import yaml
 from tools.changeset.graph import Graph
 from tools.changeset.registry import Registry
 from tools.changeset.trees import Tree
+from tools.config.features import FeatureError, feature_settings, validate_features
 
 ENV_SCHEMA = "environments/schema/environment.schema.json"
 PROFILE_SCHEMA = "environments/schema/profile.schema.json"
@@ -79,6 +80,10 @@ def load_profile(tree: Tree, name: str, validate: bool = True) -> dict:
     doc = yaml.safe_load(text) or {}
     if validate:
         _schema_validate(tree, PROFILE_SCHEMA, doc, path)
+        try:
+            validate_features(doc.get("features") or {})
+        except FeatureError as exc:
+            raise ConfigError(f"{path}: {exc}") from None
     return doc
 
 
@@ -188,17 +193,23 @@ def render_component(tree: Tree, registry: Registry, env_doc: dict, profile_doc:
                      declared: Optional[Set[str]] = None) -> dict:
     """The terraform.tfvars.json content for one component.
 
-    `environment` is the ADR §6 object; `settings` is the deep merge of the profile's
-    component_settings.<id> (lower precedence) and environment.components.<id> (higher).
+    `environment` is the ADR §6 object; `settings` is the deep merge of (lowest to highest precedence)
+    the profile `features` mapped by tools/config/features.py, the profile's component_settings.<id>
+    and environment.components.<id>.
     Optional globals (network, datadog, budget, features, profile_name) are included only when the
     root declares a variable of that name, so unrelated global edits never change this component.
     """
     c = registry.get(component_id)
     env = env_doc.get("environment") or {}
+    try:
+        from_features = feature_settings(profile_doc.get("features") or {}, component_id)
+    except FeatureError as exc:
+        raise ConfigError(f"profile '{profile_doc.get('profile')}': {exc}") from None
+    settings = deep_merge(from_features, (profile_doc.get("component_settings") or {}).get(component_id) or {})
+    settings = deep_merge(settings, (env_doc.get("components") or {}).get(component_id) or {})
     rendered = {
         "environment": {k: env.get(k) for k in ENVIRONMENT_KEYS if k in env},
-        "settings": deep_merge((profile_doc.get("component_settings") or {}).get(component_id) or {},
-                               (env_doc.get("components") or {}).get(component_id) or {}),
+        "settings": settings,
     }
     rendered["environment"].setdefault("tags", {})
     if declared is None:

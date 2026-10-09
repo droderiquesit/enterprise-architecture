@@ -125,6 +125,37 @@ variable "deploy_partner_sim" {
   default = null
 }
 
+variable "deploy_core_aks" {
+  description = "deploy-core-aks contract v1 (optional; null when the producer is not enabled). Only apps.<svc>.url is read."
+  type = object({
+    apps = optional(map(object({
+      url = optional(string)
+    })), {})
+  })
+  default = null
+}
+
+variable "deploy_core_aca" {
+  description = "deploy-core-aca contract v1 (optional; null when the producer is not enabled). Only apps.<svc>.url is read."
+  type = object({
+    apps = optional(map(object({
+      url = optional(string)
+    })), {})
+  })
+  default = null
+}
+
+variable "deploy_appservice" {
+  description = "deploy-appservice contract v1 (optional; null when the producer is not enabled). Only apps.<key>.{service,url} is read."
+  type = object({
+    apps = optional(map(object({
+      service = string
+      url     = optional(string)
+    })), {})
+  })
+  default = null
+}
+
 variable "foundation_network" {
   description = "foundation-network contract v1 (optional; null when the producer is not enabled)."
   type = object({

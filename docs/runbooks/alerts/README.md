@@ -6,10 +6,11 @@ One page per service rendered from `observability/onboarding/rendered/dev/*.json
 `<runbook_url>#<section>`; the anchors on these pages match those sections, and each section points to the shared
 procedure in [alert-response.md](../alert-response.md).
 
-> The lab manifests (`observability/onboarding/<env>/*.yaml`) currently set `runbook_url` to
-> `https://runbooks.example.com/enterprise-hello/<service>` (a placeholder host). To make monitor links resolve to
-> these pages, the observability owner must point `metadata.runbook_url` at the published location of this
-> directory (see [known limitations](../../known-limitations.md#documentation-and-links)).
+> Monitor links come from the archetype default `runbook_base_url` (`observability/archetypes/global-defaults.yaml`):
+> `[[repository]]?path=/docs/runbooks/alerts/[[service]].md`, i.e. these pages in the repository named by each
+> manifest's `metadata.repository` (Azure Repos file URL). The lab manifests use the placeholder organisation
+> `example-org`; set `metadata.repository` (or override `runbook_base_url`) to your repository URL
+> (see [known limitations](../../known-limitations.md#documentation-and-links)).
 
 | Service | Team | Runbook sections |
 |---|---|---|

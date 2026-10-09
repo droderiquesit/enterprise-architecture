@@ -5,15 +5,15 @@
       "scope": "Hello.App",
       "name": "send order-events",
       "kind": "producer",
-      "trace_id": "0000000000000000623891c6762c4567",
-      "span_id": "7e422fa748abacf2",
-      "parent_span_id": "9fb4e163e56dd07e",
+      "trace_id": "0000000000000000ddadfb384d69ffb7",
+      "span_id": "2993e7777bd4aadf",
+      "parent_span_id": "bcefc41151336382",
       "links": [],
       "attributes": {
         "messaging.system": "servicebus",
         "messaging.operation.type": "send",
         "messaging.destination.name": "order-events",
-        "messaging.message.id": "5f43c0a8-faf5-4576-8cba-90dc8c000e77"
+        "messaging.message.id": "53d509c8-56fc-4137-a56f-199e66384b14"
       }
     }
   ],
@@ -23,20 +23,20 @@
       "scope": "hello_worker",
       "name": "servicebus.process",
       "kind": "consumer",
-      "trace_id": "fdc10fea2591f1007f8230bbcbbb6877",
-      "span_id": "04c53f736a7be17e",
+      "trace_id": "b5718201a4927b1efa1350a2a8fcf88d",
+      "span_id": "8cabafe7e8980340",
       "parent_span_id": "",
       "links": [
         {
-          "trace_id": "0000000000000000623891c6762c4567",
-          "span_id": "7e422fa748abacf2"
+          "trace_id": "0000000000000000ddadfb384d69ffb7",
+          "span_id": "2993e7777bd4aadf"
         }
       ],
       "attributes": {
         "messaging.system": "servicebus",
         "messaging.operation.type": "process",
         "messaging.destination.name": "order-events/subscriptions/notifications",
-        "messaging.message.id": "5f43c0a8-faf5-4576-8cba-90dc8c000e77"
+        "messaging.message.id": "53d509c8-56fc-4137-a56f-199e66384b14"
       }
     }
   ]

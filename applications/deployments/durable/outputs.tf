@@ -34,7 +34,7 @@ output "contract" {
           url            = local.url
           urls           = { public = local.private ? null : local.url, private = local.url }
           health_path    = "/api/healthz"
-          readiness_path = null
+          readiness_path = "/api/readyz"
           version_path   = "/api/version"
           scale_to_zero  = var.settings.always_ready_instances == 0
           min_replicas   = var.settings.always_ready_instances
@@ -56,7 +56,7 @@ output "contract" {
           url            = "https://${azurerm_windows_function_app.reconciliation[0].default_hostname}"
           urls           = { public = "https://${azurerm_windows_function_app.reconciliation[0].default_hostname}", private = null }
           health_path    = "/api/healthz"
-          readiness_path = null
+          readiness_path = "/api/readyz"
           version_path   = "/api/version"
           scale_to_zero  = true
           min_replicas   = 0
@@ -67,9 +67,9 @@ output "contract" {
         }
       } : {},
     )
-    # The Functions apps expose /api/healthz and /api/version but no /readyz: probed by scripts/smoke.sh, not
-    # by tools/smoke/smoke.py (which requires /healthz, /readyz and /version at the endpoint root).
-    endpoints     = {}
+    # hello-durable serves /api/healthz, /api/readyz (Durable client round-trip) and /api/version, so the smoke
+    # endpoint (tools/smoke/smoke.py appends /healthz, /readyz, /version) is the /api base path.
+    endpoints     = { "hello-durable" = "${local.url}/api" }
     idle_behavior = { "hello-durable" = { scale_to_zero = var.settings.always_ready_instances == 0 } }
     deploy_steps = [{
       kind           = "functionapp-flex"

@@ -14,11 +14,13 @@ variable "settings" {
     history_retention_days = optional(number, 7)
     payment_timeout_secs   = optional(number, 10)
     task_hub               = optional(string) # default "hellodurable<env>"
-    # Callers' URLs (not consumed contracts): orders-api / inventory-api base URLs. Unset => status updates are
-    # skipped / reservation simulated (hello-durable README).
+    # Upstream base URLs. Overrides only: when null they are derived from the optional upstream contracts
+    # (orders: deploy-core-aca/aks apps["hello-orders-api"].url; inventory: deploy-appservice hello-inventory-api,
+    # else deploy-core-aca/aks; partner: deploy-partner-sim.url). Kubernetes-internal *.svc.cluster.local URLs are
+    # ignored. Still unset => status updates are skipped / reservation and payment simulated (hello-durable README).
     orders_api_url    = optional(string)
     inventory_api_url = optional(string)
-    partner_api_url   = optional(string) # override of deploy-partner-sim.url
+    partner_api_url   = optional(string)
     # Network exposure. Durable HTTP functions are anonymous at the Functions layer, so the app must stay private:
     #   private-endpoint (default when foundation_network is provided): public access disabled + PE (sites).
     #   restricted: public endpoint with ip_restriction default Deny + allowed_ip_ranges (e.g. deploy agent egress IPs).

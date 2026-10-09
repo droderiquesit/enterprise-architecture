@@ -1,20 +1,21 @@
 # Deployment profiles
 
 A profile ([`environments/profiles/<profile>.yaml`](../../environments/profiles/)) lists the components an environment
-enables, `component_settings` that are deep-merged under the environment's own `components.<id>` blocks, and
-descriptive `features`. `tools/config/resolve.py --env <env>` prints the resolved set; for `custom` it adds required
+enables, high-level `features`, and `component_settings` that are deep-merged under the environment's own
+`components.<id>` blocks. `tools/config/resolve.py --env <env>` prints the resolved set; for `custom` it adds required
 upstream dependencies automatically, for every other profile it fails with an explanation when a hard dependency is
 missing.
 
-> **What actually changes resources.** Only the component list and `component_settings` (plus
-> `environments/<env>/environment.yaml components.<id>`) reach Terraform. The `features:` block of a profile
-> (`bastion`, `app_gateway`, `firewall`, `trace_sample_rate`, `rum_session_sample_rate`, ...) is not read by any lab
-> root today - it documents intent. Example: `enterprise` says `bastion: true`, but Bastion is created only when
-> `components.foundation-edge.bastion.enabled = true` (and the network root has `bastion_subnet = true` for
-> Basic/Standard). See [known limitations](../known-limitations.md#configuration).
+**Features are effective.** `tools/config/render.py` maps each profile feature to component settings
+(`tools/config/features.py`; table in [environments/profiles/README.md](../../environments/profiles/README.md#feature-mapping)):
+`topology`/`egress`/`firewall`/`app_gateway` -> foundation-network, `firewall`/`bastion`/`app_gateway`/`front_door`/`apim`
+-> foundation-edge toggles, `service_bus_sku` -> platform-messaging `sku`, `rum_session_sample_rate`/`session_replay` ->
+obs-prereqs RUM sample rates, `trace_sample_rate` -> `trace_sample_ratio` of every deploy root that declares it.
+`private_endpoints` and `deploy_lab_infrastructure` are documented-only; any other key is rejected. Example:
+`enterprise` says `bastion: true`, so foundation-edge renders `bastion.enabled = true` (Developer SKU, no subnet needed).
 
-Precedence for a root's `settings`: root `variables.tf` defaults < profile `component_settings.<id>` <
-`environments/<env>/environment.yaml components.<id>`.
+Precedence for a root's `settings`: root `variables.tf` defaults < profile `features` (mapped) < profile
+`component_settings.<id>` < `environments/<env>/environment.yaml components.<id>`.
 
 ## Profiles at a glance
 
@@ -53,7 +54,7 @@ profile: minimal
 custom_components: []
 datadog: {site: datadoghq.com, api_key_secret_name: datadog-api-key, app_key_secret_name: datadog-app-key}
 network: {hub_address_space: 10.40.0.0/20, spoke_address_space: 10.41.0.0/16}
-budget: {monthly_amount: 300, currency: USD, contact_emails: [platform-team@example.com]}
+budget: {monthly_amount: 500, currency: USD, contact_emails: [platform-team@example.com]}
 components:
   bootstrap:
     operator_ip_ranges: ["203.0.113.10"]
@@ -82,8 +83,10 @@ pricing calculator - nothing here has been billed):
 | obs-dbm | ~45 | Datadog Agent on ACI, 1 vCPU / 2 GB always on |
 | Datadog | billed by Datadog | RUM sessions, synthetic runs (tests created **paused**), APM/infra hosts, logs, DBM |
 
-Order of magnitude: roughly USD 400-450/month before Datadog charges - **above** the default `budget.monthly_amount: 300`
-in `environments/dev/environment.yaml`; raise the budget or expect the 100 % notification.
+Order of magnitude: roughly USD 400-450/month before Datadog charges. `environments/dev/environment.yaml` therefore sets
+`budget.monthly_amount: 500` (estimate + ~10 % headroom); foundation-governance reads that global (`var.budget`) unless
+`components.foundation-governance.budget.amount` overrides it (root fallback 300). The minimal profile creates only
+the `fulfillment` Service Bus subscription (the only `order-events` consumer in the profile).
 
 ## enterprise
 
@@ -96,8 +99,7 @@ components:
     bastion_subnet: true          # only if you also enable Bastion Basic/Standard in foundation-edge
   foundation-deploy-agents:
     vmss: {admin_ssh_public_key: "ssh-ed25519 AAAA..."}   # required in vmss mode
-  foundation-edge:
-    bastion: {enabled: true}      # profile features.bastion alone does nothing
+  # foundation-edge bastion.enabled comes from the profile feature `bastion: true` (Developer SKU)
 ```
 
 Adds (approx., per root READMEs): AKS ~110, App Service plans ~150 (P0v3 Linux + Windows), VM hosts ~110 24x7 (less
@@ -145,7 +147,7 @@ custom_components: [deploy-core-aca, deploy-durable, obs-monitoring]
 
 ## Budgets do not cap spend
 
-`foundation-governance` creates a monthly consumption budget (default 300, filter `application=enterprise-hello` and
+`foundation-governance` creates a monthly consumption budget (environment `budget.monthly_amount`, root fallback 300; filter `application=enterprise-hello` and
 `env=<env>`) with actual 50/80/100 % and forecast 80/100 % notifications. **Azure budgets only alert; resources keep
 running and keep costing money**, and cost data lags by up to about 24 hours. Stopping spend is a human decision (or
 automation you add). Cost controls that are implemented: [cost-and-lifecycle.md](cost-and-lifecycle.md).

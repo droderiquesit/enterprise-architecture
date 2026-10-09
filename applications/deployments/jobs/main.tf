@@ -19,9 +19,11 @@ locals {
   aca = var.platform_containerapps
   sb  = var.platform_messaging
 
-  core_apps   = merge(try(var.deploy_core_aks.apps, {}), try(var.deploy_core_aca.apps, {}))
+  # Kubernetes-internal *.svc.cluster.local URLs (deploy-core-aks) are not resolvable from Container Apps jobs.
+  core_apps   = { for k, a in merge(try(var.deploy_core_aks.apps, {}), try(var.deploy_core_aca.apps, {})) : k => a if a.url != null && !can(regex("\\.svc\\.cluster\\.local", coalesce(a.url, "x"))) }
   catalog_url = try(local.core_apps["hello-catalog-api"].url, null)
   orders_url  = coalesce(var.settings.orders_api_url, try(local.core_apps["hello-orders-api"].url, null), "unset")
+  durable_url = coalesce(var.settings.durable_api_url, try("https://${var.deploy_durable.function_app.hostname}", null), "unset")
   api_origin  = coalesce(try(var.deploy_core_aca.public_api.origin, null), try(var.deploy_core_aks.public_api.origin, null), "unset")
   frontend    = try(var.deploy_frontend.url, null)
 
@@ -36,7 +38,7 @@ locals {
       }
       reconcile = {
         svc = "hello-jobs", trigger = "schedule", cron = var.settings.reconcile_cron, args = ["reconcile-trigger"], timeout = 300, cpu = 0.25, memory = "0.5Gi"
-        env = var.settings.durable_api_url == null ? {} : { DURABLE_API_URL = var.settings.durable_api_url }
+        env = local.durable_url == "unset" ? {} : { DURABLE_API_URL = local.durable_url }
       }
     },
     var.settings.batch_processor.enabled ? {

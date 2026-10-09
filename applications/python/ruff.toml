@@ -14,7 +14,9 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
+"../**/tests/**" = ["S104", "S105", "S106", "S108", "S603", "S607", "PLW1510", "ASYNC", "B017", "E402", "RUF015", "SIM117"]
 "**/tests/**" = ["S104", "S105", "S106", "S108", "S603", "S607", "PLW1510", "ASYNC", "B017", "E402", "RUF015", "SIM117"]
+"../**/testing.py" = ["S603", "S607", "S108", "S103", "PLW1510"]
 "**/testing.py" = ["S603", "S607", "S108", "S103", "PLW1510"]
 
 [lint.isort]

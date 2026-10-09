@@ -412,6 +412,10 @@ run "three_hosts" {
     error_message = "Python 3.13."
   }
   assert {
+    condition     = azurerm_linux_function_app.this["premium"].app_settings["AUDIT_SINK"] == "log" && !contains(keys(azurerm_linux_function_app.this["premium"].app_settings), "AUDIT_STORE")
+    error_message = "AUDIT_SINK (the variable hello_functions reads) is set; without ledger/table contracts it is log."
+  }
+  assert {
     condition     = alltrue([for h, a in azurerm_linux_function_app.this : a.app_settings["FAULTS_ENABLED"] == "false" && startswith(a.app_settings["FAULT_TOKEN"], "@Microsoft.KeyVault(SecretUri=") && !contains(keys(a.app_settings), "LOG_FILE_PATH")])
     error_message = "Faults off, Key Vault reference for FAULT_TOKEN, no sidecar/log file on Functions."
   }

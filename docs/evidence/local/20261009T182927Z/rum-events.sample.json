@@ -1,28 +1,27 @@
 {
   "intercepted_requests": 2,
   "forwarded_to_mock_intake": {
-    "/api/v2/rum": 3
+    "/api/v2/rum": 2
   },
   "forward_statuses": {
     "202": 2
   },
   "event_types": {
-    "long_task": 2,
-    "resource": 10,
-    "action": 5,
+    "resource": 12,
+    "action": 4,
     "view": 5
   },
-  "query_example": "ddsource=browser&dd-api-key=pub***&dd-evp-origin-version=7.15.0&dd-evp-origin=browser&dd-request-id=c7226ac5-5c03-46bb-aa9f-6e70f0d6a97f&batch_time=1791569813630&_dd.api=fetch",
+  "query_example": "ddsource=browser&dd-api-key=pub***&dd-evp-origin-version=7.15.0&dd-evp-origin=browser&dd-request-id=133eb7b5-02c9-4d86-b174-edc646277b69&batch_time=1791570617651&_dd.api=fetch",
   "post_orders_resource__dd_trace_id": [
-    "7817313233707566397"
+    "15973699672588550071"
   ],
-  "browser_traceparent": "00-00000000000000006c7cacf7d919853d-7c5284eaae1d922b-01",
+  "browser_traceparent": "00-0000000000000000ddadfb384d69ffb7-1e5c0a5b0f26afc3-01",
   "first_events": {
     "view": {
       "type": "view",
       "service": "hello-frontend",
       "version": "0.1.0-e2e",
-      "date": 1791569813094,
+      "date": 1791570616250,
       "source": "browser",
       "view": {
         "url": "http://localhost:18080/",
@@ -33,7 +32,7 @@
       "type": "resource",
       "service": "hello-frontend",
       "version": "0.1.0-e2e",
-      "date": 1791569813094,
+      "date": 1791570616250,
       "source": "browser",
       "view": {
         "url": "http://localhost:18080/",
@@ -54,7 +53,7 @@
       "type": "action",
       "service": "hello-frontend",
       "version": "0.1.0-e2e",
-      "date": 1791569813446,
+      "date": 1791570616697,
       "source": "browser",
       "view": {
         "url": "http://localhost:18080/",

@@ -51,6 +51,16 @@ output "contract" {
       package_sha256 = try(var.artifacts["svc-jobs"].package_sha256, null)
       submit_script  = "applications/deployments/jobs/scripts/submit-batch-job.sh"
       identity_id    = var.platform_batch.identity.id
+      # Job preparation task (ADR-0001 §13): observability-published Fluent Bit setup, run elevated on each node
+      # before the job's tasks; ships Batch task stdout (JSON logs) to Datadog. null = no log collection.
+      job_preparation = try(var.obs_telemetry_transport.batch_log_setup, null) == null ? null : {
+        script_gzip_base64 = var.obs_telemetry_transport.batch_log_setup.script_gzip_base64
+        script_sha256      = var.obs_telemetry_transport.batch_log_setup.script_sha256
+        environment = {
+          (var.obs_telemetry_transport.batch_log_setup.identity_env)  = var.platform_batch.identity.client_id
+          (var.obs_telemetry_transport.batch_log_setup.log_paths_env) = var.obs_telemetry_transport.batch_log_setup.log_paths_template
+        }
+      }
     }
     deploy_steps = var.platform_batch == null ? [] : [{
       kind           = "batch-job"

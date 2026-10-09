@@ -1,11 +1,11 @@
 {
   "first": {
     "status": 202,
-    "order_id": "d8c00bec-eaf5-4702-b30a-9b3eb81c5071"
+    "order_id": "dfa2458b-dad7-46e1-b902-8fea9e674077"
   },
   "replay": {
     "status": 202,
-    "order_id": "d8c00bec-eaf5-4702-b30a-9b3eb81c5071",
+    "order_id": "dfa2458b-dad7-46e1-b902-8fea9e674077",
     "replayed_header": {
       "Idempotent-Replayed": "true"
     }
@@ -18,7 +18,7 @@
       "status": 409,
       "detail": "The Idempotency-Key was already used with a different request body.",
       "instance": "/orders",
-      "trace_id": "62de1aef29274f4cf5b2799f704ac283"
+      "trace_id": "7068e880d27d61a1c5e7d72e479c814c"
     }
   },
   "orders_with_customer_ref": 1

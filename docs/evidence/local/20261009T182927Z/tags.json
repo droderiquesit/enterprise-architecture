@@ -12,142 +12,142 @@
   ],
   "spans_by_service_scope": {
     "hello-bff": {
-      "System.Net.Http": {
-        "spans": 48,
+      "Microsoft.AspNetCore": {
+        "spans": 34,
         "missing": [],
         "wrong": []
       },
-      "Microsoft.AspNetCore": {
-        "spans": 75,
+      "System.Net.Http": {
+        "spans": 21,
         "missing": [],
         "wrong": []
       }
     },
     "hello-orders-api": {
       "OpenTelemetry.Instrumentation.SqlClient": {
-        "spans": 53,
+        "spans": 21,
         "missing": [],
         "wrong": []
       },
       "System.Net.Http": {
-        "spans": 5,
+        "spans": 2,
         "missing": [],
         "wrong": []
       },
       "Azure.Messaging.ServiceBus.ServiceBusSender": {
-        "spans": 5,
+        "spans": 2,
         "missing": [],
         "wrong": []
       },
       "Hello.App": {
-        "spans": 5,
+        "spans": 2,
         "missing": [],
         "wrong": []
       },
       "Microsoft.AspNetCore": {
-        "spans": 74,
+        "spans": 33,
         "missing": [],
         "wrong": []
       }
     },
     "hello-inventory-api": {
       "Microsoft.AspNetCore": {
-        "spans": 10,
+        "spans": 4,
         "missing": [],
         "wrong": []
       }
     },
     "hello-durable": {
       "System.Net.Http": {
-        "spans": 47,
-        "missing": [],
-        "wrong": []
-      },
-      "Microsoft.Azure.Functions.Worker": {
-        "spans": 126,
+        "spans": 20,
         "missing": [],
         "wrong": []
       },
       "Microsoft.AspNetCore": {
-        "spans": 5,
+        "spans": 1,
         "missing": [],
         "wrong": []
       },
-      "Microsoft.DurableTask": {
-        "spans": 5,
-        "missing": [],
-        "wrong": []
-      },
-      "Hello.App": {
-        "spans": 5,
+      "Microsoft.Azure.Functions.Worker": {
+        "spans": 50,
         "missing": [],
         "wrong": []
       },
       "WebJobs.Extensions.DurableTask": {
-        "spans": 5,
+        "spans": 2,
         "missing": [],
         "wrong": []
       },
       "Azure.Messaging.ServiceBus.ServiceBusProcessor": {
-        "spans": 5,
+        "spans": 2,
+        "missing": [],
+        "wrong": []
+      },
+      "Microsoft.DurableTask": {
+        "spans": 2,
+        "missing": [],
+        "wrong": []
+      },
+      "Hello.App": {
+        "spans": 2,
         "missing": [],
         "wrong": []
       },
       "DurableTask.Core": {
-        "spans": 117,
+        "spans": 47,
         "missing": [],
         "wrong": []
       },
       "OpenTelemetry.Instrumentation.SqlClient": {
-        "spans": 8,
+        "spans": 3,
         "missing": [],
         "wrong": []
       }
     },
     "hello-catalog-api": {
       "opentelemetry.instrumentation.psycopg": {
-        "spans": 51,
+        "spans": 27,
         "missing": [],
         "wrong": []
       },
       "opentelemetry.instrumentation.redis": {
-        "spans": 16,
+        "spans": 6,
         "missing": [],
         "wrong": []
       },
       "opentelemetry.instrumentation.fastapi": {
-        "spans": 78,
+        "spans": 33,
         "missing": [],
         "wrong": []
       }
     },
     "hello-partner-sim": {
       "opentelemetry.instrumentation.fastapi": {
-        "spans": 35,
+        "spans": 15,
         "missing": [],
         "wrong": []
       }
     },
     "hello-worker": {
       "azure.core.tracing.ext.opentelemetry_span": {
-        "spans": 124,
+        "spans": 26,
         "missing": [],
         "wrong": []
       },
       "hello_worker": {
-        "spans": 5,
+        "spans": 2,
         "missing": [],
         "wrong": []
       }
     },
     "hello-dbadapter-postgresql": {
       "opentelemetry.instrumentation.psycopg": {
-        "spans": 33,
+        "spans": 13,
         "missing": [],
         "wrong": []
       },
       "opentelemetry.instrumentation.fastapi": {
-        "spans": 15,
+        "spans": 5,
         "missing": [],
         "wrong": []
       }
@@ -155,16 +155,16 @@
   },
   "span_problems": [],
   "metrics_services": {
-    "hello-inventory-api": 36,
-    "hello-bff": 42,
+    "hello-bff": 41,
+    "hello-inventory-api": 35,
     "otelcol-contrib": 89,
-    "hello-orders-api": 42,
-    "hello-durable": 47,
+    "hello-orders-api": 41,
+    "hello-durable": 46,
     "otel-gateway": 1,
     "hello-catalog-api": 5,
     "hello-worker": 2,
-    "hello-partner-sim": 5,
-    "hello-dbadapter-postgresql": 4
+    "hello-dbadapter-postgresql": 4,
+    "hello-partner-sim": 5
   },
   "metrics_resource_missing": {
     "hello-bff": [],
@@ -177,27 +177,6 @@
     "hello-dbadapter-postgresql": []
   },
   "hello.workflow.completed": [
-    {
-      "attributes": {
-        "outcome": "succeeded",
-        "workflow": "OrderProcessing"
-      },
-      "value": "1"
-    },
-    {
-      "attributes": {
-        "outcome": "succeeded",
-        "workflow": "OrderProcessing"
-      },
-      "value": "1"
-    },
-    {
-      "attributes": {
-        "outcome": "compensated",
-        "workflow": "OrderProcessing"
-      },
-      "value": "1"
-    },
     {
       "attributes": {
         "outcome": "succeeded",

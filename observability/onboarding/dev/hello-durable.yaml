@@ -12,7 +12,6 @@ metadata:
   tier: critical
   env: dev
   repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
-  runbook_url: https://runbooks.example.com/enterprise-hello/hello-durable
   description: Durable Functions OrderProcessing / BatchProcessing / Reconciliation.
   languages:
   - dotnet

@@ -100,4 +100,12 @@ run "secret_scoped_assignments" {
     condition     = !contains(keys(azurerm_role_assignment.workload_secrets_user), "obs-collector/fault-token")
     error_message = "collector must not read fault-token"
   }
+  assert {
+    condition     = alltrue([for k in ["obs-collector/fluentbit-shared-key", "obs-collector/datadog-api-key", "hello-jobs/datadog-api-key", "hello-worker/datadog-api-key", "hello-inventory-api/datadog-api-key"] : contains(keys(azurerm_role_assignment.workload_secrets_user), k)]) && !contains(keys(azurerm_role_assignment.workload_secrets_user), "hello-durable/datadog-api-key")
+    error_message = "Fluent Bit readers: collector (API key + forward shared key), VM/VMSS host identities and the Batch pool identity."
+  }
+  assert {
+    condition     = contains(keys(output.contract.secret_ids), "fluentbit-shared-key")
+    error_message = "fluentbit-shared-key is published as a versionless secret id."
+  }
 }

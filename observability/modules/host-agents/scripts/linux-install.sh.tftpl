@@ -14,6 +14,9 @@ ENV_FILE=/etc/default/fluent-bit-eh
 API_KEY_SECRET_ID='${api_key_secret_id}'
 IDENTITY_CLIENT_ID='${identity_client_id}'
 CONFIGURE_AGENT='${configure_agent}'
+# Runtime overrides for hosts whose identity / log paths are only known on the node (Azure Batch job
+# preparation task: EH_IDENTITY_CLIENT_ID = pool identity, EH_LOG_PATHS under $AZ_BATCH_NODE_ROOT_DIR).
+IDENTITY_CLIENT_ID="$${EH_IDENTITY_CLIENT_ID:-$IDENTITY_CLIENT_ID}"
 log() { echo "[eh-host-setup] $*"; }
 
 # ------------------------------------------------------------------ Datadog Agent: OTLP on, logs off
@@ -92,6 +95,7 @@ ${k}=${v}
 %{ endfor ~}
 DD_API_KEY=$DD_API_KEY_VALUE
 ENVEOF
+if [ -n "$${EH_LOG_PATHS:-}" ]; then sed -i "s|^FLB_LOG_PATHS=.*|FLB_LOG_PATHS=$EH_LOG_PATHS|" "$stage/env"; fi
 install -d -m 0750 "$STATE_DIR"
 (set -a; . "$stage/env"; set +a; cd "$stage" && /opt/fluent-bit/bin/fluent-bit -c "$stage/fluent-bit.yaml" --dry-run >/dev/null) || { log "fluent-bit dry-run failed; keeping previous config"; rm -rf "$stage"; exit 4; }
 

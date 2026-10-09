@@ -36,9 +36,48 @@ PKG=$(jqr batch.package_uri); SHA=$(jqr batch.package_sha256); IDENTITY=$(jqr ba
 export AZURE_BATCH_ACCOUNT="$ACCOUNT" AZURE_BATCH_ENDPOINT="https://$HOST"
 az batch account login --name "$ACCOUNT" --resource-group "$(az batch account list --query "[?name=='$ACCOUNT'].resourceGroup | [0]" -o tsv)" >/dev/null
 
+# Job preparation task (ADR-0001 §13 amendment): the observability-published Fluent Bit setup (deploy-jobs contract
+# batch.job_preparation, from obs-telemetry-transport batch_log_setup) runs elevated on every node before the job's
+# tasks and ships Batch task stdout.txt (JSON logs) to Datadog. The script travels gzip+base64 in an environment
+# setting, is sha256-checked on the node, and reads the Datadog API key from Key Vault with the pool identity.
+PREP_SHA=$(jqr batch.job_preparation.script_sha256)
 if ! az batch job show --job-id "$JOB" >/dev/null 2>&1; then
-  az batch job create --id "$JOB" --pool-id "$POOL" >/dev/null
-  echo "created job $JOB on pool $POOL"
+  JOBSPEC=$(mktemp)
+  python3 - "$CONTRACT" "$JOBSPEC" "$JOB" "$POOL" <<'PY'
+import json, sys
+contract, out, job, pool = sys.argv[1:5]
+d = json.load(open(contract)); d = d.get("data", d); d = d.get("value", d)
+prep = (d.get("batch") or {}).get("job_preparation")
+spec = {"id": job, "poolInfo": {"poolId": pool}}
+if prep:
+    inner = ('set -euo pipefail; '
+             'export EH_LOG_PATHS="${EH_LOG_PATHS//\\$AZ_BATCH_NODE_ROOT_DIR/$AZ_BATCH_NODE_ROOT_DIR}"; '
+             'printf %s "$EH_SETUP_GZ_B64" | base64 -d | gunzip > eh-flb-setup.sh; '
+             'echo "' + prep["script_sha256"] + '  eh-flb-setup.sh" | sha256sum -c --status; '
+             'bash eh-flb-setup.sh')
+    env = [{"name": k, "value": v} for k, v in sorted((prep.get("environment") or {}).items())]
+    env.append({"name": "EH_SETUP_GZ_B64", "value": prep["script_gzip_base64"]})
+    spec["jobPreparationTask"] = {
+        "id": "eh-log-setup",
+        "commandLine": "/bin/bash -c '" + inner + "'",
+        "environmentSettings": env,
+        "userIdentity": {"autoUser": {"scope": "pool", "elevationLevel": "admin"}},
+        "waitForSuccess": True,
+        "rerunOnNodeRebootAfterSuccess": True,
+        "constraints": {"maxWallClockTime": "PT15M", "maxTaskRetryCount": 2, "retentionTime": "P1D"},
+    }
+    spec["metadata"] = [{"name": "eh-log-setup-sha256", "value": prep["script_sha256"]}]
+json.dump(spec, open(out, "w"))
+PY
+  az batch job create --json-file "$JOBSPEC" >/dev/null
+  rm -f "$JOBSPEC"
+  echo "created job $JOB on pool $POOL${PREP_SHA:+ (job preparation: Fluent Bit setup $PREP_SHA)}"
+elif [[ -n "$PREP_SHA" ]]; then
+  current=$(az batch job show --job-id "$JOB" --query "metadata[?name=='eh-log-setup-sha256'].value | [0]" -o tsv 2>/dev/null || true)
+  if [[ "$current" != "$PREP_SHA" ]]; then
+    echo "WARNING: job $JOB was created with log setup '${current:-none}', contract has $PREP_SHA." >&2
+    echo "         A job preparation task cannot be changed: delete the job (az batch job delete --job-id $JOB) when idle to pick it up." >&2
+  fi
 fi
 
 TASK="daily-aggregate-$DATE"

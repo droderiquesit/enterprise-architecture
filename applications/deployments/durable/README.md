@@ -6,9 +6,13 @@
   resource group (webspace constraint). Optional `azurerm_windows_function_app` on the Windows Consumption (Y1) plan running
   **only Reconciliation** (created when platform-functions publishes `consumption_windows`). Private endpoint (`sites`)
   when foundation-network is provided.
-- **Consumed contracts**: platform-functions (`flex.durable`, `consumption_windows`), platform-messaging, platform-db-sql
-  (`fulfillment`), obs-telemetry-transport, foundation-identity; optional deploy-partner-sim (`url` → PARTNER_API_URL),
-  foundation-network (private endpoint; **not yet in catalog/components.yaml optional_consumes**).
+- **Consumed contracts** (catalog/components.yaml): platform-functions (`flex.durable`, `consumption_windows`),
+  platform-messaging, platform-db-sql (`fulfillment`), obs-telemetry-transport, foundation-identity, foundation-network
+  (private endpoint, VNet integration); optional deploy-partner-sim (`url` → `PARTNER_API_URL`), deploy-core-aca /
+  deploy-core-aks (`apps["hello-orders-api"].url` → `ORDERS_API_URL`; Kubernetes-internal `*.svc.cluster.local` URLs
+  are ignored because Functions cannot resolve them), deploy-appservice (`hello-inventory-api` app url →
+  `INVENTORY_API_URL`, falling back to the core contracts). `settings.{orders,inventory,partner}_api_url` override the
+  derived values.
 - **Produced contract**: `deploy-durable`: `function_app.{id,name,hostname,private}`, `reconciliation_app`, `task_hub`,
   `apps`, `deploy_steps[functionapp-flex]`.
 
@@ -17,7 +21,7 @@
 deployment storage = Flex `blobContainer` with the user-assigned identity (no keys), `DURABLE_TASK_HUB`
 (`hellodurable<env>`), `RECONCILE_SCHEDULE`, `ServiceBusConnection__fullyQualifiedNamespace/__credential/__clientId`,
 `SERVICEBUS_FQDN`, `BATCH_ITEMS_QUEUE`, `SQL_CONNECTION_STRING` (no password) + `SQL_USE_AZURE_CREDENTIAL=true`,
-`STORAGE_MODE=sql`, `ORDERS_API_URL`/`INVENTORY_API_URL` (settings), `PARTNER_API_URL`, `PAYMENT_TIMEOUT_SECONDS`,
+`STORAGE_MODE=sql`, `ORDERS_API_URL`/`INVENTORY_API_URL`/`PARTNER_API_URL` (settings override > upstream contracts > unset ⇒ simulated), `PAYMENT_TIMEOUT_SECONDS`,
 `DURABLE_HISTORY_RETENTION_DAYS`, `FAULTS_ENABLED`, `FAULT_TOKEN` (Key Vault reference),
 `FAULT_ACTIVITY_FAILURE_RATE` (only when faults_enabled), `OTEL_*` (gateway, `http/protobuf`, generic endpoint so the
 host emits Durable V2 spans), `AzureFunctionsJobHost__telemetryMode=OpenTelemetry`. Flex forbids
@@ -38,7 +42,9 @@ rollback = redeploy the previous package. Y1 runs from the package URL (`WEBSITE
 `WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID`), so its rollback is re-apply with the previous artifact.
 
 ## Smoke
-`/api/healthz`, `/api/version` (no `/readyz` in hello-durable ⇒ not in `endpoints`; use `scripts/smoke.sh`).
+`/api/healthz`, `/api/readyz` (Durable client round-trip), `/api/version`. The contract publishes
+`endpoints["hello-durable"] = https://<host>/api`, so `tools/smoke/smoke.py` probes all three (from a network that can
+reach the private endpoint); `scripts/smoke.sh` remains for ad-hoc checks.
 
 ## Cost
 Flex on-demand, scale to zero: ≈ $0 idle; ~$0.000026/GB-s + executions; 2 GB instances. Y1: free grant covers lab use.

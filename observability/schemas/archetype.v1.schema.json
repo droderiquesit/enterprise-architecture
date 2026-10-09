@@ -75,6 +75,7 @@
     "extends": {"type": "string", "description": "Profiles only: another profile merged before this one."},
     "defaults": {"type": "object", "description": "Partial manifest (metadata/spec) merged under the service manifest."},
     "params": {"type": "object"},
+    "runbook_base_url": {"type": "string", "description": "Default metadata.runbook_url when a manifest omits it (meaningful in global-defaults). Placeholders: [[service]], [[env]], [[team]], [[repository]] (metadata.repository). Monitor links append #<section>."},
     "synthetics": {"type": "object"},
     "slo_burn_rate": {"type": "object"},
     "monitors": {"type": "object", "additionalProperties": {"$ref": "#/$defs/monitor"}}

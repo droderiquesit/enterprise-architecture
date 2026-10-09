@@ -109,3 +109,27 @@ run "reject_lab_cost_ceiling" {
   }
   expect_failures = [var.settings]
 }
+
+run "batch_log_setup_published" {
+  command = plan
+
+  assert {
+    condition     = output.contract.batch_log_setup.fluent_bit_version == "5.1.3" && length(output.contract.batch_log_setup.script_sha256) == 64 && strcontains(local.batch_setup_script, "EH_LOG_PATHS") && strcontains(local.batch_setup_script, "EH_IDENTITY_CLIENT_ID") && strcontains(local.batch_setup_script, "CONFIGURE_AGENT='false'")
+    error_message = "The Batch Fluent Bit setup script (pinned version, runtime path/identity overrides, no Agent) is published in the contract."
+  }
+  assert {
+    condition     = !strcontains(local.batch_setup_script, "DD_API_KEY=") || strcontains(local.batch_setup_script, "DD_API_KEY=$DD_API_KEY_VALUE")
+    error_message = "No API key value is rendered into the script (read from Key Vault on the node)."
+  }
+}
+
+run "batch_log_setup_disabled" {
+  command = plan
+  variables {
+    settings = { batch_log_setup_enabled = false }
+  }
+  assert {
+    condition     = output.contract.batch_log_setup == null
+    error_message = "batch_log_setup can be switched off."
+  }
+}

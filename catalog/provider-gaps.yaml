@@ -184,3 +184,24 @@ gaps:
     references:
       - https://learn.microsoft.com/en-us/azure/templates/microsoft.web/connections
       - https://learn.microsoft.com/en-us/azure/logic-apps/authenticate-with-managed-identity
+  - service_id: container-apps-consumption
+    arm_types:
+      - {type: Microsoft.App/containerApps, api_version: "2025-07-01"}
+    azurerm_status: partial
+    resolution: azapi
+    reason: "observability/modules/telemetry-transport (Fluent Bit aggregator + OTel gateway apps, owned by obs-telemetry-transport): azurerm_container_app 5.9.0 has no ingress additionalPortMappings (OTLP gRPC 4317 + HTTP 4318 / forward 24224 + HTTP on one app) and no secret volume item paths (secrets mounted as named config files). Application container apps stay on azurerm."
+    owner_component: obs-telemetry-transport
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.app/2025-07-01/containerapps
+      - https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview#additional-tcp-ports
+      - https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets#mounting-secrets-in-a-volume
+  - service_id: datadog-azure-native-integration
+    arm_types:
+      - {type: Microsoft.Datadog/monitors/monitoredSubscriptions, api_version: "2025-06-11"}
+    azurerm_status: partial
+    resolution: azapi
+    reason: "azurerm 5.9.0 has azurerm_datadog_monitor (+ _tag_rule, _sso_configuration) but no resource for monitors/monitoredSubscriptions (additional subscriptions monitored by one Datadog native monitor). Used only by observability/modules/azure-integration in mode = native with extra subscriptions."
+    owner_component: obs-azure-integration
+    references:
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.datadog/2025-06-11/monitors/monitoredsubscriptions
+      - https://learn.microsoft.com/en-us/azure/partner-solutions/datadog/overview

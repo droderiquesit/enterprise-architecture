@@ -16,10 +16,10 @@
 | | Default |
 |---|---|
 | Scope | subscription (`budget.scope = "resource_group"` + `resource_group_ids` for per-RG budgets) |
-| Amount | 300 (billing currency), monthly grain |
+| Amount | `settings.budget.amount`, else the environment global `budget.monthly_amount` (`var.budget`, rendered by `tools/config/render.py`; dev: 500), else 300 — billing currency, monthly grain |
 | Filter | tags `application = enterprise-hello` AND `env = <env>` (safe in shared subscriptions; `filter_by_lab_tags = false` to count everything) |
 | Notifications | Actual ≥ 50 %, 80 %, 100 %; Forecasted > 80 %, 100 % (Azure allows max 5) |
-| Recipients | `budget.contact_emails` (default: `environment.owner` if it is an e-mail) + action group `budget` (e-mail receivers) |
+| Recipients | `settings.budget.contact_emails`, else the global `budget.contact_emails`, else `environment.owner` if it is an e-mail; + action group `budget` (e-mail receivers) |
 | Start date | first day of the month of first apply (`time_static`), never changes afterwards |
 
 ## Policy assignments (subscription scope, built-in definitions verified on Learn 2026-10-09)

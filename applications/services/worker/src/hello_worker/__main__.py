@@ -52,12 +52,33 @@ def build(settings=None):
     return s, app, worker, source, sink
 
 
+async def open_with_retry(component, name: str, attempts: int = 8, base_delay: float = 1.0, max_delay: float = 30.0) -> None:
+    """Open a dependency with bounded exponential backoff (full jitter) so a broker or table endpoint that is not
+    reachable yet at container start does not crash-loop the worker. Re-raises after `attempts` failures."""
+    import random
+
+    for attempt in range(1, attempts + 1):
+        try:
+            await component.open()
+            return
+        except Exception as exc:
+            if attempt == attempts:
+                log.error("dependency open failed; giving up", extra={"dependency": name, "attempts": attempt})
+                raise
+            delay = random.uniform(0, min(max_delay, base_delay * 2 ** (attempt - 1)))
+            log.warning(
+                "dependency open failed; retrying",
+                extra={"dependency": name, "attempt": attempt, "retry_in_s": round(delay, 2), "error.kind": type(exc).__name__},
+            )
+            await asyncio.sleep(delay)
+
+
 async def amain() -> None:
     import uvicorn
 
     s, app, worker, source, sink = build()
-    await sink.open()
-    await source.open()
+    await open_with_retry(sink, "table")
+    await open_with_retry(source, "servicebus")
     server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=s.port, log_config=None, access_log=False))  # noqa: S104
     server.install_signal_handlers = lambda: None  # we own signals
     loop = asyncio.get_running_loop()

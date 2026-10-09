@@ -206,10 +206,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
-        owner: applications deploy root (sidecar spec from obs instrumentation contract)
-        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
-        datadog_limitation: sidecar adds CPU/memory to each replica; job sidecar must terminate when the main container exits
+        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input, allow-list aca_console_allow keeps only the job apps) -> Datadog
+        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (aggregator); deploy-jobs sets app_log_route = eventhub, no sidecar
+        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the aggregator drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected apps); Datadog serverless-init log collection unused
+        datadog_limitation: diagnostic-setting latency (minutes); console lines from apps outside the allow-list are dropped by design
       traces:
         supported: 'yes'
         method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
@@ -253,10 +253,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
-        owner: applications deploy root (sidecar spec from obs instrumentation contract)
-        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
-        datadog_limitation: sidecar adds CPU/memory to each replica; job sidecar must terminate when the main container exits
+        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input, allow-list aca_console_allow keeps only the job apps) -> Datadog
+        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (aggregator); deploy-jobs sets app_log_route = eventhub, no sidecar
+        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the aggregator drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected apps); Datadog serverless-init log collection unused
+        datadog_limitation: diagnostic-setting latency (minutes); console lines from apps outside the allow-list are dropped by design
       traces:
         supported: 'yes'
         method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
@@ -300,10 +300,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
-        owner: applications deploy root (sidecar spec from obs instrumentation contract)
-        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
-        datadog_limitation: sidecar adds CPU/memory to each replica; job sidecar must terminate when the main container exits
+        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input, allow-list aca_console_allow keeps only the job apps) -> Datadog
+        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (aggregator); deploy-jobs sets app_log_route = eventhub, no sidecar
+        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the aggregator drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected apps); Datadog serverless-init log collection unused
+        datadog_limitation: diagnostic-setting latency (minutes); console lines from apps outside the allow-list are dropped by design
       traces:
         supported: 'yes'
         method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
@@ -1208,10 +1208,10 @@ compute:
     signals:
       app_logs:
         supported: partial
-        method: pool start task installs Fluent Bit (config from instrumentation contract) tailing task logs
-        owner: platform-batch (start task) + obs instrumentation contract
-        duplicate_prevention: no Agent log collection
-        datadog_limitation: start task ownership crosses layers - reconcile
+        method: job preparation task (deploy-jobs, submit-batch-job.sh) runs the obs-telemetry-transport batch_log_setup script - pinned Fluent Bit systemd service tailing Batch task stdout.txt ($AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt) -> Datadog HTTP intake
+        owner: obs-telemetry-transport (script content) + deploy-jobs (job preparation task); ADR-0001 section 13
+        duplicate_prevention: no Datadog Agent on Batch nodes; task stdout is not exported anywhere else
+        datadog_limitation: setup re-runs once per node per job; an existing job keeps its original preparation task (re-create the job to change it); Fluent Bit self-metrics have no local Agent OTLP receiver on Batch nodes
       traces:
         supported: 'yes'
         method: OTel SDK -> OTel gateway (pool subnet routes to ACA internal ingress)

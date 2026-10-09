@@ -12,7 +12,6 @@ metadata:
   tier: high
   env: dev
   repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
-  runbook_url: https://runbooks.example.com/enterprise-hello/hello-inventory-api
   description: Inventory API (Cosmos DB NoSQL), App Service Windows.
   languages:
   - dotnet

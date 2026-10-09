@@ -43,7 +43,7 @@
       "manifest"
     ],
     "manifest": "dev/hello-catalog-api.yaml",
-    "sha256": "8945ed6b43b6133fdaa73a3a78b109c6641d9b34f12f30710d985c69560afc01"
+    "sha256": "1116855af6b143e7015ec5603198ffd4332eb5502e0706fcc348ebfcf5722d56"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -70,7 +70,7 @@
     ],
     "owner": "catalog@example.com",
     "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md",
     "team": "catalog",
     "tier": "high"
   },
@@ -78,7 +78,7 @@
     "aca.http_5xx_ratio@app": {
       "evaluation_delay": 900,
       "key": "aca.http_5xx_ratio@app",
-      "message": "{{#is_alert}}**CRITICAL**: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).{{/is_alert}}\n{{#is_warning}}**WARNING**: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Compare with the APM error rate; if APM is healthy the failures are at ingress/revision level.\n2. az containerapp revision list -n <app> -g <rg> -o table; check the active revision is healthy.\n3. Review ContainerAppSystemLogs (diagnostic settings) for probe failures and scaling events.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#aca-5xx",
+      "message": "{{#is_alert}}**CRITICAL**: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).{{/is_alert}}\n{{#is_warning}}**WARNING**: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Compare with the APM error rate; if APM is healthy the failures are at ingress/revision level.\n2. az containerapp revision list -n <app> -g <rg> -o table; check the active revision is healthy.\n3. Review ContainerAppSystemLogs (diagnostic settings) for probe failures and scaling events.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#aca-5xx",
       "name": "[dev] hello-catalog-api Container App [[resource.name]] 5xx ratio above 5%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -97,7 +97,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "app",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#aca-5xx",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#aca-5xx",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -118,7 +118,7 @@
     "aca.restarts@app": {
       "evaluation_delay": 900,
       "key": "aca.restarts@app",
-      "message": "{{#is_alert}}**WARNING**: Container replicas restarted repeatedly (probe failures, crashes or OOM).{{/is_alert}}\n{{#is_warning}}**WARNING**: Container replicas restarted repeatedly (probe failures, crashes or OOM).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. az containerapp logs show -n <app> -g <rg> --type system to read restart reasons.\n2. Check the Fluent Bit sidecar is not the restarting container (telemetry pipeline dashboard).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#aca-restarts",
+      "message": "{{#is_alert}}**WARNING**: Container replicas restarted repeatedly (probe failures, crashes or OOM).{{/is_alert}}\n{{#is_warning}}**WARNING**: Container replicas restarted repeatedly (probe failures, crashes or OOM).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. az containerapp logs show -n <app> -g <rg> --type system to read restart reasons.\n2. Check the Fluent Bit sidecar is not the restarting container (telemetry pipeline dashboard).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#aca-restarts",
       "name": "[dev] hello-catalog-api Container App [[resource.name]] replicas restarting",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -136,7 +136,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "app",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#aca-restarts",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#aca-restarts",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -157,7 +157,7 @@
     "apm.error_rate": {
       "evaluation_delay": null,
       "key": "apm.error_rate",
-      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. APM -> Service hello-catalog-api -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#error-rate",
+      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. APM -> Service hello-catalog-api -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#error-rate",
       "name": "[dev] hello-catalog-api error rate above 5%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -176,7 +176,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#error-rate",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#error-rate",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -198,7 +198,7 @@
     "apm.http_5xx": {
       "evaluation_delay": null,
       "key": "apm.http_5xx",
-      "message": "{{#is_alert}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. Filter traces by http.status_code:5* for hello-catalog-api; open the error span.\n2. 503 from /readyz-gated dependencies means a dependency is down; 500 means an unhandled exception.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#http-5xx",
+      "message": "{{#is_alert}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service answered requests with HTTP 5xx.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. Filter traces by http.status_code:5* for hello-catalog-api; open the error span.\n2. 503 from /readyz-gated dependencies means a dependency is down; 500 means an unhandled exception.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#http-5xx",
       "name": "[dev] hello-catalog-api returning HTTP 5xx",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -216,7 +216,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#http-5xx",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#http-5xx",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -238,7 +238,7 @@
     "apm.latency_p95": {
       "evaluation_delay": null,
       "key": "apm.latency_p95",
-      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#latency",
+      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#latency",
       "name": "[dev] hello-catalog-api p95 latency above 1.5s",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -256,7 +256,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#latency",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#latency",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -278,7 +278,7 @@
     "apm.no_traffic": {
       "evaluation_delay": null,
       "key": "apm.no_traffic",
-      "message": "{{#is_alert}}**CRITICAL**: No server spans were received although this service is declared always-on.{{/is_alert}}\n{{#is_warning}}**WARNING**: No server spans were received although this service is declared always-on.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. Is the pipeline healthy? Check the \"telemetry pipeline canary\" monitor first - if it is also alerting, the problem is the collector/agent, not the service.\n2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?\n3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#missing-telemetry",
+      "message": "{{#is_alert}}**CRITICAL**: No server spans were received although this service is declared always-on.{{/is_alert}}\n{{#is_warning}}**WARNING**: No server spans were received although this service is declared always-on.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. Is the pipeline healthy? Check the \"telemetry pipeline canary\" monitor first - if it is also alerting, the problem is the collector/agent, not the service.\n2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?\n3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#missing-telemetry",
       "name": "[dev] hello-catalog-api stopped reporting traces",
       "new_group_delay": 60,
       "no_data_timeframe": 30,
@@ -297,7 +297,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#missing-telemetry",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#missing-telemetry",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -318,7 +318,7 @@
     "logs.error_spike": {
       "evaluation_delay": null,
       "key": "logs.error_spike",
-      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. Open Logs for service:hello-catalog-api env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-catalog-api in the last hour (a new version is the usual cause).\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#error-logs",
+      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\n\nTroubleshooting:\n1. Open Logs for service:hello-catalog-api env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-catalog-api in the last hour (a new version is the usual cause).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#error-logs",
       "name": "[dev] hello-catalog-api error log volume above 50 in 10m",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -336,7 +336,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#error-logs",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#error-logs",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -357,7 +357,7 @@
     "pg.alive@catalog-db": {
       "evaluation_delay": 900,
       "key": "pg.alive@catalog-db",
-      "message": "{{#is_alert}}**CRITICAL**: The server reports it is not alive.{{/is_alert}}\n{{#is_warning}}**WARNING**: The server reports it is not alive.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. az postgres flexible-server show -n <server> -g <rg> --query state (Stopped? auto-stopped after 7 days?).\n2. Check Azure Resource Health for the server.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#postgres-down",
+      "message": "{{#is_alert}}**CRITICAL**: The server reports it is not alive.{{/is_alert}}\n{{#is_warning}}**WARNING**: The server reports it is not alive.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. az postgres flexible-server show -n <server> -g <rg> --query state (Stopped? auto-stopped after 7 days?).\n2. Check Azure Resource Health for the server.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#postgres-down",
       "name": "[dev] hello-catalog-api PostgreSQL [[resource.name]] is down",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -376,7 +376,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "catalog-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#postgres-down",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#postgres-down",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -397,7 +397,7 @@
     "pg.connections_failed@catalog-db": {
       "evaluation_delay": 900,
       "key": "pg.connections_failed@catalog-db",
-      "message": "{{#is_alert}}**CRITICAL**: Connections are being rejected (auth, max_connections, network).{{/is_alert}}\n{{#is_warning}}**WARNING**: Connections are being rejected (auth, max_connections, network).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check active_connections vs max_connections.\n2. Entra auth: verify the managed identity role (pgaadauth_create_principal) and token audience.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#postgres-connections",
+      "message": "{{#is_alert}}**CRITICAL**: Connections are being rejected (auth, max_connections, network).{{/is_alert}}\n{{#is_warning}}**WARNING**: Connections are being rejected (auth, max_connections, network).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check active_connections vs max_connections.\n2. Entra auth: verify the managed identity role (pgaadauth_create_principal) and token audience.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#postgres-connections",
       "name": "[dev] hello-catalog-api PostgreSQL [[resource.name]] failed connections",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -416,7 +416,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "catalog-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#postgres-connections",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#postgres-connections",
       "severity": "critical",
       "tags": [
         "application:enterprise-hello",
@@ -437,7 +437,7 @@
     "pg.cpu@catalog-db": {
       "evaluation_delay": 900,
       "key": "pg.cpu@catalog-db",
-      "message": "{{#is_alert}}**WARNING**: Server CPU is saturated (Burstable SKUs also exhaust CPU credits).{{/is_alert}}\n{{#is_warning}}**WARNING**: Server CPU is saturated (Burstable SKUs also exhaust CPU credits).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. DBM -> Query metrics for this host; look for sequential scans.\n2. Burstable SKU: check azure.dbforpostgresql_flexibleservers.cpu_credits_remaining.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#postgres-cpu",
+      "message": "{{#is_alert}}**WARNING**: Server CPU is saturated (Burstable SKUs also exhaust CPU credits).{{/is_alert}}\n{{#is_warning}}**WARNING**: Server CPU is saturated (Burstable SKUs also exhaust CPU credits).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. DBM -> Query metrics for this host; look for sequential scans.\n2. Burstable SKU: check azure.dbforpostgresql_flexibleservers.cpu_credits_remaining.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#postgres-cpu",
       "name": "[dev] hello-catalog-api PostgreSQL [[resource.name]] CPU above 90%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -455,7 +455,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "catalog-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#postgres-cpu",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#postgres-cpu",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -477,7 +477,7 @@
     "pg.storage@catalog-db": {
       "evaluation_delay": 900,
       "key": "pg.storage@catalog-db",
-      "message": "{{#is_alert}}**WARNING**: Storage is almost full (server becomes read-only at the limit).{{/is_alert}}\n{{#is_warning}}**WARNING**: Storage is almost full (server becomes read-only at the limit).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Enable storage auto-grow or scale storage.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#postgres-storage",
+      "message": "{{#is_alert}}**WARNING**: Storage is almost full (server becomes read-only at the limit).{{/is_alert}}\n{{#is_warning}}**WARNING**: Storage is almost full (server becomes read-only at the limit).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Enable storage auto-grow or scale storage.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#postgres-storage",
       "name": "[dev] hello-catalog-api PostgreSQL [[resource.name]] storage above 90%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -495,7 +495,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "catalog-db",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#postgres-storage",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#postgres-storage",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -516,7 +516,7 @@
     "redis.memory@cache": {
       "evaluation_delay": 900,
       "key": "redis.memory@cache",
-      "message": "{{#is_alert}}**WARNING**: Memory is nearly full; evictions (evictedkeys) will rise.{{/is_alert}}\n{{#is_warning}}**WARNING**: Memory is nearly full; evictions (evictedkeys) will rise.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check TTLs (cache-aside keys must expire) and evictedkeys.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#redis-memory",
+      "message": "{{#is_alert}}**WARNING**: Memory is nearly full; evictions (evictedkeys) will rise.{{/is_alert}}\n{{#is_warning}}**WARNING**: Memory is nearly full; evictions (evictedkeys) will rise.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check TTLs (cache-aside keys must expire) and evictedkeys.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#redis-memory",
       "name": "[dev] hello-catalog-api Managed Redis [[resource.name]] memory above 90%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -534,7 +534,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "cache",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#redis-memory",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#redis-memory",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -555,7 +555,7 @@
     "redis.server_load@cache": {
       "evaluation_delay": 900,
       "key": "redis.server_load@cache",
-      "message": "{{#is_alert}}**WARNING**: The cache is CPU-bound; latency increases and cache-aside callers fall back to the database.{{/is_alert}}\n{{#is_warning}}**WARNING**: The cache is CPU-bound; latency increases and cache-aside callers fall back to the database.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check azure.cache_redisenterprise.operations_per_second and expensive commands.\n2. Watch the database CPU: cache saturation shifts load to the origin.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#redis-load",
+      "message": "{{#is_alert}}**WARNING**: The cache is CPU-bound; latency increases and cache-aside callers fall back to the database.{{/is_alert}}\n{{#is_warning}}**WARNING**: The cache is CPU-bound; latency increases and cache-aside callers fall back to the database.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog` | owner: catalog@example.com | tier: high\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check azure.cache_redisenterprise.operations_per_second and expensive commands.\n2. Watch the database CPU: cache saturation shifts load to the origin.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#redis-load",
       "name": "[dev] hello-catalog-api Managed Redis [[resource.name]] server load above 90%",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -573,7 +573,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": "cache",
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#redis-load",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#redis-load",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -640,7 +640,7 @@
       "burn_rate_alerts": [
         {
           "long_window": "1h",
-          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-burn-rate",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-burn-rate",
           "name": "[dev] hello-catalog-api availability SLO burn rate critical (1h/5m)",
           "notify": {
             "alert": [
@@ -648,28 +648,28 @@
               "oncall"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-burn-rate",
           "severity": "critical",
           "short_window": "5m",
           "threshold": 14.4
         },
         {
           "long_window": "6h",
-          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-burn-rate",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-burn-rate",
           "name": "[dev] hello-catalog-api availability SLO burn rate warning (6h/30m)",
           "notify": {
             "alert": [
               "team-catalog"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-burn-rate",
           "severity": "warning",
           "short_window": "30m",
           "threshold": 6.0
         }
       ],
       "denominator": "sum:trace.http.server.request.hits{service:hello-catalog-api,env:dev}.as_count()",
-      "description": "availability SLO for hello-catalog-api (dev). Runbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-availability",
+      "description": "availability SLO for hello-catalog-api (dev). Runbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-availability",
       "display_name": "[dev] hello-catalog-api availability",
       "name": "availability",
       "numerator": "sum:trace.http.server.request.hits{service:hello-catalog-api,env:dev}.as_count() - sum:trace.http.server.request.errors{service:hello-catalog-api,env:dev}.as_count()",
@@ -691,7 +691,7 @@
       "burn_rate_alerts": [
         {
           "long_window": "1h",
-          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `latency` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-burn-rate",
+          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `latency` is burning 14.4x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-burn-rate",
           "name": "[dev] hello-catalog-api latency SLO burn rate critical (1h/5m)",
           "notify": {
             "alert": [
@@ -699,27 +699,27 @@
               "oncall"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-burn-rate",
           "severity": "critical",
           "short_window": "5m",
           "threshold": 14.4
         },
         {
           "long_window": "6h",
-          "message": "{{#is_alert}}**WARNING**: error budget of SLO `latency` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-burn-rate",
+          "message": "{{#is_alert}}**WARNING**: error budget of SLO `latency` is burning 6.0x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-catalog-api` | env: `dev` | team: `catalog`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-burn-rate",
           "name": "[dev] hello-catalog-api latency SLO burn rate warning (6h/30m)",
           "notify": {
             "alert": [
               "team-catalog"
             ]
           },
-          "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-burn-rate",
+          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-burn-rate",
           "severity": "warning",
           "short_window": "30m",
           "threshold": 6.0
         }
       ],
-      "description": "latency SLO for hello-catalog-api (dev). Runbook: https://runbooks.example.com/enterprise-hello/hello-catalog-api#slo-latency",
+      "description": "latency SLO for hello-catalog-api (dev). Runbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-catalog-api.md#slo-latency",
       "display_name": "[dev] hello-catalog-api latency",
       "name": "latency",
       "tags": [

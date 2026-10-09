@@ -46,7 +46,7 @@
       "manifest"
     ],
     "manifest": "dev/hello-frontend.yaml",
-    "sha256": "1cf00e5828ee7bae292f53f56bd29f8578c5f09572f8f7a7f8830be86a6ce167"
+    "sha256": "b8878656cac18b99905aaaf74e78b9a07beb077a522a79213359ce0401601d15"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -72,7 +72,7 @@
     ],
     "owner": "web@example.com",
     "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-frontend",
+    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md",
     "team": "web",
     "tier": "high"
   },
@@ -80,7 +80,7 @@
     "rum.error_count": {
       "evaluation_delay": null,
       "key": "rum.error_count",
-      "message": "{{#is_alert}}**WARNING**: Users hit JavaScript or network errors.{{/is_alert}}\n{{#is_warning}}**WARNING**: Users hit JavaScript or network errors.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-frontend` | env: `dev` | team: `web` | owner: web@example.com | tier: high\n\nTroubleshooting:\n1. RUM -> Error Tracking for hello-frontend; group by @error.source (network vs source).\n2. Network errors on API calls: open the linked backend trace (resource -> APM).\n3. CORS failures: check CORS_ALLOWED_ORIGINS on the BFF includes the frontend origin.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-frontend#rum-errors",
+      "message": "{{#is_alert}}**WARNING**: Users hit JavaScript or network errors.{{/is_alert}}\n{{#is_warning}}**WARNING**: Users hit JavaScript or network errors.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-frontend` | env: `dev` | team: `web` | owner: web@example.com | tier: high\n\nTroubleshooting:\n1. RUM -> Error Tracking for hello-frontend; group by @error.source (network vs source).\n2. Network errors on API calls: open the linked backend trace (resource -> APM).\n3. CORS failures: check CORS_ALLOWED_ORIGINS on the BFF includes the frontend origin.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md#rum-errors",
       "name": "[dev] hello-frontend browser errors above 25 in 15m",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -98,7 +98,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-frontend#rum-errors",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md#rum-errors",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",
@@ -119,7 +119,7 @@
     "rum.lcp_p75": {
       "evaluation_delay": null,
       "key": "rum.lcp_p75",
-      "message": "{{#is_alert}}**WARNING**: Page load performance (Largest Contentful Paint, nanoseconds) degraded.{{/is_alert}}\n{{#is_warning}}**WARNING**: Page load performance (Largest Contentful Paint, nanoseconds) degraded.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-frontend` | env: `dev` | team: `web` | owner: web@example.com | tier: high\n\nTroubleshooting:\n1. RUM view performance: compare by @view.url_path and @geo.country.\n\nRunbook: https://runbooks.example.com/enterprise-hello/hello-frontend#rum-performance",
+      "message": "{{#is_alert}}**WARNING**: Page load performance (Largest Contentful Paint, nanoseconds) degraded.{{/is_alert}}\n{{#is_warning}}**WARNING**: Page load performance (Largest Contentful Paint, nanoseconds) degraded.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-frontend` | env: `dev` | team: `web` | owner: web@example.com | tier: high\n\nTroubleshooting:\n1. RUM view performance: compare by @view.url_path and @geo.country.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md#rum-performance",
       "name": "[dev] hello-frontend LCP p75 above 4s",
       "new_group_delay": 60,
       "no_data_timeframe": null,
@@ -137,7 +137,7 @@
       "renotify_interval": 0,
       "require_full_window": false,
       "resource_role": null,
-      "runbook_url": "https://runbooks.example.com/enterprise-hello/hello-frontend#rum-performance",
+      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-frontend.md#rum-performance",
       "severity": "warning",
       "tags": [
         "application:enterprise-hello",

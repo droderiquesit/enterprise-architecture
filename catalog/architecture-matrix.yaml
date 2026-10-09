@@ -148,7 +148,7 @@ architectures:
     deployment: deploy-specialized
 databases:
   sql-database-provisioned: {owner: hello-orders-api, boundary: "db orders / schema orders", also: [hello-dbadapter-sql]}
-  sql-database-serverless: {owner: hello-durable, boundary: "db fulfillment / schemas fulfillment", also: [hello-jobs]}
+  sql-database-serverless: {owner: hello-durable, boundary: "db fulfillment / schema fulfillment (fulfillments, batch_runs, reconciliation_runs - reconciliation summaries written by the Durable Reconciliation orchestration; hello-jobs only triggers it over HTTP)"}
   sql-elastic-pool: {owner: hello-dbadapter-sql-pool, boundary: "db adapter_pool", default: disabled}
   sql-hyperscale: {owner: hello-dbadapter-sql-hyperscale, boundary: "db adapter_hs", default: disabled}
   sql-managed-instance: {owner: hello-dbadapter-sqlmi, boundary: "db adapter"}
@@ -164,7 +164,7 @@ databases:
   documentdb: {owner: hello-dbadapter-documentdb, boundary: "db adapter / collection records"}
   managed-cassandra: {owner: hello-dbadapter-cassandra-mi, boundary: "keyspace adapter"}
   managed-redis: {owner: hello-catalog-api (cache-aside, not durable), boundary: "key prefix catalog:", also: [hello-dbadapter-redis (key prefix adapter:)]}
-  table-storage: {owner: hello-worker, boundary: "table notifications", also: [hello-dbadapter-table-storage (table adapterrecords)]}
+  table-storage: {owner: hello-worker, boundary: "table notifications", also: [hello-jobs process-batch-items (table batchitems; RESULT_SINK=table when deploy-jobs result_tables_endpoint is set), hello-dbadapter-table-storage (table adapterrecords)]}
   confidential-ledger: {owner: hello-functions audit, boundary: "collection order-audit", also: [hello-dbadapter-ledger]}
   horizondb: {owner: hello-dbadapter-horizondb, boundary: "db adapter", default: blocked-unless-preview-access}
   data-explorer: {owner: hello-dbadapter-adx, boundary: "database adapter / table Records"}

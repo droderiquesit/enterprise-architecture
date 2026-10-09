@@ -84,6 +84,14 @@ variable "obs_telemetry_transport" {
       logs_intake_host             = optional(string)
       forward_shared_key_secret_id = optional(string)
     })
+    batch_log_setup = optional(object({
+      script_gzip_base64 = string
+      script_sha256      = string
+      fluent_bit_version = string
+      log_paths_template = string
+      identity_env       = optional(string, "EH_IDENTITY_CLIENT_ID")
+      log_paths_env      = optional(string, "EH_LOG_PATHS")
+    }))
     env = optional(map(map(string)), {})
   })
 }
@@ -159,6 +167,16 @@ variable "deploy_frontend" {
   description = "deploy-frontend contract v1 (optional; null when the producer is not enabled)."
   type = object({
     url = optional(string)
+  })
+  default = null
+}
+
+variable "deploy_durable" {
+  description = "deploy-durable contract v1 (optional; null when the producer is not enabled). function_app.hostname -> DURABLE_API_URL."
+  type = object({
+    function_app = object({
+      hostname = string
+    })
   })
   default = null
 }

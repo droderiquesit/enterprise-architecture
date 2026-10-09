@@ -25,6 +25,17 @@ Fluent Bit aggregator and the OTel gateway (Container Apps, internal ingress).
 * `aca_console_allow` (default `["<prefix>-caj-*"]`: jobs only)
 * `grant_key_vault_secrets_user`
 
+* `eventhub_secret_version` (1): `value_wo_version` of the write-only listen secret; increment after renewing the
+  authorization rule keys (docs/runbooks/secret-rotation.md)
+* `batch_log_setup_enabled` (true): publish `batch_log_setup` in the contract (below)
+
+## Batch log setup (`batch_log_setup`)
+ADR-0001 §13: the contract carries a gzip+base64 Linux installer rendered from
+`modules/host-agents/scripts/linux-install.sh.tftpl` with the `linux-host` Fluent Bit config (`batch.tf`): pinned
+Fluent Bit 5.1.3, no Datadog Agent, Datadog API key read from Key Vault on the node with the identity named in
+`EH_IDENTITY_CLIENT_ID`, tail paths from `EH_LOG_PATHS` (`$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt`).
+deploy-jobs runs it as the Batch job preparation task. No secrets are rendered.
+
 ## Cost at defaults
 About $110/month. Event Hubs Standard 1 TU is about $22; two always-on 0.5 vCPU / 1 GiB Container Apps are about
 $80; the private endpoint is about $7.5. Datadog ingestion is extra. See `modules/telemetry-transport/README.md`.

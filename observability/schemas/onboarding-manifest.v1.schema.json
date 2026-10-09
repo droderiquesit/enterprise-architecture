@@ -256,8 +256,7 @@
         "service",
         "team",
         "owner",
-        "env",
-        "runbook_url"
+        "env"
       ],
       "additionalProperties": false,
       "properties": {
@@ -311,7 +310,8 @@
         },
         "runbook_url": {
           "type": "string",
-          "pattern": "^https?://"
+          "pattern": "^https?://",
+          "description": "Runbook page for this service; monitors link to <runbook_url>#<section>. Optional: defaults to the archetype runbook_base_url (global-defaults)."
         },
         "description": {
           "type": "string"

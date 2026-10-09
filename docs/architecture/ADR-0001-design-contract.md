@@ -181,9 +181,9 @@ README and in `catalog/services/*.yaml` (`networking.private_support`).
 | `hello-catalog-api` | Python 3.13 FastAPI | PostgreSQL db `catalog` + Managed Redis cache-aside | AKS / App Service Linux |
 | `hello-dbadapter-<family>` | Python 3.13 FastAPI | one boundary per family | ACA / App Service / VM (mapping in `catalog/architecture-matrix.yaml`) |
 | `hello-worker` | Python 3.13 | consumes `notifications` queue; writes Table Storage | VMSS / VM / AKS |
-| `hello-durable` | .NET 10 isolated Durable Functions | SQL schema `fulfillment`; Durable runtime storage separate | Functions Flex Consumption |
+| `hello-durable` | .NET 10 isolated Durable Functions | SQL schema `fulfillment` (`fulfillments`, `batch_runs`, reconciliation summaries in `reconciliation_runs`); Durable runtime storage separate | Functions Flex Consumption |
 | `hello-partner-sim` | Python 3.13 | none (simulated external API) | ACI |
-| `hello-jobs` | Python 3.13 | reconciliation summaries in SQL `fulfillment.reconciliation` | ACA Jobs, Azure Batch |
+| `hello-jobs` | Python 3.13 | Table Storage table `batchitems` (batch-item results, `RESULT_SINK=table`); daily-aggregate JSON file/blob; reconciliation is only *triggered* (HTTP to hello-durable) | ACA Jobs, Azure Batch |
 | `hello-traffic` | Python 3.13 (+Playwright) | none | ACA scheduled job |
 
 User journey (vertical slice): browser → `hello-bff` `/api/orders` → `hello-orders-api` → `hello-catalog-api`
@@ -256,8 +256,14 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
 - 2026-10-09: plan identity may write to the `plans` container (the plan stage persists the saved plan); apply identity reads it.
 - 2026-10-09: Azure DevOps workload identity federation uses the Entra issuer `https://login.microsoftonline.com/<tenant>/v2.0`
   (the `vstoken.dev.azure.com` issuer is deprecated, retiring 2027-07-01); issuer/subject are copied from the service connection.
-- 2026-10-09: Batch pool start-task telemetry setup (Fluent Bit) is observability-owned content (script published by the
-  instrumentation contract) referenced by the platform-batch pool start task; platform-batch owns only the reference.
+- 2026-10-09: Batch node log collection (Fluent Bit) is observability-owned content: `obs-telemetry-transport` publishes
+  `batch_log_setup` (gzip+base64 Linux installer: pinned Fluent Bit, `linux-host` config tailing Batch task
+  `$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt`, Datadog API key read from Key Vault on the node with the pool
+  identity; no secret in the contract). It is run by the **job preparation task** of the Batch job that the application
+  deployment root submits (`deploy-jobs` contract `batch.job_preparation`, `scripts/submit-batch-job.sh`), not by the pool
+  start task: Batch pools have no VM extensions, and platform-batch is upstream of obs-telemetry-transport, so a
+  start-task reference would create a platform → observability dependency cycle. platform-batch's start task installs
+  only the runtime (Python 3.13). (Supersedes the earlier "start task references the script" wording of this amendment.)
 - 2026-10-09: Static Web Apps is not available in swedencentral; the frontend SWA resource uses a separate `swa_location` (default westeurope).
 
 ## See also

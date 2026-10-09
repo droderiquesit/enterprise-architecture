@@ -414,10 +414,13 @@ services:
     terraform_resources:
     - azurerm_container_app_environment
     - azurerm_container_app
-    azapi: []
+    azapi:
+    - type: Microsoft.App/containerApps
+      api_version: '2025-07-01'
+      reason: observability telemetry transport (obs-telemetry-transport) Fluent Bit aggregator / OTel gateway apps need additional ingress port mappings (additionalPortMappings) and secret volume item paths, which azurerm_container_app 5.9.0 cannot express
     component: platform-containerapps
     implemented: true
-    notes: container app resources owned by deploy-* roots; environment by platform-containerapps
+    notes: container app resources owned by deploy-* roots (azurerm) and obs-telemetry-transport (azapi, see catalog/provider-gaps.yaml); environment by platform-containerapps
   workload:
     exercised_by:
     - hello-bff
@@ -1095,7 +1098,7 @@ services:
     exercised_by:
     - hello-jobs daily-aggregate task
     operations:
-    - daily aggregation into SQL fulfillment.reconciliation
+    - daily order aggregation (GET orders-api) to a JSON file / optional blob upload
   telemetry:
     azure_metric_namespace: azure.batch_batchaccounts
     signals:
@@ -1104,7 +1107,7 @@ services:
         method: Azure integration (azure.batch_batchaccounts) + OTel task metrics via OTel gateway
       logs:
         supported: partial
-        method: pool start task installs Fluent Bit (config from the observability instrumentation contract) tailing task log files
+        method: job preparation task (deploy-jobs submit-batch-job.sh) runs the obs-telemetry-transport batch_log_setup script - pinned Fluent Bit tailing Batch task stdout.txt -> Datadog (ADR-0001 section 13)
         notes: ServiceLogs via diagnostic settings for platform events
       traces: *id004
       dbm: *id002

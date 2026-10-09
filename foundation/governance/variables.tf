@@ -19,7 +19,8 @@ variable "settings" {
   type = object({
     budget = optional(object({
       # Azure budgets ALERT; they never stop or cap spend.
-      amount = optional(number, 300)
+      # Override of the environment global `budget.monthly_amount` (var.budget); 300 when neither is set.
+      amount = optional(number)
       # "subscription" (default) or "resource_group" (one budget per id in resource_group_ids).
       scope               = optional(string, "subscription")
       resource_group_ids  = optional(list(string), [])
@@ -73,4 +74,14 @@ variable "settings" {
     condition     = length(var.settings.action_group_short_name) <= 12
     error_message = "action_group_short_name must be <= 12 characters."
   }
+}
+
+variable "budget" {
+  description = "Environment global `budget` (environments/<env>/environment.yaml; rendered by tools/config/render.py because this root declares it). settings.budget.amount / contact_emails override it."
+  type = object({
+    monthly_amount = optional(number)
+    currency       = optional(string)
+    contact_emails = optional(list(string), [])
+  })
+  default = null
 }

@@ -1,0 +1,68 @@
+# Deployment profiles
+
+A profile (`<profile>.yaml`, schema [`../schema/profile.schema.json`](../schema/profile.schema.json)) declares:
+
+- `components` — the components the profile enables (`tools/config/resolve.py --env <env>` prints the resolved set);
+- `features` — high-level switches, turned into component settings by `tools/config/render.py` (table below);
+- `component_settings.<id>` — explicit per-component settings defaults.
+
+Overview, cost estimates and examples per profile: [docs/guides/deployment-profiles.md](../../docs/guides/deployment-profiles.md).
+
+## Settings precedence
+
+`tools/config/render.py --env <env> --component <id>` renders `<root>/terraform.tfvars.json`. A root's `settings`
+object is the deep merge of (lowest to highest precedence):
+
+1. root `variables.tf` / `settings.tf` defaults (applied by Terraform for anything not rendered);
+2. **profile `features`**, mapped to settings by [`tools/config/features.py`](../../tools/config/features.py);
+3. profile `component_settings.<id>`;
+4. `environments/<env>/environment.yaml` `components.<id>`.
+
+Maps are merged key by key; lists and scalars are replaced. The rendered settings are part of each component's
+fingerprint, so editing a feature re-selects only the components it maps to.
+
+## Feature mapping
+
+| Feature | Value | Component | Settings path |
+|---|---|---|---|
+| `topology` | `single-spoke` \| `hub-spoke` | foundation-network | `topology` |
+| `egress` | `nat-gateway` \| `firewall` | foundation-network | `egress` |
+| `firewall` | bool | foundation-network | `firewall_subnet` |
+| | | foundation-edge | `firewall.enabled` |
+| `bastion` | bool | foundation-edge | `bastion.enabled` (Developer SKU by default: no `AzureBastionSubnet` needed; for Basic/Standard also set `components.foundation-network.bastion_subnet: true`) |
+| `app_gateway` | bool | foundation-network | `appgw_subnet` |
+| | | foundation-edge | `app_gateway.enabled` |
+| `front_door` | bool | foundation-edge | `front_door.enabled` |
+| `apim` | bool | foundation-edge | `apim.enabled` |
+| `service_bus_sku` | `Standard` \| `Premium` | platform-messaging | `sku` |
+| `rum_session_sample_rate` | 0–100 | obs-prereqs | `rum_applications.hello-frontend.session_sample_rate` |
+| `session_replay` | bool | obs-prereqs | `rum_applications.hello-frontend.session_replay_sample_rate` (`true` ⇒ 100, `false` ⇒ 0) |
+| `trace_sample_rate` | 0–1 | deploy-core-aks, deploy-core-aca, deploy-durable, deploy-functions, deploy-partner-sim, deploy-dbadapters, deploy-appservice, deploy-jobs, deploy-vm-workloads | `trace_sample_ratio` (`OTEL_TRACES_SAMPLER_ARG`) |
+
+Documented-only features (accepted, rendered nowhere):
+
+| Feature | Why |
+|---|---|
+| `private_endpoints` | private endpoints are the ADR-0001 §8 default of every root; exceptions are per-root settings (`network_mode`, `private_endpoint_enabled`, ...) |
+| `deploy_lab_infrastructure` | `observability-only` enables no lab infrastructure through its `components` list |
+
+Any other key in `features` is rejected by `tools/config/lib.py` (`load_profile` and `render_component`), so a new
+feature must be added to `FEATURE_MAP` (or `DOCUMENTED_ONLY`) together with this table. Tests:
+[`tests/tools/test_profile_features.py`](../../tests/tools/test_profile_features.py) (including a check that every
+target settings path exists in the root's `settings` type).
+
+### Prerequisites the mapping cannot supply
+
+- `app_gateway: true` (profiles `full`, `specialized`) enables Application Gateway in foundation-edge, whose validation
+  requires `components.foundation-edge.app_gateway.key_vault_certificate_secret_id` and `backend_fqdns` in the
+  environment file; plan fails with that message until they are set (or set the feature to `false`).
+- `front_door: true` likewise requires `components.foundation-edge.front_door.origins`.
+- `egress: firewall` requires `topology: hub-spoke` and `firewall: true` (foundation-network validation).
+
+## Profile-specific component settings
+
+- `minimal`: `platform-containerapps.ingress_mode: external`; `platform-messaging.subscriptions` = only
+  `fulfillment` (hello-durable is the only `order-events` consumer in the profile; subscriptions without a
+  consumer would retain every order event until TTL).
+- `enterprise`, `full`, `specialized`: `platform-containerapps.ingress_mode: internal`; ACR Premium with private
+  endpoint and public access disabled.
