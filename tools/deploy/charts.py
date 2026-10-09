@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -84,7 +85,19 @@ def cmd_lint(args) -> int:
                 rc |= 1
                 continue
             if kubeconform:
-                kc = run([kubeconform, "-strict", "-summary", "-ignore-missing-schemas", "-"], input=tpl.stdout, text=True)
+                kc = run(
+                    [
+                        kubeconform, "-strict", "-summary",
+                        "-kubernetes-version", os.environ.get("KUBERNETES_VERSION", "1.36.0"),
+                        "-schema-location", "default",
+                        "-schema-location",
+                        "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json",
+                        "-skip", "Route",  # OpenShift Route has no public schema; asserted in tests/charts
+                        *(["-cache", os.environ["KUBECONFORM_CACHE"]] if os.environ.get("KUBECONFORM_CACHE") else []),
+                        "-",
+                    ],
+                    input=tpl.stdout, text=True,
+                )
                 rc |= kc.returncode
             else:
                 print("note: kubeconform not installed; rendered manifests not schema-validated")

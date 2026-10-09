@@ -118,9 +118,9 @@ architectures:
     source: applications/deployments/specialized/README.md
   aro:
     artifact: container-image (svc-catalog-api)
-    runtime_config: Deployment/Service/Route manifests rendered into the contract (settings.aro_catalog_env), applied by scripts/deploy-aro.sh
-    smoke: rollout status in deploy-aro.sh
-    rollback: oc rollout undo or re-apply previous digest
+    runtime_config: Helm values for applications/charts/hello-service rendered into the contract (aro.helm, Route + SCC-assigned UID), installed by scripts/deploy-aro.sh (helm upgrade --install, rollback on failure)
+    smoke: helm --wait readiness in deploy-aro.sh
+    rollback: helm rollback <release> or re-apply previous digest
     source: applications/deployments/specialized/README.md
   vm-confidential:
     artifact: zip-package (svc-worker) via managed run command install-hello-worker-cvm

@@ -15,6 +15,14 @@ runtimes:
   dotnet: {version: "10.0", sdk: "10.0.401", support: "LTS", end_of_support: "2028-11-14"}
   python: {version: "3.13", end_of_support_functions: "2029-10"}
   node_build: {version: "24", minimum: "22"}
+cli:
+  helm: "4.3.0"            # chart lint/package/OCI push (pipelines/variables/tools.yml HELM_VERSION)
+  helm3_compat: "3.22.0"   # chart tests also render with Helm 3
+  kubeconform: "0.8.0"
+  kind: "0.33.0"           # optional local smoke (tests/charts, HELLO_KIND_SMOKE=1)
+  kubectl: "1.36.5"
+kubernetes:
+  aks_default_version: "1.36"   # platform/compute/aks settings default; kubeconform schemas 1.36.0
 images:
   fluent_bit: "fluent/fluent-bit:5.1.3"
   datadog_agent: "gcr.io/datadoghq/agent:7.84.2"

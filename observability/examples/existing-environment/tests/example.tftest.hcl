@@ -24,7 +24,7 @@ run "onboards_existing_resources_verbatim" {
   command = plan
 
   assert {
-    condition     = output.onboarding.services == tolist(["orders-api", "orders-web", "telemetry-pipeline"])
+    condition     = output.onboarding.services == tolist(["azure-platform-logs", "orders-api", "orders-web", "telemetry-pipeline"])
     error_message = "all manifests must be onboarded"
   }
   assert {
@@ -54,6 +54,14 @@ run "onboards_existing_resources_verbatim" {
   assert {
     condition     = contains(keys(module.diagnostics[0].platform_log_settings), "orders-api/db")
     error_message = "PostgreSQL platform logs exported"
+  }
+  assert {
+    condition     = length(output.diagnostic_settings.activity_log) == 1 && output.diagnostic_settings.entra == null && output.diagnostic_settings.tiers["orders-api/db"] == "standard"
+    error_message = "Activity Log of the supplied subscription exported; Entra off; standard tier"
+  }
+  assert {
+    condition     = contains(keys(module.onboarding.monitor_ids), "azure-platform-logs/azlogs.rbac_changes") && length(output.azure_logs.metrics) == 8
+    error_message = "Azure platform log monitors and log-based metrics expected"
   }
   assert {
     condition     = length(module.kubernetes) == 1

@@ -1,5 +1,5 @@
 # hello-catalog-api on a local kind cluster (tests/charts smoke): local image loaded with `kind load`, Postgres and
-# Redis in-cluster, password from an existing Secret, no workload identity / Key Vault / Datadog Agent on the node.
+# Redis in namespace deps, password from an existing Secret, no workload identity / Key Vault / Datadog Agent on the node.
 # image.digest is set by the test from the loaded image id.
 kind: deployment
 service: {name: hello-catalog-api, version: 0.1.0-e2e, env: kind, team: catalog, domain: catalog, tier: high, logsSource: python}
@@ -11,12 +11,12 @@ identity:
   clientId: 00000000-0000-0000-0000-000000000001
   workloadIdentity: false
 env:
-  PG_HOST: postgres
+  PG_HOST: postgres.deps.svc.cluster.local
   PG_DATABASE: catalog
   PG_USER: postgres
   PG_AUTH: password
   PG_SSLMODE: disable
-  REDIS_HOST: redis
+  REDIS_HOST: redis.deps.svc.cluster.local
   REDIS_PORT: "6379"
   REDIS_AUTH: none
   REDIS_TLS: "false"

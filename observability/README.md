@@ -9,7 +9,8 @@ compute platforms, databases or applications, and it needs nothing outside this 
 | What | Where |
 |---|---|
 | Terraform modules (monitoring content) | `modules/{onboarding,monitors,slos,dashboards,synthetics,service-catalog,rum,notification-routing,deployment-markers}` |
-| Terraform modules (collection/transport) | `modules/{azure-integration,diagnostic-settings,telemetry-transport,fluent-bit,otel-collector,host-agents,kubernetes,instrumentation,dbm}` and `config/` (separate owner; see their READMEs) |
+| Terraform modules (collection/transport) | `modules/{azure-integration,diagnostic-settings,azure-logs,telemetry-transport,fluent-bit,otel-collector,host-agents,kubernetes,instrumentation,dbm}` and `config/` (separate owner; see their READMEs) |
+| Azure platform / control-plane logs | `modules/azure-logs` (Activity Log, Entra ID), `modules/diagnostic-settings` (tiered category policy), `modules/log-management` (Datadog index, metrics, dashboard), archetype profile `azure-platform-logs` - section 11 |
 | Manifest / archetype / routing schemas | `schemas/*.v1.schema.json` |
 | Monitoring archetypes | `archetypes/global-defaults.yaml`, `archetypes/platform/*.yaml`, `archetypes/profiles/*.yaml` |
 | Tools | `tools/onboarding/{validate,render}.py`, `tools/verify/telemetry_verify.py`, `tools/markers/send_deployment_event.py`, `tools/release/package.sh` |
@@ -226,3 +227,32 @@ Monitor messages link to `<runbook_url>#<section>`: `error-rate`, `http-5xx`, `l
 (`archetypes/global-defaults.yaml`, placeholders `[[service]]`, `[[env]]`, `[[team]]`, `[[repository]]`) is used. The
 shipped default is `[[repository]]?path=/docs/runbooks/alerts/[[service]].md` (Azure Repos file URL built from
 `metadata.repository`); override it in your vendored global defaults (e.g. a wiki or a GitHub `blob/main/...` URL).
+
+## 11. Azure platform and control-plane logs (1.1.0)
+
+Full guide: `docs/guides/azure-logs-to-datadog.md` in the source repository (what is collected per source and
+tier, cost controls, permissions, verification queries, removal).
+
+* **Control plane** - `modules/azure-logs`: one subscription-scoped diagnostic setting per subscription id
+  (Activity Log, all 8 categories by default) and an optional tenant-wide Entra ID setting
+  (`entra.enabled` + `acknowledge_prerequisites`: Security Administrator, Entra ID P1/P2 for sign-in logs). Both
+  stream to the `activity-logs` hub of `modules/telemetry-transport` (`event_hub.activity_logs_hub`; `""` shares
+  `platform-logs`). Inputs are subscription GUIDs and a namespace authorization rule id only.
+* **Resource logs** - `modules/diagnostic-settings` `platform_log_tier = security | standard | verbose` applies the
+  maintained per-type policy `category-policy.json` (Microsoft Learn category names, cost notes, `kube-audit`
+  supersedes `kube-audit-admin`). The 1.0 `platform_log_allowlist` input still works and replaces the policy.
+* **Shape in Datadog** - the Fluent Bit aggregator keeps every Azure field verbatim and sets `ddsource`
+  `azure.<provider>` / `azure.activedirectory`, `service:azure`, `ddsourcecategory:azure` and the Datadog forwarder
+  tags (`subscription_id`, `resource_group`, `tenant`) plus `resource_type`, `resource_name`, `region`, `category`,
+  `azure_log_type`, `env`. It also dedups Event Hubs redeliveries and truncates (never drops) records above
+  Datadog's 1 MB limit.
+* **Datadog side** - `modules/log-management`: "Azure platform logs" dashboard (default), optional log-based
+  metrics, index (retention, daily quota, sampled exclusion filters; **index order** caveat in the module README),
+  Activity Log pipeline and archive. Monitors: onboard one pseudo-service per environment with
+  `telemetry.profile: azure-platform-logs` (see `examples/existing-environment/manifests/prod/azure-platform-logs.yaml`).
+* **Native alternative** - `modules/azure-integration` `mode = native` forwards logs through the tag rule
+  (`native.send_subscription_logs`, `send_resource_logs`, `send_aad_logs`, `log_tag_filters`). It is mutually
+  exclusive with the Event Hubs path per subscription / tenant, and `eventhub_log_forwarding` validation fails the
+  plan on overlap.
+* Not collected: NSG / VNet flow logs (Storage-only Network Watcher feature; options in the guide).
+

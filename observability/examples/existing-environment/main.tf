@@ -50,8 +50,40 @@ module "diagnostics" {
   source = "./.vendor/observability-1.0.0/modules/diagnostic-settings"
   count  = var.diagnostics.enabled ? 1 : 0
 
-  resources   = local.diagnostic_resources
-  destination = var.diagnostics.destination
+  resources = local.diagnostic_resources
+  destination = {
+    authorization_rule_id = var.diagnostics.destination.authorization_rule_id
+    app_logs_hub          = var.diagnostics.destination.app_logs_hub
+    platform_logs_hub     = var.diagnostics.destination.platform_logs_hub
+  }
+  platform_log_tier = var.diagnostics.platform_log_tier
+}
+
+# Subscription Activity Log (+ optional Entra ID) of the supplied subscriptions -> activity-logs hub.
+module "azure_logs" {
+  source = "./.vendor/observability-1.0.0/modules/azure-logs"
+  count  = var.diagnostics.enabled ? 1 : 0
+
+  activity_log = {
+    enabled          = var.azure_logs.activity_log_enabled
+    subscription_ids = var.azure_logs.subscription_ids
+    categories       = var.azure_logs.categories
+  }
+  entra = var.azure_logs.entra
+  destination = {
+    authorization_rule_id = var.diagnostics.destination.authorization_rule_id
+    eventhub_name         = coalesce(var.diagnostics.destination.activity_logs_hub, var.diagnostics.destination.platform_logs_hub)
+  }
+}
+
+module "log_management" {
+  source = "./.vendor/observability-1.0.0/modules/log-management"
+
+  env       = var.env
+  dashboard = { enabled = var.log_management.dashboard, entra = var.azure_logs.entra.enabled }
+  metrics   = { enabled = var.log_management.metrics }
+  index     = { enabled = var.log_management.index, name = "azure-platform-${var.env}" }
+  pipeline  = { enabled = var.log_management.pipeline }
 }
 
 module "dbm" {

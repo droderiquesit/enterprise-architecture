@@ -556,3 +556,89 @@ Lab: Open the SLO, then the service error/latency monitors; check recent deploym
 1. Open the test result and the failing step/assertion.
 2. Compare with APM for the same window.
 3. If only the synthetic fails, check DNS/ingress/private location reachability.
+
+## aks-exec
+
+**Someone opened an interactive session into a pod (kube-audit-admin / kube-audit).**
+
+Monitors: `azlogs.aks_exec` (warning, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Logs: source:azure.containerservice @aks_audit.objectRef.subresource:exec - aks_audit.user.username and objectRef namespace/name.
+2. properties.log holds the full audit event (sourceIPs, userAgent, annotations authorization.k8s.io/reason).
+3. Not break-glass (docs/runbooks/break-glass.md) or not approved: revoke the user's cluster role binding.
+
+## azure-activity-deletes
+
+**Azure resources were deleted in a protected resource group (Activity Log, Administrative category).**
+
+Monitors: `azlogs.activity_deletes` (warning, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Logs: [[params.activity_scope]] @category:Administrative @operationName:*DELETE* - group by @operationName and resource_group.
+2. Who: identity.claims (upn / appid) and callerIpAddress; correlationId groups the steps of one operation.
+3. Expected during a pipeline teardown/retire run: mute the monitor for the run window; otherwise treat as an incident.
+
+## azure-diagnostics-deleted
+
+**A diagnostic setting was deleted - logs of that resource no longer reach Datadog (defense-evasion pattern).**
+
+Monitors: `azlogs.diagnostic_settings_deleted` (critical, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Logs: @operationName:*DIAGNOSTICSETTINGS/DELETE* - resourceId names the resource that lost its export.
+2. If not done by the obs-diagnostics pipeline (retire/destroy), re-apply obs-diagnostics and investigate the caller.
+
+## azure-logs-missing
+
+**No Azure platform / Activity Log record reached Datadog (diagnostic settings, Event Hubs or the aggregator Kafka input broken).**
+
+Monitors: `azlogs.logs_missing` (warning, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Check the telemetry pipeline canary first (aggregator alive?).
+2. Event Hubs metrics: incoming messages on platform-logs / activity-logs; consumer group fluent-bit lag.
+3. Aggregator logs: kafka input errors (SASL, connection string rotated?); re-apply obs-diagnostics if settings were deleted.
+
+## azure-policy-denies
+
+**Azure Policy is denying many requests (a deployment is fighting a policy assignment).**
+
+Monitors: `azlogs.policy_deny_spike` (warning, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Logs: @category:Policy - properties.policies names the assignment and definition that denied the request.
+2. Correlate with the deployment pipeline run (correlationId); fix the template or request a policy exemption.
+
+## azure-rbac-changes
+
+**A role assignment was created or removed (privilege change).**
+
+Monitors: `azlogs.rbac_changes` (warning, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Logs: @operationName:*ROLEASSIGNMENTS* - properties.requestbody / responseBody hold principalId and roleDefinitionId.
+2. Confirm the change came from the deployment pipeline identity (identity.claims.appid) and a reviewed change.
+3. Unexpected: remove the assignment, rotate credentials of the acting principal, open a security incident.
+
+## azure-service-health
+
+**Microsoft published a Service Health event (incident / action required / security) affecting this subscription and region.**
+
+Monitors: `azlogs.service_health` (warning, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Logs: @category:ServiceHealth - properties.title, properties.impactedServices, properties.trackingId.
+2. Check Azure Service Health in the portal for the tracking id; correlate with application monitors before acting.
+
+## entra-signin-failures
+
+**Failed interactive sign-ins spike (password spray / misconfigured client).**
+
+Monitors: `azlogs.entra_signin_failures` (warning, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Logs: source:azure.activedirectory @category:SignInLogs - group by @properties.status.errorCode, @properties.userPrincipalName, callerIpAddress.
+2. 50126 = bad credentials, 50053 = locked out, 53003 = blocked by Conditional Access.
+3. Cloud SIEM (if licensed) runs Datadog's Entra ID detection rules on the same logs.
+
+## keyvault-access-denied
+
+**A burst of denied Key Vault requests (missing RBAC role / access policy, or someone probing secrets).**
+
+Monitors: `azlogs.keyvault_access_denied` (warning, archetypes/profiles/azure-platform-logs.yaml).
+
+1. Logs: source:azure.keyvault @properties.httpStatusCode:403 - identity.claim (appid / objectidentifier / xms_mirid) is the caller.
+2. A workload identity after a role change: re-apply its role assignment. An unknown caller: security incident.

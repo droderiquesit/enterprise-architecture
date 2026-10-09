@@ -12,11 +12,15 @@
 | `lua/enterprise_hello.lua` | shared filters | see the list below |
 
 The filters in `lua/enterprise_hello.lua`:
-* `eh_redact`: key=value, JSON fields, `Bearer`, `sig=`, `AccountKey=`
+* `eh_redact`: key=value, JSON fields, `Bearer`, `sig=`, `AccountKey=` (Azure/Entra/Kubernetes metadata such as
+  `tokenIssuerType`, `authorization.k8s.io/*` and `{"key","value"}` labels is kept)
 * `eh_normalize`: `log` becomes `message`; trace-id aliases are lifted; `dd.*` is flattened
 * `eh_k8s`: service/env/version/ddsource/ddtags from labels
 * `eh_static_tags`
-* `eh_azure_split`: splits `{"records":[...]}` batches; ACA console allow-list
+* `eh_azure_split`: splits `{"records":[...]}` batches; ACA console allow-list; Datadog Azure forwarder record
+  shape (`ddsource azure.<provider>`, `service:azure`, `subscription_id`/`resource_group`/`tenant`/`resource_type`/
+  `region`/`category`/`azure_log_type`/`env` tags, Azure fields verbatim, `aks_audit.*` from kube-audit);
+  redelivery dedup; 1 MB size guard; drop of application categories outside the app-logs hub
 * `eh_finalize`: adds `telemetry.pipeline:fluent-bit`
 
 ## Environment contract (no defaults inside the configs)
@@ -32,6 +36,7 @@ Deployers must set every variable they use. The modules do this through `modules
 | Forward | `FLB_FORWARD_*` (host, port, TLS, `FLB_FORWARD_SHARED_KEY` secret) |
 | Event Hubs | `EVENTHUB_BROKERS`, `EVENTHUB_TOPICS`, `EVENTHUB_CONSUMER_GROUP`, `KAFKA_SECURITY_PROTOCOL`=SASL_SSL, `EVENTHUB_CONNECTION_STRING` (secret) |
 | ACA console filter | `FLB_ACA_CONSOLE_ALLOW` |
+| Azure platform logs (Lua, optional; defaults in brackets) | `FLB_EVENTHUB_APP_TOPIC` [`app-logs`], `FLB_AZURE_SERVICE` [`azure`], `FLB_AZURE_ENV_BY_SUBSCRIPTION` [`<sub-guid>=<env>,...`, empty], `FLB_AZURE_MAX_RECORD_BYTES` [900000], `FLB_AZURE_DEDUP_CACHE` [20000] |
 
 Resilience settings:
 * `storage.type: filesystem` on inputs, bounded by `storage.total_limit_size` on outputs

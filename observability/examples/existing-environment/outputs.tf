@@ -31,7 +31,18 @@ output "diagnostic_settings" {
     app_logs      = module.diagnostics[0].app_log_settings
     platform_logs = module.diagnostics[0].platform_log_settings
     unsupported   = module.diagnostics[0].unsupported_resources
+    tiers         = module.diagnostics[0].platform_log_tiers
+    activity_log  = module.azure_logs[0].activity_log_settings
+    entra         = module.azure_logs[0].entra_setting_id
   } : null
+}
+
+output "azure_logs" {
+  description = "Azure platform logs in Datadog: dashboard and log-based metrics."
+  value = {
+    dashboard_url = module.log_management.dashboard_url
+    metrics       = module.log_management.metric_names
+  }
 }
 
 output "dbm" {

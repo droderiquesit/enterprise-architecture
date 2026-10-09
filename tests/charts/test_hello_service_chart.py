@@ -9,13 +9,13 @@ import copy
 import json
 import re
 import subprocess
+import tarfile
 
 import jsonschema
 import pytest
 import yaml
 
-from chartlib import (CHART, HELM3, KUBECONFORM, aks_kubernetes_version, by_kind, example_files, helm_binaries,
-                      load_values, render, run, template)
+from chartlib import CHART, HELM3, KUBECONFORM, aks_kubernetes_version, by_kind, example_files, helm_binaries, load_values, render, run, template
 
 EXAMPLES = example_files()
 IDS = [p.stem for p in EXAMPLES]
@@ -197,8 +197,8 @@ def test_no_plaintext_secrets(values, helm_bin):
                 assert "value" not in e and "secretKeyRef" in e["valueFrom"], e
     for spc in by_kind(docs, "SecretProviderClass"):
         objs = yaml.safe_load(spc["spec"]["parameters"]["objects"])["array"]
-        for o in objs:
-            o = yaml.safe_load(o)
+        for raw in objs:
+            o = yaml.safe_load(raw)
             assert o["objectType"] == "secret" and re.fullmatch(r"[A-Za-z0-9-]+", o["objectName"])
         assert spc["spec"]["parameters"]["usePodIdentity"] == "false"
 
@@ -350,3 +350,13 @@ def test_chart_metadata():
     assert chart["apiVersion"] == "v2" and chart["type"] == "application"
     assert re.fullmatch(r"\d+\.\d+\.\d+", chart["version"])
     assert not (CHART / "charts").exists() and "dependencies" not in chart, "no subcharts (one release per workload)"
+
+
+def test_package_excludes_examples(helm_bin, tmp_path):
+    res = run([helm_bin, "package", str(CHART), "--app-version", "src-test", "-d", str(tmp_path)])
+    assert res.returncode == 0, res.stderr
+    chart = yaml.safe_load((CHART / "Chart.yaml").read_text())
+    with tarfile.open(tmp_path / f"hello-service-{chart['version']}.tgz") as t:
+        names = t.getnames()
+    assert "hello-service/values.schema.json" in names and "hello-service/README.md" in names
+    assert not any("/examples/" in n for n in names)

@@ -6,8 +6,17 @@
   endpoint port from platform-servicefabric `app_port`) into the contract and `scripts/deploy-sf.sh` uploads/provisions/
   upgrades with `sfctl` (monitored upgrade, FailureAction=Rollback). The cluster admin client certificate is fetched by the
   pipeline at deploy time (not in state).
-- **ARO** — `hello-catalog-api` Deployment/Service/Route manifests rendered into the contract (`aro.manifests`); applied by
-  `scripts/deploy-aro.sh` (`oc apply`, rollout status). PG/Redis env comes from `settings.aro_catalog_env`.
+- **ARO** — `hello-catalog-api` with the shared Helm chart [`applications/charts/hello-service`](../../charts/hello-service/README.md):
+  Terraform renders the release values into the contract (`aro.helm.{release,chart,chart_path,values}`) with OpenShift
+  settings (`openshift.enabled`: no fixed `runAsUser` — the restricted-v2 SCC assigns the UID; `openshift.route.enabled`:
+  edge-TLS Route instead of an Ingress; no AKS workload identity webhook / Key Vault CSI add-on). `scripts/deploy-aro.sh`
+  runs `helm upgrade --install --rollback-on-failure` (Helm 3: `--atomic`) `--wait --history-max 10`.
+  **Prerequisite**: an OpenShift login — the pipeline provides `OC_TOKEN` (deployer service account / Entra-integrated
+  identity; kubeadmin via `az aro list-credentials` is not used) and the script runs `oc login --server <api> --token`;
+  `--dry-run` without `OC_TOKEN` only renders the chart. PG/Redis env comes from `settings.aro_catalog_env` (non-secret;
+  secret-looking keys are rejected) and secrets from existing Secrets via `settings.aro_secret_env`
+  (`{PG_PASSWORD = {secretName, key}}`); `settings.aro_replicas` (2). `status.aro` is `blocked` when the
+  foundation-identity `hello-catalog-api` identity or a digest-pinned image is missing.
 - **Confidential VM** — `hello-worker` via managed run command (`install-hello-worker-cvm`, same `vm-script` as vm-workloads).
 - **Automation** — `azurerm_automation_runbook` `hello-health-probe` (`Python3`, stdlib-only script in `templates/health-probe.py`)
   + `azurerm_automation_job_schedule` on the platform schedule with `probe_urls`.
@@ -16,8 +25,8 @@
 - **Produced contract**: `deploy-specialized`: `service_fabric`, `aro`, `apps`, `status`.
 
 ## Rollback
-SF: `sfctl application upgrade` to the previous type version (auto-rollback on health failure). ARO: `oc rollout undo` or
-re-apply previous digest. CVM: previous package. Runbook: previous commit.
+SF: `sfctl application upgrade` to the previous type version (auto-rollback on health failure). ARO: automatic rollback of a
+failed upgrade; manual `helm -n hello rollback hello-catalog-api <revision> --wait` or re-apply the previous digest. CVM: previous package. Runbook: previous commit.
 
 ## Cost
 No billable resources of its own beyond the runbook (Automation free minutes cover an hourly probe).

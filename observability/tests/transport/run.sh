@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
 TF="${TERRAFORM_BIN:-terraform}"
 rc=0
-for d in modules/{instrumentation,fluent-bit,otel-collector,telemetry-transport,diagnostic-settings,azure-integration,host-agents,kubernetes,dbm} \
+for d in modules/{instrumentation,fluent-bit,otel-collector,telemetry-transport,diagnostic-settings,azure-logs,log-management,azure-integration,host-agents,kubernetes,dbm} \
          lab/{azure-integration,telemetry-transport,diagnostics,hosts,kubernetes,dbm}; do
   dir="$ROOT/observability/$d"
   if (cd "$dir" && "$TF" fmt -check -recursive >/dev/null && "$TF" init -backend=false -input=false >/dev/null && "$TF" validate >/dev/null && "$TF" test >/tmp/tf-test-$$.log 2>&1); then

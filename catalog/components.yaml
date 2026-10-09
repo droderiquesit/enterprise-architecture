@@ -404,6 +404,7 @@ components:
     consumes: [platform-aks, platform-shared, platform-messaging, platform-db-sql, platform-db-postgresql, obs-telemetry-transport, foundation-identity]
     optional_consumes: [platform-db-redis, obs-kubernetes]
     artifacts: [svc-bff, svc-orders-api, svc-catalog-api, svc-worker]
+    inputs: [applications/charts/hello-service/**]
   - id: deploy-core-aca
     produces: [deploy-core-aca]
     layer: applications
@@ -490,6 +491,7 @@ components:
     optional_consumes: [platform-servicefabric, platform-aro, platform-specialized-compute, platform-messaging, platform-db-table-storage]
     consumes: [obs-telemetry-transport, foundation-identity]
     artifacts: [svc-catalog-api, svc-inventory-api, svc-jobs]
+    inputs: [applications/charts/hello-service/**]
 
   # ------------------------------------------------------------------- docs
   - id: docs

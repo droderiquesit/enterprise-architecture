@@ -12,13 +12,14 @@ Fluent Bit aggregator and the OTel gateway (Container Apps, internal ingress).
   only: `otlp.{headers_secret_id, default_protocol, node_agent_*_port, host_agent_grpc_endpoint,
   gateway_distribution, internal_only, logs_policy}`, `fluentbit.{sidecar_forward_config, sidecar_parsers,
   sidecar_lua, sidecar_mode, logs_intake_host, forward_shared_key_secret_id, forward_tls, metrics_port,
-  aca_console_allow}`, `event_hub.{kafka_endpoint, consumer_group, location}`, `log_routes`, `aggregator`,
+  aca_console_allow}`, `event_hub.{kafka_endpoint, consumer_group, location, activity_logs_hub}`, `log_routes`, `aggregator`,
   `gateway`.
 
 ## Settings (`components.obs-telemetry-transport`)
 * `datadog_site`, `api_key_secret_name`, `forward_shared_key_secret_name` (default `fluentbit-shared-key`; the
   value is set out of band), `collector_identity_key`
-* `event_hub_mode`, `event_hub_capacity` (lab ceiling 1–2 TU), `event_hub_private_endpoint`
+* `event_hub_mode`, `event_hub_capacity` (lab ceiling 1–2 TU), `event_hub_private_endpoint`,
+  `event_hub_activity_logs_hub` (default `activity-logs`: control-plane logs of `obs-diagnostics`; `""` shares `platform-logs`)
 * `aggregator_hosting`, `gateway_hosting`, `gateway_distribution`, `gateway_sampling`,
   `gateway_sampling_percentage`, `gateway_otlp_logs` (drop)
 * `*_max_replicas` (≤ 5 in the lab), `workload_profile_name`, `sidecar_mode`

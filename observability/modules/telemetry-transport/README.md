@@ -5,7 +5,7 @@ contract (`catalog/contracts/obs-telemetry-transport.v1.schema.json`).
 
 | Part | Resources (existing-or-new) |
 |---|---|
-| Event Hubs | `event_hub.mode = create`: Standard namespace (Kafka endpoint, TLS 1.2, default-deny network rules + trusted services, optional private endpoint), hubs `app-logs` and `platform-logs` (2 partitions, 1 day), consumer group `fluent-bit`, SAS rules `diagnostic-settings-send` (Manage+Send+Listen, required by diagnostic settings) and `fluent-bit-listen` (Listen). The listen connection string is written **write-only** to Key Vault. `existing`: bring the namespace id, send rule id and listen secret id. `none`: no Event Hub route. |
+| Event Hubs | `event_hub.mode = create`: Standard namespace (Kafka endpoint, TLS 1.2, default-deny network rules + trusted services, optional private endpoint), hubs `app-logs`, `platform-logs` and `activity-logs` (control-plane logs: Activity Log, Entra ID; `event_hub.activity_logs_hub = ""` shares `platform-logs`) (2 partitions, 1 day), consumer group `fluent-bit` per hub, SAS rules `diagnostic-settings-send` (Manage+Send+Listen, required by diagnostic settings) and `fluent-bit-listen` (Listen). The listen connection string is written **write-only** to Key Vault. `existing`: bring the namespace id, send rule id and listen secret id. `none`: no Event Hub route. |
 | Fluent Bit aggregator | `aggregator.hosting = container_app`: Container App on the provided ACA environment and workload profile. **Internal** TCP ingress on 24224 (forward, shared key, optional TLS from Key Vault) plus an internal port on 2020 (health and self-metrics). `kafka` input against `<ns>.servicebus.windows.net:9093` (SASL_SSL). Datadog output (gzip, TLS). Filesystem buffer bounded by `storage.total_limit_size`, retries, `mem_buf_limit`, health check, canary. `none`: the caller provides `external_endpoint`. |
 | OTel gateway | `gateway.hosting = container_app`: upstream contrib (default) or DDOT. **Internal** HTTP ingress (OTLP/HTTP on 4318 behind the environment's HTTPS endpoint) plus an internal TCP port on 4317 (gRPC). Optional bearer-token auth, probabilistic or tail sampling, OTLP logs drop. `none`: `external_endpoints`. |
 
@@ -32,7 +32,7 @@ Locally verified: SASL PLAIN with `$ConnectionString` against Apache Kafka 4.1 (
 ## Inputs (abridged)
 `name_prefix`, `names`, `resource_group {name,id}`, `location`, `tags`, `datadog {site, api_key_secret_id
 (versionless), env, extra_tags}`, `collector_identity {id, principal_id, client_id}`, `key_vault {id,
-grant_secrets_user}`, `event_hub {..., listen_secret_version (write-only `value_wo_version`; increment to rotate)}`, `container_apps {environment_id, workload_profile_name,
+grant_secrets_user}`, `event_hub {..., activity_logs_hub, listen_secret_version (write-only `value_wo_version`; increment to rotate)}`, `container_apps {environment_id, workload_profile_name,
 external_ingress=false}`, `aggregator {...}`, `gateway {distribution, sampling, sampling_percentage, otlp_logs,
 auth, replicas}`, `sidecar_mode`, `aca_console_allow`, `images`.
 

@@ -21,7 +21,7 @@ architectures:
     runtime_config: Kubernetes Deployment env + workload identity ServiceAccount
     telemetry: {logs: fluent-bit-daemonset, traces: datadog-agent-otlp (hostPort 4317 via node IP), metrics: datadog-agent + otel}
     smoke: GET /readyz via in-cluster job + public ingress /api/healthz
-    rollback: re-apply previous image digest (Deployment rolling update)
+    rollback: per-workload Helm release (applications/charts/hello-service) - re-apply previous digest, or `helm rollback <release>` in an emergency
   container-apps-consumption:
     workloads: [hello-bff, hello-orders-api, hello-catalog-api, hello-dbadapter-*]
     deployment: [deploy-core-aca, deploy-dbadapters]

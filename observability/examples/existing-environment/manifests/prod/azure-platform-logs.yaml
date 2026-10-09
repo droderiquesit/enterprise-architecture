@@ -1,0 +1,18 @@
+apiVersion: observability/v1
+kind: ServiceOnboarding
+metadata:
+  service: azure-platform-logs
+  team: platform
+  owner: platform@contoso.example
+  env: prod
+  runbook_url: https://wiki.contoso.example/runbooks/azure-platform-logs
+spec:
+  architecture: external
+  telemetry: {profile: azure-platform-logs}
+  monitors:
+    params:
+      protected_resource_groups: "resource_group:rg-*-prod"
+      service_health_regions: '(@properties.region:West\ Europe OR @properties.region:Global)'
+  notifications:
+    default: [platform]
+    critical: [platform]

@@ -6,14 +6,14 @@ variables {
     eventhub_name         = "activity-logs"
   }
   activity_log = {
-    subscription_ids = ["00000000-0000-0000-0000-000000000000", "11111111-1111-1111-1111-111111111111"]
+    subscription_ids = ["00000000-0000-0000-0000-000000000000", "11111111-0000-0000-0000-000000000000"]
   }
 }
 
 run "activity_log_per_subscription_all_categories" {
   command = plan
   assert {
-    condition     = length(azurerm_monitor_diagnostic_setting.activity_log) == 2 && azurerm_monitor_diagnostic_setting.activity_log["11111111-1111-1111-1111-111111111111"].target_resource_id == "/subscriptions/11111111-1111-1111-1111-111111111111"
+    condition     = length(azurerm_monitor_diagnostic_setting.activity_log) == 2 && azurerm_monitor_diagnostic_setting.activity_log["11111111-0000-0000-0000-000000000000"].target_resource_id == "/subscriptions/11111111-0000-0000-0000-000000000000"
     error_message = "One subscription-scoped setting per subscription."
   }
   assert {
@@ -95,9 +95,9 @@ run "reject_resource_id_instead_of_guid" {
 run "reject_duplicate_with_native_subscription_logs" {
   command = plan
   variables {
-    native_log_forwarding = { subscription_log_subscription_ids = ["11111111-1111-1111-1111-111111111111"] }
+    native_log_forwarding = { subscription_log_subscription_ids = ["11111111-0000-0000-0000-000000000000"] }
   }
-  expect_failures = [azurerm_monitor_diagnostic_setting.activity_log["11111111-1111-1111-1111-111111111111"], azurerm_monitor_diagnostic_setting.activity_log["00000000-0000-0000-0000-000000000000"]]
+  expect_failures = [azurerm_monitor_diagnostic_setting.activity_log["11111111-0000-0000-0000-000000000000"], azurerm_monitor_diagnostic_setting.activity_log["00000000-0000-0000-0000-000000000000"]]
 }
 
 run "reject_entra_duplicate_with_native_aad_logs" {

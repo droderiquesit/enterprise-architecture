@@ -59,7 +59,7 @@ def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
 
-def template(values: dict | Path, release: str | None = None, namespace: str = "hello", helm: str | None = None,
+def template(values: dict | Path, *, release: str | None = None, namespace: str = "hello", helm: str | None = None,
              extra: list[str] | None = None, tmp: Path | None = None) -> subprocess.CompletedProcess:
     helm = helm or HELM
     if isinstance(values, dict):

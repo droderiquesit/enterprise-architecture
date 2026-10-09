@@ -12,7 +12,7 @@ Nothing is **deployed** or **verified**: this sandbox has no Azure or Datadog cr
 
 | Architecture | Application logs (only path) | Traces + metrics (OTLP) | Platform metrics | Platform logs |
 |---|---|---|---|---|
-| AKS | Fluent Bit **DaemonSet** tails `/var/log/containers` (`config/fluent-bit/k8s-daemonset.yaml`) | Node Datadog Agent OTLP receiver, `hostPort` 4317/4318, endpoint `http://$(DD_AGENT_HOST):4317` (`status.hostIP`) | Azure integration | AKS diagnostic settings (`kube-audit-admin`, ...) to the platform-logs hub |
+| AKS | Fluent Bit **DaemonSet** tails `/var/log/containers` (`config/fluent-bit/k8s-daemonset.yaml`) | Node Datadog Agent OTLP receiver, `hostPort` 4317/4318, endpoint `http://$(DD_AGENT_HOST):4317` (`status.hostIP`) | Azure integration | AKS diagnostic settings (tier policy: `kube-audit-admin`, `guard`, `kube-apiserver`, ...) to the platform-logs hub |
 | VM / VMSS | Fluent Bit **service** tails the app log file (`linux-host.yaml` / `windows-host.yaml`) | Host Agent OTLP receiver on `localhost:4317/4318` | Azure integration + Agent | - |
 | ACA (apps) | Fluent Bit **sidecar** tails `LOG_FILE_PATH` on a shared EmptyDir (`sidecar.yaml`, or `sidecar-forward.yaml` to the aggregator) | OTel **gateway** (internal ingress): `https://<gw>` (OTLP/HTTP) or `http://<gw>:4317` (gRPC) | Azure integration | `ContainerAppSystemLogs` to the platform-logs hub |
 | ACA **jobs** | stdout, then environment diagnostic setting `ContainerAppConsoleLogs`, then Event Hub `app-logs`, then aggregator (**allow-listed job names only**) | gateway | Azure integration | as ACA |
@@ -21,6 +21,11 @@ Nothing is **deployed** or **verified**: this sandbox has no Azure or Datadog cr
 | Browser | - (RUM) | RUM + `allowedTracingUrls` (content package) | - | - |
 | Databases | DB logs: diagnostic settings (platform hub) | client spans from app SDKs | Azure integration | `PostgreSQLLogs`, `SQLSecurityAuditEvents`, ... |
 | Databases (DBM) | - | - | Datadog Agent DBM check from the observability subnet (ACI) or AKS cluster checks (`modules/dbm`) | - |
+| Subscription / tenant (control plane) | - | - | - | Activity Log (subscription diagnostic setting) and optional Entra ID (tenant setting), `modules/azure-logs`, to the **activity-logs** hub |
+
+Platform logs (resource, Activity Log, Entra ID) reach Datadog in the shape of Datadog's own Azure forwarder
+(`ddsource azure.<provider>`, `service:azure`, `subscription_id` / `resource_group` / `tenant` tags; fields verbatim).
+The categories follow the tier policy of `modules/diagnostic-settings`. Guide: `docs/guides/azure-logs-to-datadog.md`.
 
 `modules/instrumentation` computes the per-app integration hook (env vars, Kubernetes patch, Container Apps
 sidecar patch, App Service app settings, ACI sidecar) from the `obs-telemetry-transport` contract. The owning
@@ -79,11 +84,26 @@ have no Fluent Bit route.
 
 ### 2.5 Native Azure integration
 `azurerm_datadog_monitor_tag_rule` keeps `resource_log_enabled = false` by default. When enabled, the native
-resource-log forwarding creates its own diagnostic settings, which would duplicate 2.2 and 2.3. Datadog's
+resource-log forwarding creates its own diagnostic settings, which would duplicate 2.2 and 2.3. Native subscription
+(Activity Log) and Entra forwarding duplicate `modules/azure-logs`. The plan fails on any overlap per subscription
+or tenant (`modules/azure-integration` `eventhub_log_forwarding`, `modules/azure-logs` `native_log_forwarding`, lab
+settings validation) [integration.tftest `reject_native_*`, azure_logs.tftest `reject_*_native_*`, lab diagnostics
+`control_plane.tftest`]. Datadog's
 *automated log forwarding* (ARM template, control-plane Function Apps) also creates diagnostic settings. That
 conflicts with ADR rule 4, so this package does not use it (see `modules/azure-integration/README.md`).
 
-### 2.6 Traces and metrics
+### 2.6 Azure platform logs at the aggregator
+* Batches are split one record per entry. Records with a strong identity (Entra `properties.id`, otherwise time +
+  resourceId + category + operationName + resultType + correlationId) are delivered once, even when Event Hubs
+  re-delivers a batch (bounded cache `FLB_AZURE_DEDUP_CACHE`).
+* Application categories arriving on a non-app hub (`FLB_EVENTHUB_APP_TOPIC`) are dropped, because the app-logs
+  path already carries them.
+* Records above `FLB_AZURE_MAX_RECORD_BYTES` (900000; Datadog accepts 1 MB per log) are truncated field by field
+  and flagged `truncated:true`. They are never dropped.
+
+[`test_fluentbit.py::test_aggregator_azure_platform_and_control_plane_logs`]
+
+### 2.7 Traces and metrics
 * Every app sends OTLP to exactly one target (`otlp_target` = `agent` | `gateway`).
 * APM stats are computed once, by the gateway's `datadog/connector` on 100% of spans, before sampling.
 * Gateway replicas report `host_metadata.enabled=false` and do not become hosts.

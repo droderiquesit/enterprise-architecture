@@ -24,6 +24,19 @@ Output: `integration_id`, which is the integration id (`<tenant>:<client>`) or t
 * Linking a **new** native monitor requires `native_org_keys` (API + application key, sensitive, kept in state).
   Prefer `existing_monitor_id`.
 
+## Log forwarding: native tag rule vs Event Hubs
+`mode = native` can forward logs itself (`native.send_subscription_logs` (default true), `send_resource_logs`
+(default false), `send_aad_logs` (default false), `log_tag_filters` Include/Exclude). Azure then creates and owns
+diagnostic settings on matching resources. The Event Hubs path (`modules/azure-logs`, `modules/diagnostic-settings`,
+Fluent Bit aggregator) gives per-category control, record shaping, dedup and a size guard, but needs Event Hubs and
+the aggregator. The native path needs no infrastructure and is billed through the Azure Marketplace.
+
+**Pick one path per source.** Pass what the Event Hubs path exports as `eventhub_log_forwarding`
+(`activity_log_subscription_ids`, `resource_log_subscription_ids`, `entra_enabled`). The plan fails when a native
+toggle overlaps it for the same subscription or tenant. Output `native_log_forwarding` feeds
+`modules/azure-logs` `native_log_forwarding` for the reverse check. Trade-offs: `docs/guides/azure-logs-to-datadog.md`
+section 6.
+
 ## Duplicate prevention
 * Native `resource_log_enabled` defaults to **false**. When true, Azure creates its own diagnostic settings per
   resource, which duplicates the Event Hub, sidecar and DaemonSet routes (README-transport.md §2.5).
@@ -41,8 +54,10 @@ Output: `integration_id`, which is the integration id (`<tenant>:<client>`) or t
 * AzAPI gap: `Microsoft.Datadog/monitors/monitoredSubscriptions` (API 2025-06-11) has no azurerm resource.
 
 ## Tests
-`tests/integration.tftest.hcl` covers app_registration, secretless, native new and existing monitors, `none`,
-and negative tests (secret mode without a secret, bad subscription id).
+`tests/integration.tftest.hcl` covers app_registration, secretless, native new and existing monitors, `none`, the
+native log block (subscription, resource and Entra logs, tag filters), and negative tests (secret mode without a
+secret, bad subscription id, native + Event Hubs Activity Log on the same subscription, native resource logs +
+diagnostic settings, native + Event Hubs Entra).
 
 ## References (checked 2026-10-09)
 - https://docs.datadoghq.com/integrations/guide/azure-programmatic-management
@@ -51,3 +66,4 @@ and negative tests (secret mode without a secret, bad subscription id).
 - https://docs.datadoghq.com/integrations/guide/azure-advanced-configuration/
 - https://learn.microsoft.com/azure/templates/microsoft.datadog/2025-06-11/monitors/monitoredsubscriptions
 - https://registry.terraform.io/providers/DataDog/datadog/4.25.0/docs/resources/integration_azure
+- https://learn.microsoft.com/azure/partner-solutions/metrics-logs (native tag rules for logs)

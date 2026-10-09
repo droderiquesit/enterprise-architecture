@@ -82,18 +82,55 @@ variable "azure_subscription_id" {
 }
 
 variable "diagnostics" {
-  description = "Diagnostic settings on the manifest resources -> existing Event Hubs (Fluent Bit aggregator reads them)."
+  description = <<-EOT
+    Diagnostic settings on the manifest resources -> existing Event Hubs (Fluent Bit aggregator reads them).
+    platform_log_tier: security | standard | verbose (package category policy, see docs/guides/azure-logs-to-datadog.md).
+  EOT
   type = object({
-    enabled = optional(bool, true)
+    enabled           = optional(bool, true)
+    platform_log_tier = optional(string, "standard")
     destination = optional(object({
       authorization_rule_id = string
       app_logs_hub          = string
       platform_logs_hub     = string
+      activity_logs_hub     = optional(string, "activity-logs")
       }), {
       authorization_rule_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-observability-prod/providers/Microsoft.EventHub/namespaces/evhns-obs-prod/authorizationRules/diagnostics-send"
       app_logs_hub          = "app-logs"
       platform_logs_hub     = "platform-logs"
+      activity_logs_hub     = "activity-logs"
     })
+  })
+  default = {}
+}
+
+variable "azure_logs" {
+  description = <<-EOT
+    Control-plane logs of the SUPPLIED subscriptions -> the same Event Hubs namespace (diagnostics.destination):
+    subscription Activity Log (all categories by default) and, optionally, tenant-wide Entra ID logs (needs the
+    Security Administrator role for the deploying identity, Entra ID P1/P2 for sign-in logs, acknowledge_prerequisites).
+    Only diagnostic settings are created; destroy removes only them.
+  EOT
+  type = object({
+    activity_log_enabled = optional(bool, true)
+    subscription_ids     = optional(list(string), ["00000000-0000-0000-0000-000000000000"])
+    categories           = optional(list(string), ["Administrative", "Security", "ServiceHealth", "Alert", "Recommendation", "Policy", "Autoscale", "ResourceHealth"])
+    entra = optional(object({
+      enabled                   = optional(bool, false)
+      acknowledge_prerequisites = optional(bool, false)
+      categories                = optional(list(string), ["AuditLogs", "SignInLogs", "ServicePrincipalSignInLogs", "ManagedIdentitySignInLogs"])
+    }), {})
+  })
+  default = {}
+}
+
+variable "log_management" {
+  description = "Datadog-side handling of the Azure platform logs (package modules/log-management). Index, pipeline and archive are org-wide objects and stay off unless this root owns them."
+  type = object({
+    dashboard = optional(bool, true)
+    metrics   = optional(bool, true)
+    index     = optional(bool, false)
+    pipeline  = optional(bool, false)
   })
   default = {}
 }

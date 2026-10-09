@@ -11,7 +11,7 @@ Platforms, databases, RBAC data-plane grants, diagnostic settings and telemetry 
 
 | Root | Component | Workloads (catalog/architecture-matrix.yaml) |
 |---|---|---|
-| [core-aks](core-aks/README.md) | deploy-core-aks | bff, orders-api, catalog-api, worker on AKS (namespace `hello`) |
+| [core-aks](core-aks/README.md) | deploy-core-aks | bff, orders-api, catalog-api, worker on AKS (namespace `hello`), one Helm release each |
 | [core-aca](core-aca/README.md) | deploy-core-aca | bff (external), orders-api, catalog-api (internal) on Container Apps |
 | [frontend](frontend/README.md) | deploy-frontend | hello-frontend on Static Web Apps + runtime config.json |
 | [durable](durable/README.md) | deploy-durable | hello-durable on Flex Consumption (+ Windows Consumption Reconciliation) |
@@ -33,6 +33,25 @@ Platforms, databases, RBAC data-plane grants, diagnostic settings and telemetry 
 | `web-app` | azurerm | Linux/Windows web app (code or container), Key Vault reference identity, VNet integration, health check, private endpoint or deny-by-default access restrictions, `staging` slot when the SKU supports slots. |
 | `vm-script` | pure | Renders the Linux install script for run commands / CustomScript: package read with the host's managed identity (IMDS token, no SAS), sha256 check, env file, secrets fetched from Key Vault **on the host** (never in state), health check + rollback. |
 | `service-meta` | pure | Team/domain/tier/owner/runtime/artifact per service (mirrors observability onboarding metadata). |
+
+## Helm (Kubernetes workloads)
+
+Every Enterprise Hello workload on Kubernetes is deployed with the generic chart
+[`applications/charts/hello-service`](../charts/hello-service/README.md) (kinds `deployment`, `worker`, `cronjob`;
+values contract in `values.schema.json`: digest-only images, required identity client id and resources, no plaintext
+secrets, faults off by default).
+
+| Where | How |
+|---|---|
+| AKS (`core-aks`) | `helm_release` per workload (hashicorp/helm 3.3), values = `yamlencode` of a typed object from the contracts; `atomic`, `wait`, `cleanup_on_fail`, `max_history 10`, `lint`; chart from the repo or `oci://<acr>/helm/hello-service:<version>` |
+| ARO (`specialized`) | values rendered into the contract; `scripts/deploy-aro.sh` → `oc login` + `helm upgrade --install --rollback-on-failure --wait` |
+| kind (tests) | `tests/charts/test_kind_smoke.py` (opt-in `HELLO_KIND_SMOKE=1`) |
+
+Where Helm is **not** used, and why: Container Apps, App Service/Functions, ACI, Static Web Apps, VM/VMSS, Logic Apps,
+Service Fabric and Automation are ARM resources (azurerm) or non-Kubernetes runtimes — Helm only targets Kubernetes APIs.
+Chart tests: `python3 -m pytest tests/charts -q` (lint `--strict`, template, kubeconform against the AKS Kubernetes
+version, rendered-manifest assertions, schema rejections, Terraform-rendered values). The applications pipeline packages
+and pushes the chart (`helm package` → `helm push oci://<acr>/helm`); see the chart README.
 
 ## Conventions (all roots)
 
@@ -72,6 +91,7 @@ Post-apply order per root: `terraform apply` → `deploy-zip.sh` (if `deploy_ste
 ```bash
 for d in applications/deployments/modules/* applications/deployments/*/; do bash tools/validate/terraform.sh "$d"; done
 checkov -d applications/deployments --framework terraform --quiet   # 0 failed; skips are justified inline
+python3 -m pytest tests/charts -q                                    # hello-service chart (helm + kubeconform)
 ```
 
 Docs: https://learn.microsoft.com/azure/container-apps/ , https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan ,

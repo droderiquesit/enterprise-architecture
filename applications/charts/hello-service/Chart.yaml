@@ -9,9 +9,9 @@ type: application
 # Chart version: semver of the CHART (templates/schema), independent from the application version.
 # Bump MINOR for backwards-compatible template/values additions, MAJOR for breaking values changes.
 version: 1.0.0
-# appVersion is informational only. The deployed application version is `service.version`
-# (DD_VERSION, app.kubernetes.io/version, tags.datadoghq.com/version); the applications pipeline
-# overrides appVersion when it packages the chart (`helm package --app-version`).
+# appVersion is informational only: one chart serves many applications. The deployed application version is
+# `service.version` (DD_VERSION, app.kubernetes.io/version, tags.datadoghq.com/version), set per release by the
+# deployer (Terraform / deploy script); `helm package --app-version` may override this field.
 appVersion: "0.0.0"
 kubeVersion: ">=1.30.0-0"
 keywords: [enterprise-hello, datadog, opentelemetry, workload-identity]

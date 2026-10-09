@@ -2179,3 +2179,38 @@ databases:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
+# Azure control-plane and platform logs (package 1.1.0). Not rendered by tools/catalog/render_coverage.py; the
+# human-readable table is docs/guides/azure-logs-to-datadog.md. verified_on applies (Microsoft Learn + Datadog docs).
+control_plane_logs:
+  activity_log:
+    supported: 'yes'
+    method: subscription-scoped diagnostic setting (all 8 categories) -> Event Hubs activity-logs hub -> Fluent Bit aggregator -> Datadog (ddsource azure.<provider> / azure.subscription / azure.resourcegroup, service azure)
+    owner: obs-diagnostics
+    module: observability/modules/azure-logs
+    default: 'on'
+    duplicate_prevention: mutually exclusive with the Azure Native integration send_subscription_logs (validation in obs-diagnostics, obs-azure-integration and both modules)
+  entra_id:
+    supported: partial
+    method: tenant-level azurerm_monitor_aad_diagnostic_setting -> activity-logs hub -> aggregator (ddsource azure.activedirectory)
+    owner: obs-diagnostics
+    module: observability/modules/azure-logs
+    default: 'off'
+    prerequisites: Security Administrator role for the deploying identity; Entra ID P1/P2 to export sign-in logs (ProvisioningLogs and MicrosoftGraphActivityLogs need P1/P2); Event Hub in a subscription of the same tenant; settings.entra.acknowledge_prerequisites = true
+  resource_logs:
+    supported: 'yes'
+    method: per-resource diagnostic settings with a tiered category policy (security | standard | verbose) -> platform-logs hub -> aggregator
+    owner: obs-diagnostics
+    module: observability/modules/diagnostic-settings (category-policy.json)
+    default: standard (minimal profile should set security)
+  sql_audit:
+    supported: partial
+    method: diagnostic setting SQLSecurityAuditEvents on <server>/databases/master (obs-diagnostics); requires server auditing with the Azure Monitor target (azurerm_mssql_server_extended_auditing_policy log_monitoring_enabled = true) owned by platform-db-sql
+    owner: obs-diagnostics
+  flow_logs:
+    supported: 'no'
+    method: NSG flow logs (retiring 2027-09-30, no new ones since 2025-06-30) and VNet flow logs are Network Watcher features written to Storage only, never to Event Hubs; not collected by this package
+    owner: null
+  datadog_side:
+    supported: 'yes'
+    method: observability/modules/log-management (dashboard, log-based metrics; opt-in index with quota + sampled exclusions, Activity Log pipeline, archive) + archetype profile azure-platform-logs (monitors)
+    owner: obs-azure-integration

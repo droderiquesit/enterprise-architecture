@@ -1,0 +1,166 @@
+apiVersion: observability/v1
+kind: Archetype
+metadata:
+  name: azure-platform-logs
+  layer: profile
+  description: Azure control-plane and platform logs (Activity Log, Entra ID, Key Vault, AKS audit) shipped through
+    Event Hubs and the Fluent Bit aggregator (ddsource azure.*, service azure). Onboard ONE pseudo-service per
+    environment with this profile (see docs/guides/azure-logs-to-datadog.md).
+defaults:
+  metadata:
+    tier: high
+  spec:
+    telemetry:
+      traces: {enabled: false}
+      logs: {route: none}
+    catalog: {type: custom}
+params:
+  # Every query is scoped to the records of the aggregator (application categories excluded) in this env.
+  azure_logs_scope: "source:azure* -azure_log_type:application env:[[env]]"
+  activity_scope: "[[params.azure_logs_scope]] azure_log_type:activity"
+  # Resource groups whose deletes page someone (Datadog tag wildcard). Lab: "eh-rg-*" (foundation naming).
+  protected_resource_groups: "resource_group:*"
+  activity_delete_threshold: 0
+  policy_deny_threshold: 20
+  # Service Health incidents only for the regions in use (Activity Log properties.region, e.g. "Sweden Central").
+  service_health_regions: "@properties.region:*"
+  keyvault_denied_threshold: 10
+  aks_exec_threshold: 0
+  # Entra ID sign-in failures: only when the tenant-level Entra export is enabled (obs-diagnostics settings.entra).
+  entra_enabled: false
+  entra_signin_failure_threshold: 25
+  logs_missing_window: 2h
+monitors:
+  azlogs.activity_deletes:
+    scope: service
+    name: "[[[env]]] Azure Activity Log: successful deletes in protected resource groups"
+    type: log alert
+    query: 'logs("[[params.activity_scope]] @category:Administrative @resultType:Success @operationName:(*\/DELETE OR *\/delete) [[params.protected_resource_groups]]").index("*").rollup("count").by("resource_group").last("15m") > [[critical]]'
+    thresholds: {critical: "[[params.activity_delete_threshold]]"}
+    evaluation_delay: 0
+    severity: warning
+    priority: 3
+    summary: Azure resources were deleted in a protected resource group (Activity Log, Administrative category).
+    troubleshooting: |-
+      1. Logs: [[params.activity_scope]] @category:Administrative @operationName:*DELETE* - group by @operationName and resource_group.
+      2. Who: identity.claims (upn / appid) and callerIpAddress; correlationId groups the steps of one operation.
+      3. Expected during a pipeline teardown/retire run: mute the monitor for the run window; otherwise treat as an incident.
+    runbook_section: azure-activity-deletes
+  azlogs.rbac_changes:
+    scope: service
+    name: "[[[env]]] Azure RBAC role assignment created or deleted"
+    type: log alert
+    query: 'logs("[[params.activity_scope]] @category:Administrative @resultType:Success @operationName:(MICROSOFT.AUTHORIZATION\/ROLEASSIGNMENTS\/WRITE OR MICROSOFT.AUTHORIZATION\/ROLEASSIGNMENTS\/DELETE OR Microsoft.Authorization\/roleAssignments\/write OR Microsoft.Authorization\/roleAssignments\/delete)").index("*").rollup("count").by("subscription_id").last("15m") > [[critical]]'
+    thresholds: {critical: 0}
+    evaluation_delay: 0
+    severity: warning
+    priority: 2
+    summary: A role assignment was created or removed (privilege change).
+    troubleshooting: |-
+      1. Logs: @operationName:*ROLEASSIGNMENTS* - properties.requestbody / responseBody hold principalId and roleDefinitionId.
+      2. Confirm the change came from the deployment pipeline identity (identity.claims.appid) and a reviewed change.
+      3. Unexpected: remove the assignment, rotate credentials of the acting principal, open a security incident.
+    runbook_section: azure-rbac-changes
+  azlogs.diagnostic_settings_deleted:
+    scope: service
+    name: "[[[env]]] Azure diagnostic setting deleted (log export disabled)"
+    type: log alert
+    query: 'logs("[[params.activity_scope]] @category:Administrative @resultType:Success @operationName:(MICROSOFT.INSIGHTS\/DIAGNOSTICSETTINGS\/DELETE OR microsoft.insights\/diagnosticSettings\/delete OR Microsoft.Insights\/diagnosticSettings\/delete)").index("*").rollup("count").by("resource_group").last("15m") > [[critical]]'
+    thresholds: {critical: 0}
+    evaluation_delay: 0
+    severity: critical
+    priority: 2
+    summary: A diagnostic setting was deleted - logs of that resource no longer reach Datadog (defense-evasion pattern).
+    troubleshooting: |-
+      1. Logs: @operationName:*DIAGNOSTICSETTINGS/DELETE* - resourceId names the resource that lost its export.
+      2. If not done by the obs-diagnostics pipeline (retire/destroy), re-apply obs-diagnostics and investigate the caller.
+    runbook_section: azure-diagnostics-deleted
+  azlogs.policy_deny_spike:
+    scope: service
+    name: "[[[env]]] Azure Policy denies above [[critical]] in 1h"
+    type: log alert
+    query: 'logs("[[params.activity_scope]] @category:Policy @operationName:(MICROSOFT.AUTHORIZATION\/POLICIES\/DENY\/ACTION OR Microsoft.Authorization\/policies\/deny\/action)").index("*").rollup("count").by("resource_group").last("1h") > [[critical]]'
+    thresholds: {critical: "[[params.policy_deny_threshold]]"}
+    evaluation_delay: 0
+    severity: warning
+    priority: 3
+    summary: Azure Policy is denying many requests (a deployment is fighting a policy assignment).
+    troubleshooting: |-
+      1. Logs: @category:Policy - properties.policies names the assignment and definition that denied the request.
+      2. Correlate with the deployment pipeline run (correlationId); fix the template or request a policy exemption.
+    runbook_section: azure-policy-denies
+  azlogs.service_health:
+    scope: service
+    name: "[[[env]]] Azure Service Health incident for a region in use"
+    type: log alert
+    query: 'logs("[[params.activity_scope]] @category:ServiceHealth @properties.incidentType:(Incident OR ActionRequired OR Security) [[params.service_health_regions]]").index("*").rollup("count").by("@properties.trackingId").last("30m") > [[critical]]'
+    thresholds: {critical: 0}
+    evaluation_delay: 0
+    severity: warning
+    priority: 2
+    summary: Microsoft published a Service Health event (incident / action required / security) affecting this subscription and region.
+    troubleshooting: |-
+      1. Logs: @category:ServiceHealth - properties.title, properties.impactedServices, properties.trackingId.
+      2. Check Azure Service Health in the portal for the tracking id; correlate with application monitors before acting.
+    runbook_section: azure-service-health
+  azlogs.keyvault_access_denied:
+    scope: service
+    name: "[[[env]]] Key Vault access denied (401/403) above [[critical]] in 15m"
+    type: log alert
+    query: 'logs("source:azure.keyvault @category:AuditEvent @properties.httpStatusCode:(401 OR 403) env:[[env]]").index("*").rollup("count").by("resource_name").last("15m") > [[critical]]'
+    thresholds: {critical: "[[params.keyvault_denied_threshold]]"}
+    evaluation_delay: 0
+    severity: warning
+    priority: 3
+    summary: A burst of denied Key Vault requests (missing RBAC role / access policy, or someone probing secrets).
+    troubleshooting: |-
+      1. Logs: source:azure.keyvault @properties.httpStatusCode:403 - identity.claim (appid / objectidentifier / xms_mirid) is the caller.
+      2. A workload identity after a role change: re-apply its role assignment. An unknown caller: security incident.
+    runbook_section: keyvault-access-denied
+  azlogs.aks_exec:
+    scope: service
+    name: "[[[env]]] AKS exec / port-forward / attach into a pod"
+    type: log alert
+    query: 'logs("source:azure.containerservice @aks_audit.objectRef.subresource:(exec OR portforward OR attach) env:[[env]]").index("*").rollup("count").by("resource_name").last("15m") > [[critical]]'
+    thresholds: {critical: "[[params.aks_exec_threshold]]"}
+    evaluation_delay: 0
+    severity: warning
+    priority: 3
+    summary: Someone opened an interactive session into a pod (kube-audit-admin / kube-audit).
+    troubleshooting: |-
+      1. Logs: source:azure.containerservice @aks_audit.objectRef.subresource:exec - aks_audit.user.username and objectRef namespace/name.
+      2. properties.log holds the full audit event (sourceIPs, userAgent, annotations authorization.k8s.io/reason).
+      3. Not break-glass (docs/runbooks/break-glass.md) or not approved: revoke the user's cluster role binding.
+    runbook_section: aks-exec
+  azlogs.entra_signin_failures:
+    scope: service
+    when: ["params.entra_enabled"]
+    name: "[[[env]]] Entra ID sign-in failures above [[critical]] in 15m"
+    type: log alert
+    query: 'logs("source:azure.activedirectory @category:SignInLogs -@properties.status.errorCode:0").index("*").rollup("count").by("tenant").last("15m") > [[critical]]'
+    thresholds: {critical: "[[params.entra_signin_failure_threshold]]"}
+    evaluation_delay: 0
+    severity: warning
+    priority: 3
+    summary: Failed interactive sign-ins spike (password spray / misconfigured client).
+    troubleshooting: |-
+      1. Logs: source:azure.activedirectory @category:SignInLogs - group by @properties.status.errorCode, @properties.userPrincipalName, callerIpAddress.
+      2. 50126 = bad credentials, 50053 = locked out, 53003 = blocked by Conditional Access.
+      3. Cloud SIEM (if licensed) runs Datadog's Entra ID detection rules on the same logs.
+    runbook_section: entra-signin-failures
+  azlogs.logs_missing:
+    scope: service
+    name: "[[[env]]] No Azure platform logs received in [[params.logs_missing_window]]"
+    type: log alert
+    query: 'logs("[[params.azure_logs_scope]]").index("*").rollup("count").last("[[params.logs_missing_window]]") < [[critical]]'
+    thresholds: {critical: 1}
+    evaluation_delay: 0
+    new_group_delay: 0
+    severity: warning
+    priority: 3
+    summary: No Azure platform / Activity Log record reached Datadog (diagnostic settings, Event Hubs or the aggregator Kafka input broken).
+    troubleshooting: |-
+      1. Check the telemetry pipeline canary first (aggregator alive?).
+      2. Event Hubs metrics: incoming messages on platform-logs / activity-logs; consumer group fluent-bit lag.
+      3. Aggregator logs: kafka input errors (SASL, connection string rotated?); re-apply obs-diagnostics if settings were deleted.
+    runbook_section: azure-logs-missing
