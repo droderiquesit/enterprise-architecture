@@ -70,13 +70,16 @@ helm.sh/chart: {{ include "hello-service.chart" . }}
 {{- toYaml $psc -}}
 {{- end -}}
 
-{{- define "hello-service.kvEnabled" -}}
-{{- if and .Values.keyVault.enabled (gt (len .Values.secretEnv) 0) }}true{{ end -}}
+{{/* secretsMode=synced: secretEnv is read from the Kubernetes Secret maintained by the Delinea dsv-k8s syncer. */}}
+{{- define "hello-service.syncedSecretName" -}}
+{{- default (printf "%s-dsv" (include "hello-service.fullname" .)) .Values.secretsSync.secretName -}}
 {{- end -}}
 
 {{/*
 Container env. Order matters: DD_AGENT_HOST first so later values can use $(DD_AGENT_HOST).
-Chart-owned keys next, then the sorted non-secret env, then secret references (never values).
+Chart-owned keys next (incl. the DSV runtime env), then the sorted env, then secret settings: in the default
+secretsMode=dsv their VALUE is the dsv:// reference the app resolves at start-up with its workload identity;
+in secretsMode=synced they come from the dsv-k8s syncer Secret via secretKeyRef. Never secret values.
 */}}
 {{- define "hello-service.env" -}}
 {{- if .Values.telemetry.agentHostFromHostIP }}
@@ -95,6 +98,22 @@ Chart-owned keys next, then the sorted non-secret env, then secret references (n
   value: {{ .Values.identity.clientId | quote }}
 - name: FAULTS_ENABLED
   value: {{ ternary "true" "false" .Values.faults.enabled | quote }}
+{{- with .Values.dsv }}
+{{- if .tenant }}
+- name: DSV_TENANT
+  value: {{ .tenant | quote }}
+{{- end }}
+{{- if .tld }}
+- name: DSV_TLD
+  value: {{ .tld | quote }}
+{{- end }}
+{{- if .baseUrl }}
+- name: DSV_BASE_URL
+  value: {{ .baseUrl | quote }}
+{{- end }}
+- name: DSV_AUTH
+  value: {{ default "azure" .auth | quote }}
+{{- end }}
 {{- if ne .Values.kind "cronjob" }}
 - name: PORT
   value: {{ .Values.port | quote }}
@@ -107,13 +126,15 @@ Chart-owned keys next, then the sorted non-secret env, then secret references (n
 - name: {{ $k }}
   value: {{ index $.Values.env $k | quote }}
 {{- end }}
-{{- if include "hello-service.kvEnabled" . }}
 {{- range $k := keys .Values.secretEnv | sortAlpha }}
 - name: {{ $k }}
+{{- if eq $.Values.secretsMode "synced" }}
   valueFrom:
     secretKeyRef:
-      name: {{ include "hello-service.fullname" $ }}-kv
+      name: {{ include "hello-service.syncedSecretName" $ }}
       key: {{ $k }}
+{{- else }}
+  value: {{ index $.Values.secretEnv $k | quote }}
 {{- end }}
 {{- end }}
 {{- range $k := keys .Values.existingSecretEnv | sortAlpha }}
@@ -255,11 +276,6 @@ spec:
         - name: app-logs
           mountPath: {{ dir .Values.logFile.path }}
         {{- end }}
-        {{- if include "hello-service.kvEnabled" . }}
-        - name: kv-secrets
-          mountPath: /mnt/secrets
-          readOnly: true
-        {{- end }}
   volumes:
     - name: tmp
       emptyDir:
@@ -268,15 +284,6 @@ spec:
     - name: app-logs
       emptyDir:
         sizeLimit: {{ .Values.logFile.sizeLimit }}
-    {{- end }}
-    {{- if include "hello-service.kvEnabled" . }}
-    # Secrets Store CSI driver: the sync to Secret "{{ $name }}-kv" only happens while a pod mounts this volume.
-    - name: kv-secrets
-      csi:
-        driver: secrets-store.csi.k8s.io
-        readOnly: true
-        volumeAttributes:
-          secretProviderClass: {{ $name }}-kv
     {{- end }}
 {{- end -}}
 
@@ -291,7 +298,10 @@ spec:
 {{- if and .Values.openshift.route.enabled (ne .Values.kind "deployment") -}}
 {{- fail "openshift.route.enabled is only valid for kind=deployment" -}}
 {{- end -}}
-{{- if and (gt (len .Values.secretEnv) 0) (not .Values.keyVault.enabled) -}}
-{{- fail "secretEnv requires keyVault.enabled=true (Secrets Store CSI driver)" -}}
+{{- if and (eq .Values.secretsMode "dsv") (gt (len .Values.secretEnv) 0) (not .Values.dsv.baseUrl) (not .Values.dsv.tenant) -}}
+{{- fail "secretEnv (dsv:// references) needs dsv.tenant or dsv.baseUrl so the app can reach Delinea DSV" -}}
+{{- end -}}
+{{- if and (eq .Values.secretsMode "dsv") (gt (len .Values.secretEnv) 0) (not .Values.identity.workloadIdentity) -}}
+{{- fail "secretsMode=dsv needs identity.workloadIdentity=true (the app authenticates to DSV with its workload identity); use secretsMode=synced otherwise" -}}
 {{- end -}}
 {{- end -}}
