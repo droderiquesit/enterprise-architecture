@@ -12,6 +12,31 @@ Two kinds of rollback, handled differently:
 
 None of these procedures has been run against Azure.
 
+## Automatic rollback (pipeline, application roots only)
+
+When the code deploy or the smoke test of an `applications/deployments/*` root fails inside the apply stage,
+`pipelines/scripts/tf-apply.sh` calls `applications/deployments/scripts/rollback.sh` (`tools/deploy/rollback.py`)
+unless `self_healing.auto_rollback: false` in `environments/<env>/environment.yaml`:
+
+| Contract `rollback.method` / deploy step | Automatic action |
+|---|---|
+| `traffic-shift` (core-aca) | `az containerapp revision activate` + `az containerapp ingress traffic set --revision-weight <app>--<previous suffix>=100` (suffix from the previous contract envelope) |
+| `webapp-zip` with slot | `az webapp deployment slot swap` back - only if deploy-zip reported the swap (`DEPLOY_PROGRESS_FILE`); never repeated blindly |
+| `functionapp-flex`, `logicapp-zip`, `swa`, `webapp-zip` without slot | `deploy-zip.sh --only <app>` with the **previous** envelope (previous package URL + sha256) |
+| `redeploy-previous-digest` (core-aks) | `helm rollback <release> 0 -n <ns> --wait` through `az aks command invoke` for releases whose image changed |
+| VM / VMSS (`reinstall-previous-package`) | only commands the root declares in `rollback.commands` (`vm-run-command`); otherwise manual (below) |
+
+Then smoke runs against the previous contract. The record becomes **`rolled_back`** (never `succeeded`: Terraform
+state still describes the new release) and the stage fails, so the run is red and an alert is raised. A
+`rolled_back` component is **held**: no deploy, heal or reconcile run retries the same fingerprint; the next commit
+touching it (the fix, or a `git revert`) or a `mode: manual` run does. If the rollback itself fails the alert kind is
+`rollback-failed` - continue with the manual procedures below. Infrastructure roots are never rolled back
+automatically.
+
+Check after an automatic rollback: `health-<component>-<attempt>` artifact (`rollback.json`, `smoke.json`,
+`deploy-progress.txt`), then reconcile state: revert or fix the commit so the next apply converges Terraform state
+with what runs (for AKS the helm release revision is ahead of state until then).
+
 ## Find the previous version
 
 * Deployment record `deployments/<env>/<component>.json` (state account) holds the commit and artifact digests of the

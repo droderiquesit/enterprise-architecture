@@ -1,0 +1,1 @@
+│ Error: creating Key Vault: keyvault.VaultsClient#CreateOrUpdate: Failure responding to request: StatusCode=403 -- Original Error: autorest/azure: Service returned an error. Status=403 Code="AuthorizationFailed" Message="The client 'abc' with object id 'abc' does not have authorization to perform action 'Microsoft.KeyVault/vaults/write' over scope '/subscriptions/...'"

@@ -1,0 +1,1 @@
+Warning  Failed  pod/hello-bff-7c9  Error: ImagePullBackOff (Back-off pulling image "acrehdev.azurecr.io/hello-bff@sha256:abc")

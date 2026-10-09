@@ -1,0 +1,8 @@
+╷
+│ Error: Unsupported argument
+│
+│   on main.tf line 12, in resource "azurerm_container_app" "this":
+│   12:   revision_mode_x = "Single"
+│
+│ An argument named "revision_mode_x" is not expected here.
+╵

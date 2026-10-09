@@ -167,3 +167,26 @@ def test_heal_cli_mode(lab, capsys):
     assert rc == 0
     out = capsys.readouterr()
     assert '"mode": "heal"' in out.out
+
+
+def test_heal_in_promoted_environment_only_heals_the_same_code(lab, tmp_path):
+    from fixture_repo import commit_all as _commit
+    from test_scopes_promotion import _promotion_fixture
+
+    repo, dev_records = lab
+    _promotion_fixture(repo)
+    test_records = LocalStore(tmp_path / "test-records")
+    # test was promoted at this commit and platform-db-sql failed there
+    promoted = select_deploy(repo, "test", test_records)
+    for cid in ("platform-db-sql", "platform-shared"):
+        e = promoted["components"][cid]
+        test_records.put_json(f"test/{cid}.json", {"component": cid, "status": "failed", "deploy_fp": e["deploy_fp"],
+                                                   "fp_parts": e["fp_parts"], "scope": e["scope"]})
+    doc = select_heal(repo, "test", test_records)
+    assert set(doc["summary"]["plan"]) == {"platform-db-sql", "platform-shared"}
+    # main moved on: new sql code was never promoted -> not healed in test (needs a promotion), shared still is
+    write(repo, "platform/data/sql/main.tf", "# sql v4\n")
+    _commit(repo, "sql v4")
+    doc = select_heal(repo, "test", test_records)
+    assert doc["summary"]["plan"] == ["platform-shared"]
+    assert any("platform-db-sql: not healed" in n and "promote again" in n for n in doc["notes"])

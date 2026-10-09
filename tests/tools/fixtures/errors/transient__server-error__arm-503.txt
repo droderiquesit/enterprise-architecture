@@ -1,0 +1,2 @@
+│ Error: waiting for creation of Private Endpoint "pe-sql": Code="InternalServerError" Message="An error has occurred."
+│ unexpected status 503 (503 Service Unavailable) with error: ServiceUnavailable

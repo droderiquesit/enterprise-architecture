@@ -1,0 +1,2 @@
+│ Error: Provider produced inconsistent final plan
+│ When expanding the plan for azurerm_monitor_diagnostic_setting.this to include new values learned so far during apply, provider "registry.terraform.io/hashicorp/azurerm" produced an invalid new value for .enabled_log: block count changed from 3 to 2.

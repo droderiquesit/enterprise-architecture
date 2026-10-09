@@ -123,8 +123,9 @@ Promote platform first, then applications (their Select waits otherwise).
 * **Retirement**: a recorded component that is no longer enabled is `retire-pending`; it is destroyed only
   when `environments/<env>/retirements.yaml` lists it with `confirm: <component id>`, no enabled component
   depends on it, and `lab-<env>-retire` is approved; consumers retire first, from the recorded commit.
-* **Drift**: nightly in dev for both scopes (plan only, report, run marked SucceededWithIssues on drift);
-  run `mode: drift` manually for test/prod.
+* **Drift**: nightly in dev for both scopes (plan, report, run marked SucceededWithIssues on drift; additive drift of
+  `drift.auto_remediate` components is re-applied in dev - [Self-healing](#self-healing)); run `mode: drift` manually for test/prod.
+* **Heal**: every 2 h in dev (`heal` schedules), fan-out to test/prod; `mode: heal` can also be queued manually.
 * **Resuming**: a failed/partial/canceled apply writes a non-succeeded record, so the next run re-selects it.
   *Rerun failed jobs* is safe for plan stages; for a failed apply stage rerun the plan stage too (the saved
   plan may be stale) or start a new run.
@@ -134,12 +135,47 @@ Promote platform first, then applications (their Select waits otherwise).
   `pipelines/scripts/tf-init.sh`, `terraform plan/apply`, `tools/contracts/publish.py` and
   `tools/deploy/record.py write` locally, and records the action in the change log.
 
+## Self-healing
+
+Both pipelines recover from what is safe to recover from, and stop loudly at everything else. Every recovery is
+logged (`##vso` warning + `health/retries.jsonl`), summarised per run (Evidence: `health.json` / `health.md`, run
+summary tab) and sent to Datadog (event + `pipeline.heal.*` gauges; key from DSV).
+
+**Heals automatically**
+
+| Mechanism | What | Where |
+|---|---|---|
+| Transient retry | `terraform init/plan/apply`, idempotent `az` calls in `deploy-zip.sh`, package downloads: bounded attempts (registry `retry: {attempts, max_minutes}`, default 3 / 20 min), exponential backoff with jitter, only for failures `tools/deploy/retry_rules.yaml` classifies as transient (throttling, 5xx, timeouts, DNS/TCP, operation in progress, Entra propagation). Unmatched = permanent = fail fast. | `tools/deploy/retry.py`, `applications/deployments/scripts/lib.sh` `with_retry` |
+| Apply continuation | after a transient apply failure: re-plan, and apply the remaining diff **only** if every change is inside the reviewed plan (same addresses; no new delete/replace). Otherwise the stage fails and asks for a reviewed run. | `retry.py tf-apply` |
+| Stale state lock | lock held: holder claim (`deployments/<env>/_locks/<component>/…`) → build status via REST. Running holder → wait (backoff, max 30 min). Completed/failed/canceled holder (or an earlier attempt of the same job) and lock older than 10 min, or no claim and older than 400 min → `terraform force-unlock` / `az storage blob lease break --auth-mode login` + audit record `_audit/lock-recovery-*.json`. | `tools/deploy/lock_doctor.py`, [lock-recovery runbook](../docs/runbooks/lock-recovery.md) |
+| Heal runs | schedules whose displayName contains `heal` (every 2 h, dev; `auto` → `heal`) select only components whose last record is failed / partial / canceled or whose smoke verification failed. Normal stages, approvals and checks. The dev heal run queues heal runs for test/prod (`heal_interval_hours`, at the commit they last ran; components whose code differs from the failed promotion are skipped); those stop at their approval. | `select.py select_heal`, `tools/deploy/heal_queue.py` |
+| App rollback | application roots only: code deploy or smoke failed → traffic back to the previous ACA revision, slot swap back, `helm rollback` (AKS, via `az aks command invoke`), previous package re-deployed (Flex/zip/Logic Apps/SWA), root-declared VM commands; smoke against the previous contract; record `rolled_back`; the stage still fails. | `applications/deployments/scripts/rollback.sh`, `tools/deploy/rollback.py`, [rollback runbook](../docs/runbooks/rollback.md) |
+| Drift | drift runs re-apply **additive-only** drift (creates/updates, no delete/replace) of components with `drift: {auto_remediate: true}` (obs-monitoring, obs-diagnostics, obs-azure-integration, foundation-governance, foundation-secrets) where `self_healing.drift_auto_remediate` is true (dev only). Anything destructive is reported and alerted. | `select.py select_all`, `tools/deploy/remediate.py` |
+| Agent | tool downloads fall back to the `Cache@2` copy (keyed by pinned versions) - checksum always verified; credentialed steps start with `preflight.sh` (disk, DNS of Entra/ARM/DSV/storage/registry, `az account show`) and fail fast with `PREFLIGHT_FAIL class=disk|dns|auth`. | `install-tools.sh`, `preflight.sh` |
+
+**Never heals automatically**: permanent failures (authorization, quota, policy deny, validation, plan binding,
+protected deletes); a lock whose holder build is still running; infrastructure "rollback" (a Terraform rollback is a
+new reviewed change: revert the commit); destructive drift; drift in test/prod (unless `environments/<env>` opts
+in); approvals (heal runs wait for them like any run; dev's `lab-dev` has no checks by choice).
+
+**Circuit breaker / quarantine**: `tools/deploy/record.py` counts consecutive failed / partial / canceled /
+rolled-back results per component; at `self_healing.max_consecutive_failures` (dev/test 3, prod 2) the record becomes
+`quarantined` (reason kept) and an alert is raised (Azure Boards work item and/or Datadog event, `self_healing.notify`).
+`rolled_back` and `quarantined` are **held**: deploy, reconcile, heal and drift remediation never select them again
+for the same deploy fingerprint. **To unquarantine**: push a commit that changes the component (its deploy
+fingerprint changes), or queue `mode: manual, components: <id>`; a succeeded run resets the counter.
+See [quarantine runbook](../docs/runbooks/quarantine.md).
+
+**Suggested Datadog monitors** (`python3 tools/report/ci_metrics.py monitors`): quarantined components
+(`pipeline.heal.quarantined > 0`), consecutive failures, heal runs failing, state-lock recovery spikes, retry storms,
+refused drift remediation.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | Select fails "invalid pipeline scopes" | a platform component depends on an applications component | set `scope: applications` on it or remove the edge |
-| Select fails "mode 'auto' is not allowed for environment 'test'" | test/prod only accept `promote`, `drift`, `retire` | run with `mode: promote` |
+| Select fails "mode 'auto' is not allowed for environment 'test'" | test/prod only accept `promote`, `drift`, `retire`, `heal` | run with `mode: promote` |
 | Select fails "cannot promote … has not successfully deployed this commit" | source environment runs other code | promote/deploy the commit in the source environment first |
 | Applications run plans nothing, warns "waiting for the platform pipeline" | platform change on the same commit not yet deployed | let the platform run finish; it triggers the applications run |
 | Apply fails "stale plan; re-run" | an upstream contract changed between plan and apply | rerun the plan stage (or a new run) |
@@ -148,6 +184,9 @@ Promote platform first, then applications (their Select waits otherwise).
 | Validate fails "… is stale; run tools/pipeline/generate.py" | registry changed without regeneration | regenerate and commit both generated files |
 | `pipeline_templates.py` LIM003 warning/error | expanded YAML approaching ADO limits | see [Scaling](#scaling-and-limits) |
 | Required template check fails on a resource | pipeline does not extend `universal.yml` or the check points at another ref | fix the entry file / check configuration |
+| Plan/apply log "lock doctor: wait - holder build N is inProgress" | another run holds the Terraform state lock | expected; it is never broken while that run lives ([lock recovery](../docs/runbooks/lock-recovery.md)) |
+| Component not selected, reason "held: quarantined" | circuit breaker | fix and push, or `mode: manual` ([quarantine](../docs/runbooks/quarantine.md)) |
+| `PREFLIGHT_FAIL class=dns` | agent cannot resolve a private endpoint / DSV | fix agent DNS / private DNS zone links; rerun |
 | Stage waits on "Exclusive lock" | another run holds `lab-<env>` | expected (`lockBehavior: sequential`); cancel the older run if obsolete |
 
 ## Scaling and limits
@@ -156,7 +195,7 @@ Azure Pipelines limits (Learn, *Templates*: at most 100 included YAML files, 100
 memory - "typically 600 KB-2 MB of on-disk YAML"; *Stages*: up to 256 jobs per stage). No limit on the number
 of stages is documented. `tools/validate/pipeline_templates.py` fails before them: >80 files, depth >20,
 estimated expanded size >1,000,000 bytes (warning above 600,000), >200 jobs in a stage (including the
-validate matrix legs). Current estimate: platform ~450 KB, applications ~340 KB. When a budget is exceeded:
+validate matrix legs). Current estimate: platform ~540 KB, applications ~380 KB (self-healing steps included). When a budget is exceeded:
 split the scope further (another `scope` value and generated file, chained by a pipeline resource trigger),
 shard the Build stage, and keep parallelism bounded by the `deployPool` size (`validateMaxParallel` bounds
 the validation matrix).
@@ -198,7 +237,11 @@ the validation matrix).
 8. **Permissions**: only release managers may queue runs with `environment: prod`; contributors may queue
    dev. Azure Artifacts feed `observabilityFeed` (pipelines/variables/tools.yml): the project Build Service
    needs *Feed Publisher*.
-9. **Bootstrap prerequisites**: storage containers `tfstate`, `contracts`, `plans`, `deployments`,
+9. **Self-healing permissions**: the project *Build Service* identity needs *Queue builds* on both pipelines (heal
+   fan-out) and *Create work items* in the area of `self_healing.notify.area_path` (quarantine alerts); the plan
+   identities need Storage Blob Data Contributor on `deployments` (failure/verification records, lock claims);
+   lock breaking uses the apply identity (blob lease break needs Data Contributor on `tfstate`).
+10. **Bootstrap prerequisites**: storage containers `tfstate`, `contracts`, `plans`, `deployments`,
    `evidence`, `packages` and the role assignments of `bootstrap/identities.tf`.
 
 ## What only a real Azure DevOps organisation can prove
@@ -208,7 +251,10 @@ template variables inside included templates, `lower()`, `iif()`, `replace()`), 
 across 100+ stages, matrix from a relayed output variable, the pipeline resource trigger with branch + tag
 filters, Required template / Exclusive lock / approval behaviour, `lockBehavior` at stage level, workload
 identity federation token refresh during long applies, `az acr import` digest preservation across registries,
-Universal Package publishing, and the real expanded-size margin. The repository proves the logic (selection,
+Universal Package publishing, and the real expanded-size margin. Self-healing: `Build.CronSchedule.DisplayName`
+reaching the Select step, the Runs API fan-out with `templateParameters`, Boards work item creation with
+System.AccessToken, `Cache@2` restore/save, real Azure error texts beyond the captured samples, `force-unlock` /
+lease break against a real azurerm backend, ACA/App Service/AKS rollback commands against live resources. The repository proves the logic (selection,
 conditions, ordering, promotion gates, lint) with tests and static checks only.
 
 ## Files

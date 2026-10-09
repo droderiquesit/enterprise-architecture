@@ -6,7 +6,9 @@ executed against a live Azure subscription or Datadog organisation yet.
 | Runbook | Use when |
 |---|---|
 | [secret-rotation.md](secret-rotation.md) | rotating Datadog keys, fault token, DBM / database passwords, Event Hubs listen key, Cosmos keys |
-| [rollback.md](rollback.md) | a release must be reverted: per architecture (revisions, slots, digests, packages); infrastructure via reviewed change only |
+| [rollback.md](rollback.md) | a release must be reverted: automatic application rollback, per architecture (revisions, slots, digests, packages); infrastructure via reviewed change only |
+| [lock-recovery.md](lock-recovery.md) | a Terraform state lock is stuck (what the pipeline breaks automatically, and the manual path) |
+| [quarantine.md](quarantine.md) | a component is quarantined by the pipeline circuit breaker (triage, how to clear) |
 | [teardown.md](teardown.md) | removing components or a whole environment (pipeline retire mode, per-root destroy, what is retained, scoped cleanup) |
 | [break-glass.md](break-glass.md) | pipeline or agents unavailable; state recovery (links the bootstrap break-glass procedures) |
 | [alert-response.md](alert-response.md) | a Datadog monitor fired: one section per runbook anchor (generated from the archetypes) |

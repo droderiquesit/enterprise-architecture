@@ -1,0 +1,1 @@
+│ Error: creating Linux Virtual Machine Scale Set: Code="OperationNotAllowed" Message="Operation could not be completed as it results in exceeding approved standardDSv5Family Cores quota. Additional details - Deployment Model: Resource Manager, Location: swedencentral, Current Limit: 10, Current Usage: 8, Additional Required: 4"

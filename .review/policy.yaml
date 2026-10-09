@@ -1,0 +1,171 @@
+# Automated PR review policy (eh-pr-reviewer). Schema: tools/review/policy.schema.json.
+# Guide: docs/guides/automated-pr-review.md
+#
+# TRUST: the reviewer reads this file from the PR *target* branch (merge base / target head), never from the PR
+# source branch, so a PR cannot loosen the policy it is reviewed against. Changing this file is itself an
+# owner-protected change (non-owner => vote reject) and is never bot-approved.
+#
+# The APPROVE decision is computed only from this deterministic policy. Optional AI findings can add findings
+# (comment / block); they can never cause an approval.
+schema_version: 1
+
+# Azure DevOps identities (uniqueName or identity id) allowed to change owner_protected paths.
+owners:
+  - platform-security@example.com
+  - platform-team@example.com
+owner_protected:
+  - .review/**
+  - tools/review/policy.schema.json
+
+bot:
+  # Names of the reviewer identity in Azure DevOps (user-assigned managed identity `pr-reviewer` added as a user).
+  names: [eh-id-pr-reviewer, pr-reviewer, eh-pr-reviewer]
+
+# PR status posted on every iteration: genre/name = eh-review/policy (required by branch policy).
+status:
+  genre: eh-review
+  name: policy
+
+# Ordered change classes - first match wins. `never_approve` classes can never be bot-approved; `protected`
+# classes must also have a path-based required-reviewer group in branch policy (tools/review/ado_setup.py emits it).
+classes:
+  - name: review-governance
+    description: The reviewer itself, its policy, infrastructure and tests (changes can never be bot-approved).
+    globs: [.review/**, tools/review/**, applications/services/pr-reviewer/**, foundation/pr-reviewer/**, tests/review/**,
+            catalog/contracts/foundation-pr-reviewer.v1.schema.json]
+    never_approve: true
+    protected: true
+  - name: pipeline-governance
+    description: Pipelines, change detection, registry, branch-policy tooling and repository governance files.
+    globs: [azure-pipelines*.yml, pipelines/**, tools/changeset/**, tools/ado/**, tools/pipeline/**, tools/validate/**,
+            tools/deploy/**, tools/contracts/**, tools/config/**, catalog/components.yaml, catalog/schemas/**,
+            environments/schema/**, environments/promotion.yaml, .github/**, CONTRIBUTING.md, .gitignore, .gitattributes,
+            docs/architecture/**]
+    never_approve: true
+    protected: true
+  - name: identity-secrets
+    description: RBAC, identities, federated credentials, DSV access configuration and secret tooling.
+    globs: [bootstrap/**, foundation/identity/**, foundation/secrets/**, tools/secrets/**, observability/images/dsv-fetch/**,
+            applications/shared/python/hello_common/src/hello_common/secrets.py, applications/shared/python/hello_common/src/hello_common/azure_auth.py,
+            "applications/shared/dotnet/**/Secrets/**", foundation/governance/**]
+    never_approve: true
+    protected: true
+  - name: network-security
+    description: Network perimeter (VNets, NSGs, routes, firewall, edge).
+    globs: [foundation/network/**, foundation/edge/**]
+    never_approve: true
+    protected: true
+  - name: evidence
+    description: Deployment/verification evidence (status claims, ADR-0001 section 11) - never bot-approved.
+    globs: [docs/evidence/**, docs/IMPLEMENTATION_CHECKLIST.md]
+    never_approve: true
+  - name: prod-config
+    description: Production environment configuration and production observability manifests.
+    globs: [environments/prod/**, observability/onboarding/prod/**, observability/onboarding/rendered/prod/**]
+    never_approve: true
+    protected: true
+  - name: generated
+    description: Generated files; the PR build verifies they match their generator (tools/docs/generate.py --check).
+    globs: [docs/guides/component-ownership.md, docs/guides/architecture-deployment-matrix.md, docs/coverage/**,
+            observability/onboarding/rendered/**]
+  - name: dependencies
+    description: Lockfiles / exact pins; refined to dependency-patch (only patch bumps) or dependency-change.
+    globs: ["**/requirements.txt", "**/package-lock.json", "**/.terraform.lock.hcl", "**/Directory.Packages.props", "**/packages.lock.json"]
+    refine: dependencies
+  - name: observability-manifests
+    description: Service onboarding manifests; refined to observability-thresholds, onboarding-manifest or observability-config.
+    globs: ["observability/onboarding/*/*.yaml"]
+    refine: observability
+  - name: environment-config
+    globs: [environments/**]
+  - name: docs
+    builtin: docs
+  - name: tests
+    builtin: tests
+  - name: terraform
+    globs: ["**/*.tf", "**/*.tfvars", "**/*.tftpl"]
+  - name: code
+    globs: ["**"]
+
+decision:
+  # Auto-approve (vote 10) only when EVERY changed file falls in one of these classes and every other rule holds
+  # (no blocking findings, PR build validation green on the latest iteration, author is not the bot, target branch
+  # not release/*).
+  auto_approve_classes: [docs, tests, generated, dependency-patch, observability-thresholds, onboarding-manifest]
+  require_build_green: true
+  blocking_severities: [critical, high, medium]     # any such finding prevents auto-approval
+  wait_for_author_severities: [critical, high]      # violation/AI findings at these severities => vote -5
+  never_approve_target_branches: ["release/*"]
+  # Vote for changes that need a human: 0 (no vote). 5 is allowed only when branch policy requires the
+  # eh-review/policy status (which stays pending until a human approves).
+  human_required_vote: 0
+  max_files_for_auto_approve: 40
+
+limits:
+  max_changed_lines: 2000
+  max_files: 150
+  max_file_bytes: 512000
+  max_inline_threads: 30
+
+secrets:
+  entropy_min_length: 32
+  entropy_threshold_base64: 4.3
+  entropy_threshold_hex: 3.2
+  # Test fixtures: definite secret patterns are downgraded to a high finding (still blocks approval).
+  fixture_paths: ["**/tests/**", "**/fixtures/**", "**/testdata/**"]
+  skip_paths: ["**/package-lock.json", "**/.terraform.lock.hcl", "**/requirements.txt", "**/packages.lock.json", "**/*.svg"]
+
+terraform:
+  sensitive_resource_types:
+    - azurerm_role_assignment
+    - azurerm_role_definition
+    - azurerm_*federated_identity_credential
+    - azurerm_user_assigned_identity
+    - azurerm_network_security_group
+    - azurerm_network_security_rule
+    - azurerm_subnet_network_security_group_association
+    - azurerm_route
+    - azurerm_route_table
+    - azurerm_subnet_route_table_association
+    - azurerm_firewall*
+    - azurerm_management_lock
+    - azurerm_policy_*
+    - azurerm_*_policy_assignment
+    - azurerm_storage_account_network_rules
+    - azurerm_private_endpoint
+    - azurerm_private_dns_zone_virtual_network_link
+    - azurerm_virtual_network_peering
+    - azurerm_key_vault*
+    - azapi_resource
+  security_attributes: [identity, network_rules, public_network_access, public_network_access_enabled, ip_restriction,
+                        ip_restriction_default_action, shared_access_key_enabled, local_authentication_enabled,
+                        local_auth_enabled, role_definition_name, principal_id, scope, security_rule, min_tls_version]
+
+observability:
+  manifest_schema: observability/schemas/onboarding-manifest.v1.schema.json
+  prod_envs: [prod]
+  threshold_paths:
+    - {path: "spec.slos[*].target", min: 95.0, max: 99.99}
+    - {path: "spec.slos[*].warning", min: 95.0, max: 99.999}
+    - {path: "spec.slos[*].threshold_ms", min: 50, max: 10000}
+    - {path: "spec.monitors.params.error_log_threshold", min: 5, max: 1000}
+
+dependencies:
+  allow_new_packages: false
+
+ai:
+  # Optional Claude review (Anthropic API key from Delinea DSV: app setting ANTHROPIC_API_KEY=dsv://eh/<env>/anthropic-api-key).
+  enabled: false
+  model: claude-opus-5-5          # e.g. claude-sonnet-5-5 for lower cost
+  api_key_env: ANTHROPIC_API_KEY
+  effort: medium
+  max_input_chars: 120000         # bounded, redacted diff; lockfiles/generated/binary/large files excluded
+  max_file_chars: 20000
+  max_output_tokens: 8000         # cost cap per PR iteration (one request; cached by head commit + policy hash)
+  max_findings: 25
+  timeout_seconds: 120
+  max_retries: 2
+  server_fallbacks: true          # Claude API server-side refusal fallbacks ("default" routing)
+  exclude_globs: ["**/package-lock.json", "**/*.lock.hcl", "**/requirements.txt", "docs/coverage/**", "observability/onboarding/rendered/**",
+                  "**/*.svg", "**/*.png", "**/*.min.js"]
+  blocking_severities: [critical, high]

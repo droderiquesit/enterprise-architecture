@@ -1,0 +1,1 @@
+Error: Failed to get existing workspaces: containers.Client#ListBlobs: Failure sending request: StatusCode=0 -- Original Error: Get "https://stehdevstate.blob.core.windows.net/tfstate?comp=list": dial tcp: lookup stehdevstate.blob.core.windows.net on 168.63.129.16:53: no such host

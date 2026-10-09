@@ -1,0 +1,2 @@
+Error: Failed to install provider
+Error while installing hashicorp/azurerm v4.40.0: read tcp 10.0.0.4:51234->140.82.112.4:443: read: connection reset by peer

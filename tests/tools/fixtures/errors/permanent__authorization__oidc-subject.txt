@@ -1,0 +1,1 @@
+Error: building account: could not acquire access token to parse claims: clientAssertionCredential: Authentication failed. AADSTS700213: No matching federated identity record found for presented assertion subject 'sc://org/lab/lab-dev-apply'.

@@ -1,0 +1,1 @@
+│ Error: authorization.RoleAssignmentsClient#Create: Failure responding to request: StatusCode=400 -- Original Error: autorest/azure: Service returned an error. Status=400 Code="PrincipalNotFound" Message="Principal 1234abcd does not exist in the directory 00000000-0000-0000-0000-000000000000. Check that you have the correct principal ID."

@@ -1,0 +1,16 @@
+╷
+│ Error: Error acquiring the state lock
+│
+│ Error message: state blob is already locked
+│ Lock Info:
+│   ID:        9f5c2e7a-1b2c-4d5e-8f90-123456789abc
+│   Path:      tfstate/dev/platform-shared.tfstate
+│   Operation: OperationTypeApply
+│   Who:       AzDevOps@agent-01
+│   Version:   1.14.3
+│   Created:   2026-10-09 06:12:44.123456789 +0000 UTC
+│   Info:
+│
+│ Terraform acquires a state lock to protect the state from being written
+│ by multiple users at the same time.
+╵

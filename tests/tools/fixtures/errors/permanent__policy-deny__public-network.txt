@@ -1,0 +1,1 @@
+│ Error: creating Storage Account: Code="RequestDisallowedByPolicy" Message="Resource 'stehdevx' was disallowed by policy. Policy identifiers: '[{"policyAssignment":{"name":"deny-public-storage"}}]'."

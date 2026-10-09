@@ -53,7 +53,7 @@ class LockInfo:
 
 def parse_lock_info(text: str) -> LockInfo:
     def field(name):
-        m = re.search(rf"^\s*{name}:\s*(.*?)\s*$", text, re.M)
+        m = re.search(rf"^[\s│|]*{name}:\s*(.*?)\s*$", text, re.M)
         return m.group(1) if m else ""
 
     info = LockInfo(id=field("ID"), path=field("Path"), who=field("Who"), operation=field("Operation"))
