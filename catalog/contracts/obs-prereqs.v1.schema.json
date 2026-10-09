@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "obs-prereqs.v1.schema.json",
+  "title": "obs-prereqs contract v1 - Datadog prerequisites created before application deployments (RUM applications)",
+  "description": "Produced by observability/lab/prereqs. Contains NO secrets: the RUM client token is a browser-facing credential that Datadog designs to be shipped to every visitor (config.json); API and application keys never appear here.",
+  "type": "object",
+  "required": ["datadog_site", "rum"],
+  "additionalProperties": false,
+  "properties": {
+    "datadog_site": {"type": "string", "pattern": "^[a-z0-9.]+$", "examples": ["datadoghq.com", "datadoghq.eu"]},
+    "rum": {
+      "type": "object",
+      "required": ["applications"],
+      "additionalProperties": false,
+      "properties": {
+        "applications": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["application_id", "client_token", "name", "site", "session_sample_rate", "session_replay_sample_rate"],
+            "additionalProperties": false,
+            "properties": {
+              "application_id": {"type": "string", "minLength": 1},
+              "client_token": {"type": "string", "minLength": 1, "description": "Browser-safe RUM client token."},
+              "name": {"type": "string"},
+              "type": {"type": "string"},
+              "site": {"type": "string"},
+              "service": {"type": "string", "description": "DD service name the browser SDK must use."},
+              "session_sample_rate": {"type": "number", "minimum": 0, "maximum": 100},
+              "session_replay_sample_rate": {"type": "number", "minimum": 0, "maximum": 100},
+              "default_privacy_level": {"enum": ["mask", "mask-user-input", "allow"]},
+              "track_user_interactions": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    }
+  }
+}
