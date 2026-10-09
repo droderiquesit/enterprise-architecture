@@ -1,0 +1,4 @@
+-r ../../shared/python/hello_common/requirements.in
+azure-functions==2.3.0
+azure-data-tables==12.7.0
+azure-confidentialledger==1.1.1

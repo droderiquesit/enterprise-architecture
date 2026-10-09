@@ -17,6 +17,14 @@ public static class WorkflowStatus
     public const string Failed = "Failed";
 }
 
+/// <summary>Final outcome of a workflow, recorded once by the RecordWorkflowOutcome activity.</summary>
+public sealed record WorkflowOutcome(string Workflow, string Outcome, double DurationMs)
+{
+    public const string Succeeded = "succeeded";
+    public const string Failed = "failed";
+    public const string Compensated = "compensated";
+}
+
 public sealed record ReserveInput(Guid OrderId, string Sku, int Quantity);
 
 public sealed record ReserveResult(bool Reserved, string Status, bool Simulated);

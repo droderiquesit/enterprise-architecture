@@ -18,6 +18,7 @@ public static class WorkflowActivityNames
     public const string GetOrdersSince = nameof(GetOrdersSince);
     public const string GetFulfillmentRecordsSince = nameof(GetFulfillmentRecordsSince);
     public const string RecordReconciliationRun = nameof(RecordReconciliationRun);
+    public const string RecordWorkflowOutcome = nameof(RecordWorkflowOutcome);
 }
 
 /// <summary>Lab-only activity failure injection (FAULT_ACTIVITY_FAILURE_RATE, default 0 = off).</summary>
@@ -96,10 +97,6 @@ public sealed partial class WorkflowActivities(
         ArgumentNullException.ThrowIfNull(context);
         faults.MaybeFail(WorkflowActivityNames.RecordFulfillment);
         await store.UpsertFulfillmentAsync(record, context.CancellationToken).ConfigureAwait(false);
-        metrics.WorkflowsCompleted.Add(
-            1,
-            new KeyValuePair<string, object?>("workflow", "OrderProcessing"),
-            new KeyValuePair<string, object?>("outcome", record.Status));
     }
 
     [Function(WorkflowActivityNames.UpdateOrderStatus)]
@@ -124,10 +121,6 @@ public sealed partial class WorkflowActivities(
         ArgumentNullException.ThrowIfNull(summary);
         ArgumentNullException.ThrowIfNull(context);
         await store.UpsertBatchRunAsync(summary, context.CancellationToken).ConfigureAwait(false);
-        metrics.WorkflowsCompleted.Add(
-            1,
-            new KeyValuePair<string, object?>("workflow", "BatchProcessing"),
-            new KeyValuePair<string, object?>("outcome", summary.Failed == 0 ? "Succeeded" : "PartiallyFailed"));
     }
 
     [Function(WorkflowActivityNames.EnqueueBatchItems)]
@@ -157,11 +150,30 @@ public sealed partial class WorkflowActivities(
         ArgumentNullException.ThrowIfNull(summary);
         ArgumentNullException.ThrowIfNull(context);
         await store.UpsertReconciliationRunAsync(summary, context.CancellationToken).ConfigureAwait(false);
-        metrics.WorkflowsCompleted.Add(
-            1,
-            new KeyValuePair<string, object?>("workflow", "Reconciliation"),
-            new KeyValuePair<string, object?>("outcome", summary.MissingFulfillment + summary.StatusMismatch + summary.StuckOrders == 0 ? "Clean" : "Drift"));
     }
+
+    /// <summary>
+    /// Emits hello.workflow.completed{workflow,outcome} and hello.workflow.duration{workflow} (ms). Runs as an activity,
+    /// never in orchestrator code, so orchestrator replays cannot double count. Deliberately does no I/O and cannot
+    /// fail after recording, so durable activity retries do not double count either.
+    /// </summary>
+    [Function(WorkflowActivityNames.RecordWorkflowOutcome)]
+    public void RecordWorkflowOutcome([ActivityTrigger] WorkflowOutcome outcome)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+        Record(metrics, outcome);
+        LogOutcome(logger, outcome.Workflow, outcome.Outcome, outcome.DurationMs);
+    }
+
+    internal static void Record(HelloMetrics metrics, WorkflowOutcome outcome)
+    {
+        var workflow = new KeyValuePair<string, object?>("workflow", outcome.Workflow);
+        metrics.WorkflowCompleted.Add(1, workflow, new KeyValuePair<string, object?>("outcome", outcome.Outcome));
+        metrics.WorkflowDuration.Record(Math.Max(0, outcome.DurationMs), workflow);
+    }
+
+    [LoggerMessage(EventId = 7402, Level = LogLevel.Information, Message = "Workflow {workflow} finished: {workflow_outcome} in {duration_ms} ms")]
+    private static partial void LogOutcome(ILogger logger, string workflow, string workflow_outcome, double duration_ms);
 
     [LoggerMessage(EventId = 7401, Level = LogLevel.Warning, Message = "Compensation: released reservation for {order_id}")]
     private static partial void LogCompensated(ILogger logger, Guid order_id);

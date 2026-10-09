@@ -1,0 +1,5 @@
+**
+!shared/python/hello_common/src/**
+!services/functions/**
+**/__pycache__
+**/tests

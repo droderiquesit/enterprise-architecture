@@ -193,7 +193,7 @@ async def process_batch_items(source=None, sink=None, *, queue: str | None = Non
 async def _handle_item(env: Envelope, source, sink, queue: str, max_attempts: int) -> str:
     attrs = {"messaging.system": "servicebus", "messaging.operation.type": "process", "messaging.destination.name": queue,
              "messaging.message.id": env.message_id}
-    with tracer.start_as_current_span(f"process {queue}", context=Context(), kind=SpanKind.CONSUMER,
+    with tracer.start_as_current_span("servicebus.process", context=Context(), kind=SpanKind.CONSUMER,
                                       links=links_from_properties(env.application_properties), attributes=attrs) as span:
         try:
             try:

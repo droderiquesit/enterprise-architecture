@@ -54,8 +54,8 @@ locals {
     "hello-worker" = {
       MESSAGING_MODE            = "servicebus"
       SERVICEBUS_FQDN           = var.platform_messaging.fqdn
-      SERVICEBUS_TOPIC          = var.platform_messaging.topic.name
-      SERVICEBUS_SUBSCRIPTION   = var.platform_messaging.subscriptions["notifications"].name
+      SB_TOPIC                  = var.platform_messaging.topic.name
+      SB_SUBSCRIPTION           = var.platform_messaging.subscriptions["notifications"].name
       TABLE_MODE                = "memory" # platform-db-table-storage is not consumed by deploy-core-aks (see README)
       HEALTH_PORT               = "8081"
       OTEL_PYTHON_EXCLUDED_URLS = "healthz,readyz,version"

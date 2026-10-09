@@ -42,6 +42,10 @@ locals {
     },
     var.port == null ? {} : { PORT = tostring(var.port) },
     var.identity_client_id == null ? {} : { AZURE_CLIENT_ID = var.identity_client_id },
+    # hello_common (Python): workload identity on AKS, managed identity elsewhere.
+    var.runtime == "python" && var.identity_client_id != null ? {
+      AZURE_CREDENTIAL_MODE = var.architecture == "aks" ? "workload_identity" : "managed_identity"
+    } : {},
   )
   env = merge(local.base, module.instrumentation.env)
 

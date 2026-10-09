@@ -16,12 +16,24 @@ public static partial class Reconciliation
         ArgumentNullException.ThrowIfNull(context);
         var input = context.GetInput<ReconcileInput>() ?? new ReconcileInput(new DateTimeOffset(context.CurrentUtcDateTime.AddHours(-24), TimeSpan.Zero));
         var log = context.CreateReplaySafeLogger(Name);
+        var startedAt = context.CurrentUtcDateTime;
 
-        var orders = await context.CallActivityAsync<List<OrderSnapshot>>(WorkflowActivityNames.GetOrdersSince, input.Since, OrderProcessing.DefaultRetry);
-        var fulfillments = await context.CallActivityAsync<List<FulfillmentSnapshot>>(WorkflowActivityNames.GetFulfillmentRecordsSince, input.Since, OrderProcessing.DefaultRetry);
-        var summary = Diff(context.InstanceId, input, orders ?? [], fulfillments ?? [], new DateTimeOffset(context.CurrentUtcDateTime, TimeSpan.Zero));
+        ReconciliationSummary summary;
+        try
+        {
+            var orders = await context.CallActivityAsync<List<OrderSnapshot>>(WorkflowActivityNames.GetOrdersSince, input.Since, OrderProcessing.DefaultRetry);
+            var fulfillments = await context.CallActivityAsync<List<FulfillmentSnapshot>>(WorkflowActivityNames.GetFulfillmentRecordsSince, input.Since, OrderProcessing.DefaultRetry);
+            summary = Diff(context.InstanceId, input, orders ?? [], fulfillments ?? [], new DateTimeOffset(context.CurrentUtcDateTime, TimeSpan.Zero));
+            await context.CallActivityAsync(WorkflowActivityNames.RecordReconciliationRun, summary, OrderProcessing.DefaultRetry);
+        }
+        catch (TaskFailedException)
+        {
+            await OrderProcessing.RecordOutcomeAsync(context, Name, WorkflowOutcome.Failed, startedAt);
+            throw;
+        }
 
-        await context.CallActivityAsync(WorkflowActivityNames.RecordReconciliationRun, summary, OrderProcessing.DefaultRetry);
+        // "succeeded" = the run completed; drift counts are in the run summary, not the outcome attribute.
+        await OrderProcessing.RecordOutcomeAsync(context, Name, WorkflowOutcome.Succeeded, startedAt);
         LogDone(log, summary.RunId, summary.OrdersChecked, summary.MissingFulfillment, summary.StatusMismatch, summary.StuckOrders);
         return summary;
     }

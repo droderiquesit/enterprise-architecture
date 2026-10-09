@@ -94,7 +94,7 @@ class Worker:
         started = time.perf_counter()
         outcome = "completed"
         # New root trace (empty Context) + link: an async hand-off is not a parent/child relationship.
-        with tracer.start_as_current_span(f"process {self.entity}", context=Context(), kind=SpanKind.CONSUMER,
+        with tracer.start_as_current_span("servicebus.process", context=Context(), kind=SpanKind.CONSUMER,
                                           links=links_from_properties(env.application_properties), attributes=attributes) as span:
             try:
                 event = parse_event(env.body)

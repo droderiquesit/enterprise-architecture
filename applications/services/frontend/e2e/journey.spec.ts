@@ -49,6 +49,7 @@ function corsHeaders() {
 
 async function journey(page: Page) {
   await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Enterprise Hello' })).toBeVisible(); // asserted by the Datadog browser synthetic
   await expect(page.getByTestId('product-list')).toBeVisible();
   await expect(page.getByTestId('product-row-SKU-0002')).toContainText('Compact Widget 2');
   await page.getByTestId('order-SKU-0001').click();

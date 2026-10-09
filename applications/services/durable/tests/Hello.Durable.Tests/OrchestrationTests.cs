@@ -38,7 +38,8 @@ public sealed class OrderProcessingTests
         var names = ctx.Calls.Select(c => c.Name).ToList();
         Assert.True(names.IndexOf(WorkflowActivityNames.ReserveInventory) < names.IndexOf(WorkflowActivityNames.ChargePayment));
         Assert.True(names.IndexOf(WorkflowActivityNames.ChargePayment) < names.IndexOf(WorkflowActivityNames.RecordFulfillment));
-        Assert.Equal(WorkflowActivityNames.UpdateOrderStatus, names[^1]);
+        Assert.Equal(WorkflowActivityNames.UpdateOrderStatus, names[^2]);
+        Assert.Equal(WorkflowActivityNames.RecordWorkflowOutcome, names[^1]);
     }
 
     [Fact]

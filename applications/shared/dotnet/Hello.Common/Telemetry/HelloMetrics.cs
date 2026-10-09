@@ -12,6 +12,9 @@ public sealed class HelloMetrics : IDisposable
     private static readonly double[] DurationBuckets =
         [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10];
 
+    private static readonly double[] WorkflowBuckets =
+        [50, 100, 250, 500, 1000, 2500, 5000, 10_000, 30_000, 60_000, 120_000, 300_000, 600_000];
+
     private readonly Meter _meter;
 
     public HelloMetrics(IMeterFactory meterFactory, HelloServiceInfo info)
@@ -33,8 +36,13 @@ public sealed class HelloMetrics : IDisposable
             advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = DurationBuckets });
         InventoryReservations = _meter.CreateCounter<long>(
             "hello.inventory.reservations", "{reservation}", "Reservation outcomes (attribute result).");
-        WorkflowsCompleted = _meter.CreateCounter<long>(
-            "hello.workflows.completed", "{workflow}", "Durable workflow outcomes (attributes workflow, outcome).");
+        WorkflowCompleted = _meter.CreateCounter<long>(
+            "hello.workflow.completed", "{workflow}", "Completed durable workflows (attributes workflow, outcome=succeeded|failed|compensated).");
+        WorkflowDuration = _meter.CreateHistogram(
+            "hello.workflow.duration",
+            "ms",
+            "Durable workflow duration from orchestration start to outcome (attribute workflow).",
+            advice: new InstrumentAdvice<double> { HistogramBucketBoundaries = WorkflowBuckets });
         FaultsInjected = _meter.CreateCounter<long>(
             "hello.faults.injected", "{fault}", "Injected lab faults (attribute fault.type).");
         IdempotentReplays = _meter.CreateCounter<long>(
@@ -51,7 +59,9 @@ public sealed class HelloMetrics : IDisposable
 
     public Counter<long> InventoryReservations { get; }
 
-    public Counter<long> WorkflowsCompleted { get; }
+    public Counter<long> WorkflowCompleted { get; }
+
+    public Histogram<double> WorkflowDuration { get; }
 
     public Counter<long> FaultsInjected { get; }
 

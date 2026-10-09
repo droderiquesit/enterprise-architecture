@@ -73,6 +73,6 @@ async def test_servicebus_emulator_to_table(monkeypatch, spans):
                 assert [m.dead_letter_reason for m in dead] == ["PoisonMessage"]
                 for m in dead:
                     await dlq.complete_message(m)
-        consumer = [x for x in spans() if x.name == "process order-events/subscriptions/notifications"]
+        consumer = [x for x in spans() if x.name == "servicebus.process"]
         linked = [x for x in consumer if x.links and x.links[0].context.trace_id == int("4bf92f3577b34da6a3ce929d0e0e4736", 16)]
         assert linked and all(x.parent is None for x in linked)

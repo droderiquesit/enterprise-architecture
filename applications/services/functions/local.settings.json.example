@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "PYTHON_ENABLE_OPENTELEMETRY": "true",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+    "DD_ENV": "local",
+    "DD_SERVICE": "hello-functions",
+    "DD_VERSION": "0.0.0-dev",
+    "ServiceBusConnection__fullyQualifiedNamespace": "example.servicebus.windows.net",
+    "CATALOG_API_URL": "http://localhost:8080",
+    "AUDIT_SINK": "log",
+    "AzureWebJobs.audit.Disabled": "true"
+  }
+}

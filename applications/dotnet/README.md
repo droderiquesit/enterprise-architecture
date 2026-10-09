@@ -30,7 +30,7 @@ here (MSBuild discovers them by walking up from the project directory).
 | Problems | RFC 7807 everywhere (`AddProblemDetails`, `HelloExceptionHandler`, status-code pages), `type = urn:enterprise-hello:problem:<code>`, `trace_id` extension |
 | Idempotency | `IdempotencyKey` (header validation, request fingerprint) |
 | Identity | `AzureCredentialFactory` — WorkloadIdentityCredential (AKS) → ManagedIdentityCredential(`AZURE_CLIENT_ID`) → DefaultAzureCredential |
-| Metrics | `HelloMetrics` (meter `Hello.App`): `hello.orders.created`, `hello.orders.publish_failures`, `hello.orders.status_transitions`, `hello.http.dependency.duration` (s), `hello.inventory.reservations`, `hello.workflows.completed`, `hello.faults.injected`, `hello.idempotency.replays` — bounded attributes only |
+| Metrics | `HelloMetrics` (meter `Hello.App`): `hello.orders.created`, `hello.orders.publish_failures`, `hello.orders.status_transitions`, `hello.http.dependency.duration` (s), `hello.inventory.reservations`, `hello.workflow.completed`, `hello.workflow.duration` (ms), `hello.faults.injected`, `hello.idempotency.replays` — bounded attributes only |
 | Web defaults | `AddHelloServiceDefaults` / `UseHelloServiceDefaults` / `MapHelloServiceEndpoints` (PORT binding, Kestrel limits, snake_case JSON, `traceparent` response header) |
 
 ## Common environment
@@ -44,7 +44,7 @@ here (MSBuild discovers them by walking up from the project directory).
 ```bash
 cd applications/dotnet
 dotnet build EnterpriseHello.sln -c Release          # 0 warnings, 0 errors (warnings are errors in src)
-dotnet test --solution EnterpriseHello.sln -c Release # 71 tests
+dotnet test --solution EnterpriseHello.sln -c Release # 79 tests
 VERSION=1.2.3 GIT_COMMIT=$(git rev-parse --short HEAD) ./build.sh all        # build + test + publish
 VERSION=1.2.3 CA_BUNDLE=/path/ca.crt ./build.sh images bff orders-api      # docker images (optional CA secret)
 ```
@@ -72,7 +72,7 @@ durable on `mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated1
 | Check | Command / result |
 |---|---|
 | Release build | `dotnet build EnterpriseHello.sln -c Release` → 0 warnings, 0 errors |
-| Tests | `dotnet test --solution EnterpriseHello.sln -c Release` → 71 passed (Common 25, orders 16, inventory 6, bff 10, durable 14) |
+| Tests | `dotnet test --solution EnterpriseHello.sln -c Release` → 79 passed (Common 25, orders 16, inventory 6, bff 10, durable 22) |
 | Pipeline script | `VERSION=0.1.0-ci ./build.sh all` → exit 0, 5 zips + build-info.json |
 | Images | `docker build` bff / orders-api / inventory-api / durable → OK (245 / 339 / 280 MB uncompressed; durable ≈1.3 GB base) |
 | E2E (memory) | bff → orders-api (`STORAGE_MODE=memory MESSAGING_MODE=log PRICE_FALLBACK=true`) + inventory-api: `/healthz` 200, `/version` JSON, `POST /api/orders` 202 with `traceparent` continuing the caller's trace id, replay → `Idempotent-Replayed: true`, GET by id/list, CORS preflight headers, catalog unset → 503 problem; orders logs carry `dd.trace_id=11803532876627986230` for trace `4bf92f3577b34da6a3ce929d0e0e4736` |

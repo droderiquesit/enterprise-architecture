@@ -23,12 +23,22 @@ public static partial class BatchProcessing
         var results = await Task.WhenAll(tasks);
         var summary = Aggregate(context.InstanceId, results, startedAt, context.CurrentUtcDateTime);
 
-        await context.CallActivityAsync(WorkflowActivityNames.RecordBatchRun, summary, OrderProcessing.DefaultRetry);
-        if (input.Enqueue)
+        try
         {
-            var ids = results.Where(r => r.Succeeded).Select(r => $"{context.InstanceId}:{r.Index}").ToList();
-            await context.CallActivityAsync(WorkflowActivityNames.EnqueueBatchItems, new EnqueueInput(context.InstanceId, ids), OrderProcessing.DefaultRetry);
+            await context.CallActivityAsync(WorkflowActivityNames.RecordBatchRun, summary, OrderProcessing.DefaultRetry);
+            if (input.Enqueue)
+            {
+                var ids = results.Where(r => r.Succeeded).Select(r => $"{context.InstanceId}:{r.Index}").ToList();
+                await context.CallActivityAsync(WorkflowActivityNames.EnqueueBatchItems, new EnqueueInput(context.InstanceId, ids), OrderProcessing.DefaultRetry);
+            }
         }
+        catch (TaskFailedException)
+        {
+            await OrderProcessing.RecordOutcomeAsync(context, Name, WorkflowOutcome.Failed, startedAt);
+            throw;
+        }
+
+        await OrderProcessing.RecordOutcomeAsync(context, Name, summary.Failed == 0 ? WorkflowOutcome.Succeeded : WorkflowOutcome.Failed, startedAt);
 
         LogDone(log, context.InstanceId, summary.Succeeded, summary.Failed);
         return summary;

@@ -26,6 +26,7 @@ public static partial class OrderProcessing
     {
         ArgumentNullException.ThrowIfNull(context);
         var input = context.GetInput<OrderWorkflowInput>() ?? throw new InvalidOperationException("OrderProcessing requires input.");
+        var startedAt = context.CurrentUtcDateTime;
         var log = context.CreateReplaySafeLogger(Name);
         var steps = new List<string>();
         var reserved = false;
@@ -38,7 +39,7 @@ public static partial class OrderProcessing
             steps.Add($"reserve:{reservation.Status}");
             if (!reservation.Reserved)
             {
-                return await FailAsync(context, input, steps, $"inventory_{reservation.Status}", compensate: false, log);
+                return await FailAsync(context, input, steps, $"inventory_{reservation.Status}", compensate: false, startedAt, log);
             }
 
             reserved = true;
@@ -49,7 +50,7 @@ public static partial class OrderProcessing
             steps.Add($"charge:{payment?.Status ?? failure}");
             if (failure is not null)
             {
-                return await FailAsync(context, input, steps, failure, compensate: reserved, log);
+                return await FailAsync(context, input, steps, failure, compensate: reserved, startedAt, log);
             }
 
             await context.CallActivityAsync(WorkflowActivityNames.UpdateOrderStatus, new StatusUpdateInput(input.OrderId, "Charged", null, context.InstanceId), DefaultRetry);
@@ -64,13 +65,14 @@ public static partial class OrderProcessing
             await context.CallActivityAsync(WorkflowActivityNames.UpdateOrderStatus, new StatusUpdateInput(input.OrderId, WorkflowStatus.Fulfilled, null, context.InstanceId), DefaultRetry);
             steps.Add("status:Fulfilled");
             context.SetCustomStatus(new { step = "done", outcome = WorkflowStatus.Fulfilled });
+            await RecordOutcomeAsync(context, Name, WorkflowOutcome.Succeeded, startedAt);
             LogCompleted(log, input.OrderId, WorkflowStatus.Fulfilled, null);
             return new OrderWorkflowResult(input.OrderId, WorkflowStatus.Fulfilled, null, payment.PaymentId, steps);
         }
         catch (TaskFailedException ex)
         {
             steps.Add($"error:{ex.TaskName}");
-            return await FailAsync(context, input, steps, $"activity_failed:{ex.TaskName}", compensate: reserved, log);
+            return await FailAsync(context, input, steps, $"activity_failed:{ex.TaskName}", compensate: reserved, startedAt, log);
         }
     }
 
@@ -104,7 +106,7 @@ public static partial class OrderProcessing
     }
 
     private static async Task<OrderWorkflowResult> FailAsync(
-        TaskOrchestrationContext context, OrderWorkflowInput input, List<string> steps, string reason, bool compensate, ILogger log)
+        TaskOrchestrationContext context, OrderWorkflowInput input, List<string> steps, string reason, bool compensate, DateTime startedAt, ILogger log)
     {
         context.SetCustomStatus(new { step = "compensate", reason });
         if (compensate)
@@ -144,8 +146,26 @@ public static partial class OrderProcessing
         }
 
         context.SetCustomStatus(new { step = "done", outcome = WorkflowStatus.Failed, reason });
+        await RecordOutcomeAsync(context, Name, compensate ? WorkflowOutcome.Compensated : WorkflowOutcome.Failed, startedAt);
         LogCompleted(log, input.OrderId, WorkflowStatus.Failed, reason);
         return new OrderWorkflowResult(input.OrderId, WorkflowStatus.Failed, reason, null, steps);
+    }
+
+    /// <summary>
+    /// Records the workflow outcome metrics through an activity (see WorkflowActivities.RecordWorkflowOutcome). Duration is
+    /// computed from replay-safe context time. Best effort: a metrics failure never changes the workflow result.
+    /// </summary>
+    internal static async Task RecordOutcomeAsync(TaskOrchestrationContext context, string workflow, string outcome, DateTime startedAt)
+    {
+        try
+        {
+            var durationMs = (context.CurrentUtcDateTime - startedAt).TotalMilliseconds;
+            await context.CallActivityAsync(WorkflowActivityNames.RecordWorkflowOutcome, new WorkflowOutcome(workflow, outcome, durationMs));
+        }
+        catch (TaskFailedException)
+        {
+            // Metrics are best effort.
+        }
     }
 
     [LoggerMessage(EventId = 7001, Level = LogLevel.Information, Message = "OrderProcessing started for {order_id} ({workflow_instance_id})")]

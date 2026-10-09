@@ -84,7 +84,7 @@ async def test_process_batch_items_memory(spans):
     out = await commands.process_batch_items(src, sink, queue="batch-items", max_messages=10, max_seconds=2)
     assert out["completed"] == 3 and out["dead_lettered"] == 1 and out["received"] == 4
     assert set(sink.rows) == {"item-0", "item-1", "item-2"} and sink.rows["item-0"]["status"] == "Processed"
-    consumer = [s for s in spans() if s.name == "process batch-items"]
+    consumer = [s for s in spans() if s.name == "servicebus.process"]
     assert len(consumer) == 4 and all(s.parent is None for s in consumer)
     assert sum(1 for s in consumer if s.links and s.links[0].context.trace_id == int("4bf92f3577b34da6a3ce929d0e0e4736", 16)) == 3
 

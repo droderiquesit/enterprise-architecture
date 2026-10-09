@@ -31,7 +31,7 @@ activity retries are idempotent. Identity needs Storage Blob/Queue/Table Data Co
 | `StartOrderWorkflow` | HTTP `POST /api/workflows/order` (body = OrderCreated message) | lab/smoke entry point when Service Bus is unavailable; same instance-id rule. *Addition to the spec.* |
 | `PurgeHistory` | timer `0 15 3 * * *` | purges Completed/Failed/Terminated instances older than `DURABLE_HISTORY_RETENTION_DAYS` (7) |
 | `Healthz`, `Version` | HTTP `GET /api/healthz`, `/api/version` | |
-| activities | | `ReserveInventory`, `ReleaseInventory`, `ChargePayment`, `RecordFulfillment`, `UpdateOrderStatus`, `ProcessItem`, `RecordBatchRun`, `EnqueueBatchItems`, `GetOrdersSince`, `GetFulfillmentRecordsSince`, `RecordReconciliationRun` |
+| activities | | `RecordWorkflowOutcome` (metrics, last step of every orchestration), `ReserveInventory`, `ReleaseInventory`, `ChargePayment`, `RecordFulfillment`, `UpdateOrderStatus`, `ProcessItem`, `RecordBatchRun`, `EnqueueBatchItems`, `GetOrdersSince`, `GetFulfillmentRecordsSince`, `RecordReconciliationRun` |
 
 HTTP functions use `AuthorizationLevel.Anonymous`: the app is expected to be reachable only privately (inbound access is
 owned by the deployment root). Orchestrators are deterministic (context time, no I/O, `CreateReplaySafeLogger`).
@@ -83,8 +83,32 @@ Recommendation (ADR-0001 §10 — logs only via FunctionAppLogs → Event Hubs �
 service (no `logs` pipeline, or a filter on `service.name=hello-durable`). Alternative: per-signal endpoints only (no
 duplicate logs, no host/orchestration spans).
 
-Other telemetry: metrics `hello.workflows.completed{workflow,outcome}`, `hello.faults.injected{fault.type=activity_failure}`,
-`hello.http.dependency.duration`; logs carry `order_id`, `workflow_instance_id`, `workflow_outcome`, `workflow_reason`.
+### Workflow metrics (monitors depend on these)
+
+| Instrument | Type / unit | Attributes |
+|---|---|---|
+| `hello.workflow.completed` | counter `{workflow}` | `workflow` = `OrderProcessing`\|`BatchProcessing`\|`Reconciliation`; `outcome` = `succeeded`\|`failed`\|`compensated` |
+| `hello.workflow.duration` | histogram, `ms` (buckets 50 ms … 10 min) | `workflow` |
+
+Meter `Hello.App` (`System.Diagnostics.Metrics` via `IMeterFactory`), registered with the worker's OTel MeterProvider by
+`AddHelloOpenTelemetry` and exported over OTLP (delta temporality). Outcome mapping: OrderProcessing `Fulfilled` →
+`succeeded`, failure after a reservation (released) → `compensated`, failure before/without a reservation → `failed`;
+BatchProcessing all items OK → `succeeded`, any failed item or failed RecordBatchRun → `failed`; Reconciliation run
+completed → `succeeded` (drift is in the run summary), activity failure → `failed` (recorded, then the exception is rethrown).
+
+**Why an activity (`RecordWorkflowOutcome`) and not the orchestrator or the client:** orchestrator code is replayed many
+times, so a counter there would double count (replay-safe logging has no metric equivalent). The client side only sees
+completion if something polls or subscribes, which the Service Bus starter does not. Each orchestrator therefore calls
+a final `RecordWorkflowOutcome` activity once, as its last step. Durable checkpoints the completed activity in history,
+so replays never run it again. Duration is `context.CurrentUtcDateTime(at outcome) − context.CurrentUtcDateTime(at start)`.
+That is replay-safe and deterministic, and covers the whole run including durable timers and retries. The activity does
+no I/O and cannot fail after recording, and the orchestrator calls it without a RetryPolicy, so at-least-once activity
+delivery cannot double count either. The only exception is a host crash between recording and checkpointing, which is
+rare and accepted. A failure of this activity never changes the workflow result (best effort, caught).
+Unit tests: `WorkflowMetricsTests` (outcome per path, duration from context time, the orchestrator never emits
+measurements itself, and the activity emits the counter and histogram with exact attributes and unit).
+
+Other telemetry: `hello.faults.injected{fault.type=activity_failure}`, `hello.http.dependency.duration`; logs carry `order_id`, `workflow_instance_id`, `workflow_outcome`, `workflow_reason`.
 In FunctionAppLogs the worker lines are host-formatted (not the ADR JSON line); correlation is via the host's
 `operation id`/trace fields.
 

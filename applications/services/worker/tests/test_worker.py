@@ -46,7 +46,7 @@ async def test_success_link_not_parent_and_idempotent_upsert(spans):
     assert len(src.completed) == 2 and sink.writes == 2 and len(sink.rows) == 1
     row = sink.rows["11111111-1111-1111-1111-111111111111"]
     assert row["PartitionKey"] == "order" and row["status"] == "Notified" and row["producer_trace_id"] == "4bf92f3577b34da6a3ce929d0e0e4736"
-    consumer = [s for s in spans() if s.name.startswith("process ")]
+    consumer = [s for s in spans() if s.name == "servicebus.process"]
     assert len(consumer) == 2
     for s in consumer:
         assert s.kind.name == "CONSUMER" and s.parent is None

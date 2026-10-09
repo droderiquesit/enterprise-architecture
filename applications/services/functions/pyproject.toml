@@ -1,0 +1,14 @@
+[project]
+name = "hello-functions"
+version = "1.0.0"
+description = "Enterprise Hello Azure Functions (Python v2 model): audit, cache_warmer, quote"
+requires-python = ">=3.13,<3.14"
+dependencies = ["hello-common", "azure-functions>=2.3", "azure-data-tables>=12.7", "azure-confidentialledger>=1.1"]
+
+[tool.uv.sources]
+hello-common = { path = "../../shared/python/hello_common", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: needs docker"]
+addopts = "-m 'not integration'"

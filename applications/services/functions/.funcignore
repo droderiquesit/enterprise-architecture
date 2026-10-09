@@ -1,0 +1,11 @@
+tests/
+.venv/
+__pycache__/
+*.pyc
+local.settings.json
+local.settings.json.example
+Dockerfile
+Dockerfile.dockerignore
+pyproject.toml
+requirements.in
+README.md
