@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "service.schema.json",
+  "title": "Azure service catalog file (catalog/services/*.yaml)",
+  "description": "One file per category group. Each entry describes one hosting variant of an Azure (or partner/Fabric) service: lifecycle, availability, IaC support, workload mapping, telemetry collection paths, Datadog limitations, cost and implementation status. Status vocabulary follows ADR-0001 section 11.",
+  "type": "object",
+  "required": ["schema_version", "verified_on", "services"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "verified_on": {"$ref": "#/$defs/date"},
+    "description": {"type": "string"},
+    "services": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/service"}
+    }
+  },
+  "$defs": {
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "httpsUrl": {"type": "string", "pattern": "^https://[^\\s]+$"},
+    "nonEmptyString": {"type": "string", "minLength": 1},
+    "tri": {"enum": [true, false, "unknown"]},
+    "support": {"enum": ["yes", "no", "partial", "n/a"]},
+    "signal": {
+      "type": "object",
+      "required": ["supported", "method"],
+      "additionalProperties": false,
+      "properties": {
+        "supported": {"$ref": "#/$defs/support"},
+        "method": {"type": "string", "description": "Collection path, e.g. 'Fluent Bit sidecar -> Datadog HTTP intake'"},
+        "notes": {"type": "string"}
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": [
+        "id", "family", "hosting_variant", "category", "display_name", "lifecycle",
+        "availability", "iac", "workload", "telemetry", "datadog_limitations", "cost",
+        "status", "references"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"},
+        "family": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$", "description": "Product family, e.g. azure-sql, cosmos-db, app-service"},
+        "parent": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$", "description": "Umbrella entry id when this entry is a more specific variant (e.g. app-service-linux-code -> app-service-linux)"},
+        "hosting_variant": {"$ref": "#/$defs/nonEmptyString"},
+        "category": {
+          "enum": ["database", "compute", "serverless", "analytics", "adjacent-data", "messaging", "partner", "fabric", "specialized", "platform-support"]
+        },
+        "display_name": {"$ref": "#/$defs/nonEmptyString"},
+        "summary": {"type": "string"},
+        "variants": {
+          "type": "array",
+          "description": "SKUs / VM sizes / hardware features treated as variants, not separate architectures",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {"$ref": "#/$defs/nonEmptyString"},
+              "lifecycle": {"enum": ["ga", "preview", "legacy", "retiring", "retired", "not-recommended"]},
+              "notes": {"type": "string"}
+            }
+          }
+        },
+        "lifecycle": {
+          "type": "object",
+          "required": ["status", "notes", "verified_on"],
+          "additionalProperties": false,
+          "properties": {
+            "status": {"enum": ["ga", "preview", "legacy", "retiring", "retired", "not-recommended"]},
+            "notes": {"$ref": "#/$defs/nonEmptyString"},
+            "verified_on": {"$ref": "#/$defs/date"},
+            "retirement_date": {"$ref": "#/$defs/date"},
+            "creation_blocked_from": {"$ref": "#/$defs/date"},
+            "successor": {"type": "string", "description": "Catalog id or product recommended instead"}
+          }
+        },
+        "availability": {
+          "type": "object",
+          "required": ["regions_checked", "quotas", "registrations", "licensing"],
+          "additionalProperties": false,
+          "properties": {
+            "regions_checked": {
+              "type": "object",
+              "required": ["swedencentral", "eastus2", "westeurope"],
+              "additionalProperties": {"$ref": "#/$defs/tri"},
+              "properties": {
+                "swedencentral": {"$ref": "#/$defs/tri"},
+                "eastus2": {"$ref": "#/$defs/tri"},
+                "westeurope": {"$ref": "#/$defs/tri"}
+              }
+            },
+            "region_notes": {"type": "string"},
+            "quotas": {"type": "array", "items": {"type": "string"}},
+            "registrations": {"type": "array", "items": {"type": "string"}, "description": "Resource providers and preview feature flags"},
+            "licensing": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "networking": {
+          "type": "object",
+          "required": ["private_support"],
+          "additionalProperties": false,
+          "properties": {
+            "private_support": {"enum": ["private-endpoint", "vnet-injection", "vnet-integration", "private-endpoint-or-vnet-injection", "internal-only", "partial", "none", "n/a"]},
+            "notes": {"type": "string"}
+          }
+        },
+        "iac": {
+          "type": "object",
+          "required": ["terraform_resources", "azapi", "component", "implemented"],
+          "additionalProperties": false,
+          "properties": {
+            "terraform_resources": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9_]+$"}},
+            "azapi": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["type", "api_version", "reason"],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {"type": "string", "pattern": "^[A-Za-z0-9.]+/[A-Za-z0-9/]+$"},
+                  "api_version": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}(-preview)?$"},
+                  "reason": {"$ref": "#/$defs/nonEmptyString"}
+                }
+              }
+            },
+            "component": {"type": ["string", "null"], "description": "Component id from catalog/components.yaml that owns the resource, or null"},
+            "implemented": {"type": "boolean"},
+            "notes": {"type": "string"}
+          }
+        },
+        "workload": {
+          "type": "object",
+          "required": ["exercised_by", "operations"],
+          "additionalProperties": false,
+          "properties": {
+            "exercised_by": {"type": "array", "items": {"type": "string"}},
+            "operations": {"type": "array", "items": {"type": "string"}},
+            "boundary": {"type": "string"}
+          }
+        },
+        "telemetry": {
+          "type": "object",
+          "required": ["signals"],
+          "additionalProperties": false,
+          "properties": {
+            "azure_metric_namespace": {"type": ["string", "null"], "description": "Datadog Azure integration metric prefix, e.g. azure.sql_servers_databases"},
+            "signals": {
+              "type": "object",
+              "required": ["metrics", "logs", "traces", "dbm", "rum", "profiling"],
+              "additionalProperties": {"$ref": "#/$defs/signal"},
+              "properties": {
+                "metrics": {"$ref": "#/$defs/signal"},
+                "logs": {"$ref": "#/$defs/signal"},
+                "traces": {"$ref": "#/$defs/signal"},
+                "dbm": {"$ref": "#/$defs/signal"},
+                "rum": {"$ref": "#/$defs/signal"},
+                "profiling": {"$ref": "#/$defs/signal"}
+              }
+            }
+          }
+        },
+        "datadog_limitations": {"type": "array", "items": {"type": "string"}},
+        "cost": {
+          "type": "object",
+          "required": ["profile", "approx_monthly_usd_default", "assumptions", "teardown", "data_retention"],
+          "additionalProperties": false,
+          "properties": {
+            "profile": {"enum": ["low", "medium", "high", "very-high"]},
+            "approx_monthly_usd_default": {"type": ["number", "null"], "minimum": 0},
+            "assumptions": {"$ref": "#/$defs/nonEmptyString"},
+            "teardown": {"$ref": "#/$defs/nonEmptyString"},
+            "data_retention": {"$ref": "#/$defs/nonEmptyString"}
+          }
+        },
+        "status": {
+          "type": "object",
+          "required": ["implementation", "live_validation", "default_profiles"],
+          "additionalProperties": false,
+          "properties": {
+            "implementation": {"enum": ["cataloged", "implemented", "disabled", "blocked"]},
+            "live_validation": {"enum": ["not-run", "deployed", "verified"]},
+            "blocked_reason": {"type": "string"},
+            "evidence": {"type": "string", "description": "Path under docs/evidence/ (required when live_validation != not-run)"},
+            "default_profiles": {"type": "array", "items": {"enum": ["minimal", "enterprise", "full", "specialized", "observability-only", "custom"]}}
+          }
+        },
+        "references": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/httpsUrl"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+<Project>
+  <!--
+    Central build settings for every Enterprise Hello .NET project.
+    Projects live under applications/services/<svc>/ and applications/shared/dotnet/; each of those trees has a
+    one-line Directory.Build.props / Directory.Packages.props that imports the files in this directory, because
+    MSBuild only discovers these files by walking up from the project directory.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(TF_BUILD)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Company>Enterprise Hello (synthetic lab)</Company>
+    <Product>Enterprise Hello</Product>
+    <Copyright>Synthetic lab code</Copyright>
+    <!-- Version/commit come from the pipeline (VERSION, GIT_COMMIT) through build.sh. -->
+    <Version Condition="'$(Version)' == ''">0.1.0-local</Version>
+    <SourceRevisionId Condition="'$(SourceRevisionId)' == ''">$(GIT_COMMIT)</SourceRevisionId>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
+  </PropertyGroup>
+
+  <!-- src projects: warnings are errors. Test projects keep warnings visible but non-fatal. -->
+  <PropertyGroup Condition="'$(IsTestProject)' != 'true' and !$(MSBuildProjectName.EndsWith('.Tests'))">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Allow NuGet audit advisories to surface as warnings without breaking an otherwise reproducible build. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- CA1707 (underscores in test names) and CA2007 are noise in tests. -->
+    <NoWarn>$(NoWarn);CA1707;CA2007;CA1515;CA1861;CA2234;CA1062;CA1859;CA2000</NoWarn>
+  </PropertyGroup>
+</Project>

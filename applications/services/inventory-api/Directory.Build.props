@@ -1,0 +1,4 @@
+<Project>
+  <!-- Central settings live in applications/dotnet/Directory.Build.props. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../dotnet/Directory.Build.props" />
+</Project>

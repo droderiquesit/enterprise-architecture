@@ -1,0 +1,4 @@
+<Project>
+  <!-- Central package versions live in applications/dotnet/Directory.Packages.props. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../dotnet/Directory.Packages.props" />
+</Project>

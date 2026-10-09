@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hello-common"
+version = "1.0.0"
+description = "Shared runtime for Enterprise Hello Python services: config, JSON logging, OpenTelemetry, FastAPI app factory, fault injection, resilient HTTP, RFC 7807 problems, Azure credentials."
+requires-python = ">=3.13,<3.14"
+license = { text = "MIT" }
+# Exact pins live in requirements.in / each service's compiled requirements.txt.
+dependencies = [
+  "fastapi>=0.143",
+  "uvicorn>=0.54",
+  "httpx>=0.28",
+  "pydantic>=2.14",
+  "opentelemetry-api>=1.45",
+  "opentelemetry-sdk>=1.45",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.45",
+  "opentelemetry-exporter-otlp-proto-http>=1.45",
+  "opentelemetry-instrumentation-fastapi>=0.66b1",
+  "opentelemetry-instrumentation-httpx>=0.66b1",
+  "opentelemetry-instrumentation-logging>=0.66b1",
+  "azure-identity>=1.26",
+  "azure-core>=1.41",
+  "azure-core-tracing-opentelemetry>=1.0.0b13",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: needs docker containers or network services"]
