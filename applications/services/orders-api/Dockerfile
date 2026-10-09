@@ -3,6 +3,7 @@
 # Build context: the repository's applications/ directory, e.g.
 #   docker build -f applications/services/orders-api/Dockerfile -t hello-orders-api:$VERSION \
 #     --build-arg VERSION=$VERSION --build-arg GIT_COMMIT=$GIT_COMMIT --build-arg BUILD_TIME=$BUILD_TIME applications
+# Behind a TLS-intercepting proxy add: --secret id=ca_bundle,src=/path/to/ca-bundle.crt
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble AS build
 ARG VERSION=0.1.0-local
@@ -15,7 +16,10 @@ COPY shared/dotnet/Directory.Build.props shared/dotnet/Directory.Packages.props 
 COPY shared/dotnet/Hello.Common/Hello.Common.csproj ../shared/dotnet/Hello.Common/
 COPY services/orders-api/Directory.Build.props services/orders-api/Directory.Packages.props ../services/orders-api/
 COPY services/orders-api/src/Hello.OrdersApi/Hello.OrdersApi.csproj ../services/orders-api/src/Hello.OrdersApi/
+# Optional secret `ca_bundle`: CA bundle for TLS-intercepting egress proxies (build-time only, never in the image).
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
+    --mount=type=secret,id=ca_bundle,required=false \
+    if [ -s /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
     dotnet restore ../services/orders-api/src/Hello.OrdersApi/Hello.OrdersApi.csproj
 COPY shared/dotnet/Hello.Common/ ../shared/dotnet/Hello.Common/
 COPY services/orders-api/src/ ../services/orders-api/src/
