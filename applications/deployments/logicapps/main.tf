@@ -211,6 +211,7 @@ module "private_endpoint" {
 # ------------------------------------------------- Standard: archive data path for the system-assigned identity
 # The archive container is application data owned by this deployment root (created through ARM, no data-plane keys).
 resource "azurerm_storage_container" "archive" {
+  #checkov:skip=CKV2_AZURE_21:Storage read logging is a diagnostic setting owned by observability (obs-diagnostics, ADR-0001 rule 4), not by this root.
   count                 = local.standard ? 1 : 0
   name                  = var.settings.archive_container
   storage_account_id    = local.as.logicapps_storage.id

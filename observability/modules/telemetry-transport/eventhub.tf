@@ -78,6 +78,7 @@ resource "azurerm_eventhub_namespace_authorization_rule" "fluentbit_listen" {
 # The connection string is written write-only (value_wo: not persisted in this resource's state; the
 # authorization rule itself necessarily holds its keys in state - see README "Secrets in state").
 resource "azurerm_key_vault_secret" "fluentbit_listen" {
+  #checkov:skip=CKV_AZURE_41:The value is the Event Hubs listen rule connection string; it is rotated by regenerating the rule key and bumping listen_secret_version (runbook docs/runbooks/secret-rotation.md), so a fixed expiry date would only create drift.
   count            = local.eh_create && var.event_hub.listen_secret_key_vault_id != null ? 1 : 0
   name             = var.event_hub.listen_secret_name
   key_vault_id     = var.event_hub.listen_secret_key_vault_id
