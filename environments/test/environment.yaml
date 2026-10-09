@@ -35,5 +35,13 @@ budget:
   monthly_amount: 500
   currency: USD
   contact_emails: [platform-team@example.com]
+# Pipeline self-healing (pipelines/README.md "Self-healing"). Heal runs stop at the environment approval.
+self_healing:
+  enabled: true
+  heal_interval_hours: 6
+  max_consecutive_failures: 3
+  drift_auto_remediate: false      # drift is reported, never re-applied automatically
+  auto_rollback: true
+  notify: {work_item: true, work_item_type: Bug, datadog_event: true}
 # Per-component overrides of each root's `settings` defaults (see <root>/variables.tf).
 components: {}

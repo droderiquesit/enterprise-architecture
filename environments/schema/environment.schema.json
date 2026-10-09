@@ -67,6 +67,28 @@
         "contact_emails": {"type": "array", "items": {"type": "string", "pattern": "^[^@\\s]+@[^@\\s]+$"}}
       }
     },
+    "self_healing": {
+      "description": "Pipeline self-healing policy (pipelines/README.md 'Self-healing'). Never rendered into Terraform inputs, so changing it does not change any deploy fingerprint.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean", "description": "heal-mode runs select failed/partial/canceled components and failed verifications (false: heal runs select nothing)."},
+        "heal_interval_hours": {"type": "integer", "minimum": 1, "maximum": 24, "description": "Documentation of the heal schedule; the cron itself lives in the entry pipeline (ADO schedules are compile-time)."},
+        "max_consecutive_failures": {"type": "integer", "minimum": 1, "maximum": 10, "description": "Circuit breaker: quarantine a component after N consecutive failed runs (default 3)."},
+        "drift_auto_remediate": {"type": "boolean", "description": "Allow drift runs to plan+apply additive-only drift of components with drift.auto_remediate (never destroy/replace). Default false."},
+        "auto_rollback": {"type": "boolean", "description": "Roll back application deployments whose deploy/smoke failed (default true). Infrastructure is never auto-rolled back."},
+        "notify": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "work_item": {"type": "boolean", "description": "Open an Azure Boards work item on quarantine / remediation refusal."},
+            "work_item_type": {"type": "string"},
+            "area_path": {"type": "string"},
+            "datadog_event": {"type": "boolean", "description": "Send a Datadog event (key fetched from DSV)."}
+          }
+        }
+      }
+    },
     "components": {
       "description": "Per-component settings blocks, rendered as var.settings of that root.",
       "type": "object",

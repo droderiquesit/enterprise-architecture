@@ -56,6 +56,8 @@ class Component:
     secret_env: Dict[str, str] = field(default_factory=dict)
     dsv_state_output: Optional[str] = None
     secret_outputs: Optional[str] = None
+    retry: Dict[str, int] = field(default_factory=dict)          # {attempts, max_minutes} (tools/deploy/retry.py)
+    drift_auto_remediate: bool = False                           # drift.auto_remediate (additive-only plan+apply)
     raw: dict = field(default_factory=dict)
 
     @property
@@ -186,6 +188,8 @@ def load_registry(tree: Tree, path: str = REGISTRY_PATH) -> Registry:
             secret_env=dict(raw.get("secret_env") or {}),
             dsv_state_output=raw.get("dsv_state_output"),
             secret_outputs=raw.get("secret_outputs"),
+            retry=dict(raw.get("retry") or {}),
+            drift_auto_remediate=bool((raw.get("drift") or {}).get("auto_remediate", False)),
             raw=raw,
         )
         if c.id in components:

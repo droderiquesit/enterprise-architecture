@@ -150,6 +150,23 @@
             "minimum": 5,
             "maximum": 360
           },
+          "retry": {
+            "description": "Bounded auto-retry of transient failures (tools/deploy/retry.py; defaults in tools/deploy/retry_rules.yaml).",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {"type": "integer", "minimum": 1, "maximum": 6},
+              "max_minutes": {"type": "integer", "minimum": 1, "maximum": 120}
+            }
+          },
+          "drift": {
+            "description": "Drift handling. auto_remediate: plan+apply additive-only drift (no destroy/replace) when the environment's self_healing.drift_auto_remediate allows it (never prod unless it opts in).",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "auto_remediate": {"type": "boolean"}
+            }
+          },
           "scope": {
             "enum": [
               "platform",

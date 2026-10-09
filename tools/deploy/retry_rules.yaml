@@ -1,0 +1,72 @@
+# Failure classification for tools/deploy/retry.py (unit-tested against captured samples in
+# tests/tools/fixtures/errors/). Order of evaluation: permanent -> lock -> transient; the first matching
+# rule wins. Anything unmatched is treated as permanent (fail fast, never retry blindly).
+# Patterns are Python regular expressions, matched case-insensitively against the command output.
+schema_version: 1
+defaults:
+  attempts: 3               # total attempts including the first (registry `retry.attempts` overrides per component)
+  max_minutes: 20           # wall-clock budget for all attempts (registry `retry.max_minutes`)
+  base_seconds: 15          # first backoff
+  factor: 2.0               # exponential growth
+  max_backoff_seconds: 180
+  jitter: 0.3               # +/- 30 % full jitter
+
+permanent:
+  - id: plan-binding
+    why: the reviewed plan no longer matches its inputs - re-plan, never retry the apply
+    patterns: ['stale plan; re-run', 'Saved plan is stale', 'plan file digest differs', 'plan binding']
+  - id: authorization
+    why: missing RBAC / federated credential - retrying cannot fix it
+    patterns: ['AuthorizationFailed', 'AuthorizationPermissionMismatch', 'does not have authorization to perform',
+               'StatusCode=403', 'Status=403', '\b403 Forbidden\b', 'AADSTS700016', 'AADSTS70021', 'AADSTS700213',
+               'StatusCode=401', '\b401 Unauthorized\b', 'InvalidAuthenticationToken']
+  - id: quota
+    why: subscription/region quota - needs a quota increase or a smaller SKU
+    patterns: ['QuotaExceeded', 'OperationNotAllowed.*quota', 'exceeding approved .* quota', 'SkuNotAvailable']
+  - id: policy-deny
+    why: Azure Policy deny - change the resource or the assignment
+    patterns: ['RequestDisallowedByPolicy', 'disallowed by policy']
+  - id: validation
+    why: configuration / Terraform validation error
+    patterns: ['Error: Invalid value for', 'Error: Unsupported argument', 'Error: Missing required argument',
+               'Error: Reference to undeclared', 'InvalidTemplate', 'ValidationError', 'InvalidParameter\b',
+               'BadRequestFormat', 'Error: Invalid reference', 'LinkedInvalidPropertyId']
+  - id: plan-policy
+    why: protected resource delete/replace without approval
+    patterns: ['protected resource (delete|replace)']
+
+lock:
+  - id: state-lock
+    why: Terraform state lease held - tools/deploy/lock_doctor.py decides between waiting and breaking a stale lock
+    patterns: ['Error acquiring the state lock', 'state blob is already locked', 'LeaseAlreadyPresent',
+               'There is already a lease present']
+
+transient:
+  - id: throttled
+    why: ARM / service throttling
+    patterns: ['\b429\b', 'TooManyRequests', 'RetryableError', 'Rate limit is exceeded', 'SubscriptionRequestsThrottled',
+               'throttl']
+  - id: server-error
+    why: HTTP 5xx from Azure / registries / DSV
+    patterns: ['StatusCode=5\d\d', 'Status=5\d\d', '\b50[0234] (Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)',
+               'InternalServerError', 'ServiceUnavailable', 'GatewayTimeout', 'InternalError']
+  - id: timeout
+    why: network timeout / long-running operation polling timeout
+    patterns: ['context deadline exceeded', 'i/o timeout', 'TLS handshake timeout', 'timed out', 'Timeout awaiting',
+               'net/http: request canceled']
+  - id: connection
+    why: DNS / TCP / TLS failures on the agent or the endpoint
+    patterns: ['connection reset by peer', 'connection refused', 'no such host', 'Temporary failure in name resolution',
+               'Name or service not known', 'EOF$', 'unexpected EOF', 'broken pipe', 'tls: .*(handshake|bad record)',
+               'Could not resolve host', 'Failed to connect to', 'Connection aborted']
+  - id: operation-in-progress
+    why: another operation on the same resource is still running
+    patterns: ['AnotherOperationInProgress', 'OperationNotAllowed.*(in progress|is being updated)', 'Conflict.*is being updated',
+               'is in (Updating|Provisioning|Deleting) state', 'ResourceGroupBeingDeleted', 'RetryableErrorDuringCreate']
+  - id: aad-propagation
+    why: Entra ID eventual consistency right after an identity / role assignment was created
+    patterns: ['PrincipalNotFound', 'does not exist in the directory', 'Principal .* does not exist']
+  - id: registry-pull
+    why: registry / package feed temporarily slow
+    patterns: ['ImagePullBackOff', 'failed to pull', 'TOOMANYREQUESTS', 'net/http: TLS handshake timeout',
+               'error pulling image', 'manifest unknown.*retry']

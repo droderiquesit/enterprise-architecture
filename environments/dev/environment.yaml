@@ -34,5 +34,13 @@ budget:
   monthly_amount: 500
   currency: USD
   contact_emails: [platform-team@example.com]
+# Pipeline self-healing (pipelines/README.md "Self-healing"). Not a Terraform input: no fingerprint changes.
+self_healing:
+  enabled: true                    # heal runs (schedule "heal", every 2 h) re-run failed components; dev approvals are checks-free
+  heal_interval_hours: 2
+  max_consecutive_failures: 3      # circuit breaker -> quarantined
+  drift_auto_remediate: true       # additive-only drift of drift.auto_remediate components is re-applied
+  auto_rollback: true              # application deploy roots only; infrastructure never auto-rolls back
+  notify: {work_item: false, datadog_event: true}
 # Per-component overrides of each root's `settings` defaults (see <root>/variables.tf).
 components: {}

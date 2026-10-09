@@ -17,6 +17,8 @@
 #              never echoed; `?` = optional). Typically TF_VAR_<ephemeral/sensitive variable> or provider keys.
 # dsv_state_output: Terraform output holding the desired DSV state (tools/secrets/dsv_apply.py plan/apply).
 # secret_outputs:   sensitive Terraform output {name: value} published to DSV after apply (tools/secrets/publish.py).
+# retry:       {attempts, max_minutes} bounded auto-retry of transient failures (tools/deploy/retry.py)
+# drift:       {auto_remediate: bool} re-apply additive-only drift on drift runs where the environment allows it
 # inputs:      extra repo globs that change this component (shared modules are discovered
 #              automatically by tools/changeset from module "source" paths)
 schema_version: 1
@@ -48,11 +50,13 @@ components:
     inputs: [foundation/identity/secrets.yaml]   # secret catalogue (source/publisher metadata)
     dsv_state_output: dsv_desired_state         # converged by tools/secrets/dsv_apply.py (plan stage diff, apply stage)
     catalog_refs: [delinea-dsv]
+    drift: {auto_remediate: true}   # additive drift re-applied where environments/<env> self_healing allows (dev)
   - id: foundation-governance
     layer: foundation
     kind: terraform
     path: foundation/governance
     produces: [foundation-governance]
+    drift: {auto_remediate: true}   # additive drift re-applied where environments/<env> self_healing allows (dev)
   - id: foundation-deploy-agents
     layer: foundation
     kind: terraform
@@ -311,6 +315,7 @@ components:
       DD_APP_KEY: datadog-app-key
       TF_VAR_datadog_azure_client_secret: datadog-azure-client-secret?   # only for settings.app_auth = secret
     catalog_refs: [datadog-azure-native-integration]
+    drift: {auto_remediate: true}   # additive drift re-applied where environments/<env> self_healing allows (dev)
   - id: obs-telemetry-transport
     layer: observability
     kind: terraform
@@ -328,6 +333,7 @@ components:
     scope: applications         # reads application deployment contracts (resource ids)
     consumes: [obs-telemetry-transport]
     discovers_resources: true   # reads every enabled platform/deployment contract (resource ids)
+    drift: {auto_remediate: true}   # additive drift re-applied where environments/<env> self_healing allows (dev)
   - id: obs-hosts
     layer: observability
     kind: terraform
@@ -365,6 +371,7 @@ components:
     optional_consumes: [deploy-core-aks, deploy-core-aca, deploy-frontend, deploy-durable, deploy-functions, deploy-partner-sim, deploy-dbadapters, deploy-appservice, deploy-jobs, deploy-vm-workloads, deploy-logicapps, deploy-specialized, obs-telemetry-transport]
     after_deployments: true     # runs after every selected applications deployment (needs endpoints)
     inputs: [observability/onboarding/**, observability/archetypes/**]
+    drift: {auto_remediate: true}   # additive drift re-applied where environments/<env> self_healing allows (dev)
 
   # ------------------------------------------------------ observability images (platform scope)
   - id: img-dsv-fetch
