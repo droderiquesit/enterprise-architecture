@@ -18,10 +18,11 @@ for this one resource because the embedded 2016-06-01 schema lacks `parameterVal
 catalog/provider-gaps.yaml (owner deploy-logicapps).
 
 ## Storage for Standard
-Logic Apps Standard (WS plans) needs the Azure Files content share ⇒ a storage connection. Preferred:
-`settings.storage_connection_secret_id` (Key Vault). Fallback (default): the access key is read at plan time from
-the platform `logicapps_storage` account (sensitive, in state). Request: platform-appservice should publish a Key Vault
-secret id for that connection string.
+Logic Apps Standard (WS plans) needs the Azure Files content share ⇒ a storage connection: the access key is read
+at plan time from the platform `logicapps_storage` account and set as `storage_account_access_key` (sensitive, **in
+state** - documented exception). Microsoft Learn: key access cannot be disabled for Standard logic apps outside ASE v3,
+and the runtime (not our code) reads `AzureWebJobsStorage`, so a `dsv://` reference cannot be used; Azure Key Vault
+references are not used in this repository (ADR-0001 §14). Our own app settings carry `dsv://` references only.
 
 - **Consumed contracts**: platform-appservice (`plans.logicapps`, `logicapps_storage`), platform-messaging,
   obs-telemetry-transport, foundation-identity, foundation-network (all registered in catalog/components.yaml).

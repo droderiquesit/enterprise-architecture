@@ -22,8 +22,8 @@ are collected through the environment's `ContainerAppConsoleLogs` diagnostic set
 Fluent Bit aggregator, allow-list `aca_console_allow`).
 
 Batch (ADR-0001 §13): the contract's `batch.job_preparation` carries the observability-published Fluent Bit setup
-(`obs-telemetry-transport` `batch_log_setup`) plus `EH_IDENTITY_CLIENT_ID` (pool identity, needs Key Vault Secrets User
-on `datadog-api-key`) and `EH_LOG_PATHS`. `submit-batch-job.sh` creates the job with that **job preparation task**
+(`obs-telemetry-transport` `batch_log_setup`) plus `EH_IDENTITY_CLIENT_ID` (pool identity, mapped to a DSV user with read
+on `datadog-api-key`; dsv-fetch reads it on the node via IMDS) and `EH_LOG_PATHS`. `submit-batch-job.sh` creates the job with that **job preparation task**
 (elevated, `waitForSuccess`, re-run after reboot, script sha256-checked on the node), which installs Fluent Bit 5.1.3
 as `fluent-bit-eh.service` tailing the tasks' `stdout.txt`. A job created earlier keeps its preparation task; the script
 warns when the contract's setup differs (delete the idle job to pick it up).

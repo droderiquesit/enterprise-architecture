@@ -123,15 +123,8 @@ resource "azurerm_container_app_job" "this" {
     identity = local.ids[each.value.svc].id
   }
 
-  dynamic "secret" {
-    for_each = module.env[each.key].secret_env
-    content {
-      name                = module.env[each.key].secret_names[secret.key]
-      key_vault_secret_id = secret.value
-      identity            = local.ids[each.value.svc].id
-    }
-  }
-
+  # No Container Apps secrets: secret settings (e.g. FAULT_TOKEN) are env values holding dsv:// references that the
+  # job resolves at start-up with its managed identity (ADR-0001 §14). Jobs have no sidecar, so no dsv-fetch.
   dynamic "manual_trigger_config" {
     for_each = each.value.trigger == "manual" ? [1] : []
     content {
@@ -186,13 +179,6 @@ resource "azurerm_container_app_job" "this" {
         content {
           name  = env.value
           value = local.job_env[each.key][env.value]
-        }
-      }
-      dynamic "env" {
-        for_each = sort(keys(module.env[each.key].secret_env))
-        content {
-          name        = env.value
-          secret_name = module.env[each.key].secret_names[env.value]
         }
       }
     }

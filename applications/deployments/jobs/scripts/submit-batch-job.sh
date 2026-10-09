@@ -39,7 +39,7 @@ az batch account login --name "$ACCOUNT" --resource-group "$(az batch account li
 # Job preparation task (ADR-0001 §13 amendment): the observability-published Fluent Bit setup (deploy-jobs contract
 # batch.job_preparation, from obs-telemetry-transport batch_log_setup) runs elevated on every node before the job's
 # tasks and ships Batch task stdout.txt (JSON logs) to Datadog. The script travels gzip+base64 in an environment
-# setting, is sha256-checked on the node, and reads the Datadog API key from Key Vault with the pool identity.
+# setting, is sha256-checked on the node, and reads the Datadog API key from Delinea DSV with the pool identity (dsv-fetch, IMDS) when Fluent Bit starts.
 PREP_SHA=$(jqr batch.job_preparation.script_sha256)
 if ! az batch job show --job-id "$JOB" >/dev/null 2>&1; then
   JOBSPEC=$(mktemp)

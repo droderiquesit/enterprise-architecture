@@ -43,8 +43,13 @@ output "secret_refs" {
 }
 
 output "init_container_names" {
-  description = "Init containers (dsv-fetch for the sidecar's key)."
+  description = "Init containers (dsv-fetch for the sidecar's key, Consumption profile)."
   value       = [for c in local.inits : c.name]
+}
+
+output "dsv_fetch_mode" {
+  description = "How the sidecar's key is fetched: init (Consumption profile), refresher (Dedicated profile: regular container), none."
+  value       = length(local.inits) > 0 ? "init" : (length(local.refreshers) > 0 ? "refresher" : "none")
 }
 
 output "plain_env" {

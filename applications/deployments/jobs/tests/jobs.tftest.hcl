@@ -22,6 +22,7 @@ variables {
     tags            = {}
   }
   artifacts = {
+    "img-dsv-fetch" = { image = "ehcrshareddevabcde.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555" }
     "svc-frontend" = {
       tag            = "src-111111111111111111111111"
       commit         = "0123abc"
@@ -357,6 +358,11 @@ variables {
 
 run "jobs_minimal" {
   command = plan
+
+  assert {
+    condition     = alltrue([for k, j in azurerm_container_app_job.this : length(j.secret) == 0 && alltrue([for e in j.template[0].container[0].env : e.secret_name == null])])
+    error_message = "Jobs carry no Container Apps secrets / Key Vault references; secret settings are dsv:// env values."
+  }
 
   assert {
     condition     = toset(keys(azurerm_container_app_job.this)) == toset(["seed", "reconcile", "batchitems"])

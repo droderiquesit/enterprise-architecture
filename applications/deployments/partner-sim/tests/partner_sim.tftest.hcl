@@ -6,11 +6,6 @@ mock_provider "azurerm" {
       ip_address = "10.41.1.4"
     }
   }
-  mock_data "azurerm_key_vault_secret" {
-    defaults = {
-      value = "mock-secret-value"
-    }
-  }
 }
 
 # BEGIN FIXTURE (generated): upstream contract shapes with valid Azure IDs.
@@ -28,6 +23,7 @@ variables {
     tags            = {}
   }
   artifacts = {
+    "img-dsv-fetch" = { image = "ehcrshareddevabcde.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555" }
     "svc-frontend" = {
       tag            = "src-111111111111111111111111"
       commit         = "0123abc"
@@ -354,20 +350,28 @@ run "defaults" {
     error_message = "Partner-sim runs on a private IP in the aci subnet."
   }
   assert {
-    condition     = [for c in azurerm_container_group.this.container : c.name] == ["hello-partner-sim", "fluent-bit"]
-    error_message = "ACI group needs the app and the Fluent Bit sidecar."
+    condition     = jsonencode([for c in azurerm_container_group.this.container : c.name]) == jsonencode(["hello-partner-sim", "fluent-bit", "dsv-fetch"]) && length(azurerm_container_group.this.init_container) == 0
+    error_message = "ACI group: app, Fluent Bit sidecar and the dsv-fetch refresher (no init container: ACI init containers have no managed identity)."
   }
   assert {
     condition     = azurerm_container_group.this.image_registry_credential[0].user_assigned_identity_id == var.foundation_identity.identities["hello-partner-sim"].id
     error_message = "ACR pull with the user-assigned identity (no registry password)."
   }
   assert {
-    condition     = azurerm_container_group.this.container[0].environment_variables["FAULTS_ENABLED"] == "false" && !contains(keys(azurerm_container_group.this.container[0].environment_variables), "FAULT_TOKEN")
-    error_message = "FAULTS_ENABLED false by default; FAULT_TOKEN only as a secure variable."
+    condition     = azurerm_container_group.this.container[0].environment_variables["FAULTS_ENABLED"] == "false" && azurerm_container_group.this.container[0].environment_variables["FAULT_TOKEN"] == "dsv://eh/dev/fault-token#value" && azurerm_container_group.this.container[0].environment_variables["DSV_AUTH"] == "azure"
+    error_message = "FAULTS_ENABLED false by default; FAULT_TOKEN is a dsv:// reference resolved by the app."
   }
   assert {
-    condition     = contains(keys(azurerm_container_group.this.container[0].secure_environment_variables), "FAULT_TOKEN") && contains(keys(azurerm_container_group.this.container[1].secure_environment_variables), "DD_API_KEY")
-    error_message = "Secrets travel only as secure environment variables."
+    condition     = alltrue([for c in azurerm_container_group.this.container : try(length(c.secure_environment_variables), 0) == 0]) && !strcontains(jsonencode(azurerm_container_group.this.container), "vault.azure.net")
+    error_message = "No secret values in the container group (nothing secret in state)."
+  }
+  assert {
+    condition     = contains(azurerm_container_group.this.container[2].commands, "DD_API_KEY=dsv://eh/dev/datadog-api-key#value") && azurerm_container_group.this.container[2].image == "ehcrshareddevabcde.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555" && azurerm_container_group.this.container[2].environment_variables["AZURE_CLIENT_ID"] == var.foundation_identity.identities["hello-partner-sim"].client_id
+    error_message = "dsv-fetch refresher (artifacts img-dsv-fetch) writes the sidecar's key with the group identity."
+  }
+  assert {
+    condition     = anytrue([for v in azurerm_container_group.this.container[1].volume : v.name == "dsv-secrets" && v.mount_path == "/dsv-secrets"]) && anytrue([for v in azurerm_container_group.this.container[2].volume : v.name == "dsv-secrets"])
+    error_message = "Fluent Bit and dsv-fetch share the dsv-secrets emptyDir."
   }
   assert {
     condition     = azurerm_container_group.this.container[0].environment_variables["LOG_FILE_PATH"] == "/var/log/app/app.log" && azurerm_container_group.this.container[0].volume[0].mount_path == "/var/log/app"
@@ -380,17 +384,6 @@ run "defaults" {
   assert {
     condition     = output.contract.container_group.id != null && output.contract.apps["hello-partner-sim"].app_log_route == "sidecar"
     error_message = "Contract exposes container_group.id and log route."
-  }
-}
-
-run "no_secret_resolution" {
-  command = plan
-  variables {
-    settings = { resolve_secrets = false }
-  }
-  assert {
-    condition     = length(azurerm_container_group.this.container[0].secure_environment_variables) == 0
-    error_message = "resolve_secrets = false reads nothing from Key Vault."
   }
 }
 

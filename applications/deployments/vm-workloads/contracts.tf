@@ -150,8 +150,7 @@ variable "platform_db_cosmos_nosql" {
       username = optional(string)
     })
     auth_mode     = string
-    key_secret_id = optional(string) # legacy v1 name (Key Vault id); only its last segment (secret name) is used
-    key_ref       = optional(string) # Delinea DSV reference (preferred)
+    key_secret_id = optional(string) # dsv:// reference (field name kept from v1)
     databases = map(object({
       name = string
       containers = optional(map(object({

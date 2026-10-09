@@ -12,11 +12,8 @@ variable "settings" {
     # Service Bus subscription read by the Standard audit-archive workflow (platform-messaging must provide it;
     # sharing `audit` with hello-functions would split messages between consumers).
     archive_subscription = optional(string, "archive")
-    # Logic Apps Standard needs a storage connection (Azure Files content share). Prefer a Key Vault secret holding
-    # the connection string; otherwise the access key is read at plan time (sensitive, stored in state).
-    storage_connection_secret_id = optional(string)
-    network_mode                 = optional(string, "auto")
-    allowed_ip_ranges            = optional(list(string), [])
+    network_mode         = optional(string, "auto")
+    allowed_ip_ranges    = optional(list(string), [])
   })
   default = {}
 

@@ -9,10 +9,6 @@ variable "settings" {
     latency_ms_mean      = optional(number, 120)
     partner_failure_rate = optional(number, 0) # lab only; > 0 makes /payments decline/fail randomly
     dns_record_name      = optional(string, "partner-sim")
-    # ACI has no Key Vault references: secure environment values (FAULT_TOKEN, Fluent Bit DD_API_KEY) are read
-    # from Key Vault at plan time (data source, sensitive, stored only in the Entra-only state account).
-    # false = no secret values at all (fault injection impossible, sidecar ships nothing).
-    resolve_secrets = optional(bool, true)
   })
   default = {}
 

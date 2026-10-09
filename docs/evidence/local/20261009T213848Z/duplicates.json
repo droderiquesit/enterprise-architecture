@@ -1,0 +1,35 @@
+{
+  "marker_counts": {
+    "hello-orders-api": 1,
+    "hello-catalog-api": 1,
+    "hello-inventory-api": 1,
+    "hello-partner-sim": 1,
+    "hello-worker": 1,
+    "hello-durable": 1,
+    "hello-bff": 1,
+    "hello-dbadapter-postgresql": 1
+  },
+  "marker_definitions": {
+    "hello-orders-api": "message startswith 'Order 1e318a6f-48d2-466e-a37b-c2ec2b272105 created'",
+    "hello-catalog-api": "'product upserted' sku=E2E-MARKER-2250B0BA (direct POST /products)",
+    "hello-inventory-api": "'Reservation ... order 1e318a6f-48d2-466e-a37b-c2ec2b272105'",
+    "hello-partner-sim": "'payment processed' order_id=1e318a6f-48d2-466e-a37b-c2ec2b272105",
+    "hello-worker": "'notification recorded' order_id=1e318a6f-48d2-466e-a37b-c2ec2b272105",
+    "hello-durable": "'OrderProcessing for 1e318a6f-48d2-466e-a37b-c2ec2b272105 completed'",
+    "hello-bff": "retry attempt 2 log of the single fault-window request trace 5c87fe56bdb949649e1965d092d9a30e",
+    "hello-dbadapter-postgresql": "'POST /roundtrip 200' of the browser roundtrip trace 0000000000000000147c9e16de08faa1"
+  },
+  "identical_events_total": 36,
+  "identical_structured_app_events": 0,
+  "identical_events_examples": [
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "      \n",
+    "      \n",
+    "fail: Azure.Messaging.ServiceBus[9]\n      order-events/Subscriptions/fulfillment-debc6bce-b152-469d-ba69-48fc38bddcc4-Receiver: ReceiveBatchAsync Exception: Azu"
+  ],
+  "identical_plaintext_events_more_often_at_intake_than_in_source_file": {},
+  "duplicate_span_ids": 0,
+  "spans_total": 389,
+  "log_events_total": 527
+}

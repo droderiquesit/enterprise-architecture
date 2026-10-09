@@ -8,12 +8,21 @@ locals {
   has_sidecar = local.patch != null && try(length(local.patch.sidecars), 0) > 0
 
   secrets = local.has_sidecar ? { for s in local.patch.secrets : s.name => s.value } : {}
-  inits   = local.has_sidecar ? try(local.patch.init_containers, []) : []
+  # dsv-fetch: init container on the Consumption profile (managed identity available to init containers there);
+  # elsewhere (Dedicated profiles) as a refresher container next to the sidecar (Microsoft Learn: init containers
+  # cannot use managed identities in consumption-only environments or on dedicated workload profiles)
+  init_mode  = var.workload_profile_name == "Consumption"
+  inits      = local.has_sidecar && local.init_mode ? try(local.patch.init_containers, []) : []
+  refreshers = local.has_sidecar && !local.init_mode ? try(local.patch.refresher_containers, []) : []
 
   volumes    = local.has_sidecar ? local.patch.volumes : []
   app_mounts = local.has_sidecar ? local.patch.app_container.volume_mounts : []
   sidecars   = local.has_sidecar ? local.patch.sidecars : []
   sorted_env = sort(keys(var.env))
+  extra_containers = concat(
+    [for s in local.sidecars : { name = s.name, image = s.image, cpu = s.cpu, memory = s.memory, command = null, args = s.args, env = s.env, volume_mounts = s.volume_mounts, liveness_probe = s.liveness_probe }],
+    [for r in local.refreshers : { name = r.name, image = r.image, cpu = r.cpu, memory = r.memory, command = r.command, args = r.args, env = r.env, volume_mounts = r.volume_mounts, liveness_probe = null }],
+  )
 
   # Deterministic revision suffix: changes whenever the template changes, so every template change
   # creates a new, addressable revision (rollback target). Lowercase alphanumerics, starts with a letter.
@@ -23,7 +32,7 @@ locals {
     cpu     = var.container.cpu
     memory  = var.container.memory
     scale   = var.scale
-    sidecar = local.sidecars
+    sidecar = local.extra_containers
     init    = local.inits
   })), 0, 9)}"
 
@@ -94,10 +103,6 @@ resource "azurerm_container_app" "this" {
   }
 
   lifecycle {
-    precondition {
-      condition     = length(local.inits) == 0 || var.workload_profile_name == "Consumption"
-      error_message = "The dsv-fetch init container needs managed identity, which Container Apps offers to init containers only on the Consumption profile of a workload-profiles environment."
-    }
     precondition {
       condition     = !anytrue([for k, v in var.env : can(regex("(?i)(password|secret|token|apikey|api_key|connectionstring)", k)) && !startswith(v, "dsv://") && v != "" && !contains(["false", "true"], v)])
       error_message = "A secret-looking setting carries a literal value; secret settings must be dsv:// references."
@@ -201,13 +206,14 @@ resource "azurerm_container_app" "this" {
 
     # Fluent Bit sidecar (ADR-0001 §10): tails LOG_FILE_PATH on the shared EmptyDir volume.
     dynamic "container" {
-      for_each = local.sidecars
+      for_each = local.extra_containers
       content {
-        name   = container.value.name
-        image  = container.value.image
-        cpu    = container.value.cpu
-        memory = container.value.memory
-        args   = container.value.args
+        name    = container.value.name
+        image   = container.value.image
+        cpu     = container.value.cpu
+        memory  = container.value.memory
+        command = container.value.command
+        args    = container.value.args
 
         dynamic "env" {
           for_each = container.value.env
@@ -224,10 +230,13 @@ resource "azurerm_container_app" "this" {
             sub_path = volume_mounts.value.sub_path
           }
         }
-        liveness_probe {
-          transport = container.value.liveness_probe.transport
-          port      = container.value.liveness_probe.port
-          path      = container.value.liveness_probe.path
+        dynamic "liveness_probe" {
+          for_each = container.value.liveness_probe == null ? [] : [container.value.liveness_probe]
+          content {
+            transport = liveness_probe.value.transport
+            port      = liveness_probe.value.port
+            path      = liveness_probe.value.path
+          }
         }
       }
     }

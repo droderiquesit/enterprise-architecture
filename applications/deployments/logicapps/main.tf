@@ -136,7 +136,10 @@ module "env" {
 }
 
 data "azurerm_storage_account" "logicapps" {
-  count               = local.standard && var.settings.storage_connection_secret_id == null ? 1 : 0
+  # Documented exception (README "Secrets in state"): the Workflow Standard host needs the storage account key
+  # (AzureWebJobsStorage + the Azure Files content share; key access cannot be disabled outside ASE v3 - Microsoft
+  # Learn) and azurerm_logic_app_standard has no write-only/identity-only form, so the key lands in state.
+  count               = local.standard ? 1 : 0
   name                = local.st_parts[1]
   resource_group_name = local.st_parts[0]
 }
@@ -157,16 +160,14 @@ resource "azurerm_logic_app_standard" "archive" {
   virtual_network_subnet_id                = local.as.integration_subnet_id
   ftp_publish_basic_authentication_enabled = false
   scm_publish_basic_authentication_enabled = false
-  key_vault_reference_identity_id          = local.identity.id
-  storage_account_name                     = var.settings.storage_connection_secret_id == null ? local.as.logicapps_storage.name : null
-  storage_account_access_key               = var.settings.storage_connection_secret_id == null ? data.azurerm_storage_account.logicapps[0].primary_access_key : null
-  storage_key_vault_secret_id              = var.settings.storage_connection_secret_id
+  storage_account_name                     = local.as.logicapps_storage.name
+  storage_account_access_key               = data.azurerm_storage_account.logicapps[0].primary_access_key
   tags                                     = merge(local.tags, { service = local.svc, version = lookup(local.artifact_version, local.meta.artifact, "n/a") })
 
   # Built-in (service provider) Service Bus / Blob connectors authenticate with the SYSTEM-assigned identity
   # (most built-in connectors cannot select a user-assigned identity:
   # https://learn.microsoft.com/azure/logic-apps/single-tenant-overview-compare). The user-assigned identity is
-  # kept for Key Vault references and the OTel/app-settings contract.
+  # kept for Delinea DSV reads by our code (dsv:// app settings) and the OTel/app-settings contract.
   identity {
     type         = "SystemAssigned, UserAssigned"
     identity_ids = [local.identity.id]

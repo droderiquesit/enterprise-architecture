@@ -429,16 +429,16 @@ run "three_hosts" {
     error_message = "AUDIT_SINK (the variable hello_functions reads) is set; without ledger/table contracts it is log."
   }
   assert {
-    condition     = alltrue([for h, a in azurerm_linux_function_app.this : a.app_settings["FAULTS_ENABLED"] == "false" && startswith(a.app_settings["FAULT_TOKEN"], "@Microsoft.KeyVault(SecretUri=") && !contains(keys(a.app_settings), "LOG_FILE_PATH")])
-    error_message = "Faults off, Key Vault reference for FAULT_TOKEN, no sidecar/log file on Functions."
+    condition     = alltrue([for h, a in azurerm_linux_function_app.this : a.app_settings["FAULTS_ENABLED"] == "false" && a.app_settings["FAULT_TOKEN"] == "dsv://eh/dev/fault-token#value" && a.app_settings["DSV_BASE_URL"] == "https://contoso.secretsvaultcloud.com/v1" && !anytrue([for k, v in a.app_settings : startswith(v, "@Microsoft.KeyVault(")]) && !contains(keys(a.app_settings), "LOG_FILE_PATH")])
+    error_message = "Faults off, DSV reference for FAULT_TOKEN, no sidecar/log file on Functions."
   }
   assert {
     condition     = azapi_resource.quote[0].body.kind == "functionapp" && length(azapi_resource.quote[0].body.properties.template.containers) == 2 && azapi_resource.quote[0].body.properties.template.containers[1].name == "fluent-bit"
     error_message = "Functions on Container Apps V2 (kind=functionapp) with the Fluent Bit sidecar (ACA log route)."
   }
   assert {
-    condition     = alltrue([for s in azapi_resource.quote[0].body.properties.configuration.secrets : !can(s.value) || startswith(s.name, "flb-")])
-    error_message = "Only non-secret Fluent Bit config is stored as plain ACA secret values; real secrets are Key Vault references."
+    condition     = alltrue([for s in azapi_resource.quote[0].body.properties.configuration.secrets : startswith(s.name, "flb-")]) && azapi_resource.quote[0].body.properties.template.initContainers[0].name == "dsv-fetch" && !strcontains(jsonencode(azapi_resource.quote[0].body), "keyVaultUrl")
+    error_message = "ACA secrets hold only the non-secret Fluent Bit config; the sidecar key comes from the dsv-fetch init container; no Key Vault references."
   }
   assert {
     condition     = output.contract.function_apps["premium"].id != null && output.contract.apps["hello-functions-premium"].app_log_route == "eventhub" && output.contract.apps["hello-functions-aca"].app_log_route == "sidecar"

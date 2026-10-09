@@ -1,6 +1,9 @@
 # hello-partner-sim (simulated payment API) on Azure Container Instances: private IP in the `aci` subnet,
 # user-assigned identity (ACR pull + runtime), Fluent Bit sidecar tailing a shared emptyDir volume
 # (ADR-0001 §10), private DNS A record in the lab internal zone.
+# Secrets (ADR-0001 §14): nothing secret in this root or its state. The app resolves its dsv:// settings (FAULT_TOKEN)
+# at start-up with its managed identity; the Fluent Bit sidecar's Datadog key is written into the shared emptyDir by a
+# dsv-fetch REFRESHER container (ACI init containers cannot use managed identities - Microsoft Learn).
 module "meta" {
   source = "../modules/service-meta"
 }
@@ -16,14 +19,8 @@ locals {
   meta     = module.meta.services[local.svc]
   identity = var.foundation_identity.identities[local.svc]
   artifact = local.meta.artifact
-  kv_host  = regex("^https://([^/]+)/", var.foundation_identity.key_vault_uri)[0]
-
-  # Secret env (name -> versionless id) for the app and the sidecar; values resolved below.
-  app_secret_ids     = module.env.secret_env
-  sidecar            = module.env.aci_sidecar
-  sidecar_secret_ids = local.sidecar == null ? {} : local.sidecar.container.secure_environment_variables
-  all_secret_ids     = var.settings.resolve_secrets ? merge(local.app_secret_ids, local.sidecar_secret_ids) : {}
-  secret_names       = { for k, id in local.all_secret_ids : k => regex("/secrets/([A-Za-z0-9-]+)$", id)[0] }
+  sidecar  = module.env.aci_sidecar
+  fetcher  = local.sidecar == null ? null : local.sidecar.fetcher
 
   dns_zone = var.foundation_network.internal_dns_zone_id == null ? null : var.foundation_network.internal_dns_zone
   fqdn     = local.dns_zone == null ? null : "${var.settings.dns_record_name}.${local.dns_zone}"
@@ -58,22 +55,8 @@ module "env" {
   }
 }
 
-data "azurerm_key_vault_secret" "env" {
-  for_each     = local.secret_names
-  name         = each.value
-  key_vault_id = var.foundation_identity.key_vault_id
-
-  lifecycle {
-    precondition {
-      condition     = startswith(local.all_secret_ids[each.key], "https://${local.kv_host}/")
-      error_message = "ACI secret ${each.key} must live in the foundation Key Vault (${local.kv_host})."
-    }
-  }
-}
-
 resource "azurerm_container_group" "this" {
   #checkov:skip=CKV_AZURE_98:Private IP in the delegated aci subnet (ip_address_type = Private); no public exposure.
-  #checkov:skip=CKV_AZURE_235:Secure environment variables come from Key Vault data sources; ACI has no native Key Vault references.
   name                = local.names.container_group
   resource_group_name = azurerm_resource_group.this.name
   location            = local.location
@@ -104,8 +87,8 @@ resource "azurerm_container_group" "this" {
       protocol = "TCP"
     }
 
-    environment_variables        = module.env.env
-    secure_environment_variables = { for k in keys(local.app_secret_ids) : k => data.azurerm_key_vault_secret.env[k].value if contains(keys(local.secret_names), k) }
+    # plain values + dsv:// references (resolved by the app); no secure_environment_variables
+    environment_variables = module.env.env
 
     liveness_probe {
       http_get {
@@ -141,13 +124,12 @@ resource "azurerm_container_group" "this" {
   dynamic "container" {
     for_each = local.sidecar == null ? [] : [local.sidecar.container]
     content {
-      name                         = container.value.name
-      image                        = container.value.image
-      cpu                          = container.value.cpu
-      memory                       = container.value.memory
-      commands                     = container.value.commands
-      environment_variables        = container.value.environment_variables
-      secure_environment_variables = { for k in keys(container.value.secure_environment_variables) : k => data.azurerm_key_vault_secret.env[k].value if contains(keys(local.secret_names), k) }
+      name                  = container.value.name
+      image                 = container.value.image
+      cpu                   = container.value.cpu
+      memory                = container.value.memory
+      commands              = container.value.commands
+      environment_variables = container.value.environment_variables
 
       dynamic "volume" {
         for_each = container.value.volumes
@@ -157,6 +139,29 @@ resource "azurerm_container_group" "this" {
           empty_dir  = volume.value.empty_dir ? true : null
           secret     = volume.value.secret
           read_only  = volume.value.empty_dir ? false : true
+        }
+      }
+    }
+  }
+
+  # dsv-fetch refresher (ACI init containers have no managed identity): writes /dsv-secrets/fluentbit-env.yaml from
+  # DSV with the group's identity (IMDS), re-fetches hourly; Fluent Bit restarts until the file exists.
+  dynamic "container" {
+    for_each = local.fetcher == null ? [] : [local.fetcher]
+    content {
+      name                  = container.value.name
+      image                 = container.value.image
+      cpu                   = container.value.cpu
+      memory                = container.value.memory
+      commands              = container.value.commands
+      environment_variables = container.value.environment_variables
+
+      dynamic "volume" {
+        for_each = container.value.volumes
+        content {
+          name       = volume.value.name
+          mount_path = volume.value.mount_path
+          empty_dir  = true
         }
       }
     }

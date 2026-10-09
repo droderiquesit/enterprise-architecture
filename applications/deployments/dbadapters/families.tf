@@ -23,7 +23,7 @@ locals {
   region_names = { swedencentral = "Sweden Central", westeurope = "West Europe", northeurope = "North Europe", eastus = "East US", eastus2 = "East US 2", westus2 = "West US 2", uksouth = "UK South", germanywestcentral = "Germany West Central", francecentral = "France Central" }
   region_dn    = coalesce(var.settings.region_display_name, lookup(local.region_names, local.location, local.location))
 
-  # family => {available, hosting (matrix default), short name, env, secret_env (name -> Key Vault id)}
+  # family => {available, hosting (matrix default), short name, env, secret_env (name -> dsv:// reference)}
   catalog = {
     "sql" = {
       available = local.sql != null && try(local.sql.databases["adapter"] != null, false)
@@ -92,7 +92,7 @@ locals {
       hosting   = "aca"
       short     = "cmongo"
       env       = { MONGO_AUTH = "connection_string", MONGO_DATABASE = "adapter", MONGO_COLLECTION = "records" }
-      secrets   = try({ MONGO_URI = local.cmongo.key_secret_id }, {}) # connection string held in Key Vault (no Entra data plane)
+      secrets   = try({ MONGO_URI = local.cmongo.key_secret_id }, {}) # connection string held in Delinea DSV (no Entra data plane)
     }
     "documentdb" = {
       available = local.docdb != null

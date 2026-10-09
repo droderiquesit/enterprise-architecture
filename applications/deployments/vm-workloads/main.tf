@@ -4,7 +4,7 @@
 #   platform-vm windows  hello-inventory-api   managed run command (scripts/install-windows-service.ps1.tftpl)
 #   platform-vmss flex   hello-worker          CustomScript extension on the scale-set model
 # Packages are read with the host's user-assigned identity from the packages container (no SAS in state);
-# secrets are read from Key Vault on the host (no secret values in state).
+# secret settings are dsv:// references the services resolve from Delinea DSV at start-up (no secret values in state).
 module "meta" {
   source = "../modules/service-meta"
 }
@@ -133,7 +133,6 @@ resource "azurerm_virtual_machine_run_command" "inventory" {
       exe            = "Hello.InventoryApi.exe"
       health_url     = "http://127.0.0.1:8080/healthz"
       env            = local.host_env["inventory-vm"]
-      secrets        = module.env["inventory-vm"].secret_env
     })
   }
 }

@@ -143,7 +143,7 @@ resource "azurerm_virtual_machine_scale_set_extension" "sqlvm_adapter" {
   type_handler_version         = "2.1"
   auto_upgrade_minor_version   = true
   force_update_tag             = "${local.artifact_version[local.artifact]}-${var.settings.vmss_package_force}"
-  # The script carries no secret values (secrets are read from Key Vault on the host), but CustomScript
+  # The script carries no secret values (secret settings are dsv:// references the service resolves itself), but CustomScript
   # scripts belong in protected settings.
   protected_settings = jsonencode({
     script = base64gzip(module.vmss_script[each.key].script)

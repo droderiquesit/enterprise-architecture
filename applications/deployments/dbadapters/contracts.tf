@@ -169,8 +169,7 @@ variable "platform_db_sqlvm" {
     databases = map(object({
       name               = string
       login              = optional(string)
-      password_secret_id = optional(string) # legacy v1 name; only its last segment (secret name) is used
-      password_ref       = optional(string) # Delinea DSV reference (preferred)
+      password_secret_id = optional(string) # dsv:// reference (field name kept from v1)
     }))
   })
   default = null
@@ -224,8 +223,7 @@ variable "platform_db_cosmos_nosql" {
       username = optional(string)
     })
     auth_mode     = string
-    key_secret_id = optional(string) # legacy v1 name (Key Vault id); only its last segment (secret name) is used
-    key_ref       = optional(string) # Delinea DSV reference (preferred)
+    key_secret_id = optional(string) # dsv:// reference (field name kept from v1)
     databases = map(object({
       name = string
       containers = optional(map(object({
@@ -249,8 +247,7 @@ variable "platform_db_cosmos_mongo" {
       username = optional(string)
     })
     auth_mode     = string
-    key_secret_id = optional(string) # legacy v1 name (Key Vault id); only its last segment (secret name) is used
-    key_ref       = optional(string) # Delinea DSV reference (preferred)
+    key_secret_id = optional(string) # dsv:// reference (field name kept from v1)
     databases = map(object({
       name = string
       containers = optional(map(object({
@@ -274,8 +271,7 @@ variable "platform_db_cosmos_cassandra" {
       username = optional(string)
     })
     auth_mode     = string
-    key_secret_id = optional(string) # legacy v1 name (Key Vault id); only its last segment (secret name) is used
-    key_ref       = optional(string) # Delinea DSV reference (preferred)
+    key_secret_id = optional(string) # dsv:// reference (field name kept from v1)
     databases = map(object({
       name = string
       containers = optional(map(object({
@@ -299,8 +295,7 @@ variable "platform_db_cosmos_gremlin" {
       username = optional(string)
     })
     auth_mode     = string
-    key_secret_id = optional(string) # legacy v1 name (Key Vault id); only its last segment (secret name) is used
-    key_ref       = optional(string) # Delinea DSV reference (preferred)
+    key_secret_id = optional(string) # dsv:// reference (field name kept from v1)
     databases = map(object({
       name = string
       containers = optional(map(object({
@@ -324,8 +319,7 @@ variable "platform_db_cosmos_table" {
       username = optional(string)
     })
     auth_mode     = string
-    key_secret_id = optional(string) # legacy v1 name (Key Vault id); only its last segment (secret name) is used
-    key_ref       = optional(string) # Delinea DSV reference (preferred)
+    key_secret_id = optional(string) # dsv:// reference (field name kept from v1)
     databases = map(object({
       name = string
       containers = optional(map(object({
@@ -366,8 +360,7 @@ variable "platform_db_cassandra_mi" {
     databases = optional(map(object({
       name               = string
       login              = optional(string)
-      password_secret_id = optional(string) # legacy v1 name; only its last segment (secret name) is used
-      password_ref       = optional(string) # Delinea DSV reference (preferred)
+      password_secret_id = optional(string) # dsv:// reference (field name kept from v1)
     })), {})
   })
   default = null

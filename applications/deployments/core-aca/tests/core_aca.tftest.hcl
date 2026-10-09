@@ -22,6 +22,7 @@ variables {
     tags            = {}
   }
   artifacts = {
+    "img-dsv-fetch" = { image = "ehcrshareddevabcde.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555" }
     "svc-frontend" = {
       tag            = "src-111111111111111111111111"
       commit         = "0123abc"
@@ -394,8 +395,8 @@ run "defaults" {
     error_message = "DSV runtime env on every app."
   }
   assert {
-    condition     = alltrue([for k, a in module.app : a.init_container_names == ["dsv-fetch"]])
-    error_message = "Every sidecar app gets the dsv-fetch init container."
+    condition     = alltrue([for k, a in module.app : a.init_container_names == ["dsv-fetch"]]) && alltrue([for k, e in module.env : e.container_app_patch.init_containers[0].image == "ehcrshareddevabcde.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555"])
+    error_message = "Every sidecar app gets the dsv-fetch init container, image = this root's artifacts[img-dsv-fetch]."
   }
   assert {
     condition     = alltrue([for k, a in module.app : !strcontains(jsonencode(a.plain_env), "@Microsoft.KeyVault(") && !strcontains(jsonencode(a.plain_env), "vault.azure.net")])

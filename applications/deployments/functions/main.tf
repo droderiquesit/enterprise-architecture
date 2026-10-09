@@ -104,7 +104,6 @@ resource "azurerm_linux_function_app" "this" {
   functions_extension_version                    = "~4"
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
-  key_vault_reference_identity_id                = local.identity.id
   virtual_network_subnet_id                      = each.key == "dedicated" ? var.platform_appservice.integration_subnet_id : local.fx.integration_subnet_id
   storage_account_name                           = local.host_storage
   storage_uses_managed_identity                  = true
@@ -172,13 +171,18 @@ locals {
   aca_enabled = contains(keys(module.env), "aca")
   aca_env     = local.aca_enabled ? module.env["aca"] : null
   aca_patch   = local.aca_enabled ? local.aca_env.container_app_patch : null
-  aca_secrets = local.aca_enabled ? concat(
-    [for k, id in local.aca_env.secret_env : { name = local.aca_env.secret_names[k], keyVaultUrl = id, identity = local.identity.id }],
-    [for s in local.aca_patch.secrets : (s.key_vault_secret_id == null ? { name = s.name, value = s.value } : { name = s.name, keyVaultUrl = s.key_vault_secret_id, identity = local.identity.id }) if !contains(values(local.aca_env.secret_names), s.name)],
-  ) : []
+  # ACA secrets: only the (non-secret) Fluent Bit config files; secret settings are dsv:// env values (ADR-0001 §14)
+  aca_secrets = local.aca_enabled ? [for s in local.aca_patch.secrets : { name = s.name, value = s.value }] : []
+  aca_init = local.aca_enabled ? [for c in local.aca_patch.init_containers : {
+    name         = c.name
+    image        = c.image
+    args         = c.args
+    resources    = { cpu = c.cpu, memory = c.memory }
+    env          = [for e in c.env : { name = e.name, value = e.value }]
+    volumeMounts = [for m in c.volume_mounts : { volumeName = m.name, mountPath = m.path }]
+  }] : []
   aca_app_env = local.aca_enabled ? concat(
     [for k in sort(keys(local.aca_env.env)) : { name = k, value = local.aca_env.env[k] }],
-    [for k in sort(keys(local.aca_env.secret_env)) : { name = k, secretRef = local.aca_env.secret_names[k] }],
     [{ name = "AzureWebJobsStorage__accountName", value = coalesce(local.host_storage, "unset") },
       { name = "AzureWebJobsStorage__credential", value = "managedidentity" },
     { name = "AzureWebJobsStorage__clientId", value = local.identity.client_id }],
@@ -216,6 +220,8 @@ resource "azapi_resource" "quote" {
         secrets    = local.aca_secrets
       }
       template = {
+        # dsv-fetch writes the Fluent Bit sidecar's key (Consumption profile: init containers have managed identity)
+        initContainers = local.aca_init
         containers = concat(
           [{
             name         = local.svc
@@ -229,7 +235,7 @@ resource "azapi_resource" "quote" {
             image        = s.image
             args         = s.args
             resources    = { cpu = s.cpu, memory = s.memory }
-            env          = [for e in s.env : e.secret_name == null ? { name = e.name, value = e.value } : { name = e.name, secretRef = e.secret_name }]
+            env          = [for e in s.env : { name = e.name, value = e.value }]
             volumeMounts = [for m in s.volume_mounts : m.sub_path == null ? { volumeName = m.name, mountPath = m.path } : { volumeName = m.name, mountPath = m.path, subPath = m.sub_path }]
           }],
         )

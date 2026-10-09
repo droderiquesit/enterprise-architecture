@@ -216,6 +216,19 @@ locals {
       env           = [for k in sort(keys(local.fetch_env)) : { name = k, value = local.fetch_env[k], secret_name = null }]
       volume_mounts = [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }]
     }] : []
+    # Same reader as a regular REFRESHER container, for Dedicated workload profiles / consumption-only environments
+    # where init containers get no managed identity: writes the file, then re-fetches every refresh_s seconds; the
+    # sidecar fails fast until the file exists and is restarted by the platform.
+    refresher_containers = local.needs_fetch ? [{
+      name          = "dsv-fetch"
+      image         = var.telemetry.secrets.fetch_image
+      cpu           = var.fetch_resources.cpu
+      memory        = var.fetch_resources.memory
+      command       = ["/usr/bin/python3.13", "-I", "-c", local.aci_fetch_stub]
+      args          = local.fetch_args
+      env           = [for k in sort(keys(local.fetch_env)) : { name = k, value = local.fetch_env[k], secret_name = null }]
+      volume_mounts = [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }]
+    }] : []
     app_container = {
       name          = local.container
       env           = [for k in sort(keys(local.env)) : { name = k, value = local.env[k], secret_name = null }]

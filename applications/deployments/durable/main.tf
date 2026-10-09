@@ -185,7 +185,6 @@ resource "azurerm_windows_function_app" "reconciliation" {
   functions_extension_version                    = "~4"
   ftp_publish_basic_authentication_enabled       = false
   webdeploy_publish_basic_authentication_enabled = false
-  key_vault_reference_identity_id                = local.y1_ident.id
   # Identity-based host storage: the provider writes AzureWebJobsStorage__accountName; credential/clientId below
   # select the user-assigned identity.
   storage_account_name          = local.fx.consumption_windows.storage_account_name

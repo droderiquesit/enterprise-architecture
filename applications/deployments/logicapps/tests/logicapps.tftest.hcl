@@ -389,13 +389,13 @@ run "consumption_and_standard" {
   }
 }
 
-run "standard_keyvault_storage" {
+run "standard_only" {
   command = plan
   variables {
-    settings = { consumption_enabled = false, storage_connection_secret_id = "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/logicapps-storage-connection" }
+    settings = { consumption_enabled = false }
   }
   assert {
-    condition     = length(data.azurerm_storage_account.logicapps) == 0 && length(azapi_resource.servicebus_connection) == 0
-    error_message = "With a Key Vault storage connection no key is read; consumption disabled => no connection."
+    condition     = length(data.azurerm_storage_account.logicapps) == 1 && length(azapi_resource.servicebus_connection) == 0 && !anytrue([for k, v in azurerm_logic_app_standard.archive[0].app_settings : startswith(v, "@Microsoft.KeyVault(")])
+    error_message = "Standard host storage via the account key (documented exception); consumption disabled => no connection; no Key Vault references."
   }
 }

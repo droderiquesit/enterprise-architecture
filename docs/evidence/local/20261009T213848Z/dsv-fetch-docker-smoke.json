@@ -1,0 +1,81 @@
+{
+  "image": "dsv-fetch:dev",
+  "network": "internal (no egress)",
+  "key_sha256_prefix": "cf55dd47eee4",
+  "checks": {
+    "init-files": {
+      "ok": true,
+      "exit": 0,
+      "file": {
+        "mode": "0o400",
+        "uid": 65532,
+        "fstype": "tmpfs",
+        "sha256": "cf55dd47eee49a4f71cf2d0ecb64eef484861a5aeeb5b7875fcc5d31b3148c2a",
+        "files": [
+          "DD_API_KEY"
+        ]
+      },
+      "stderr_summary": "{\"dsv_fetch\": \"init\", \"format\": \"files\", \"out\": \"/dsv-secrets\", \"names\": [\"DD_API_KEY\"], \"files\": [\"DD_API_KEY\"], \"mode\": \"0400\"}",
+      "value_in_output": false
+    },
+    "fluent-bit": {
+      "ok": true,
+      "image": "fluent/fluent-bit:5.1.3",
+      "init_exit": 0,
+      "variants": {
+        "root": {
+          "log_requests": 1,
+          "all_with_dsv_key": true,
+          "decoy_used": false,
+          "value_in_container_log": false
+        },
+        "decoy-env": {
+          "log_requests": 1,
+          "all_with_dsv_key": true,
+          "decoy_used": false,
+          "value_in_container_log": false
+        },
+        "uid-65532": {
+          "log_requests": 1,
+          "all_with_dsv_key": true,
+          "decoy_used": false,
+          "value_in_container_log": false
+        }
+      }
+    },
+    "otel-collector": {
+      "ok": true,
+      "image": "otel/opentelemetry-collector-contrib:0.162.0",
+      "init_exit": 0,
+      "init_user": "10001:10001",
+      "metric_requests": 2,
+      "paths": [
+        "/api/beta/sketches",
+        "/api/v2/series"
+      ],
+      "all_with_dsv_key": true,
+      "collector_running": true
+    },
+    "agent-backend": {
+      "ok": true,
+      "exit": 0,
+      "ok_handle_value_sha_matches": true,
+      "forbidden_handle_error": "DSV secret read failed (access denied, HTTP 403)",
+      "stderr_empty": true
+    },
+    "datadog-agent": {
+      "ok": true,
+      "image": "datadog/agent:7.84.2",
+      "install_exit": 0,
+      "backend_file": "500 root",
+      "requests_with_dsv_key": 2,
+      "requests_with_other_key": 0,
+      "paths": [
+        "/api/beta/sketches",
+        "/api/v2/series"
+      ],
+      "agent_secret_cmd_excerpt": []
+    }
+  },
+  "ok": true
+}

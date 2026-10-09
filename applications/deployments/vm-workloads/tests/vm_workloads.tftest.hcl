@@ -398,8 +398,8 @@ run "all_hosts" {
     error_message = "No SAS tokens in scripts/state."
   }
   assert {
-    condition     = strcontains(azurerm_virtual_machine_run_command.inventory[0].source[0].script, "fault-token?api-version=7.4") && strcontains(azurerm_virtual_machine_run_command.inventory[0].source[0].script, "$envVars['FAULTS_ENABLED'] = 'false'")
-    error_message = "Inventory FAULT_TOKEN read from Key Vault on the host; faults off by default."
+    condition     = strcontains(azurerm_virtual_machine_run_command.inventory[0].source[0].script, "$envVars['FAULT_TOKEN'] = 'dsv://eh/dev/fault-token#value'") && !strcontains(azurerm_virtual_machine_run_command.inventory[0].source[0].script, "vault.azure.net") && strcontains(azurerm_virtual_machine_run_command.inventory[0].source[0].script, "$envVars['FAULTS_ENABLED'] = 'false'")
+    error_message = "Inventory FAULT_TOKEN is a dsv:// reference resolved by the service; faults off by default; no Key Vault."
   }
   assert {
     condition     = module.env["worker-vm"].env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://localhost:4317" && module.env["worker-vm"].log_route == "host" && local.host_env["worker-vm"]["TABLE_MODE"] == "table"

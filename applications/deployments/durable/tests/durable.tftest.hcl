@@ -392,8 +392,8 @@ run "flex_private" {
     error_message = "Required %...% settings DURABLE_TASK_HUB and RECONCILE_SCHEDULE."
   }
   assert {
-    condition     = azurerm_function_app_flex_consumption.this.app_settings["FAULTS_ENABLED"] == "false" && azurerm_function_app_flex_consumption.this.app_settings["FAULT_TOKEN"] == "@Microsoft.KeyVault(SecretUri=https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/fault-token)" && !contains(keys(azurerm_function_app_flex_consumption.this.app_settings), "FAULT_ACTIVITY_FAILURE_RATE")
-    error_message = "Faults off by default; FAULT_TOKEN only as a Key Vault reference."
+    condition     = azurerm_function_app_flex_consumption.this.app_settings["FAULTS_ENABLED"] == "false" && azurerm_function_app_flex_consumption.this.app_settings["FAULT_TOKEN"] == "dsv://eh/dev/fault-token#value" && azurerm_function_app_flex_consumption.this.app_settings["DSV_AUTH"] == "azure" && !anytrue([for k, v in azurerm_function_app_flex_consumption.this.app_settings : startswith(v, "@Microsoft.KeyVault(")]) && !contains(keys(azurerm_function_app_flex_consumption.this.app_settings), "FAULT_ACTIVITY_FAILURE_RATE")
+    error_message = "Faults off by default; FAULT_TOKEN only as a DSV reference (no Key Vault references)."
   }
   assert {
     condition     = !contains(keys(azurerm_function_app_flex_consumption.this.app_settings), "LOG_FILE_PATH") && !contains(keys(azurerm_function_app_flex_consumption.this.app_settings), "WEBSITE_RUN_FROM_PACKAGE") && !contains(keys(azurerm_function_app_flex_consumption.this.app_settings), "FUNCTIONS_WORKER_RUNTIME")

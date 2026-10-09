@@ -1,6 +1,7 @@
 # Rendered by applications/deployments/vm-workloads (Terraform templatefile) and executed by an Azure VM managed
 # run command. Installs/updates ${service} ${version} as a Windows service from an immutable package read with the
-# VM's user-assigned identity (IMDS token, no SAS); secrets are read from Key Vault on the host (never in state).
+# VM's user-assigned identity (IMDS token, no SAS); secret settings are dsv:// references the service resolves from
+# Delinea DSV at start-up (Hello.Common) - no secret value in this script, the service environment or state.
 # Releases: ${app_root}\releases\<version>; ${app_root}\current is a junction; failed health check => rollback.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -46,13 +47,6 @@ $envVars = [ordered]@{}
 %{ for k, v in env ~}
 $envVars['${k}'] = '${replace(v, "'", "''")}'
 %{ endfor ~}
-%{ if length(secrets) > 0 ~}
-$kt = Get-ImdsToken 'https://vault.azure.net'
-%{ for k, id in secrets ~}
-$envVars['${k}'] = (Invoke-RestMethod -Uri '${id}?api-version=7.4' -Headers @{ Authorization = "Bearer $kt" } -TimeoutSec 10).value
-%{ endfor ~}
-Remove-Variable kt
-%{ endif ~}
 
 # ---- service --------------------------------------------------------------------------------------------
 $current = Join-Path $AppRoot 'current'

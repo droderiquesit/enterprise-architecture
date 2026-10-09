@@ -28,6 +28,7 @@ variables {
     tags            = {}
   }
   artifacts = {
+    "img-dsv-fetch" = { image = "ehcrshareddevabcde.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555" }
     "svc-frontend" = {
       tag            = "src-111111111111111111111111"
       commit         = "0123abc"
@@ -405,9 +406,9 @@ variables {
     }
     databases = {
       adapter = {
-        name         = "adapter"
-        login        = "dbadapter"
-        password_ref = "dsv://eh/dev/sqlvm-dbadapter-password#value"
+        name               = "adapter"
+        login              = "dbadapter"
+        password_secret_id = "dsv://eh/dev/sqlvm-dbadapter-password#value"
       }
     }
   }
@@ -474,8 +475,8 @@ variables {
       name     = "eh-cosmos-mongo-dev-abcde"
       endpoint = "https://eh-cosmos-mongo-dev-abcde.mongo.cosmos.azure.com:443/"
     }
-    auth_mode = "key"
-    key_ref   = "dsv://eh/dev/cosmos-mongo-connection-string#value"
+    auth_mode     = "key"
+    key_secret_id = "dsv://eh/dev/cosmos-mongo-connection-string#value"
     databases = {
       adapter = {
         name = "adapter"
@@ -511,9 +512,9 @@ variables {
     }
     databases = {
       adapter = {
-        name         = "adapter"
-        login        = "dbadapter"
-        password_ref = "dsv://eh/dev/cassandra-mi-dbadapter-password#value"
+        name               = "adapter"
+        login              = "dbadapter"
+        password_secret_id = "dsv://eh/dev/cassandra-mi-dbadapter-password#value"
       }
     }
   }
@@ -588,8 +589,12 @@ run "all_families" {
     error_message = "DD_SERVICE=hello-dbadapter-<family>."
   }
   assert {
-    condition     = module.aca["cosmos-mongo"].secret_refs["mongo-uri"] == "https://eh-kv-ident-dev-abcde.vault.azure.net/secrets/cosmos-mongo-connection-string" && !contains(keys(module.env["cosmos-mongo"].env), "MONGO_URI")
-    error_message = "Key-based families get their credential only as a Key Vault secret reference."
+    condition     = module.env["cosmos-mongo"].env["MONGO_URI"] == "dsv://eh/dev/cosmos-mongo-connection-string#value" && module.env["cosmos-mongo"].secret_env["MONGO_URI"] == "dsv://eh/dev/cosmos-mongo-connection-string#value"
+    error_message = "Key-based families get their credential only as a DSV reference (the adapter resolves it at start-up)."
+  }
+  assert {
+    condition     = alltrue([for k, a in module.aca : contains(["init", "refresher"], a.dsv_fetch_mode)]) && anytrue([for k, a in module.aca : a.dsv_fetch_mode == "refresher" && contains(a.container_names, "dsv-fetch")])
+    error_message = "Consumption: dsv-fetch init container; Dedicated workload profile: refresher container (init containers get no managed identity there)."
   }
   assert {
     condition     = alltrue([for f, a in module.aca : a.has_sidecar && a.container_names[1] == "fluent-bit"]) && alltrue([for f, e in module.env : e.env["FAULTS_ENABLED"] == "false"])
@@ -600,8 +605,8 @@ run "all_families" {
     error_message = "App Service adapter: no sidecar/log file, Entra auth."
   }
   assert {
-    condition     = strcontains(module.vmss_script["sqlvm"].script, "sqlvm-dbadapter-password?api-version=7.4") && !strcontains(module.vmss_script["sqlvm"].script, "SQL_PASSWORD=\"")
-    error_message = "VMSS script resolves the SQL password from Key Vault on the host (never rendered)."
+    condition     = strcontains(module.vmss_script["sqlvm"].env_file, "SQL_PASSWORD=\"dsv://eh/dev/sqlvm-dbadapter-password#value\"") && !strcontains(module.vmss_script["sqlvm"].script, "vault.azure.net")
+    error_message = "VMSS env file carries only the DSV reference of the SQL password (resolved by the adapter)."
   }
   assert {
     condition     = output.contract.adapters["sqlvm"].url == null && output.contract.adapters["mysql"].url == "https://eh-app-dbmysql-dev-abcde.azurewebsites.net" && output.contract.adapters["sql"].id != null
