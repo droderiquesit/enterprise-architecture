@@ -11,6 +11,9 @@ variable "settings" {
 variable "obs_telemetry_transport" {
   description = "obs-telemetry-transport contract (fields used)."
   type = object({
+    fluentbit = optional(object({
+      aca_console_allow = optional(list(string), [])
+    }), {})
     event_hub = object({
       authorization_rule_id = string
       app_logs_hub          = string
@@ -42,4 +45,14 @@ variable "resources" {
     condition     = alltrue([for r in values(var.resources) : contains(["eventhub", "sidecar", "daemonset", "host", "none"], r.app_log_route)])
     error_message = "resources[*].app_log_route must be eventhub, sidecar, daemonset, host or none."
   }
+}
+
+variable "discovered_contracts" {
+  description = <<-EOT
+    Map contract name -> contract data for every enabled platform-* and deploy-* component, passed by
+    tools/contracts/materialize.py to components with discovers_resources: true. Resource ids are taken
+    ONLY from the explicit extraction map in discovery.tf (README "Resource discovery"); no recursion.
+  EOT
+  type        = any
+  default     = {}
 }

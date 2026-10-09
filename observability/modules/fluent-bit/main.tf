@@ -57,6 +57,7 @@ locals {
       FLB_ENV                  = lookup(var.static_tags, "env", "unknown")
     } : {},
     local.is_host ? { FLB_LOG_PATHS = join(",", var.log_paths) } : {},
+    var.role == "aggregator" ? { FLB_ACA_CONSOLE_ALLOW = join(",", var.aca_console_allow) } : {},
     var.role == "linux-host" && var.systemd_unit != null ? { FLB_SYSTEMD_UNIT = var.systemd_unit } : {},
     var.role == "k8s-daemonset" ? {
       FLB_EXCLUDE_PATHS = join(",", [for ns in var.exclude_namespaces : "/var/log/containers/*_${ns}_*.log"])

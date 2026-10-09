@@ -1,2 +1,0 @@
-[console_scripts]
-hello-partner-sim = hello_partner_sim.__main__:main

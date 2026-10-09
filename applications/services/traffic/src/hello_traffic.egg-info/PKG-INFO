@@ -1,7 +1,0 @@
-Metadata-Version: 2.4
-Name: hello-traffic
-Version: 1.0.0
-Summary: Enterprise Hello synthetic traffic generator (httpx API journeys + Playwright Chromium browser journeys)
-Requires-Python: <3.14,>=3.13
-Requires-Dist: hello-common
-Requires-Dist: playwright==1.63.0

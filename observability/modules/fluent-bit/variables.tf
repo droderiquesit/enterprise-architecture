@@ -85,3 +85,9 @@ variable "canary_interval_seconds" {
     error_message = "canary_interval_seconds must be 10-3600."
   }
 }
+
+variable "aca_console_allow" {
+  description = "aggregator: Container Apps/Jobs whose ContainerAppConsoleLogs (Event Hub route) are kept: exact names or prefixes ending in '*'. Empty = keep all."
+  type        = list(string)
+  default     = []
+}

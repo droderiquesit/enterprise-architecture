@@ -1,7 +1,7 @@
 module "diagnostics" {
   source = "../../modules/diagnostic-settings"
 
-  resources = { for k, r in var.resources : k => {
+  resources = { for k, r in local.all_targets : k => {
     id            = r.id
     app_log_route = r.app_log_route
     platform_logs = r.platform_logs

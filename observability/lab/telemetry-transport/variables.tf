@@ -18,7 +18,8 @@ variable "settings" {
     aggregator_max_replicas        = optional(number, 2)
     workload_profile_name          = optional(string) # null = first profile of platform_containerapps
     sidecar_mode                   = optional(string, "datadog")
-    grant_key_vault_secrets_user   = optional(bool, false) # foundation-identity already grants obs-collector
+    aca_console_allow              = optional(list(string)) # null = ["<prefix>-caj-*"] (ACA jobs have no sidecar)
+    grant_key_vault_secrets_user   = optional(bool, false)  # foundation-identity already grants obs-collector
   })
   default = {}
   validation {

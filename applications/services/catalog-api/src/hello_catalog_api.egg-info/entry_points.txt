@@ -1,2 +1,0 @@
-[console_scripts]
-hello-catalog-api = hello_catalog.__main__:main

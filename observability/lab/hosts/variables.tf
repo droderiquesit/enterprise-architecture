@@ -12,7 +12,11 @@ variable "settings" {
     default_linux_log_dir               = optional(string, "/var/log/enterprise-hello")
     default_windows_log_dir             = optional(string, "C:\\ProgramData\\enterprise-hello\\logs")
     sqlvm_os_type                       = optional(string, "windows")
-    service_tags                        = optional(map(map(string)), {}) # host key -> extra tags (service, version, source ...)
+    # per-workload application log files (as written by the app deployment, LOG_FILE_PATH); wins over log_dir
+    workload_log_paths = optional(map(list(string)), {
+      "hello-worker" = ["/var/log/hello-worker/*.log"]
+    })
+    service_tags = optional(map(map(string)), {}) # host key -> extra tags (service, version, source ...)
   })
   default = {}
 }

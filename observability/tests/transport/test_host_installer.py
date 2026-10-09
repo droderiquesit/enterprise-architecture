@@ -49,7 +49,7 @@ def test_linux_installer_in_ubuntu(tmp_path):
     res = subprocess.run(args, capture_output=True, text=True, timeout=900)
     print(res.stdout[-4000:], res.stderr[-2000:])
     assert res.returncode == 0
-    out = res.stdout
+    out = res.stdout + res.stderr
     assert "fluent-bit\t5.1.3" in out
     assert "configuration test is successful" in out
     assert "600 /etc/default/fluent-bit-eh" in out

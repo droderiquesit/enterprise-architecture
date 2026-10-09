@@ -302,6 +302,44 @@ local function azure_entry(entry, topic)
   return out
 end
 
+-- ACA environments export ContainerAppConsoleLogs for EVERY app in the environment, but apps with a
+-- Fluent Bit sidecar are already collected -> keep only allow-listed container apps/jobs (typically
+-- jobs, which have no sidecar). FLB_ACA_CONSOLE_ALLOW: comma list of exact names or prefixes ending in
+-- '*' (e.g. "eh-caj-*"); empty = keep all. Fluent Bit sidecar containers' own console output is dropped.
+local ACA_ALLOW = {}
+for item in string.gmatch(env_or("FLB_ACA_CONSOLE_ALLOW", ""), "[^,%s]+") do
+  table.insert(ACA_ALLOW, item)
+end
+
+local function aca_console_allowed(entry)
+  local cat = entry["category"] or entry["Category"]
+  if cat ~= "ContainerAppConsoleLogs" and cat ~= "ContainerAppConsoleLogs_CL" then
+    return true
+  end
+  local p = entry["properties"]
+  if type(p) ~= "table" then
+    return #ACA_ALLOW == 0
+  end
+  local container = p["ContainerName"] or p["ContainerName_s"]
+  if container == "fluent-bit" then
+    return false
+  end
+  if #ACA_ALLOW == 0 then
+    return true
+  end
+  local name = p["ContainerAppName"] or p["ContainerAppName_s"] or p["JobName"] or ""
+  for _, a in ipairs(ACA_ALLOW) do
+    if a:sub(-1) == "*" then
+      if name:sub(1, #a - 1) == a:sub(1, -2) then
+        return true
+      end
+    elseif name == a then
+      return true
+    end
+  end
+  return false
+end
+
 function eh_azure_split(tag, ts, record)
   -- kafka input (format json) wraps the message: {topic, partition, offset, key, payload}
   local payload = record["payload"]
@@ -315,11 +353,14 @@ function eh_azure_split(tag, ts, record)
   end
   local entries = payload["records"]
   if type(entries) ~= "table" then
+    if not aca_console_allowed(payload) then
+      return -1, ts, record
+    end
     return 1, ts, azure_entry(payload, topic)
   end
   local out = {}
   for _, e in ipairs(entries) do
-    if type(e) == "table" then
+    if type(e) == "table" and aca_console_allowed(e) then
       table.insert(out, azure_entry(e, topic))
     end
   end

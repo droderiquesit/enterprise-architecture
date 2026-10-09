@@ -134,6 +134,13 @@
         },
         "metrics_port": {
           "type": "integer"
+        },
+        "aca_console_allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Container Apps/Jobs (exact names or prefix*) whose ContainerAppConsoleLogs the aggregator forwards; all other apps in the environment are dropped (sidecar-collected)"
         }
       }
     },

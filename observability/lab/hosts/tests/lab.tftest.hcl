@@ -64,8 +64,8 @@ variables {
 run "lab_hosts" {
   command = plan
   assert {
-    condition     = jsonencode(output.hosts["vm-worker"]) == jsonencode(["/var/log/enterprise-hello/*.log"]) && jsonencode(output.hosts["vmss-worker"]) == jsonencode(["/opt/enterprise-hello/logs/*.log"])
-    error_message = "Log paths from contract log_dir or defaults."
+    condition     = jsonencode(output.hosts["vm-worker"]) == jsonencode(["/var/log/hello-worker/*.log"]) && jsonencode(output.hosts["vmss-worker"]) == jsonencode(["/var/log/hello-worker/*.log"]) && jsonencode(output.hosts["vm-inventory"]) == jsonencode(["C:\\ProgramData\\enterprise-hello\\logs\\*.log"])
+    error_message = "Log paths: per-workload map (hello-worker -> /var/log/hello-worker/worker.log*), else contract log_dir, else defaults."
   }
   assert {
     condition     = jsonencode(output.hosts["sqlvm"]) == jsonencode([]) && length(module.hosts.setup) == 4

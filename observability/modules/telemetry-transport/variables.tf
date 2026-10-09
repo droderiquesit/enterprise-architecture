@@ -245,3 +245,14 @@ variable "images" {
   })
   default = {}
 }
+
+variable "aca_console_allow" {
+  description = <<-EOT
+    Container Apps / Jobs whose ContainerAppConsoleLogs the aggregator forwards (exact names or prefixes ending
+    in '*'). ACA environments export console logs for ALL apps; apps with a Fluent Bit sidecar must be excluded
+    to avoid duplicates, so list only apps/jobs with app_log_route = eventhub (e.g. jobs: "eh-caj-*").
+    Empty = forward all (only correct when no app in the environment uses a sidecar).
+  EOT
+  type        = list(string)
+  default     = []
+}

@@ -74,6 +74,7 @@ locals {
       sidecar_mode                 = var.sidecar_mode
       logs_intake_host             = local.intake_host
       metrics_port                 = 2020
+      aca_console_allow            = var.aca_console_allow
     }
     event_hub = local.eh_enabled ? {
       namespace_id          = local.eh_namespace_id

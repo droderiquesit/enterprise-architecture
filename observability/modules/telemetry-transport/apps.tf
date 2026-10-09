@@ -3,10 +3,11 @@
 # item paths, both needed here (4317+4318 on one gateway, 24224+2020 on the aggregator; config files
 # mounted with real file names). API version Microsoft.App/containerApps@2025-07-01 (GA).
 module "aggregator_config" {
-  source       = "../fluent-bit"
-  role         = local.eh_enabled ? "aggregator" : "aggregator-forward"
-  datadog_site = var.datadog.site
-  static_tags  = merge({ env = var.datadog.env }, var.datadog.extra_tags)
+  source            = "../fluent-bit"
+  role              = local.eh_enabled ? "aggregator" : "aggregator-forward"
+  datadog_site      = var.datadog.site
+  static_tags       = merge({ env = var.datadog.env }, var.datadog.extra_tags)
+  aca_console_allow = var.aca_console_allow
 }
 
 module "gateway_config" {

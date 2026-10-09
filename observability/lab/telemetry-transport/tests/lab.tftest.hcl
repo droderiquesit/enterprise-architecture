@@ -84,6 +84,10 @@ run "lab_defaults" {
     condition     = output.contract.otlp.internal_only && output.contract.otlp.logs_policy == "drop"
     error_message = "Internal-only receivers; OTLP logs dropped."
   }
+  assert {
+    condition     = jsonencode(output.contract.fluentbit.aca_console_allow) == jsonencode(["eh-caj-*"])
+    error_message = "Only ACA jobs' console logs are forwarded by default."
+  }
 }
 
 run "reject_public_receiver_via_lab" {

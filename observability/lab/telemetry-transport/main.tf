@@ -84,5 +84,6 @@ module "transport" {
     otlp_logs           = var.settings.gateway_otlp_logs
     max_replicas        = var.settings.gateway_sampling == "tail" ? 1 : var.settings.gateway_max_replicas
   }
-  sidecar_mode = var.settings.sidecar_mode
+  sidecar_mode      = var.settings.sidecar_mode
+  aca_console_allow = coalesce(var.settings.aca_console_allow, ["${var.environment.name_prefix}-caj-*"])
 }

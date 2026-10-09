@@ -49,7 +49,8 @@ locals {
     location           = h.location
     identity_client_id = h.identity_client_id
     service_tags       = merge(local.base_tags, { service = h.service, source = h.os_type == "windows" ? "csharp" : "python" }, lookup(var.settings.service_tags, k, {}))
-    log_paths          = h.install_fluent_bit ? [h.os_type == "windows" ? "${h.log_dir}\\${var.settings.linux_log_glob}" : "${h.log_dir}/${var.settings.linux_log_glob}"] : []
+    log_paths = !h.install_fluent_bit ? [] : lookup(var.settings.workload_log_paths, h.service,
+    [h.os_type == "windows" ? "${h.log_dir}\\${var.settings.linux_log_glob}" : "${h.log_dir}/${var.settings.linux_log_glob}"])
     install_fluent_bit = h.install_fluent_bit
   } }
 

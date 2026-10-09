@@ -48,7 +48,7 @@ def _event_id(ev: dict) -> str | None:
         if k in ev:
             return ev[k]
     text = json.dumps(ev)
-    for i in list(range(1, 8)) + [101, 102, 201]:
+    for i in list(range(1, 8)) + [101, 102, 103, 104, 105, 201]:
         tok = f"evt-{i:04d}"
         if tok in text:
             return tok
@@ -262,6 +262,7 @@ def test_aggregator_forward_and_eventhub_kafka(stack, tmp_path):
             KAFKA_SECURITY_PROTOCOL="SASL_PLAINTEXT",  # Event Hubs: SASL_SSL (TLS) - only the local broker is plaintext
             EVENTHUB_CONNECTION_STRING=conn,
             FLB_DD_TAGS="env:test,collector:aggregator",
+            FLB_ACA_CONSOLE_ALLOW="eh-caj-*",  # only jobs (no sidecar) - sidecar apps' stdout is a duplicate
         ),
         volumes=[f"{FLB_CONFIG}:/fluent-bit/etc/eh:ro"],
         cmd=["-c", "/fluent-bit/etc/eh/aggregator.yaml"],
@@ -279,7 +280,7 @@ def test_aggregator_forward_and_eventhub_kafka(stack, tmp_path):
     _produce(kafka, "app-logs", SAMPLES / "eventhub-app-logs.jsonl")
     _produce(kafka, "platform-logs", SAMPLES / "eventhub-platform-logs.jsonl")
 
-    expected = len(SIDECAR_IDS) + 3
+    expected = len(SIDECAR_IDS) + 4
     try:
         wait_for(lambda: len([e for e in received(base)["events"] if not _is_canary(e)]) >= expected, 120, interval=2,
                  what="aggregator events")
@@ -312,6 +313,10 @@ def test_aggregator_forward_and_eventhub_kafka(stack, tmp_path):
     assert c["ddsource"] == "azure.app" and "category:ContainerAppSystemLogs" in c["ddtags"]
     assert "eventhub:platform-logs" in c["ddtags"]
     assert all(PIPELINE_TAG in e["ddtags"].split(",") for e in events)
+    # ACA console logs: job (allow-listed) delivered with its JSON fields; sidecar app + fluent-bit container dropped
+    j = ids["evt-0103"][0]
+    assert j["service"] == "hello-jobs" and j["ddsource"] == "azure.app" and "category:ContainerAppConsoleLogs" in j["ddtags"]
+    assert "evt-0104" not in ids and "evt-0105" not in ids
 
 
 def test_linux_host_config_with_canary(stack, tmp_path):

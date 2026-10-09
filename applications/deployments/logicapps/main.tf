@@ -163,8 +163,12 @@ resource "azurerm_logic_app_standard" "archive" {
   storage_key_vault_secret_id              = var.settings.storage_connection_secret_id
   tags                                     = merge(local.tags, { service = local.svc, version = lookup(local.artifact_version, local.meta.artifact, "n/a") })
 
+  # Built-in (service provider) Service Bus / Blob connectors authenticate with the SYSTEM-assigned identity
+  # (most built-in connectors cannot select a user-assigned identity:
+  # https://learn.microsoft.com/azure/logic-apps/single-tenant-overview-compare). The user-assigned identity is
+  # kept for Key Vault references and the OTel/app-settings contract.
   identity {
-    type         = "UserAssigned"
+    type         = "SystemAssigned, UserAssigned"
     identity_ids = [local.identity.id]
   }
 
@@ -202,4 +206,31 @@ module "private_endpoint" {
   subresource_names    = ["sites"]
   private_dns_zone_ids = try([var.foundation_network.private_dns_zones["webapps"].id], [])
   tags                 = local.tags
+}
+
+# ------------------------------------------------- Standard: archive data path for the system-assigned identity
+# The archive container is application data owned by this deployment root (created through ARM, no data-plane keys).
+resource "azurerm_storage_container" "archive" {
+  count                 = local.standard ? 1 : 0
+  name                  = var.settings.archive_container
+  storage_account_id    = local.as.logicapps_storage.id
+  container_access_type = "private"
+}
+
+resource "azurerm_role_assignment" "archive_receiver" {
+  count                = local.standard && contains(keys(local.sb.subscriptions), var.settings.archive_subscription) ? 1 : 0
+  scope                = local.sb.subscriptions[var.settings.archive_subscription].id
+  role_definition_name = "Azure Service Bus Data Receiver"
+  principal_id         = azurerm_logic_app_standard.archive[0].identity[0].principal_id
+  principal_type       = "ServicePrincipal"
+  description          = "Logic Apps Standard built-in Service Bus trigger (system identity) on order-events/${var.settings.archive_subscription}"
+}
+
+resource "azurerm_role_assignment" "archive_writer" {
+  count                = local.standard ? 1 : 0
+  scope                = azurerm_storage_container.archive[0].id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_logic_app_standard.archive[0].identity[0].principal_id
+  principal_type       = "ServicePrincipal"
+  description          = "Logic Apps Standard built-in Blob connector (system identity) writes the order archive"
 }
