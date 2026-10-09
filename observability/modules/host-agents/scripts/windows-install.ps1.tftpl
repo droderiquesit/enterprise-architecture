@@ -35,6 +35,8 @@ if ($ConfigureAgent -eq 'true') {
   if ($changed -and (Get-Service datadogagent -ErrorAction SilentlyContinue)) { Restart-Service datadogagent -Force; Log 'datadogagent reconfigured' }
 }
 
+if ('${install_fluent_bit}' -ne 'true') { Log 'agent-only host (no application log files)'; exit 0 }
+
 $current = if (Test-Path $FbExe) { (& $FbExe --version 2>$null | Select-Object -First 1) } else { '' }
 if ($current -notmatch [regex]::Escape("v$FbVersion")) {
   $msi = Join-Path $env:TEMP "fluent-bit-$FbVersion-win64.msi"

@@ -35,6 +35,7 @@ locals {
         api_key_secret_id  = var.datadog.api_key_secret_id == null ? "" : var.datadog.api_key_secret_id
         identity_client_id = h.identity_client_id == null ? "" : h.identity_client_id
         configure_agent    = tostring(h.install_agent)
+        install_fluent_bit = tostring(h.install_fluent_bit)
         process_collection = tostring(var.datadog.process_collection)
         agent_tags         = join(" ", [for t in sort(keys(h.service_tags)) : "${t}:${h.service_tags[t]}" if t != "source"])
         files              = h.install_fluent_bit ? { for p, c in module.flb[k].files : p => base64gzip(c) } : {}

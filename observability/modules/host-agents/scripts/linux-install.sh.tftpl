@@ -41,6 +41,8 @@ UNIT
   fi
 fi
 
+if [ "${install_fluent_bit}" != "true" ]; then log "agent-only host (no application log files)"; exit 0; fi
+
 # ------------------------------------------------------------------ Fluent Bit package (pinned)
 installed=""
 if command -v dpkg-query >/dev/null 2>&1; then installed=$(dpkg-query -W -f='$${Version}' fluent-bit 2>/dev/null || true); fi
