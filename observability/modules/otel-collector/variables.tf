@@ -82,3 +82,21 @@ variable "otlp_logs" {
     error_message = "otlp_logs must be drop or forward."
   }
 }
+
+variable "default_attributes" {
+  description = "Environment-wide policy tags as OTel resource attributes (modules/tagging otel_resource_attributes of the environment identity, e.g. deployment.environment.name, region, managed_by, application + static tags), inserted when a client sent none."
+  type        = map(string)
+  default     = {}
+}
+
+variable "service_attributes" {
+  description = "Per service.name: the service's policy attributes (team, owner, domain, tier, ...) inserted when the client sent none - the gateway enforces the onboarding manifests on telemetry of managed runtimes."
+  type        = map(map(string))
+  default     = {}
+}
+
+variable "metric_attribute_keys" {
+  description = "Resource attributes copied onto metric data points (Datadog metric tags) when the point has none, e.g. the non-unified policy keys (team, owner, domain, tier, application, region)."
+  type        = list(string)
+  default     = []
+}

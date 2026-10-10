@@ -7,7 +7,33 @@ locals {
     var.sampling == "tail" ? { OTELCOL_CONFIG_TAIL = file("${local.dir}/gateway-tail-sampling.yaml") } : {},
     var.fluentbit_metrics_target != null ? { OTELCOL_CONFIG_SCRAPE_FLB = file("${local.dir}/gateway-scrape-fluentbit.yaml") } : {},
     var.otlp_logs == "forward" ? { OTELCOL_CONFIG_LOGS_FORWARD = file("${local.dir}/gateway-logs-forward.yaml") } : {},
+    local.tag_statements_any ? { OTELCOL_CONFIG_TAGS = yamlencode(local.tags_overlay) } : {},
   )
+
+  # ------------------------------------------------------------------ tag policy overlay (transform/eh_tag_policy)
+  default_stmts = [for k in sort(keys(var.default_attributes)) :
+  "set(attributes[\"${k}\"], \"${replace(var.default_attributes[k], "\"", "")}\") where attributes[\"${k}\"] == nil"]
+  service_stmts = flatten([for svc in sort(keys(var.service_attributes)) : [
+    for k in sort(keys(var.service_attributes[svc])) :
+    "set(attributes[\"${k}\"], \"${replace(var.service_attributes[svc][k], "\"", "")}\") where attributes[\"service.name\"] == \"${svc}\" and attributes[\"${k}\"] == nil"
+  ]])
+  resource_stmts = concat(local.default_stmts, local.service_stmts)
+  datapoint_stmts = [for k in var.metric_attribute_keys :
+  "set(attributes[\"${k}\"], resource.attributes[\"${k}\"]) where resource.attributes[\"${k}\"] != nil and attributes[\"${k}\"] == nil"]
+  tag_statements_any = length(local.resource_stmts) + length(local.datapoint_stmts) > 0
+  tags_overlay = {
+    processors = {
+      "transform/eh_tag_policy" = {
+        error_mode       = "ignore"
+        trace_statements = [{ context = "resource", statements = length(local.resource_stmts) > 0 ? local.resource_stmts : ["delete_key(attributes, \"eh.tag_policy.placeholder\")"] }]
+        metric_statements = concat(
+          [{ context = "resource", statements = length(local.resource_stmts) > 0 ? local.resource_stmts : ["delete_key(attributes, \"eh.tag_policy.placeholder\")"] }],
+          length(local.datapoint_stmts) > 0 ? [{ context = "datapoint", statements = local.datapoint_stmts }] : [],
+        )
+        log_statements = [{ context = "resource", statements = length(local.resource_stmts) > 0 ? local.resource_stmts : ["delete_key(attributes, \"eh.tag_policy.placeholder\")"] }]
+      }
+    }
+  }
   order = concat(["OTELCOL_CONFIG_BASE"], sort([for k in keys(local.configs) : k if k != "OTELCOL_CONFIG_BASE"]))
   args  = concat(var.distribution == "ddot" ? ["run"] : [], [for k in local.order : "--config=env:${k}"])
 

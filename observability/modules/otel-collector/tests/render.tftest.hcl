@@ -62,3 +62,20 @@ run "reject_bad_logs_mode" {
   }
   expect_failures = [var.otlp_logs]
 }
+
+run "tag_policy_overlay" {
+  command = plan
+  variables {
+    default_attributes    = { "deployment.environment.name" = "dev", region = "swedencentral" }
+    service_attributes    = { "hello-inventory-api" = { team = "orders", owner = "orders_example.com" } }
+    metric_attribute_keys = ["team", "region"]
+  }
+  assert {
+    condition     = contains(output.config_env_order, "OTELCOL_CONFIG_TAGS") && strcontains(output.config_env["OTELCOL_CONFIG_TAGS"], "where attributes[\\\"service.name\\\"] == \\\"hello-inventory-api\\\" and attributes[\\\"team\\\"] == nil")
+    error_message = "per-service tag insertion without overwriting client values"
+  }
+  assert {
+    condition     = strcontains(output.config_env["OTELCOL_CONFIG_TAGS"], "context\": \"datapoint\"") && strcontains(output.config_env["OTELCOL_CONFIG_TAGS"], "set(attributes[\\\"region\\\"], resource.attributes[\\\"region\\\"])")
+    error_message = "policy keys copied to metric data points"
+  }
+}
