@@ -16,8 +16,9 @@ and hands the values over in the form each consumer understands:
 
 **2.x is a static Go binary** (no interpreter, no libc: `CGO_ENABLED=0`, Go standard library only — `go.mod` has no
 `require`, enforced by `tests/test_stdlib_only.py`). Same CLI, environment, config file, output formats, messages, exit
-codes, timeouts/retries and Agent protocol as the 1.x Python script `dsv_fetch.py`; the Python test suite under `tests/`
-is the black-box **conformance suite** and runs against both (see *Build, test*). The binary runs in the distroless image,
+codes, timeouts/retries and Agent protocol as the retired 1.x Python script `dsv_fetch.py` (removed in observability
+package 4.0.0, together with every Python caller); the Python test suite under `tests/` is the black-box
+**conformance suite** that proved the port identical and now runs against the binary (see *Build, test*). The binary runs in the distroless image,
 copied into the Datadog Agent container (any distro), on Linux VMs (amd64/arm64) and as a Win32 executable on Windows.
 
 ## Distribution contract (2.0.0 — other components rely on it)
@@ -41,8 +42,8 @@ Consumers:
 * **Init containers for third-party tools** (Fluent Bit, OTel collector, serverless-init): `dsv-fetch init ...`
   (entrypoint is the binary; `args: ["init", ...]`). **Refresher container** (ACI, ACA dedicated profiles: init
   containers get no managed identity): `args: ["init", ..., "--refresh-seconds", "3600"]` keeps running and re-resolves
-  every hour (after a failure every `--retry-seconds`, default 30) with a fresh token — replaces the 1.x Python stub
-  (`python3 -c "...subprocess.call([...dsv_fetch.py...])"`), which cannot run in the 2.x image (no Python).
+  every hour (after a failure every `--retry-seconds`, default 30) with a fresh token (it replaced the 1.x Python
+  refresher stub; the flag is `--refresh-seconds`, there is no `--refresh`).
 * **Linux VM/VMSS**: as root `./dsv-fetch-linux-<arch> install --dest /opt/dsv-fetch/dsv-fetch --owner dd-agent`
   (verify `sha256sum --check --ignore-missing SHA256SUMS` first).
 * **Windows**: as Administrator `dsv-fetch-windows-amd64.exe install --dest "C:\ProgramData\dsv-fetch\dsv-fetch.exe" [--owner ddagentuser]`
@@ -179,8 +180,8 @@ docker build -t dsv-fetch:dev .              # ~3.5 MB content, distroless stati
 docker buildx build --platform linux/amd64,linux/arm64 .
 
 go test ./... && go vet ./... && GOOS=windows go vet ./...      # Go unit tests (httptest fakes)
-python3 -m pytest -q tests                   # conformance suite: every CLI test x {go, python}; Go binary built by build.sh
-DSV_FETCH_IMPL=go DSV_FETCH_BIN=dist/dsv-fetch-linux-amd64 python3 -m pytest -q tests   # a release file only
+python3 -m pytest -q tests                   # conformance suite against the binary (built by build.sh --toolchain local)
+DSV_FETCH_BIN=dist/dsv-fetch-linux-amd64 python3 -m pytest -q tests   # a release file
 python3 tests/docker_smoke.py --image dsv-fetch:dev   # docker: init files, Fluent Bit, OTel collector, agent-backend, Agent 7.84.2
 ```
 
@@ -196,16 +197,19 @@ Test helpers: `tests/fake_identity.py` (IMDS + IDENTITY_ENDPOINT + Entra token e
 
 Layout: `cmd/dsv-fetch` (main, `-X main.version`), `internal/dsvfetch` (CLI with argparse-compatible messages, DSV/Entra
 client, Python-`json.dumps`-compatible output, platform files for install/ACL), `build.sh`, `VERSION`.
-`dsv_fetch.py` (1.x) stays only until the callers listed below are migrated; the image no longer contains it.
+Module path `enterprise-hello/dsv-fetch` (neutral: no hosting-specific prefix, so the vendored package stays portable).
 
-### Remaining 1.x callers (to migrate by their owners, then delete `dsv_fetch.py`)
+### Callers (package 4.0.0 — all use the binary; the 1.x Python script and its embedding are gone)
 
-Everything that embeds or runs `dsv_fetch.py` with a Python interpreter (`git grep -n dsv_fetch.py`): host-agents Linux
-installer (`modules/host-agents`), kubernetes ConfigMap secret backend (`modules/kubernetes`), DBM ACI Agent
-(`modules/dbm`, `lab/dbm`), telemetry-transport APM gateway + refresher stub (`modules/telemetry-transport/ops.tf`),
-instrumentation ACI refresher stub (`modules/instrumentation`), Batch log setup (`lab/telemetry-transport/batch.tf`),
-pipeline templates' `dsvFetchPath` (`observability/pipelines/**`), transport tests. Refresher stubs that ran
-`python3 -c ...` inside the old image switch to `init ... --refresh-seconds 3600` (same 3600 s / 30 s cadence).
+| Caller | How |
+|---|---|
+| `modules/kubernetes` (node Agent, Cluster Agent, cluster-checks runners) | init container `install` into an emptyDir, `secret_backend_command` |
+| `modules/dbm` ACI Agent, `modules/instrumentation` ACI Agent sidecar | init container `install` → Agent re-installs as root |
+| `modules/instrumentation` ACA (serverless-init) / Fluent Bit fallback | `init` (init container) or refresher `init --refresh-seconds 3600` |
+| `modules/telemetry-transport` OP Worker (dotenv), APM gateway Agent | `init` / refresher `init --refresh-seconds 3600`; init container `install` + root re-install |
+| `modules/host-agent-package` (VM Application, Linux + Windows) | release files `dsv-fetch-linux-<arch>` / `dsv-fetch-windows-amd64.exe` + `SHA256SUMS` |
+| obs-telemetry-transport Batch log setup (`batch_log_setup`) | release zip downloaded on the node (pool identity), sha256 + `SHA256SUMS` checked |
+| `observability/pipelines/templates/dsv-secrets.yml` | release zip (`dsvFetch.package_url` / `package_sha256`), `init --format files` |
 
 ## Limitations
 

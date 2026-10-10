@@ -7,7 +7,8 @@
 # sha256 like any other zip-package. The image (container-image.yml) is built from the same sources and toolchain, so
 # its /opt/dsv-fetch/dsv-fetch is byte-identical to dsv-fetch-linux-<arch>; this step verifies that for linux/amd64
 # when the agent has Docker (pulls the image just pushed by digest; the ACR login of the image step is reused).
-# Toolchain: the pinned golang image via Docker; agents without Docker need Go 1.24.13 on PATH (build.sh --toolchain auto).
+# Toolchain: the pinned golang image via Docker; agents without Docker get Go 1.24.13 from install-tools.sh go
+# (build.sh --toolchain auto picks local Go when it is exactly the pinned version).
 parameters:
   - name: componentPath
     type: string
@@ -17,6 +18,8 @@ steps:
       set -euo pipefail
       rel="$(Agent.TempDirectory)/dsv-fetch-release"
       rm -rf "$rel"; mkdir -p "$rel" "$BUILD_OUT"
+      # agents without Docker: the pinned Go toolchain (sha256-verified download; same release as the builder image)
+      if ! { command -v docker >/dev/null && docker info >/dev/null 2>&1; }; then bash pipelines/scripts/install-tools.sh go; export PATH="${TOOLS_BIN:-$HOME/.local/bin}:$PATH"; fi
       bash "${{ parameters.componentPath }}/build.sh" --out "$rel"
       (cd "$rel" && sha256sum --check SHA256SUMS)
       python3 tools/deploy/artifacts.py zip --src "$rel" --out "$BUILD_OUT/package.zip"

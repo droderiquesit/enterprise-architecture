@@ -2,6 +2,11 @@
 # Build a versioned, portable release of the observability package:
 #   <out>/observability-<version>.tar.gz  (+ .sha256)
 # Contents: modules/ config/ schemas/ tools/ pipelines/ examples/ images/ README.md CHANGELOG.md UPGRADING.md VERSION
+# This is a SOURCE release: images/dsv-fetch ships as Go sources (+ build.sh, Dockerfile), never as binaries. The
+# dsv-fetch 2.x executables (dsv-fetch-linux-amd64, dsv-fetch-linux-arm64, dsv-fetch-windows-amd64.exe + SHA256SUMS)
+# come from the img-dsv-fetch zip-package of the platform pipeline (pipelines/templates/build-dsv-fetch.yml; record
+# artifacts["img-dsv-fetch"].package_url / package_sha256) - consumers pin that zip by sha256 (pipelines templates'
+# `dsvFetch`, the host-agent VM Application package, the Batch log setup), the container image by digest.
 # Never included: lab roots, lab onboarding manifests/rendered output, extras/ (optional monitoring content of the
 # source repository), .terraform/, caches, vendored copies.
 # The build FAILS if any packaged file references paths outside the package, lab roots, remote state,
@@ -40,7 +45,7 @@ for item in "${INCLUDE[@]}"; do
   tar -C "$PKG_ROOT" \
       --exclude='.terraform' --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' --exclude='.ruff_cache' \
       --exclude='.vendor' --exclude='terraform.tfstate*' --exclude='*.tfplan' --exclude='dist' \
-      --exclude='.terraform.tfstate.lock.info' --exclude='*.auto.tfvars.json' \
+      --exclude='.terraform.tfstate.lock.info' --exclude='*.auto.tfvars.json' --exclude='.dsv-fetch-release' \
       -cf - "$item" | tar -C "${STAGE}/${NAME}" -xf -
 done
 printf '%s\n' "$VERSION" > "${STAGE}/${NAME}/VERSION"

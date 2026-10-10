@@ -1,10 +1,16 @@
 locals {
   host_identity = try(var.foundation_identity.identities[var.settings.host_identity_name], null)
-  component     = "platform-db-sqlvm"
-  workload      = "data-sqlvm"
-  identities    = var.foundation_identity.identities
-  admin_login   = "ehsqladmin"
-  vm_name       = substr(module.naming.names.virtual_machine, 0, 64)
+  # Datadog Agent enrolment (observability 4.0.0): the obs-hosts Azure Policy attaches the DSV-reader identity
+  # (foundation-identity obs-host-agent) and the Datadog Agent VM Application to VMs tagged <datadog.tag_name> = "true"
+  # (ADR-0001 §3 rule 3 amendment); it stays in identity_ids here and gallery_application is ignored.
+  dd_tags           = var.settings.datadog.enabled ? { (var.settings.datadog.tag_name) = "true" } : {}
+  dd_identity_id    = var.settings.datadog.enabled ? try(var.foundation_identity.identities[var.settings.datadog.identity_key].id, null) : null
+  user_identity_ids = distinct(compact([try(local.host_identity.id, null), local.dd_identity_id]))
+  component         = "platform-db-sqlvm"
+  workload          = "data-sqlvm"
+  identities        = var.foundation_identity.identities
+  admin_login       = "ehsqladmin"
+  vm_name           = substr(module.naming.names.virtual_machine, 0, 64)
   # Windows computer names are limited to 15 characters.
   computer_name = substr(replace("${var.environment.name_prefix}sqlvm${var.environment.name}", "-", ""), 0, 15)
 }
@@ -70,7 +76,7 @@ resource "azurerm_windows_virtual_machine" "this" {
   encryption_at_host_enabled = false
   allow_extension_operations = true # observability installs the Datadog Agent / Fluent Bit extensions
   provision_vm_agent         = true
-  tags                       = merge(module.tags.tags, { service = "hello-dbadapter" })
+  tags                       = merge(module.tags.tags, { service = "hello-dbadapter" }, local.dd_tags)
 
   os_disk {
     caching              = "ReadWrite"
@@ -87,11 +93,15 @@ resource "azurerm_windows_virtual_machine" "this" {
   # System identity for the SQL IaaS extension; the user-assigned obs-dbm identity lets the host's Datadog Agent and
   # Fluent Bit read their secrets from Delinea DSV (DSV maps users by user-assigned identity resource id, ADR §14).
   identity {
-    type         = local.host_identity == null ? "SystemAssigned" : "SystemAssigned, UserAssigned"
-    identity_ids = local.host_identity == null ? null : [local.host_identity.id]
+    type         = length(local.user_identity_ids) == 0 ? "SystemAssigned" : "SystemAssigned, UserAssigned"
+    identity_ids = length(local.user_identity_ids) == 0 ? null : local.user_identity_ids
   }
 
   boot_diagnostics {} # managed storage account
+
+  lifecycle {
+    ignore_changes = [gallery_application] # Datadog Agent VM Application: owned by the obs-hosts policy
+  }
 }
 
 resource "azurerm_managed_disk" "data" {

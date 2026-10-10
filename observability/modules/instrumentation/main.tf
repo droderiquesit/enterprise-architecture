@@ -317,7 +317,7 @@ locals {
     ["init", "--out", local.secrets_dir, "--format", "env-yaml", "--env-yaml-name", local.env_yaml_name],
     flatten([for k in sort(keys(local.sidecar_secret_refs)) : ["--map", "${k}=${local.sidecar_secret_refs[k]}"]]),
   )
-  refresh_args = concat(local.fetch_args, ["--refresh", tostring(var.fetch_resources.refresh_s)])
+  refresh_args = concat(local.fetch_args, ["--refresh-seconds", tostring(var.fetch_resources.refresh_s), "--retry-seconds", "30"])
 
   # ---------------------------------------------------------------- Datadog serverless-init sidecar (ACA, default)
   # Traces (localhost:8126), DogStatsD (udp://localhost:8125: hello.* custom + runtime metrics) and, with
@@ -420,7 +420,7 @@ locals {
     )
     init_containers = local.aca_inits
     # Fluent Bit fallback on Dedicated profiles: the same reader as a regular REFRESHER container (dsv-fetch
-    # `init --refresh`); the sidecar fails fast until the file exists and is restarted by the platform.
+    # `init --refresh-seconds`); the sidecar fails fast until the file exists and is restarted by the platform.
     refresher_containers = [for c in local.aca_inits : merge(c, { args = local.refresh_args }) if c.needs_identity]
     app_container = {
       name          = local.container
@@ -547,7 +547,7 @@ locals {
     liveness_exec = ["agent", "health"]
   }]
   # Fluent Bit fallback (log_pipeline = fluent_bit_direct) + its dsv-fetch refresher (regular container with the
-  # group's identity, `init --refresh`); Fluent Bit fails fast while the include file is missing and is restarted.
+  # group's identity, `init --refresh-seconds`); Fluent Bit fails fast while the include file is missing and is restarted.
   aci_fluent_bit = [for _ in(local.uses_sidecar && var.architecture == "aci" ? [1] : []) : {
     name                         = "fluent-bit"
     image                        = var.telemetry.fluentbit.sidecar_image

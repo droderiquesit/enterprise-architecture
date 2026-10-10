@@ -182,7 +182,7 @@ variable "sidecar_resources" {
 }
 
 variable "fetch_resources" {
-  description = "CPU/memory of the dsv-fetch init containers (ACA cpu/memory, ACI aci_cpu/aci_mem) and the refresh interval of the Fluent Bit fallback's refresher container (`dsv-fetch init --refresh`)."
+  description = "CPU/memory of the dsv-fetch init containers (ACA cpu/memory, ACI aci_cpu/aci_mem) and the refresh interval of the Fluent Bit fallback's refresher container (`dsv-fetch init --refresh-seconds`)."
   type = object({
     cpu       = optional(number, 0.25)
     memory    = optional(string, "0.5Gi")

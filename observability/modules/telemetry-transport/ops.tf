@@ -48,7 +48,6 @@ locals {
 
   opw_fetch_args = concat(["init", "--out", "/dsv-secrets", "--format", "dotenv", "--dotenv-name", "opw.env"],
   flatten([for k in sort(keys(local.opw_secret_refs)) : ["--map", "${k}=${local.opw_secret_refs[k]}"]]))
-  refresher_stub = "import subprocess,sys,time\nwhile True:\n    rc = subprocess.call([sys.executable, '-I', '/opt/dsv-fetch/dsv_fetch.py'] + sys.argv[1:])\n    time.sleep(3600 if rc == 0 else 30)\n"
   opw_fetch = {
     name         = "dsv-fetch"
     image        = var.secrets.fetch_image
@@ -63,11 +62,10 @@ locals {
   op_endpoint_port = try(local.opv.external_endpoint.port, 24224)
 
   # ------------------------------------------------------------------ APM gateway (Datadog Agent)
-  apm_hosted       = var.apm_gateway.hosting == "container_app"
-  apm_name         = coalesce(var.names.apm_gateway, substr("${var.name_prefix}-apm", 0, 32))
-  apm_image        = coalesce(var.apm_gateway.image, "gcr.io/datadoghq/agent:${try(module.fleet.agent.version, "7.84.2")}")
-  apm_url          = local.apm_hosted ? (try(azapi_resource.apm_gateway[0].output.fqdn, null) == null ? null : "http://${azapi_resource.apm_gateway[0].output.fqdn}:8126") : var.apm_gateway.external_url
-  dsv_fetch_source = coalesce(var.dsv_fetch_source, "${path.module}/../../images/dsv-fetch/dsv_fetch.py")
+  apm_hosted = var.apm_gateway.hosting == "container_app"
+  apm_name   = coalesce(var.names.apm_gateway, substr("${var.name_prefix}-apm", 0, 32))
+  apm_image  = coalesce(var.apm_gateway.image, "gcr.io/datadoghq/agent:${try(module.fleet.agent.version, "7.84.2")}")
+  apm_url    = local.apm_hosted ? (try(azapi_resource.apm_gateway[0].output.fqdn, null) == null ? null : "http://${azapi_resource.apm_gateway[0].output.fqdn}:8126") : var.apm_gateway.external_url
   apm_dsv_config = jsonencode(merge(
     var.secrets.tenant == null ? {} : { DSV_TENANT = var.secrets.tenant },
     var.secrets.tld == null ? {} : { DSV_TLD = var.secrets.tld },
@@ -99,7 +97,16 @@ locals {
     { name = "DD_PROCESS_AGENT_ENABLED", value = "false" },
     { name = "DD_HEALTH_PORT", value = "5555" },
   ]
-  apm_command    = ["/bin/sh", "-c", "python3 -I /eh/dsv/dsv_fetch.py install --dest /opt/dsv-fetch/dsv-fetch --python /opt/datadog-agent/embedded/bin/python3 && cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml && export DD_HOSTNAME=\"$${HOSTNAME}\" && exec /bin/entrypoint.sh"]
+  # the static dsv-fetch binary (copied by the init container into the replica-scoped EmptyDir /dsv-bin) re-installs
+  # itself as root (the Agent user in the container), mode 0500 - the owner/permission rule of secret_backend_command
+  apm_command = ["/bin/sh", "-c", "/dsv-bin/dsv-fetch install --dest /opt/dsv-fetch/dsv-fetch && cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml && export DD_HOSTNAME=\"$${HOSTNAME}\" && exec /bin/entrypoint.sh"]
+  apm_fetch_install = {
+    name         = "dsv-fetch-install"
+    image        = var.secrets.fetch_image
+    args         = ["install", "--dest", "/dsv-bin/dsv-fetch"]
+    resources    = { cpu = 0.25, memory = "0.5Gi" }
+    volumeMounts = [{ volumeName = "dsv-bin", mountPath = "/dsv-bin" }]
+  }
   collector_tags = merge(var.default_tags, { env = var.datadog.env }, var.datadog.extra_tags)
 }
 
@@ -199,7 +206,9 @@ resource "azapi_resource" "op_worker" {
               { volumeName = "opw-data", mountPath = "/var/lib/observability-pipelines-worker" },
             ]
           }],
-          local.opw_refresh ? [merge(local.opw_fetch, { name = "dsv-fetch-refresher", command = ["/usr/bin/python3.13", "-I", "-c", local.refresher_stub] })] : [],
+          # dedicated profiles: init containers get no managed identity -> the binary keeps running and re-resolves every
+          # hour (after a failure every 30 s) with a fresh token (dsv-fetch 2.x `init --refresh-seconds`)
+          local.opw_refresh ? [merge(local.opw_fetch, { name = "dsv-fetch-refresher", args = concat(local.opw_fetch_args, ["--refresh-seconds", "3600", "--retry-seconds", "30"]) })] : [],
         )
         scale = {
           minReplicas = try(local.opw.min_replicas, 2)
@@ -263,7 +272,6 @@ resource "azapi_resource" "apm_gateway" {
         # non-secret files mounted as a Secret volume (ACA has no config-file volume type)
         secrets = [
           { name = "agent-config", value = local.apm_datadog_yaml },
-          { name = "dsv-fetch-py", value = file(local.dsv_fetch_source) },
           { name = "dsv-config", value = local.apm_dsv_config },
         ]
       }
@@ -271,7 +279,7 @@ resource "azapi_resource" "apm_gateway" {
         containers = [{
           name  = "datadog-agent"
           image = local.apm_image
-          # dsv-fetch becomes the Agent's secret backend (root-owned, 0500, embedded python3), the rendered
+          # dsv-fetch becomes the Agent's secret backend (root-owned, 0500, static binary), the rendered
           # datadog.yaml is installed, every replica reports under its own hostname, then the image entrypoint runs
           command   = local.apm_command
           resources = { cpu = var.apm_gateway.cpu, memory = var.apm_gateway.memory }
@@ -283,8 +291,10 @@ resource "azapi_resource" "apm_gateway" {
           volumeMounts = [
             { volumeName = "agent-config", mountPath = "/eh/agent" },
             { volumeName = "dsv", mountPath = "/eh/dsv" },
+            { volumeName = "dsv-bin", mountPath = "/dsv-bin" },
           ]
         }]
+        initContainers = [local.apm_fetch_install]
         scale = {
           minReplicas = var.apm_gateway.min_replicas
           maxReplicas = var.apm_gateway.max_replicas
@@ -292,7 +302,8 @@ resource "azapi_resource" "apm_gateway" {
         }
         volumes = [
           { name = "agent-config", storageType = "Secret", secrets = [{ secretRef = "agent-config", path = "datadog.yaml" }] },
-          { name = "dsv", storageType = "Secret", secrets = [{ secretRef = "dsv-fetch-py", path = "dsv_fetch.py" }, { secretRef = "dsv-config", path = "dsv.json" }] },
+          { name = "dsv", storageType = "Secret", secrets = [{ secretRef = "dsv-config", path = "dsv.json" }] },
+          { name = "dsv-bin", storageType = "EmptyDir" },
         ]
       }
     }
@@ -306,6 +317,10 @@ resource "azapi_resource" "apm_gateway" {
     precondition {
       condition     = var.container_apps != null && local.identity_id != null
       error_message = "apm_gateway.hosting = container_app needs container_apps.environment_id and collector_identity (DSV access of the Agent)."
+    }
+    precondition {
+      condition     = var.secrets.fetch_image != null
+      error_message = "The APM gateway Agent's secret backend is the dsv-fetch binary from its image: set secrets.fetch_image."
     }
   }
 }

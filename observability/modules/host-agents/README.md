@@ -122,13 +122,6 @@ Outputs: `mode`, `gallery`, `applications`, `agent_version`, `enrollment_tag`, `
 * VMSS: an `Automatic` or `Rolling` upgrade policy rolls the model change out. With `Manual` the change applies on
   instance upgrade or reimage.
 
-## `scripts/linux-install.sh.tftpl` (legacy, Batch only)
-
-This 3.x installer (Fluent Bit host service + embedded dsv-fetch) is no longer used by this module. It stays only
-because `observability/lab/telemetry-transport/batch.tf` (obs-telemetry-transport) renders it as the Azure Batch
-job-preparation `batch_log_setup` (ADR-0001 §13). Batch pools have no VM Applications in this lab. Its owner moves
-or retires it.
-
 ## Tests
 
 * `tests/hosts.tftest.hcl` (mock providers): policy mode by default; direct mode (VM assignments, VMSS blocks);

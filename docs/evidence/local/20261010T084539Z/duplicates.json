@@ -1,0 +1,35 @@
+{
+  "marker_counts": {
+    "hello-orders-api": 1,
+    "hello-catalog-api": 1,
+    "hello-inventory-api": 1,
+    "hello-partner-sim": 1,
+    "hello-worker": 1,
+    "hello-durable": 1,
+    "hello-bff": 1,
+    "hello-dbadapter-postgresql": 1
+  },
+  "marker_definitions": {
+    "hello-orders-api": "message startswith 'Order 87cd6290-fb3e-420d-8059-d3faf34c544d created'",
+    "hello-catalog-api": "'product upserted' sku=E2E-MARKER-CA5FC47E (direct POST /products)",
+    "hello-inventory-api": "'Reservation ... order 87cd6290-fb3e-420d-8059-d3faf34c544d'",
+    "hello-partner-sim": "'payment processed' order_id=87cd6290-fb3e-420d-8059-d3faf34c544d",
+    "hello-worker": "'notification recorded' order_id=87cd6290-fb3e-420d-8059-d3faf34c544d",
+    "hello-durable": "'OrderProcessing for 87cd6290-fb3e-420d-8059-d3faf34c544d completed'",
+    "hello-bff": "retry attempt 2 log of the single fault-window request trace 373f06361b474df5a78371754dc527e6",
+    "hello-dbadapter-postgresql": "'POST /roundtrip 200' of the browser roundtrip trace 000000000000000020007494936462e5"
+  },
+  "identical_events_total": 11,
+  "identical_structured_app_events": 0,
+  "identical_events_examples": [
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "      \n",
+    "      \n",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn"
+  ],
+  "identical_plaintext_events_more_often_at_intake_than_in_source_file": {},
+  "duplicate_span_ids": 0,
+  "spans_total": 390,
+  "log_events_total": 501
+}

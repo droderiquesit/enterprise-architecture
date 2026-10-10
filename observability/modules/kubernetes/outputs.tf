@@ -40,7 +40,7 @@ locals {
 }
 
 output "contract" {
-  description = "obs-kubernetes v1 contract (catalog/contracts/obs-kubernetes.v1.schema.json)."
+  description = "obs-kubernetes v2 contract (catalog/contracts/obs-kubernetes.v2.schema.json)."
   value       = local.contract
 }
 

@@ -1,3 +1,3 @@
-module github.com/lab/enterprise-architecture/observability/images/dsv-fetch
+module enterprise-hello/dsv-fetch
 
 go 1.24

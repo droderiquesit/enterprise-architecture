@@ -1,6 +1,6 @@
 """dsv-fetch CLI end-to-end (subprocess) against tools/secrets/mock_dsv.py and a fake Azure identity server.
 
-Conformance suite: each test runs against the Go binary and the legacy Python implementation (conftest `impl`)."""
+Conformance suite of the static Go binary (conftest `impl`; written against the retired 1.x Python implementation)."""
 
 from __future__ import annotations
 
@@ -338,15 +338,11 @@ def test_install_writes_0500_copy(tmp_path, dsv, identity):
     assert _mode(dest) == 0o500
     summary = json.loads(p.stderr.strip().splitlines()[-1])
     assert summary["dsv_fetch"] == "install" and summary["dest"] == str(dest) and summary["mode"] == "0500"
-    if IMPL.name == "python":
-        assert dest.read_text().splitlines()[0] == f"#!{_sys.executable} -I"
-        assert run(["install", "--dest", str(dest), "--python", "python3"], base_env()).returncode == 2
-    else:
-        # the binary installs a byte-identical copy of itself; --python is accepted and ignored (1.x compatibility)
-        assert dest.read_bytes() == open(IMPL.argv[0], "rb").read()
-        assert run(["install", "--dest", str(dest), "--python", "python3"], base_env()).returncode == 0
-        assert run(["install", "--dest", str(dest)], base_env()).returncode == 0  # re-install replaces the 0500 file
-        assert _mode(dest) == 0o500
+    # the binary installs a byte-identical copy of itself; --python is accepted and ignored (1.x compatibility)
+    assert dest.read_bytes() == open(IMPL.argv[0], "rb").read()
+    assert run(["install", "--dest", str(dest), "--python", "python3"], base_env()).returncode == 0
+    assert run(["install", "--dest", str(dest)], base_env()).returncode == 0  # re-install replaces the 0500 file
+    assert _mode(dest) == 0o500
     _agent_backend_via(dest, dsv, identity)
 
 

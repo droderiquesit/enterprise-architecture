@@ -12,12 +12,16 @@ resources:
     - repository: obs
       type: git
       name: Platform/observability-package          # <project>/<repo> hosting the package
-      ref: refs/tags/observability-v3.0.0
+      ref: refs/tags/observability-v4.0.0
 
 variables:
   environment: prod
   rootDir: $(Build.SourcesDirectory)/monitoring
-  packageDir: $(Build.SourcesDirectory)/monitoring/.vendor/observability-3.0.0
+  packageDir: $(Build.SourcesDirectory)/monitoring/.vendor/observability-4.0.0
+  # dsv-fetch 2.x release zip (img-dsv-fetch zip-package: static binaries + SHA256SUMS; no Python). Take URL + sha256
+  # from the img-dsv-fetch artifact record of the package's platform pipeline, or mirror the zip and pin its sha256.
+  dsvFetchUrl: https://stpackagesprod.blob.core.windows.net/packages/img-dsv-fetch/src-000000000000000000000000.zip
+  dsvFetchSha256: 0000000000000000000000000000000000000000000000000000000000000000
 
 stages:
   - stage: validate
@@ -48,7 +52,7 @@ stages:
           dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}   # self-hosted agent identity (DSV user)
           datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
           datadogAppKeyRef: dsv://monitoring/prod/datadog-app-key#value
-          dsvFetchPath: $(packageDir)/images/dsv-fetch/dsv_fetch.py
+          dsvFetch: {package_url: $(dsvFetchUrl), package_sha256: $(dsvFetchSha256)}   # agent identity reads the zip (Storage Blob Data Reader)
           pool: {name: self-hosted-monitoring}                    # managed identity required for DSV
           backendConfig:
             resource_group_name: rg-tfstate
@@ -70,8 +74,7 @@ stages:
           dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}   # self-hosted agent identity (DSV user)
           datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
           datadogAppKeyRef: dsv://monitoring/prod/datadog-app-key#value
-          # the plan artifact contains the root incl. its vendored package
-          dsvFetchPath: $(Pipeline.Workspace)/tfplan-prod/.vendor/observability-3.0.0/images/dsv-fetch/dsv_fetch.py
+          dsvFetch: {package_url: $(dsvFetchUrl), package_sha256: $(dsvFetchSha256)}
           pool: {name: self-hosted-monitoring}
 
   - stage: verify
@@ -92,6 +95,7 @@ stages:
               azureServiceConnection: sc-monitoring-prod
               dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}
               datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
+              dsvFetch: {package_url: $(dsvFetchUrl), package_sha256: $(dsvFetchSha256)}
               services:
                 - {name: monitoring-config, version: $(Build.BuildNumber), team: platform}
           - template: pipelines/templates/telemetry-verify.yml@obs
@@ -105,3 +109,4 @@ stages:
               dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}
               datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
               datadogAppKeyRef: dsv://monitoring/prod/datadog-app-key#value
+              dsvFetch: {package_url: $(dsvFetchUrl), package_sha256: $(dsvFetchSha256)}

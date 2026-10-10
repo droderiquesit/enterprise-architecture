@@ -55,6 +55,21 @@ suites:
     argv: [python3, -m, tools.ci, gates]
     inputs: ['**']
     cache: false
+  - id: obs-agent-sidecar
+    # observability 4.0.0 managed-runtime sidecars (ACI Datadog Agent, ACA serverless-init) in docker: opt-in like
+    # e2e (pulls the Agent / serverless-init images; needs a dsv-fetch binary - Go, DSV_FETCH_BIN or the image)
+    tier: integration
+    kind: pytest
+    scope: platform
+    toolchain: docker
+    paths: [observability/tests/transport/test_agent_sidecar.py]
+    needs_env: {E2E: '1'}
+    inputs: [observability/tests/transport/test_agent_sidecar.py, observability/tests/transport/dockerutil.py,
+             observability/modules/instrumentation/**, observability/modules/fleet-policy/**, observability/config/**,
+             observability/images/dsv-fetch/**, tools/secrets/mock_dsv.py]
+    covers: [obs-telemetry-transport]
+    cache: false
+    timeout_minutes: 30
   - id: obs-content
     tier: unit
     kind: pytest
@@ -64,7 +79,7 @@ suites:
     inputs: [observability/tests/content/**, observability/tools/**, observability/onboarding/**,
              observability/schemas/**, observability/config/**]
   - id: obs-extras-content
-    # optional 2.x monitoring content (observability/extras/content, not in the 3.0.0 package): its own suite/step,
+    # optional 2.x monitoring content (observability/extras/content, not in the 3.x/4.x package): its own suite/step,
     # never collected together with observability/tests (separate conftest.py, own tools/onboarding v1)
     tier: unit
     kind: pytest
@@ -73,6 +88,28 @@ suites:
     paths: [observability/extras/content/tests]
     inputs: [observability/extras/content/**]
     covers: [obs-monitoring]
+  - id: obs-host-agent-package
+    # VM Application installers (Linux setup in ubuntu:24.04 via docker when available, Windows PowerShell via pwsh
+    # when available, shellcheck) rendered by terraform console + the module's terraform test
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: terraform
+    paths: [observability/modules/host-agent-package/tests]
+    inputs: [observability/modules/host-agent-package/**, observability/modules/fleet-policy/**,
+             observability/modules/tagging/**, observability/config/**, observability/images/dsv-fetch/**]
+    covers: [obs-hosts]
+  - id: obs-kubernetes-chart
+    # modules/kubernetes layered values + dsv-fetch post-renderer rendered through the pinned Datadog Helm chart
+    # (helm template) - terraform + helm toolchain
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: helm
+    paths: [observability/tests/kubernetes]
+    inputs: [observability/tests/kubernetes/**, observability/modules/kubernetes/**, observability/modules/fleet-policy/**,
+             observability/modules/tagging/**, observability/config/**, versions.yaml]
+    covers: [obs-kubernetes]
   - id: obs-portability
     tier: unit
     kind: pytest
@@ -85,9 +122,13 @@ suites:
     kind: pytest
     scope: platform
     toolchain: python
-    paths: [observability/tests/transport]
+    # every transport test file except test_agent_sidecar.py (suite obs-agent-sidecar, docker opt-in)
+    paths: [observability/tests/transport/test_category_policy.py, observability/tests/transport/test_dbm_local.py,
+            observability/tests/transport/test_fluentbit.py, observability/tests/transport/test_observability_pipelines.py,
+            observability/tests/transport/test_otel_gateway.py]
     inputs: [observability/tests/transport/**, observability/images/**, observability/lab/telemetry-transport/**,
-             observability/config/**, observability/modules/**]
+             observability/lab/dbm/**, observability/lab/hosts/**, observability/config/**, observability/modules/**,
+             tools/secrets/mock_dsv.py]
     covers: [obs-telemetry-transport, obs-hosts, obs-dbm]
   - id: py-catalog
     tier: unit

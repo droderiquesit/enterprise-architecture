@@ -1,11 +1,10 @@
 """Fixtures: tools/secrets/mock_dsv.py (DSV API) + a fake Azure identity server (IMDS, IDENTITY_ENDPOINT, Entra token).
 
-Black-box conformance suite for BOTH implementations: every CLI test runs once per implementation
-(test id suffix [go] / [python]):
-  go      the static binary: $DSV_FETCH_BIN when set, else built once per session with ../build.sh --toolchain local
-          (skipped when neither a binary nor Go is available)
-  python  the legacy 1.x dsv_fetch.py (skipped once the file is removed)
-DSV_FETCH_IMPL=go|python|both (default both) restricts the run.
+Black-box conformance suite of the static Go binary (2.x). It was written against the 1.x Python dsv_fetch.py and
+proved the Go port identical (CLI, messages, exit codes, output bytes); 1.x was retired in package 4.0.0, so the suite
+runs the binary only (test id suffix [go]):
+  $DSV_FETCH_BIN when set (e.g. a release file), else built once per session with ../build.sh --toolchain local
+  (skipped when neither a binary nor Go is available).
 """
 
 from __future__ import annotations
@@ -22,7 +21,6 @@ import pytest
 HERE = Path(__file__).resolve().parent
 IMAGE_DIR = HERE.parent
 REPO = HERE.parents[3]
-SCRIPT = IMAGE_DIR / "dsv_fetch.py"
 sys.path.insert(0, str(REPO / "tools" / "secrets"))
 sys.path.insert(0, str(IMAGE_DIR))
 
@@ -70,15 +68,15 @@ def base_env(**extra: str) -> dict[str, str]:
 
 
 VERSION = (IMAGE_DIR / "VERSION").read_text().strip()
-_IMPLS = [i for i in ("go", "python") if os.environ.get("DSV_FETCH_IMPL", "both") in ("both", i)]
+_IMPLS = ["go"]
 
 
 class Impl:
-    """The implementation under test: `argv` prefix, `name` ("go" | "python") and the version it reports."""
+    """The implementation under test: `argv` prefix, `name` ("go") and the version it reports."""
 
-    name = "python"
-    argv: list[str] = [sys.executable, "-I", str(SCRIPT)]
-    version = "1.0.0"
+    name = "go"
+    argv: list[str] = []
+    version = VERSION
 
 
 IMPL = Impl()
@@ -107,15 +105,10 @@ def go_binary(tmp_path_factory) -> str | None:
 @pytest.fixture(params=_IMPLS, autouse=True)
 def impl(request) -> Impl:
     """Selects the implementation every `run()` in the test uses."""
-    if request.param == "go":
-        binary = request.getfixturevalue("go_binary")
-        if not binary:
-            pytest.skip("no dsv-fetch binary (set DSV_FETCH_BIN or install Go)")
-        IMPL.name, IMPL.argv, IMPL.version = "go", [binary], VERSION
-    else:
-        if not SCRIPT.exists():
-            pytest.skip("dsv_fetch.py (1.x) removed")
-        IMPL.name, IMPL.argv, IMPL.version = "python", [sys.executable, "-I", str(SCRIPT)], "1.0.0"
+    binary = request.getfixturevalue("go_binary")
+    if not binary:
+        pytest.skip("no dsv-fetch binary (set DSV_FETCH_BIN or install Go)")
+    IMPL.name, IMPL.argv, IMPL.version = "go", [binary], VERSION
     return IMPL
 
 

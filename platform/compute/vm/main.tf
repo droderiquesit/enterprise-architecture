@@ -70,6 +70,21 @@ resource "azurerm_network_interface" "this" {
   }
 }
 
+# ---------------------------------------------------------------- Datadog Agent enrolment (observability 4.0.0)
+# The obs-hosts Azure Policy (DeployIfNotExists) enrols every VM tagged <datadog.tag_name> = "true": it attaches the
+# per-environment DSV-reader identity (foundation-identity obs-host-agent, contract output) and the pinned Datadog
+# Agent VM Application (ADR-0001 §3 rule 3 amendment). This root keeps that identity in identity_ids (no drift) and
+# ignores gallery_application, so a platform apply never removes what the policy added.
+locals {
+  dd_enabled     = var.settings.datadog.enabled
+  dd_tags        = local.dd_enabled ? { (var.settings.datadog.tag_name) = "true" } : {}
+  dd_identity_id = local.dd_enabled ? try(local.identities[var.settings.datadog.identity_key].id, null) : null
+  host_identity_ids = {
+    linux   = compact([try(local.identities[local.linux.identity].id, null), local.dd_identity_id])
+    windows = compact([try(local.identities[local.windows.identity].id, null), local.dd_identity_id])
+  }
+}
+
 # ---------------------------------------------------------------- Linux
 resource "azurerm_linux_virtual_machine" "this" {
   #checkov:skip=CKV_AZURE_50:Extension operations must stay enabled: observability installs the Datadog Agent/Fluent Bit extensions and Entra ID login is an extension.
@@ -94,7 +109,7 @@ resource "azurerm_linux_virtual_machine" "this" {
   encryption_at_host_enabled = var.settings.encryption_at_host_enabled
   patch_mode                 = "AutomaticByPlatform"
   patch_assessment_mode      = "AutomaticByPlatform"
-  tags                       = local.tags
+  tags                       = merge(local.tags, local.dd_tags)
 
   disable_password_authentication = local.ssh_key != null
   dynamic "admin_ssh_key" {
@@ -107,7 +122,7 @@ resource "azurerm_linux_virtual_machine" "this" {
 
   identity {
     type         = var.settings.entra_login_enabled ? "SystemAssigned, UserAssigned" : "UserAssigned"
-    identity_ids = [local.identities[local.linux.identity].id]
+    identity_ids = local.host_identity_ids["linux"]
   }
 
   os_disk {
@@ -126,7 +141,9 @@ resource "azurerm_linux_virtual_machine" "this" {
   boot_diagnostics {} # managed storage account
 
   lifecycle {
-    ignore_changes = [custom_data] # cloud-init runs once; changes must not recreate the host
+    # cloud-init runs once (changes must not recreate the host); the Datadog Agent VM Application is owned by the
+    # obs-hosts policy
+    ignore_changes = [custom_data, gallery_application]
   }
 }
 
@@ -155,11 +172,11 @@ resource "azurerm_windows_virtual_machine" "this" {
   patch_mode                 = "AutomaticByPlatform"
   patch_assessment_mode      = "AutomaticByPlatform"
   timezone                   = "UTC"
-  tags                       = local.tags
+  tags                       = merge(local.tags, local.dd_tags)
 
   identity {
     type         = var.settings.entra_login_enabled ? "SystemAssigned, UserAssigned" : "UserAssigned"
-    identity_ids = [local.identities[local.windows.identity].id]
+    identity_ids = local.host_identity_ids["windows"]
   }
 
   os_disk {
@@ -176,6 +193,10 @@ resource "azurerm_windows_virtual_machine" "this" {
   }
 
   boot_diagnostics {}
+
+  lifecycle {
+    ignore_changes = [gallery_application] # Datadog Agent VM Application: owned by the obs-hosts policy
+  }
 }
 
 # ---------------------------------------------------------------- Entra ID login (access)

@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: platform pipeline.
-# Source: catalog/components.yaml (sha256 prefix d1645b571a5dbb3b)
+# Source: catalog/components.yaml (sha256 prefix 5e7a56a5d73fc5f6)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.

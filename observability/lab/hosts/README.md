@@ -27,10 +27,37 @@ no per-host Terraform and no run command or CustomScript.
 
 ## Before plan (pipeline)
 
-Stage the img-dsv-fetch release into `observability/lab/hosts/.dsv-fetch-release/`:
-`dsv-fetch-linux-amd64`, `dsv-fetch-linux-arm64`, `dsv-fetch-windows-amd64.exe` and `SHA256SUMS`. The steps are:
-download `artifacts["img-dsv-fetch"].package_url`, verify `package_sha256`, then unzip. The plan fails with a clear
-message when the files are missing. Terraform checks every binary against `SHA256SUMS`, and the host checks it again.
+The release is staged automatically: `pipelines/scripts/tf-prepare.sh` runs `tools/deploy/artifacts.py unpack`
+(registry `UNPACK`: `obs-hosts` <- `img-dsv-fetch`) before every plan and apply of this root. It resolves
+`artifacts["img-dsv-fetch"]` exactly like `tfvars` (recorded artifact of the platform pipeline, current source
+fingerprint), downloads `package_url` from the packages store with the deploy identity (Entra ID), verifies
+`package_sha256` and every line of the zip's `SHA256SUMS`, and extracts `dsv-fetch-linux-amd64`,
+`dsv-fetch-linux-arm64`, `dsv-fetch-windows-amd64.exe` and `SHA256SUMS` into `observability/lab/hosts/.dsv-fetch-release/`
+(git-ignored). The plan fails with a clear message when the files are missing (local runs: unzip the release there
+yourself). Terraform checks every binary against `SHA256SUMS` again, and the host checks it once more.
+
+## Apply identity RBAC (document for the environment owner)
+
+The pipeline apply identity of this root needs at the policy scope (`settings.policy.scope`):
+
+* **Resource Policy Contributor** - policy definitions, initiative, assignment, remediation tasks. Bootstrap grants
+  it at subscription scope (`apply_policy_contributor`, default true); a management-group scope needs it there.
+* **Role assignments** of the custom remediation role and **Managed Identity Operator** (on the DSV-reader identity
+  only) to the assignment's remediation identity. Bootstrap's *Role Based Access Control Administrator* with the
+  ABAC condition (`apply_rbac_mode = constrained`: never Owner / User Access Administrator / RBAC Administrator)
+  covers this at subscription scope.
+* **Role definition write** (`Microsoft.Authorization/roleDefinitions/write`) for the custom remediation role - **not**
+  in bootstrap's apply rights (Contributor excludes `Microsoft.Authorization/*/write`; RBAC Administrator only manages
+  assignments). Grant it once at the scope, e.g. **User Access Administrator** restricted by an Azure ABAC
+  role-assignment condition (delegated role assignment management: `roleAssignments/write|delete` only when
+  `@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId]` is Managed Identity Operator
+  `f1a07417-d97a-45cb-824c-7a7467783830` or the custom remediation role, and `PrincipalType` is `ServicePrincipal`),
+  or have an operator create the role definition with the same name/GUID before the first apply. Deliberately not
+  added to bootstrap: role-definition write plus role-assignment rights would let the apply identity mint and assign
+  an arbitrary custom role. Not verified in a live tenant (docs/known-limitations.md).
+* `settings.publisher_principal_ids`: the apply identity's **principal (object) id** - the package module grants it
+  Storage Blob Data Contributor on the package storage account so the apply can upload the VM Application packages
+  with Entra ID (no shared keys).
 
 ## Settings (`components.obs-hosts`)
 
@@ -59,14 +86,15 @@ Agent's secret backend is the dsv-fetch binary, which uses the `obs-host-agent` 
 read on the **ingest-only** API key only. Accepted risk: any process on an enrolled host can use the identity. See
 the module README.
 
-## Requests to platform owners
+## Platform roots (done in 4.0.0)
 
-The platform roots tag their VMs and VMSS with `datadog:enabled = "true"`. Then:
-
-* add `lifecycle { ignore_changes = [gallery_application] }`;
-* add the `obs-host-agent` identity to `identity_ids`, or ignore `identity`.
-
-This keeps their next apply from removing what the policy attached.
+`platform-vm`, `platform-vmss` and `platform-db-sqlvm` tag their VMs / VMSS with `datadog:enabled = "true"`
+(`settings.datadog.tag_name`, keep it equal to `settings.policy.enrollment_tag.name` here), keep the `obs-host-agent`
+identity from the foundation-identity contract in `identity_ids` and set
+`lifecycle { ignore_changes = [gallery_application] }` (azurerm has no such block on orchestrated / Flexible scale
+sets; the policy's partial PUT is invisible to Terraform there). Their next apply does not remove what the policy
+attached (ADR-0001 §3 rule 3 as amended). The uniform VMSS keeps `upgrade_mode = Manual` (no health probe; the
+deployment root's per-instance update rolls the model out); new instances get the application at once.
 
 ## Cost
 

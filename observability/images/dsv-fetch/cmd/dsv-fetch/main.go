@@ -6,7 +6,7 @@ package main
 import (
 	"os"
 
-	"github.com/lab/enterprise-architecture/observability/images/dsv-fetch/internal/dsvfetch"
+	"enterprise-hello/dsv-fetch/internal/dsvfetch"
 )
 
 // version is set at build time: -ldflags "-X main.version=<VERSION>".

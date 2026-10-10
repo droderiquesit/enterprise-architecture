@@ -15,6 +15,55 @@
 
 ## Version-specific notes
 
+### 4.0.0 (from 3.x) - MAJOR: Datadog Agent deployment v4
+
+Nothing in this release was deployed or verified live; plan carefully and roll out per environment.
+
+1. **dsv-fetch 2.x (static binary) is required.** Build/promote `img-dsv-fetch` 2.0.0 (image + release zip) first.
+   - Every `fetch_image` input must be the digest-pinned 2.x image (the 1.x image ran Python; 2.x has no shell and
+     no interpreter). Refresher containers use `init ... --refresh-seconds 3600` (there is no `--refresh`).
+   - Pipeline templates: replace `dsvFetchPath` by `dsvFetch: {package_url, package_sha256}` (the release zip; the
+     agent identity needs read on it, or `auth: none` for a SAS / mirror URL). Agents need `curl`, `unzip`, `sha256sum`.
+   - `modules/telemetry-transport`: remove `dsv_fetch_source`.
+2. **Kubernetes (`modules/kubernetes`)**:
+   - Remove `api_key` (incl. `mode = existing` and the synced Secret), `cluster_agent_secret_name`, `resources`,
+     `cluster_check_env`, `charts.agent_tag` and `op_worker.api_key_secret_name`. Sizing / tolerations / extra env move
+     to `values_overrides` (YAML documents, applied last; the secret path cannot be overridden).
+   - `op_worker.secret_env`: `NAME = "dsv://<path>#<element>"` instead of `{secret_name, key}`; the Worker's dsv-fetch
+     init container reads them (delete the dsv-k8s syncer Secrets afterwards).
+   - `dsv.identity_client_id` is required and `dsv.fetch_image` must be digest-pinned. **Federate** that identity with
+     `datadog/datadog`, `datadog/datadog-cluster-agent`, `datadog/datadog-cluster-checks` (or set
+     `dsv.cluster_checks_identity_client_id`, e.g. the DBM identity) and, with the Worker on the cluster,
+     `<op_worker.namespace>/opw-observability-pipelines-worker`.
+   - The deploy agent running `terraform apply` needs `/bin/sh` and `awk` (Helm post-renderer).
+   - The Agent image tag comes only from the fleet policy `agent.version`.
+   - Expected plan: in-place update of the `datadog` release (new init container, env, volumes); the Cluster Agent
+     now authenticates with the API key through dsv-fetch.
+3. **VMs / VMSS** (`modules/host-agents`): the run-command / CustomScript path is gone.
+   - Default `mode = policy`: inputs `package` (gallery, storage, publisher identity, `version`,
+     `dsv_fetch_release_dir` with the unzipped, sha256-verified release), `agent_identity` (per-environment DSV-reader
+     identity: read on the API key path only), `policy.scope` (subscription or management group).
+   - Tag hosts `datadog:enabled = "true"`. In the hosts' own roots: `lifecycle { ignore_changes = [gallery_application] }`
+     and keep the DSV-reader identity in `identity_ids` (or ignore `identity`) - ADR-0001 §3 rule 3 as amended.
+   - The apply identity needs Resource Policy Contributor, role-assignment rights (Managed Identity Operator + the
+     custom remediation role) and role-definition write at the scope; the publisher identity / apply identity
+     upload the packages with Entra ID (`publisher_principal_ids`).
+   - Bump `package_version` for every change (Agent pin, installer, dsv-fetch release) and promote the same value
+     dev -> test -> prod. Without Azure Policy rights: `mode = direct` (one gallery application assignment per VM).
+   - Expected plan: the old run commands / extensions and the Fluent Bit host service are **destroyed**; the policy
+     (re)installs the Agent via the VM Application (Linux and Windows; the Agent now collects the logs). VMSS with a
+     Manual upgrade policy get it on the next instance update.
+4. **ACI / Container Apps** (`modules/instrumentation`): ACI gets a Datadog Agent sidecar and Container Apps a
+   serverless-init sidecar that collects logs; the Fluent Bit sidecars are removed (fallback only with
+   `log_pipeline = fluent_bit_direct`). App deployment roots must pass the patch's `command` of the sidecars and the
+   transport contract's `aggregator` (Worker URL).
+5. **DBM**: with a cluster the checks run as cluster checks (`modules/dbm` `hosting = cluster_checks`); keep the ACI
+   Agent only without one. Password references must be DSV (`password_ref.kind = dsv`).
+6. **Fleet policy**: `logs.collector` per architecture replaces the global switch (`logs.node_collector` is still
+   honoured on aks / vm / vmss); host log files and Windows Event Log channels are `logs.hosts`.
+7. **Contracts**: consumers of `obs-kubernetes` read **v2** (`agent.logs_enabled` is true when the Agent collects).
+
+
 ### 3.0.0 (from 2.x) - MAJOR: collection + tagging package; monitoring content moves out
 
 **What the package now is.** It connects resources to Datadog and makes the tags consistent. It no longer manages

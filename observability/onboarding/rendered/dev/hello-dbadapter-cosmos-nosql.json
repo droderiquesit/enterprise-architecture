@@ -25,7 +25,7 @@
     "tier": "low"
   },
   "os_type": "linux",
-  "package_version": "3.0.0",
+  "package_version": "4.0.0",
   "presence_ref": "deploy-dbadapters.adapters.cosmos-nosql.url",
   "resources": [
     {

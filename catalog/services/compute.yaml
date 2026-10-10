@@ -44,7 +44,7 @@ services:
     azapi: []
     component: platform-vm
     implemented: true
-    notes: VM run command (app install) is owned by deploy-vm-workloads; Agent/Fluent Bit extensions by obs-hosts
+    notes: VM run command (app install) is owned by deploy-vm-workloads; the Datadog Agent VM Application + DSV-reader identity are attached by the obs-hosts Azure Policy (tag datadog:enabled; platform-vm ignores gallery_application)
   workload:
     exercised_by:
     - hello-worker (systemd)
@@ -59,12 +59,12 @@ services:
         method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.vm) for platform metrics
       logs:
         supported: 'yes'
-        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
-        notes: Agent log collection disabled
+        method: Datadog Agent (VM Application, obs-hosts Azure Policy) tails LOG_FILE_PATH (fleet policy logs.hosts + datadog:log_paths tag) -> Observability Pipelines Worker -> Datadog Logs
+        notes: no Fluent Bit on hosts (observability 4.0.0)
       traces: &id001
         supported: 'yes'
         method: OpenTelemetry SDK -> OTLP localhost:4317 -> Datadog Agent on the host
-        notes: Agent VM extension owned by obs-hosts
+        notes: Agent installed as an Azure VM Application by the obs-hosts policy (Linux hosts default to Datadog SSI, see telemetry-capabilities)
       dbm: &id002
         supported: n/a
         method: not applicable
@@ -140,8 +140,8 @@ services:
         method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.vm) for platform metrics
       logs:
         supported: 'yes'
-        method: Fluent Bit service on the Windows host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
-        notes: Agent log collection disabled
+        method: Datadog Agent (VM Application datadog-agent-windows, obs-hosts Azure Policy) tails LOG_FILE_PATH + Event Log (System, Application) -> Observability Pipelines Worker -> Datadog Logs
+        notes: no Fluent Bit on hosts (observability 4.0.0); dsv-fetch.exe secret backend
       traces: *id001
       dbm: *id002
       rum:
@@ -210,8 +210,8 @@ services:
         method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.compute_virtualmachinescalesets) for platform metrics
       logs:
         supported: 'yes'
-        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
-        notes: Agent log collection disabled
+        method: Datadog Agent (VM Application, obs-hosts Azure Policy) tails LOG_FILE_PATH (fleet policy logs.hosts + datadog:log_paths tag) -> Observability Pipelines Worker -> Datadog Logs
+        notes: no Fluent Bit on hosts (observability 4.0.0)
       traces: *id001
       dbm: *id002
       rum:
@@ -280,8 +280,8 @@ services:
         method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (azure.compute_virtualmachinescalesets) for platform metrics
       logs:
         supported: 'yes'
-        method: Fluent Bit service on the Linux host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
-        notes: Agent log collection disabled
+        method: Datadog Agent (VM Application, obs-hosts Azure Policy) tails LOG_FILE_PATH (fleet policy logs.hosts + datadog:log_paths tag) -> Observability Pipelines Worker -> Datadog Logs
+        notes: no Fluent Bit on hosts (observability 4.0.0)
       traces: *id001
       dbm: *id002
       rum:

@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# Enterprise Hello / portable Datadog package 4.0.0: Azure Batch node log setup (job preparation task; idempotent).
+# Batch is the only host type that keeps Fluent Bit (VM/VMSS use the Datadog Agent installed by the VM Application;
+# Batch pools have no VM Applications or policy-driven Agent). Nothing secret is rendered into this script, the job
+# definition or Terraform state (ADR-0001 §14):
+#  1. (only when Fluent Bit ships directly to Datadog, i.e. needs the API key) the static dsv-fetch release binary
+#     (img-dsv-fetch ${dsv_fetch_version}, zip from the packages store, sha256-pinned below) is downloaded with the pool
+#     identity (IMDS token for Azure Storage), verified (zip sha256 + SHA256SUMS) and installed root-only (0500) as
+#     /opt/eh-dsv-fetch/dsv-fetch; non-secret DSV settings in /etc/eh-dsv/dsv.json.
+#     With Observability Pipelines the node forwards to the in-VNet Worker and needs no key: no dsv-fetch at all.
+#  2. Fluent Bit ${fb_version} (pinned), config in /etc/fluent-bit-eh, unit fluent-bit-eh.service whose ExecStartPre
+#     writes /run/fluent-bit-eh/fluentbit-env.yaml (RuntimeDirectory, tmpfs, 0700 dir / 0400 file) for ${"$"}{DD_API_KEY}.
+# Node-only values come from the job preparation environment (deploy-jobs submit-batch-job.sh):
+#   EH_IDENTITY_CLIENT_ID - pool user-assigned identity (DSV user with read on the API key path; Storage Blob Data
+#                           Reader on the packages store, as for the svc-jobs package)
+#   EH_LOG_PATHS          - Batch task stdout files under $AZ_BATCH_NODE_ROOT_DIR
+set -euo pipefail
+FB_VERSION='${fb_version}'
+API_KEY_REF='${api_key_ref}'
+INSTALL_AGENT='false'
+CONFIGURE_AGENT='false'
+NEEDS_KEY='${fb_needs_key}'
+DSV_FETCH_URL='${dsv_fetch_package_url}'
+DSV_FETCH_SHA256='${dsv_fetch_package_sha256}'
+CONF_DIR=/etc/fluent-bit-eh
+STATE_DIR=/var/lib/fluent-bit-eh
+ENV_FILE=/etc/default/fluent-bit-eh
+DSV_DIR=/opt/eh-dsv-fetch
+DSV_CONF=/etc/eh-dsv/dsv.json
+IDENTITY_CLIENT_ID="$${EH_IDENTITY_CLIENT_ID:-}"
+log() { echo "[eh-batch-log-setup] $*"; }
+
+# ------------------------------------------------------------------ dsv-fetch (static binary, only when a key is needed)
+if [ "$NEEDS_KEY" = "true" ]; then
+  if ! [[ "$IDENTITY_CLIENT_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then log "EH_IDENTITY_CLIENT_ID (pool identity client id) missing or malformed: DSV cannot be read"; exit 3; fi
+  if [ -z "$DSV_FETCH_URL" ] || ! [[ "$DSV_FETCH_SHA256" =~ ^[0-9a-f]{64}$ ]]; then log "no dsv-fetch release package pinned (artifacts img-dsv-fetch package_url/package_sha256)"; exit 5; fi
+  case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) log "unsupported architecture $(uname -m)"; exit 2 ;; esac
+  want_version='${dsv_fetch_version}'
+  if [ ! -x "$DSV_DIR/dsv-fetch" ] || [ "$("$DSV_DIR/dsv-fetch" version 2>/dev/null || true)" != "$want_version" ]; then
+    stage_dsv=$(mktemp -d)
+    trap 'rm -rf "$stage_dsv"' EXIT
+    # pool identity -> Azure Storage token (IMDS, no proxy); the token is never printed
+    token=$(curl -fsS --noproxy '*' --retry 5 -H 'Metadata: true' \
+      "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fstorage.azure.com%2F&client_id=$IDENTITY_CLIENT_ID" \
+      | sed -n 's/.*"access_token" *: *"\([^"]*\)".*/\1/p')
+    [ -n "$token" ] || { log "no Azure Storage token for the pool identity (IMDS)"; exit 6; }
+    curl -fsS --retry 5 -o "$stage_dsv/dsv-fetch.zip" -H "Authorization: Bearer $token" -H 'x-ms-version: 2021-08-06' "$DSV_FETCH_URL"
+    unset token
+    echo "$DSV_FETCH_SHA256  $stage_dsv/dsv-fetch.zip" | sha256sum -c --status || { log "dsv-fetch package sha256 mismatch"; exit 7; }
+    if ! command -v unzip >/dev/null 2>&1; then
+      if command -v apt-get >/dev/null 2>&1; then DEBIAN_FRONTEND=noninteractive apt-get install -y -q unzip >/dev/null || { apt-get update -y -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q unzip; }
+      else (command -v dnf >/dev/null && dnf install -y unzip) || yum install -y unzip; fi
+    fi
+    unzip -q -o "$stage_dsv/dsv-fetch.zip" "dsv-fetch-linux-$arch" SHA256SUMS -d "$stage_dsv"
+    (cd "$stage_dsv" && sha256sum -c --status --ignore-missing SHA256SUMS && grep -q " dsv-fetch-linux-$arch\$" SHA256SUMS) || { log "SHA256SUMS check of dsv-fetch-linux-$arch failed"; exit 7; }
+    chmod 0500 "$stage_dsv/dsv-fetch-linux-$arch"
+    install -d -m 0755 "$DSV_DIR"
+    "$stage_dsv/dsv-fetch-linux-$arch" install --dest "$DSV_DIR/dsv-fetch"
+    rm -rf "$stage_dsv"; trap - EXIT
+    log "dsv-fetch $want_version installed ($DSV_DIR/dsv-fetch, root 0500)"
+  fi
+  install -d -m 0755 /etc/eh-dsv
+  cfg='${dsv_config_json}'
+  printf '%s\n' "$${cfg%\}},\"AZURE_CLIENT_ID\":\"$IDENTITY_CLIENT_ID\"}" > "$DSV_CONF.tmp"
+  chmod 0644 "$DSV_CONF.tmp"
+  if cmp -s "$DSV_CONF.tmp" "$DSV_CONF"; then rm -f "$DSV_CONF.tmp"; else mv "$DSV_CONF.tmp" "$DSV_CONF"; fi
+fi
+
+# ------------------------------------------------------------------ Fluent Bit package (pinned)
+installed=""
+if command -v dpkg-query >/dev/null 2>&1; then installed=$(dpkg-query -W -f='$${Version}' fluent-bit 2>/dev/null || true); fi
+if [ -z "$installed" ] && command -v rpm >/dev/null 2>&1; then installed=$(rpm -q --qf '%%{VERSION}' fluent-bit 2>/dev/null || true); fi
+if [ "$installed" != "$FB_VERSION" ]; then
+  . /etc/os-release
+  case "$ID" in
+    ubuntu|debian)
+      install -d -m 0755 /usr/share/keyrings
+      curl -fsSL --retry 5 https://packages.fluentbit.io/fluentbit.key | gpg --dearmor --yes -o /usr/share/keyrings/fluentbit-keyring.gpg
+      echo "deb [signed-by=/usr/share/keyrings/fluentbit-keyring.gpg] https://packages.fluentbit.io/$ID/$VERSION_CODENAME $VERSION_CODENAME main" > /etc/apt/sources.list.d/fluent-bit.list
+      apt-get update -y -q
+      apt-mark unhold fluent-bit >/dev/null 2>&1 || true
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -q --allow-downgrades "fluent-bit=$FB_VERSION"
+      apt-mark hold fluent-bit
+      ;;
+    rhel|centos|rocky|almalinux|ol|azurelinux|mariner)
+      rpm --import https://packages.fluentbit.io/fluentbit.key
+      major=$${VERSION_ID%%.*}
+      printf '[fluent-bit]\nname=Fluent Bit\nbaseurl=https://packages.fluentbit.io/centos/%s/\ngpgcheck=1\ngpgkey=https://packages.fluentbit.io/fluentbit.key\nenabled=1\n' "$major" > /etc/yum.repos.d/fluent-bit.repo
+      (command -v dnf >/dev/null && dnf install -y "fluent-bit-$FB_VERSION") || yum install -y "fluent-bit-$FB_VERSION"
+      ;;
+    *) log "unsupported distribution $ID"; exit 2 ;;
+  esac
+  log "fluent-bit $FB_VERSION installed"
+fi
+systemctl disable --now fluent-bit.service >/dev/null 2>&1 || true
+
+# ------------------------------------------------------------------ config (staged, dry-run, then swapped)
+SECRETS_FILE='${secrets_file}'
+stage=$(mktemp -d)
+install -d -m 0755 "$stage/lua"
+%{ for path, gz in files ~}
+echo '${gz}' | base64 -d | gunzip > "$stage/${path}"
+%{ endfor ~}
+umask 077
+# non-secret env only: the API key is written at service start by ExecStartPre into $SECRETS_FILE
+cat > "$stage/env" <<ENVEOF
+%{ for k, v in env ~}
+${k}=${v}
+%{ endfor ~}
+ENVEOF
+if [ -n "$${EH_LOG_PATHS:-}" ]; then sed -i "s|^FLB_LOG_PATHS=.*|FLB_LOG_PATHS=$EH_LOG_PATHS|" "$stage/env"; fi
+install -d -m 0750 "$STATE_DIR"
+dry=$(mktemp -d)
+printf 'env:\n  DD_API_KEY: dry-run-placeholder\n' > "$dry/fluentbit-env.yaml"
+sed "s|$SECRETS_FILE|$dry/fluentbit-env.yaml|" "$stage/fluent-bit.yaml" > "$stage/.dry-run.yaml"
+(set -a; . "$stage/env"; set +a; cd "$stage" && /opt/fluent-bit/bin/fluent-bit -c "$stage/.dry-run.yaml" --dry-run >/dev/null) || { log "fluent-bit dry-run failed; keeping previous config"; rm -rf "$stage" "$dry"; exit 4; }
+rm -rf "$dry" "$stage/.dry-run.yaml"
+
+restart=0
+if ! cmp -s "$stage/env" "$ENV_FILE"; then install -m 0600 "$stage/env" "$ENV_FILE"; restart=1; fi
+rm -f "$stage/env"
+if [ ! -d "$CONF_DIR" ] || ! diff -qr "$stage" "$CONF_DIR" >/dev/null 2>&1; then
+  rm -rf "$CONF_DIR.old"; [ -d "$CONF_DIR" ] && mv "$CONF_DIR" "$CONF_DIR.old"
+  mv "$stage" "$CONF_DIR"; chmod 0755 "$CONF_DIR"
+  restart=1
+else
+  rm -rf "$stage"
+fi
+chmod -R go-w "$CONF_DIR"
+
+unit=/etc/systemd/system/fluent-bit-eh.service
+cat > "$unit.tmp" <<UNIT
+[Unit]
+Description=Fluent Bit (Azure Batch task logs -> Datadog / Observability Pipelines Worker, portable Datadog package)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/fluent-bit-eh
+WorkingDirectory=/etc/fluent-bit-eh
+# tmpfs /run/fluent-bit-eh (0700, removed on stop); dsv-fetch writes the Fluent Bit env-yaml (0400) from DSV
+RuntimeDirectory=fluent-bit-eh
+RuntimeDirectoryMode=0700
+%{ if fb_needs_key ~}
+ExecStartPre=$DSV_DIR/dsv-fetch init --config $DSV_CONF --out /run/fluent-bit-eh --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=$API_KEY_REF
+%{ endif ~}
+ExecStart=/opt/fluent-bit/bin/fluent-bit -c /etc/fluent-bit-eh/fluent-bit.yaml
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+if ! cmp -s "$unit.tmp" "$unit"; then mv "$unit.tmp" "$unit"; systemctl daemon-reload; restart=1; else rm -f "$unit.tmp"; fi
+systemctl enable fluent-bit-eh.service >/dev/null
+if [ $restart -eq 1 ] || ! systemctl is-active --quiet fluent-bit-eh.service; then systemctl restart fluent-bit-eh.service; log "fluent-bit-eh (re)started"; else log "fluent-bit-eh unchanged"; fi

@@ -10,6 +10,11 @@ config_sha="$(python3 tools/config/render.py --env "$LAB_ENV" --component "$comp
 contracts_sha="$(python3 tools/contracts/materialize.py --env "$LAB_ENV" --component "$component" --source "$CONTRACTS_URL")"
 artifacts_sha="$(python3 tools/deploy/artifacts.py tfvars --component "$component" --metadata-dir "${ARTIFACT_METADATA_DIR:-/nonexistent}" \
   --recorded "${RECORDED_ARTIFACTS:-}" --records-url "${RECORDS_URL:-}" --selection "${SELECTION_FILE:-}" --env "$LAB_ENV")"
+# roots that consume a zip-package as files (tools/deploy/artifacts.py UNPACK, e.g. obs-hosts: the img-dsv-fetch release
+# zip -> <root>/.dsv-fetch-release, package sha256 + SHA256SUMS verified); no-op for every other root. The package
+# sha256 is part of artifacts_sha above, so the plan binding covers the extracted files.
+python3 tools/deploy/artifacts.py unpack --component "$component" --metadata-dir "${ARTIFACT_METADATA_DIR:-/nonexistent}" \
+  --recorded "${RECORDED_ARTIFACTS:-}" --records-url "${RECORDS_URL:-}" --selection "${SELECTION_FILE:-}" --env "$LAB_ENV"
 python3 - "$BINDING_FILE" "$config_sha" "$contracts_sha" "$artifacts_sha" <<'PY'
 import json, sys
 json.dump({"config_sha": sys.argv[2], "contracts_sha": sys.argv[3], "artifacts_sha": sys.argv[4]}, open(sys.argv[1], "w"), indent=2)

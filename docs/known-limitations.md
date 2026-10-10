@@ -229,9 +229,30 @@ key fallback) in their READMEs.
   serverless-init; it was verified locally with serverless-init 1.10.4 against the Worker's Datadog Agent source engine
   (Vector `datadog_agent` source) - not on Azure. Without `aggregator.agent_logs_url` in the transport contract the
   sidecars do not collect logs in observability_pipelines mode (no direct-to-intake bypass) and the plan warns.
-* Fluent Bit fallback (`log_pipeline = fluent_bit_direct`) on ACI and on Dedicated Container Apps profiles needs the
-  dsv-fetch refresher container in loop mode (`dsv-fetch init --refresh <seconds>`); the dsv-fetch 2.0.0 static binary
-  must provide that flag (the distroless static image has no shell to loop in).
+* Fluent Bit fallback (`log_pipeline = fluent_bit_direct`) on ACI and on Dedicated Container Apps profiles runs the
+  dsv-fetch refresher container in loop mode (`dsv-fetch init --refresh-seconds 3600 --retry-seconds 30`, implemented
+  and unit-tested in the 2.0.0 binary; the distroless image has no shell to loop in). Not run on Azure.
+* **Observability 4.0.0 items not verified on Azure** (implemented, mock-provider / local tests only):
+  * VM / VMSS policy remediation: the ARM template's `reference(..., 'Full')` + filter lambda over
+    `applicationProfile.galleryApplications` and the **partial PUT** (location + identity + application profile only)
+    on VMs and especially VMSS (uniform and Flexible) - Microsoft documents the pattern, but the effect on every
+    property of a real scale-set model, and the remediation of existing resources, are unverified. Policy evaluation
+    delay after create, remediation task throughput and `DoNotEnforce` behaviour are untested.
+  * Gallery publishing: VM Application versions sourcing their package blobs through the gallery's user-assigned
+    publisher identity (no SAS), replication to `replica_regions`, and the apply identity uploading with Entra ID.
+  * Windows hosts: the Agent MSI install by the VM Application, `dsv-fetch.exe install` ACLs (`icacls`
+    `/inheritance:r`, ddagentuser RX, SYSTEM / Administrators F) and the Agent accepting it as secret backend on a real
+    Windows Server - cross-compiled and `go vet`-ed only; the PowerShell installer runs under `pwsh` on Linux in tests.
+  * Apply identity rights for `obs-hosts`: role-definition write for the custom remediation role is not part of
+    bootstrap's apply rights (deliberately); an operator grants it or pre-creates the role (observability/lab/hosts/README.md).
+  * ACI: the `dsv-fetch-install` init container (uid 65532, distroless nonroot) writing into the group's `emptyDir`
+    (writability by a non-root uid on ACI), the Agent re-installing it as root, IMDS from the Agent container.
+  * Kubernetes: the Helm post-renderer (`postrender/dsv-fetch-init.sh`, POSIX sh + awk) on the real deploy agents and
+    with Helm versions other than the tested ones; DSV accepting AKS workload-identity tokens (`xms_mirid`).
+  * Batch: the job preparation task downloading the dsv-fetch release zip with the pool identity (only with
+    `fluent_bit_direct`).
+  * VMSS uniform keeps `upgrade_mode = Manual`: existing instances get the policy-added VM Application on the next
+    per-instance update / reimage (new instances at once).
 * Accepted risk - VM / VMSS host identity: the per-environment user-assigned identity that the Azure Policy attaches to
   tagged VMs / VMSS can be used by **any process on the host** (IMDS is reachable by every local process), not only by
   the Datadog Agent. It can read exactly one DSV path - the Datadog API key, an ingest-only credential (it can submit

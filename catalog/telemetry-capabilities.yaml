@@ -3,8 +3,8 @@
 # Validated by tools/catalog/validate.py (keys must cover architecture-matrix.yaml + database catalog entries).
 schema_version: 1
 verified_on: '2026-10-10'
-description: 'Authoritative telemetry collection path per signal for every compute architecture (catalog/architecture-matrix.yaml) and database family - observability package 3.0.0 defaults
-  (observability/config/fleet-policy.yaml): every log source (Datadog Agent where it runs, Fluent Bit edge collectors where it cannot, Azure Event Hubs) goes to the Datadog Observability
+description: 'Authoritative telemetry collection path per signal for every compute architecture (catalog/architecture-matrix.yaml) and database family - observability package 4.0.0 defaults
+  (observability/config/fleet-policy.yaml): one log collector per architecture (Datadog Agent on AKS nodes and Linux/Windows VM/VMSS hosts, Agent sidecar in ACI, serverless-init on Container Apps, diagnostic settings -> Event Hubs for App Service/Functions/Logic Apps; Fluent Bit only for fluent_bit_direct and Batch) goes to the Datadog Observability
   Pipelines Worker and from there to Datadog Logs; Datadog tracing libraries (Single Step Instrumentation on AKS and Linux hosts, library in the image + the in-VNet Datadog Agent APM
   gateway for managed runtimes) with the Continuous Profiler; Datadog Azure integration for platform metrics; diagnostic settings (obs-diagnostics) for platform logs; Agent DBM checks.
   log_pipeline = fluent_bit_direct / apm.mode = otel restore the 2.x paths. Per-resource matrix and unsupported combinations: docs/guides/datadog-fleet-collection.md.'
@@ -1270,10 +1270,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: 'Datadog Agent tails LOG_FILE_PATH (conf.d/eh-applogs.d) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: Fluent Bit
-          service -> forward -> Worker'
+        method: 'Datadog Agent (VM Application installed by the obs-hosts Azure Policy on hosts tagged datadog:enabled) tails the fleet policy logs.hosts files + the host''s
+          datadog:log_paths tag (LOG_FILE_PATH) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: the Agent tails files + Event Log -> Worker'
         owner: obs-hosts
-        duplicate_prevention: 'Fluent Bit not installed on Linux hosts in observability_pipelines mode (fluent_bit_direct: Fluent Bit service, Agent logs off)'
+        duplicate_prevention: 'no Fluent Bit on hosts (observability 4.0.0): the Agent is the only collector (fluent_bit_direct: the Agent ships directly to the Datadog intake)'
         datadog_limitation: none
       traces:
         supported: 'yes'
@@ -1330,9 +1330,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit service tails LOG_FILE_PATH -> forward -> Observability Pipelines Worker (fluent source) -> Datadog Logs
+        method: 'Agent tails files + Event Log -> Worker: Datadog Agent (VM Application datadog-agent-windows, dsv-fetch.exe secret backend) tails logs.hosts.windows.files (LOG_FILE_PATH)
+          and the Event Log channels System + Application -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs'
         owner: obs-hosts
-        duplicate_prevention: Datadog Agent logs_enabled=false on Windows hosts
+        duplicate_prevention: no Fluent Bit on Windows hosts (observability 4.0.0); the Agent is the only collector
         datadog_limitation: none
       traces:
         supported: 'yes'
@@ -1387,10 +1388,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: 'Datadog Agent tails LOG_FILE_PATH (conf.d/eh-applogs.d) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: Fluent Bit
-          service -> forward -> Worker'
+        method: 'Datadog Agent (VM Application installed by the obs-hosts Azure Policy on hosts tagged datadog:enabled) tails the fleet policy logs.hosts files + the host''s
+          datadog:log_paths tag (LOG_FILE_PATH) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: the Agent tails files + Event Log -> Worker'
         owner: obs-hosts
-        duplicate_prevention: 'Fluent Bit not installed on Linux hosts in observability_pipelines mode (fluent_bit_direct: Fluent Bit service, Agent logs off)'
+        duplicate_prevention: 'no Fluent Bit on hosts (observability 4.0.0): the Agent is the only collector (fluent_bit_direct: the Agent ships directly to the Datadog intake)'
         datadog_limitation: none
       traces:
         supported: 'yes'
@@ -1447,10 +1448,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: 'Datadog Agent tails LOG_FILE_PATH (conf.d/eh-applogs.d) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: Fluent Bit
-          service -> forward -> Worker'
+        method: 'Datadog Agent (VM Application installed by the obs-hosts Azure Policy on hosts tagged datadog:enabled) tails the fleet policy logs.hosts files + the host''s
+          datadog:log_paths tag (LOG_FILE_PATH) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: the Agent tails files + Event Log -> Worker'
         owner: obs-hosts
-        duplicate_prevention: 'Fluent Bit not installed on Linux hosts in observability_pipelines mode (fluent_bit_direct: Fluent Bit service, Agent logs off)'
+        duplicate_prevention: 'no Fluent Bit on hosts (observability 4.0.0): the Agent is the only collector (fluent_bit_direct: the Agent ships directly to the Datadog intake)'
         datadog_limitation: none
       traces:
         supported: 'yes'
@@ -1680,10 +1681,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: 'Datadog Agent tails LOG_FILE_PATH (conf.d/eh-applogs.d) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: Fluent Bit
-          service -> forward -> Worker'
+        method: 'Datadog Agent (VM Application installed by the obs-hosts Azure Policy on hosts tagged datadog:enabled) tails the fleet policy logs.hosts files + the host''s
+          datadog:log_paths tag (LOG_FILE_PATH) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: the Agent tails files + Event Log -> Worker'
         owner: obs-hosts
-        duplicate_prevention: 'Fluent Bit not installed on Linux hosts in observability_pipelines mode (fluent_bit_direct: Fluent Bit service, Agent logs off)'
+        duplicate_prevention: 'no Fluent Bit on hosts (observability 4.0.0): the Agent is the only collector (fluent_bit_direct: the Agent ships directly to the Datadog intake)'
         datadog_limitation: none
       traces:
         supported: 'yes'
@@ -1944,7 +1945,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: Fluent Bit service on the VM (SQL error log / app logs) owned by obs-hosts
+        method: Datadog Agent on the VM (VM Application, obs-hosts policy) can tail the SQL Server error log (files via the datadog:log_paths tag)
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: SQL Server error log collection optional
@@ -1956,7 +1957,7 @@ databases:
         datadog_limitation: spans show client-observed latency only
       dbm:
         supported: 'yes'
-        method: 'Datadog Agent installed on the VM (VM extension owned by obs-hosts/obs-dbm) running the sqlserver check (dbm: true)'
+        method: 'Datadog Agent installed on the VM (VM Application via the obs-hosts policy) or a cluster-checks runner (obs-kubernetes, obs-dbm hosting auto) running the sqlserver check (dbm: true)'
         owner: obs-dbm
         duplicate_prevention: one DBM check instance per database host; do not also enable the integration-only check
         datadog_limitation: self-hosted setup guide applies

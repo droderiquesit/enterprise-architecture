@@ -46,15 +46,14 @@ parameters:
   - name: datadogAppKeyRef
     type: string
     default: dsv://observability/prod/datadog-app-key#value
-  - name: dsvFetchPath           # dsv_fetch.py of the vendored package (default: <packageDir>/images/dsv-fetch/dsv_fetch.py)
-    type: string
-    default: ''
+  - name: dsvFetch               # dsv-fetch release zip {package_url, package_sha256, auth?} (templates/dsv-secrets.yml)
+    type: object
 
 steps:
   - template: dsv-secrets.yml
     parameters:
       dsv: ${{ parameters.dsv }}
-      dsvFetchPath: ${{ coalesce(parameters.dsvFetchPath, format('{0}/images/dsv-fetch/dsv_fetch.py', parameters.packageDir)) }}
+      dsvFetch: ${{ parameters.dsvFetch }}
       secrets: {DD_API_KEY: '${{ parameters.datadogApiKeyRef }}', DD_APP_KEY: '${{ parameters.datadogAppKeyRef }}'}
   - bash: |
       set -euo pipefail

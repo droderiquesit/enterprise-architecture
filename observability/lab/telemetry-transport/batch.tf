@@ -4,12 +4,15 @@
 # once per node per job, re-run after reboot). Batch pools have no VM extensions and platform-batch is upstream
 # of this root, so neither the pool start task nor platform-batch reference observability (no dependency cycle).
 #
-# The script is the host-agents Linux installer (pinned Fluent Bit from packages.fluentbit.io, systemd unit
-# fluent-bit-eh, linux-host config). Values only known on the node are passed as job-preparation environment:
+# The script is the Batch-specific installer scripts/batch-log-setup.sh.tftpl (package 4.0.0; pinned Fluent Bit from
+# packages.fluentbit.io, systemd unit fluent-bit-eh, linux-host config; no Datadog Agent - Batch is, with
+# log_pipeline = fluent_bit_direct, the only place Fluent Bit remains). Values only known on the node are passed as
+# job-preparation environment:
 #   EH_IDENTITY_CLIENT_ID - pool user-assigned identity (a DSV user with read on datadog-api-key)
 #   EH_LOG_PATHS          - "$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt" (Batch task stdout files)
-# No secret is rendered: dsv-fetch (embedded, stdlib Python) reads the Datadog API key from Delinea DSV on the node with
-# the pool identity (IMDS) when fluent-bit-eh starts (ExecStartPre -> tmpfs env-yaml file).
+# No secret is rendered. With Observability Pipelines the node forwards to the Worker and needs no key. Otherwise the
+# static dsv-fetch binary (release zip of artifacts["img-dsv-fetch"], sha256-pinned, downloaded with the pool identity)
+# reads the Datadog API key from Delinea DSV on the node (IMDS) when fluent-bit-eh starts (ExecStartPre -> tmpfs file).
 module "batch_flb" {
   source       = "../../modules/fluent-bit"
   count        = var.settings.batch_log_setup_enabled ? 1 : 0
@@ -34,34 +37,25 @@ module "batch_flb" {
 locals {
   batch_op          = try(module.transport.contract.aggregator.kind, "") == "observability_pipelines"
   batch_flb_version = "5.1.3"
-  batch_setup_script = var.settings.batch_log_setup_enabled ? templatefile("${path.module}/../../modules/host-agents/scripts/linux-install.sh.tftpl", {
-    fb_version            = local.batch_flb_version
-    agent_version         = "7.84.2" # unused: no Agent on Batch nodes
-    site                  = var.settings.datadog_site
-    api_key_ref           = local.api_key_ref
-    identity_client_id    = "" # EH_IDENTITY_CLIENT_ID at run time (pool identity)
-    dsv_config_json       = jsonencode(merge(local.dsv.tenant == null ? {} : { DSV_TENANT = local.dsv.tenant }, { DSV_TLD = coalesce(local.dsv.tld, "com"), DSV_BASE_URL = local.dsv.base_url, DSV_AUTH = "azure", DSV_TIMEOUT_SECONDS = "10" }))
-    dsv_fetch_gz          = base64gzip(file("${path.module}/../../images/dsv-fetch/dsv_fetch.py"))
-    install_agent         = "false"
-    configure_agent       = "false"
-    install_fluent_bit    = "true"
-    process_collection    = "false"
-    agent_tags            = ""
-    files                 = { for p, c in module.batch_flb[0].files : p => base64gzip(c) }
-    env                   = module.batch_flb[0].env
-    secrets_file          = module.batch_flb[0].secrets_env_file
-    fb_needs_key          = length(module.batch_flb[0].secret_env_names) > 0
-    agent_logs            = "false"
-    agent_logs_conf       = ""
-    op_logs_url           = ""
-    apm_ssi               = "false"
-    ssi_libraries         = ""
-    remote_updates        = "false"
-    remote_configuration  = "false"
-    apm_ignore_resources  = ""
-    agent_msi_sha256      = ""
-    fluent_bit_msi_sha256 = ""
-    setup_revision        = 1
+  batch_needs_key   = var.settings.batch_log_setup_enabled ? length(module.batch_flb[0].secret_env_names) > 0 : false
+  # static dsv-fetch release (img-dsv-fetch zip-package: dsv-fetch-linux-{amd64,arm64}, dsv-fetch-windows-amd64.exe,
+  # SHA256SUMS); downloaded by the node with the pool identity only when Fluent Bit needs the API key
+  batch_dsv_fetch = {
+    url     = try(var.artifacts[var.settings.fetch_artifact].package_url, null)
+    sha256  = try(var.artifacts[var.settings.fetch_artifact].package_sha256, null)
+    version = try(coalesce(var.artifacts[var.settings.fetch_artifact].version, ""), "")
+  }
+  batch_setup_script = var.settings.batch_log_setup_enabled ? templatefile("${path.module}/scripts/batch-log-setup.sh.tftpl", {
+    fb_version               = local.batch_flb_version
+    api_key_ref              = local.api_key_ref
+    dsv_config_json          = jsonencode(merge(local.dsv.tenant == null ? {} : { DSV_TENANT = local.dsv.tenant }, { DSV_TLD = coalesce(local.dsv.tld, "com"), DSV_BASE_URL = local.dsv.base_url, DSV_AUTH = "azure", DSV_TIMEOUT_SECONDS = "10" }))
+    dsv_fetch_package_url    = local.batch_dsv_fetch.url == null ? "" : local.batch_dsv_fetch.url
+    dsv_fetch_package_sha256 = local.batch_dsv_fetch.sha256 == null ? "" : local.batch_dsv_fetch.sha256
+    dsv_fetch_version        = split("+", local.batch_dsv_fetch.version)[0]
+    files                    = { for p, c in module.batch_flb[0].files : p => base64gzip(c) }
+    env                      = module.batch_flb[0].env
+    secrets_file             = module.batch_flb[0].secrets_env_file
+    fb_needs_key             = local.batch_needs_key
   }) : null
 
   batch_log_setup = var.settings.batch_log_setup_enabled ? {

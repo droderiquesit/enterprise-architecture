@@ -25,7 +25,7 @@
     "tier": "critical"
   },
   "os_type": "linux",
-  "package_version": "3.0.0",
+  "package_version": "4.0.0",
   "presence_ref": "obs-telemetry-transport.otlp.grpc_endpoint",
   "resources": [
     {

@@ -84,6 +84,7 @@ variables {
       "hello-functions"     = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.ManagedIdentity/userAssignedIdentities/hello-functions", principal_id = "aaaaaaaa-0000-0000-0000-000000000007", client_id = "bbbbbbbb-0000-0000-0000-000000000007", name = "hello-functions" }
       "hello-jobs"          = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.ManagedIdentity/userAssignedIdentities/hello-jobs", principal_id = "aaaaaaaa-0000-0000-0000-000000000008", client_id = "bbbbbbbb-0000-0000-0000-000000000008", name = "hello-jobs" }
       "obs-dbm"             = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-id-dev-sec/providers/Microsoft.ManagedIdentity/userAssignedIdentities/obs-dbm", principal_id = "aaaaaaaa-0000-0000-0000-000000000009", client_id = "bbbbbbbb-0000-0000-0000-000000000009", name = "obs-dbm" }
+      "obs-host-agent"      = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-obs-host-agent", principal_id = "00000000-0000-0000-0001-000000000017", client_id = "00000000-0000-0000-0002-000000000017", name = "id-obs-host-agent" }
     }
   }
 }
@@ -106,6 +107,10 @@ run "defaults" {
   assert {
     condition     = alltrue([for c in azurerm_network_interface.this.ip_configuration : c.public_ip_address_id == null])
     error_message = "No public IP on the SQL VM."
+  }
+  assert {
+    condition     = contains(azurerm_windows_virtual_machine.this.identity[0].identity_ids, var.foundation_identity.identities["obs-host-agent"].id) && contains(azurerm_windows_virtual_machine.this.identity[0].identity_ids, var.foundation_identity.identities["obs-dbm"].id) && azurerm_windows_virtual_machine.this.tags["datadog:enabled"] == "true"
+    error_message = "Datadog enrolment (obs-hosts policy): tagged datadog:enabled, keeps the DSV-reader identity obs-host-agent next to obs-dbm."
   }
   assert {
     condition     = azurerm_dev_test_global_vm_shutdown_schedule.this[0].daily_recurrence_time == "1900"

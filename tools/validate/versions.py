@@ -10,6 +10,9 @@ For every Terraform root in the registry (that exists on disk) and every module 
   - roots have a committed .terraform.lock.hcl whose provider versions equal versions.yaml versions (roots without
     providers, e.g. foundation/secrets, have none: terraform init creates no lock file for built-ins)
 Registry roots that do not exist yet are reported (failure only with --strict).
+Image pins shared with the observability fleet policy (single Agent pin, package 4.0.0):
+  - images.datadog_agent           == observability/config/fleet-policy.yaml agent.image:agent.version
+  - images.datadog_serverless_init == fleet-policy agent.serverless_init.image:agent.serverless_init.version
 """
 
 from __future__ import annotations
@@ -88,6 +91,30 @@ def check_dir(repo: Path, rel: str, pins: dict, is_root: bool, owner: str) -> tu
     return errors, notes
 
 
+FLEET_POLICY = "observability/config/fleet-policy.yaml"
+
+
+def check_fleet_pins(repo: Path, images: dict) -> list[str]:
+    """versions.yaml images.* that the fleet policy also pins must be identical (one Agent version for the fleet)."""
+    path = repo / FLEET_POLICY
+    if not path.exists():
+        return []
+    agent = (yaml.safe_load(path.read_text()) or {}).get("agent") or {}
+    errors = []
+    pairs = {
+        "datadog_agent": (agent.get("image"), agent.get("version")),
+        "datadog_serverless_init": ((agent.get("serverless_init") or {}).get("image"), (agent.get("serverless_init") or {}).get("version")),
+    }
+    for key, (image, version) in pairs.items():
+        want = f"{image}:{version}" if image and version else None
+        have = images.get(key)
+        if want is None:
+            errors.append(f"{FLEET_POLICY}: agent pin for versions.yaml images.{key} missing")
+        elif have != want:
+            errors.append(f"versions.yaml images.{key} '{have}' != {FLEET_POLICY} '{want}'")
+    return errors
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", default=".")
@@ -114,6 +141,7 @@ def main(argv=None) -> int:
         e, _ = check_dir(repo, rel, pins, False, rel.split("/")[0])
         errors += e
         checked += 1
+    errors += check_fleet_pins(repo, versions.get("images") or {})
     for e in errors:
         print(f"ERROR: {e}")
     if missing:

@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: applications pipeline.
-# Source: catalog/components.yaml (sha256 prefix d1645b571a5dbb3b)
+# Source: catalog/components.yaml (sha256 prefix 5e7a56a5d73fc5f6)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -533,6 +533,47 @@ stages:
           secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
+  - stage: P_obs_hosts
+    displayName: plan obs-hosts
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_hosts'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: obs-hosts
+          componentPath: observability/lab/hosts
+          artifacts: &id013 []
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: false
+          settings: ${{ parameters.settings }}
+          recordedArtifacts: &id014
+            - img-dsv-fetch
+  - stage: C_obs_hosts
+    displayName: apply obs-hosts
+    dependsOn:
+      - Select
+      - P_obs_hosts
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_hosts.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_hosts.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_hosts'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: obs-hosts
+          componentPath: observability/lab/hosts
+          artifacts: *id013
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: false
+          settings: ${{ parameters.settings }}
+          recordedArtifacts: *id014
+          dryRun: ${{ parameters.dryRun }}
   - stage: P_deploy_core_aks
     displayName: plan deploy-core-aks
     dependsOn:
@@ -548,7 +589,7 @@ stages:
         parameters:
           component: deploy-core-aks
           componentPath: applications/deployments/core-aks
-          artifacts: &id013
+          artifacts: &id015
             - svc-bff
             - svc-orders-api
             - svc-catalog-api
@@ -571,47 +612,7 @@ stages:
         parameters:
           component: deploy-core-aks
           componentPath: applications/deployments/core-aks
-          artifacts: *id013
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          secretEnv: false
-          settings: ${{ parameters.settings }}
-          dryRun: ${{ parameters.dryRun }}
-  - stage: P_obs_hosts
-    displayName: plan obs-hosts
-    dependsOn:
-      - Select
-      - Validate
-      - Security
-      - P_deploy_vm_workloads
-      - C_deploy_vm_workloads
-    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_obs_hosts'], 'true'), and(or(in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_deploy_vm_workloads.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_deploy_vm_workloads'], 'true'))), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-plan.yml
-        parameters:
-          component: obs-hosts
-          componentPath: observability/lab/hosts
-          artifacts: &id014 []
-          timeoutMinutes: 60
-          environment: ${{ parameters.environment }}
-          secretEnv: false
-          settings: ${{ parameters.settings }}
-  - stage: C_obs_hosts
-    displayName: apply obs-hosts
-    dependsOn:
-      - Select
-      - P_obs_hosts
-    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
-    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_obs_hosts.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_obs_hosts.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_obs_hosts'], 'true'))
-    pool: *id001
-    jobs:
-      - template: ../templates/terraform-apply.yml
-        parameters:
-          component: obs-hosts
-          componentPath: observability/lab/hosts
-          artifacts: *id014
+          artifacts: *id015
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -640,7 +641,7 @@ stages:
         parameters:
           component: deploy-durable
           componentPath: applications/deployments/durable
-          artifacts: &id015
+          artifacts: &id016
             - svc-durable
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
@@ -660,7 +661,7 @@ stages:
         parameters:
           component: deploy-durable
           componentPath: applications/deployments/durable
-          artifacts: *id015
+          artifacts: *id016
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -685,7 +686,7 @@ stages:
         parameters:
           component: deploy-frontend
           componentPath: applications/deployments/frontend
-          artifacts: &id016
+          artifacts: &id017
             - svc-frontend
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
@@ -705,7 +706,7 @@ stages:
         parameters:
           component: deploy-frontend
           componentPath: applications/deployments/frontend
-          artifacts: *id016
+          artifacts: *id017
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -734,14 +735,14 @@ stages:
         parameters:
           component: deploy-jobs
           componentPath: applications/deployments/jobs
-          artifacts: &id017
+          artifacts: &id018
             - svc-jobs
             - svc-traffic
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
           settings: ${{ parameters.settings }}
-          recordedArtifacts: &id018
+          recordedArtifacts: &id019
             - img-dsv-fetch
   - stage: C_deploy_jobs
     displayName: apply deploy-jobs
@@ -757,12 +758,12 @@ stages:
         parameters:
           component: deploy-jobs
           componentPath: applications/deployments/jobs
-          artifacts: *id017
+          artifacts: *id018
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
           settings: ${{ parameters.settings }}
-          recordedArtifacts: *id018
+          recordedArtifacts: *id019
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_diagnostics
     displayName: plan obs-diagnostics
@@ -802,7 +803,7 @@ stages:
         parameters:
           component: obs-diagnostics
           componentPath: observability/lab/diagnostics
-          artifacts: &id019 []
+          artifacts: &id020 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -820,7 +821,7 @@ stages:
         parameters:
           component: obs-diagnostics
           componentPath: observability/lab/diagnostics
-          artifacts: *id019
+          artifacts: *id020
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -864,7 +865,7 @@ stages:
         parameters:
           component: obs-monitoring
           componentPath: observability/extras/content/lab/monitoring
-          artifacts: &id020 []
+          artifacts: &id021 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -882,7 +883,7 @@ stages:
         parameters:
           component: obs-monitoring
           componentPath: observability/extras/content/lab/monitoring
-          artifacts: *id020
+          artifacts: *id021
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -900,8 +901,8 @@ stages:
         - P_deploy_partner_sim
         - P_deploy_specialized
         - P_deploy_vm_workloads
-        - P_deploy_core_aks
         - P_obs_hosts
+        - P_deploy_core_aks
         - P_deploy_durable
         - P_deploy_frontend
         - P_deploy_jobs
@@ -915,14 +916,14 @@ stages:
         - C_deploy_partner_sim
         - C_deploy_specialized
         - C_deploy_vm_workloads
-        - C_deploy_core_aks
         - C_obs_hosts
+        - C_deploy_core_aks
         - C_deploy_durable
         - C_deploy_frontend
         - C_deploy_jobs
         - C_obs_diagnostics
         - C_obs_monitoring
-      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_hosts.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_hosts.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.P_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_hosts.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aca.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_dbadapters.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_logicapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_partner_sim.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_specialized.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_vm_workloads.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_hosts.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_core_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_durable.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_frontend.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_deploy_jobs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_diagnostics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_monitoring.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
       environment: ${{ parameters.environment }}
       dryRun: ${{ parameters.dryRun }}
       settings: ${{ parameters.settings }}
@@ -938,8 +939,8 @@ stages:
       - C_deploy_partner_sim
       - C_deploy_specialized
       - C_deploy_vm_workloads
-      - C_deploy_core_aks
       - C_obs_hosts
+      - C_deploy_core_aks
       - C_deploy_durable
       - C_deploy_frontend
       - C_deploy_jobs
@@ -968,8 +969,8 @@ stages:
       - P_deploy_partner_sim
       - P_deploy_specialized
       - P_deploy_vm_workloads
-      - P_deploy_core_aks
       - P_obs_hosts
+      - P_deploy_core_aks
       - P_deploy_durable
       - P_deploy_frontend
       - P_deploy_jobs
@@ -995,8 +996,8 @@ stages:
       - P_deploy_partner_sim
       - P_deploy_specialized
       - P_deploy_vm_workloads
-      - P_deploy_core_aks
       - P_obs_hosts
+      - P_deploy_core_aks
       - P_deploy_durable
       - P_deploy_frontend
       - P_deploy_jobs
@@ -1010,8 +1011,8 @@ stages:
       - C_deploy_partner_sim
       - C_deploy_specialized
       - C_deploy_vm_workloads
-      - C_deploy_core_aks
       - C_obs_hosts
+      - C_deploy_core_aks
       - C_deploy_durable
       - C_deploy_frontend
       - C_deploy_jobs

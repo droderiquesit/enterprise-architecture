@@ -25,7 +25,8 @@ kubernetes:
   aks_default_version: "1.36"   # platform/compute/aks settings default; kubeconform schemas 1.36.0
 images:
   fluent_bit: "fluent/fluent-bit:5.1.3"
-  datadog_agent: "gcr.io/datadoghq/agent:7.84.2"
+  datadog_agent: "gcr.io/datadoghq/agent:7.84.2"           # = observability/config/fleet-policy.yaml agent.image:agent.version
+  datadog_serverless_init: "datadog/serverless-init:1.10.4"  # = fleet-policy agent.serverless_init.image:version (tools/validate/versions.py)
   ddot_collector: "datadog/ddot-collector:7.84.2"
   otel_collector_contrib: "otel/opentelemetry-collector-contrib:0.162.0"
   # img-dsv-fetch (observability/images/dsv-fetch, static Go binary; deployed by recorded digest, never by tag).

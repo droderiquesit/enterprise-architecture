@@ -60,6 +60,11 @@ Rules:
    `instrumentation` contract (env vars, sidecar spec, secret *references*); app roots consume it.
 3. VM extensions (Datadog Agent, Fluent Bit) are separate ARM resources owned by observability.
    Platform VM roots set `lifecycle { ignore_changes = [...] }` on nothing observability touches.
+   *Amended 2026-10-10 (observability 4.0.0, section 13):* the observability Azure Policy (`obs-hosts`,
+   DeployIfNotExists) may modify the VM / VMSS model's `applicationProfile.galleryApplications` and add one
+   user-assigned identity (the DSV-reader `obs-host-agent`) on hosts tagged `datadog:enabled = "true"`; platform VM /
+   VMSS roots tag their hosts, keep that identity in `identity_ids` (it is a `foundation-identity` contract output) and
+   set `lifecycle { ignore_changes = [gallery_application] }`.
 4. Diagnostic settings are owned by observability (`obs-diagnostics`) only.
    Platform roots must not create `azurerm_monitor_diagnostic_setting`.
 5. Lab-shared Terraform modules live in `foundation/modules/` (naming, tags, private endpoint).
@@ -288,6 +293,33 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
   in `observability/extras/content` (component `obs-monitoring`, `optional: true`, in no built-in profile). Contract
   `obs-telemetry-transport` is **v3** (formalises `aggregator.{kind, pipeline_id, agent_logs_url}`, `env.fleet`,
   `env.apm_gateway`; v2 kept for 2.x producers / rollback). Secrets stay in Delinea DSV (section 14).
+- 2026-10-10: **Observability package 4.0.0 (Datadog Agent deployment v4)**, amending sections 3, 10 and 14:
+  - **One application-log collector per architecture** (fleet policy `architectures.<arch>.logs.collector`): Datadog
+    Agent on AKS nodes and VM/VMSS hosts (Linux files; Windows files + Event Log channels), Datadog Agent **sidecar** in
+    ACI container groups (traces `localhost:8126`, DogStatsD `localhost:8125`, logs tailed from the shared `emptyDir`
+    file), Datadog **serverless-init** on Container Apps (`DD_LOGS_ENABLED=true`, tails `DD_SERVERLESS_LOG_PATH`), Azure
+    diagnostic settings -> Event Hubs for App Service / Functions / Logic Apps. **Fluent Bit remains only** for
+    `log_pipeline = fluent_bit_direct` (fallback) and on **Azure Batch** nodes (job preparation task, amendment above;
+    the Batch installer is now `lab/telemetry-transport/scripts/batch-log-setup.sh.tftpl`). The Observability Pipelines
+    Worker stays the central log hop.
+  - **dsv-fetch is a static Go binary** (`img-dsv-fetch` 2.0.0; distroless image, release zip with
+    `dsv-fetch-linux-{amd64,arm64}`, `dsv-fetch-windows-amd64.exe`, `SHA256SUMS`); the 1.x Python `dsv_fetch.py` and
+    every embedding of it are removed. Containers copy it with an init container (`install --dest`) and the Agent uses
+    it as `secret_backend_command` (`agent-backend`); refresher containers run `init --refresh-seconds 3600`; hosts,
+    Batch nodes and pipelines take the sha256-pinned release zip.
+  - **Kubernetes**: the Datadog Helm chart with **layered values** (`values/base.yaml` + a computed fleet layer +
+    per-cluster `values_overrides`) and a **Helm post-renderer** that injects the dsv-fetch init container (deploy agents
+    need `sh` and `awk`). One secret path: node Agent, Cluster Agent and cluster-checks runners all resolve
+    `ENC[dsv://...]` with the binary (no synced Secret, no `cluster_agent_secret_name`, no unauthenticated DCA).
+  - **VM / VMSS**: no per-host Terraform, no run command / CustomScript: Azure Policy DeployIfNotExists (subscription or
+    management-group scope, least-privilege custom remediation role) enrols hosts tagged `datadog:enabled` with the
+    per-environment DSV-reader identity and the pinned **Azure VM Application** (Compute Gallery, Linux + Windows);
+    `package_version` is promoted dev -> test -> prod; Fleet Automation for inventory only (remote updates off).
+    Section 3 rule 3 amended accordingly.
+  - **DBM**: `obs-dbm` `settings.hosting = auto` runs the checks as **cluster checks** when a cluster exists (platform-aks
+    / obs-kubernetes, runners' workload identity `obs-dbm`); the separate ACI DBM Agent only when there is none.
+  - Contract `obs-kubernetes` is **v2** (actual outputs incl. `logs_enabled` per fleet policy; v1 kept for rollback).
+    Nothing here has been deployed or verified live (status: implemented / locally verified).
 
 ## 14. Secret management: Delinea DevOps Secrets Vault (DSV)
 
@@ -323,9 +355,11 @@ no write-only form (each case listed in `docs/known-limitations.md`).
 - Consumers resolve references at runtime:
   - application code: `hello_common` (Python) and `Hello.Common` (.NET) resolve any env var whose value starts with
     `dsv://` at start-up (cached, refreshed, never logged);
-  - containers without our code (Fluent Bit, OTel collector, Datadog Agent): the `hello-dsv-fetch` helper runs as an
-    **init container** (ACA, ACI, AKS) writing files to an in-memory volume, or as the Datadog Agent
-    `secret_backend_command` (VM/VMSS hosts, AKS agent);
+  - containers without our code (Fluent Bit, OTel collector, Datadog Agent, serverless-init): the static `dsv-fetch`
+    binary (`img-dsv-fetch` 2.x, Go, no interpreter) runs as an **init container** (ACA, ACI, AKS) writing files to an
+    in-memory volume, or is copied by one and used as the Datadog Agent `secret_backend_command` (AKS node Agent,
+    Cluster Agent, cluster-checks runners, ACI sidecar, VM/VMSS hosts from the VM Application package, Linux and
+    Windows);
   - pipelines: `tools/secrets/fetch.py` on self-hosted agents (deploy-agent identity) exports values only as masked step
     variables / ephemeral `TF_VAR_*` inputs; Microsoft-hosted PR builds never fetch secrets.
 - Terraform reads no DSV secrets with data sources by default (values would land in state); write-only arguments take

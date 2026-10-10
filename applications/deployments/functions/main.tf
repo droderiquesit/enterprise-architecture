@@ -232,14 +232,16 @@ resource "azapi_resource" "quote" {
             env          = local.aca_app_env
             volumeMounts = [for m in local.aca_patch.app_container.volume_mounts : { volumeName = m.name, mountPath = m.path }]
           }],
-          [for s in local.aca_patch.sidecars : {
+          # serverless-init sidecar: `command` = its start wrapper (dsv-fetch init, then exec serverless-init); omitted
+          # when the instrumentation patch leaves it null (image entrypoint)
+          [for s in local.aca_patch.sidecars : merge({
             name         = s.name
             image        = s.image
             args         = s.args
             resources    = { cpu = s.cpu, memory = s.memory }
             env          = [for e in s.env : { name = e.name, value = e.value }]
             volumeMounts = [for m in s.volume_mounts : m.sub_path == null ? { volumeName = m.name, mountPath = m.path } : { volumeName = m.name, mountPath = m.path, subPath = m.sub_path }]
-          }],
+          }, try(s.command, null) == null ? {} : { command = s.command })],
         )
         volumes = [for v in local.aca_patch.volumes : { name = v.name, storageType = v.storage_type }]
         scale   = { minReplicas = 0, maxReplicas = var.settings.aca_max_replicas }

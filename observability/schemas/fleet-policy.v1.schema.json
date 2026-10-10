@@ -11,8 +11,24 @@
       "type": "object", "additionalProperties": false,
       "properties": {
         "collector": {"enum": ["agent", "agent_sidecar", "serverless_init", "azure", "fluent_bit"], "description": "application-log collector (observability 4.0.0): agent (aks / vm / vmss), agent_sidecar (aci), serverless_init (aca), azure (diagnostic settings -> Event Hubs: appservice / functions / logicapp / Container Apps jobs), fluent_bit (batch). log_pipeline = fluent_bit_direct replaces every collector except azure by Fluent Bit"},
-        "node_collector": {"enum": ["agent", "fluent_bit"], "description": "3.x key, still honoured on aks / vm / vmss"}
+        "node_collector": {"enum": ["agent", "fluent_bit"], "description": "3.x key, still honoured on aks / vm / vmss"},
+        "hosts": {
+          "type": "object", "additionalProperties": false,
+          "description": "VM / VMSS host log collection by the Datadog Agent (modules/host-agent-package); a caller's host_logs input wins",
+          "properties": {
+            "linux": {"type": "object", "additionalProperties": false, "properties": {
+              "files": {"type": "array", "items": {"$ref": "#/$defs/host_log_file"}}}},
+            "windows": {"type": "object", "additionalProperties": false, "properties": {
+              "files": {"type": "array", "items": {"$ref": "#/$defs/host_log_file"}},
+              "event_channels": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["channel"], "properties": {
+                "channel": {"type": "string", "pattern": "^[A-Za-z0-9 ._/-]+$"}, "source": {"type": "string"}}}}}}
+          }
+        }
       }
+    },
+    "host_log_file": {
+      "type": "object", "additionalProperties": false, "required": ["path"],
+      "properties": {"path": {"type": "string", "minLength": 2}, "service": {"type": "string"}, "source": {"type": "string"}}
     },
     "apm": {
       "type": "object", "additionalProperties": false,

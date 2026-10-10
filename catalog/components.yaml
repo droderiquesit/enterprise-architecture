@@ -341,14 +341,15 @@ components:
     path: observability/lab/telemetry-transport
     consumes: [foundation-network, foundation-identity, platform-containerapps]
     produces: [obs-telemetry-transport]
-    # dsv-fetch + host-agents scripts: Batch log setup script (templatefile, not a module source); config/**: fleet and
-    # tag policy, Observability Pipelines VRL, Fluent Bit / OTel config (file()); onboarding/rendered: per-service tag sets
-    inputs: [observability/images/dsv-fetch/**, observability/modules/host-agents/scripts/**, observability/config/**, observability/onboarding/rendered/**]
+    # dsv-fetch: version pin of the release the Batch log setup downloads (scripts/batch-log-setup.sh.tftpl lives in
+    # this root); config/**: fleet and tag policy, Observability Pipelines VRL, Fluent Bit / OTel config (file());
+    # onboarding/rendered: per-service tag sets
+    inputs: [observability/images/dsv-fetch/**, observability/config/**, observability/onboarding/rendered/**]
     secret_env:                 # Datadog Terraform provider keys (Observability Pipelines definition; DSV, deploy agent identity)
       DD_API_KEY: datadog-api-key
       DD_APP_KEY: datadog-app-key
     depends_on: [foundation-secrets]
-    artifacts: [img-dsv-fetch]  # init container of the Fluent Bit aggregator / OTel gateway (resolves dsv:// refs)
+    artifacts: [img-dsv-fetch]  # image: init/refresher containers (OP Worker, aggregator, gateway, APM gateway Agent); release zip: Batch nodes
     secret_outputs: generated_secrets   # eventhub-fluentbit-listen -> DSV after apply (tools/secrets/publish.py)
   - id: obs-diagnostics
     layer: observability

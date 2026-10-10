@@ -58,9 +58,9 @@ source for Event Hubs), which applies the tag policy and sends to Datadog Logs.
 
 | Resource type | Collector (deployed by) | App logs | Traces | Profiles | Custom / runtime metrics | Platform metrics | Platform logs | DBM / RUM |
 |---|---|---|---|---|---|---|---|---|
-| AKS pods | Datadog Agent DaemonSet + Cluster Agent (Datadog Helm chart, `modules/kubernetes`) | Agent (container stdout) -> Worker | SSI (admission controller) -> node Agent | SSI `DD_PROFILING_ENABLED=auto` | DogStatsD -> node Agent | Azure integration | diagnostic settings -> Event Hubs -> Worker | DBM as cluster checks |
-| Linux VM / VMSS | Datadog Agent installed by an Azure VM Application, assigned by Azure Policy to resources tagged `datadog:enabled` (`modules/host-agents`) | Agent file tail -> Worker | host SSI -> local Agent | host SSI `auto` | DogStatsD `localhost` | Azure integration + Agent | - | Agent DBM on SQL VMs |
-| Windows VM / VMSS | same (Windows VM Application version) | Agent file tail -> Worker (no Fluent Bit) | OpenTelemetry -> Agent OTLP | **no** (see 4) | OTel -> Agent | Azure integration + Agent | - | - |
+| AKS pods | Datadog Agent DaemonSet + Cluster Agent + cluster-checks runners (Datadog Helm chart with layered values `values/base.yaml` -> fleet layer -> `values_overrides`, dsv-fetch post-renderer; `modules/kubernetes`) | Agent (container stdout) -> Worker | SSI (admission controller) -> node Agent | SSI `DD_PROFILING_ENABLED=auto` | DogStatsD -> node Agent | Azure integration | diagnostic settings -> Event Hubs -> Worker | DBM as cluster checks |
+| Linux VM / VMSS | Datadog Agent installed by an Azure VM Application, assigned by Azure Policy (DeployIfNotExists) to resources tagged `datadog:enabled` (`modules/host-agents`) | Agent file tail (`logs.hosts.linux` + `datadog:log_paths` tag) -> Worker | host SSI -> local Agent | host SSI `auto` | DogStatsD `localhost` | Azure integration + Agent | - | Agent DBM on SQL VMs |
+| Windows VM / VMSS | same (Windows VM Application version) | Agent tails files + Event Log (`System`, `Application`; fleet policy `logs.hosts.windows`) -> Worker (no Fluent Bit) | OpenTelemetry -> Agent OTLP | **no** (see 4) | OTel -> Agent | Azure integration + Agent | - | - |
 | Container Apps | **serverless-init sidecar** per replica (`modules/instrumentation` `container_app_patch`) | serverless-init tails `LOG_FILE_PATH` on a shared EmptyDir -> Worker | library in image -> serverless-init (`localhost:8126`) | library -> serverless-init | DogStatsD `udp://localhost:8125` -> serverless-init | Azure integration | system logs -> Worker | - |
 | ACI | **Datadog Agent sidecar** per container group (`modules/instrumentation` `aci_sidecar`) | Agent tails `LOG_FILE_PATH` on a shared emptyDir -> Worker | library in image -> Agent sidecar (`localhost:8126`) | library -> Agent sidecar | DogStatsD `udp://localhost:8125` -> Agent sidecar | Azure integration | - | separate ACI DBM Agent only when no cluster exists |
 | Container Apps jobs | none (run-to-completion) | console -> diagnostic settings -> Event Hubs -> Worker (`logs.collector = azure`) | library -> APM gateway | partial (short runs) | **no DogStatsD** | Azure integration | as Container Apps | - |
@@ -78,16 +78,16 @@ extension settings, run-command parameters, VM Application parameters or IaC-set
 
 | Component | Key path |
 |---|---|
-| AKS node Agent, Cluster Agent, cluster-checks runners | `dsv-fetch agent-backend` as `secret_backend_command` (binary copied by an init container) |
+| AKS node Agent, Cluster Agent, cluster-checks runners | `dsv-fetch agent-backend` as `secret_backend_command` (binary copied by the `dsv-fetch-install` init container that the Helm post-renderer adds; workload identity on the three service accounts) |
 | Linux / Windows VMs, VMSS | the VM Application installs the Agent and `dsv-fetch` / `dsv-fetch.exe` (`secret_backend_command`); the host identity reads the key path |
 | ACI Agent sidecar | init container `dsv-fetch-install` copies the static binary into an emptyDir (ACI init containers have no managed identity, so it makes no DSV call); the Agent's start command installs it root-owned 0500 and the Agent resolves `api_key: ENC[dsv://...]` with the group identity |
 | Container Apps serverless-init | init container `dsv-fetch-install` copies the binary (no identity needed, every workload profile); the sidecar runs `dsv-fetch init --format dotenv` into its own `/tmp`, sources and truncates the file and execs `/datadog-init` (serverless-init has no secret backend) |
 | Observability Pipelines Worker, APM gateway | dsv-fetch dotenv / secret backend (`modules/telemetry-transport`) |
 
-With `log_pipeline = fluent_bit_direct` (fallback) every "-> Worker" becomes the 2.x path: Fluent Bit sidecars on
-Container Apps / ACI (the serverless-init / Agent sidecars keep traces and DogStatsD, their log collection is off),
-the Fluent Bit DaemonSet on AKS and the host service on VMs, all shipping to the Datadog intake, and the Fluent Bit
-aggregator for Event Hubs. With `apm.mode = otel` traces follow the 2.x OpenTelemetry path, and Datadog profiling is off;
+With `log_pipeline = fluent_bit_direct` (fallback) every "-> Worker" becomes a direct path: Fluent Bit sidecars on
+Container Apps / ACI (the serverless-init / Agent sidecars keep traces and DogStatsD, their log collection is off) and
+the Fluent Bit DaemonSet on AKS ship to the Datadog intake, the Fluent Bit aggregator reads Event Hubs, and the **host
+Agents ship their logs directly to the Datadog intake** (VMs / VMSS never get Fluent Bit in 4.0.0). With `apm.mode = otel` traces follow the 2.x OpenTelemetry path, and Datadog profiling is off;
 the Container Apps / ACI sidecars still collect the logs.
 
 ### ACI Agent sidecar: design notes and cost

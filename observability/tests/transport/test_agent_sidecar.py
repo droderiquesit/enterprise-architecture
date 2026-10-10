@@ -30,13 +30,12 @@ import json
 import os
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
 import yaml
 
-from dockerutil import DSV_FETCH_IMAGE, DSV_FETCH_SRC, PACKAGE, PYTHON_IMAGE, REPO, Stack, sh, wait_for
+from dockerutil import DSV_FETCH_IMAGE, PACKAGE, PYTHON_IMAGE, REPO, Stack, dsv_fetch_binary, sh, wait_for
 
 pytestmark = pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
 
@@ -114,24 +113,10 @@ def _render(tmp: Path, architecture: str, runtime: str) -> dict:
 
 def _binary(tmp: Path) -> tuple[Path, bool]:
     """(path to a static dsv-fetch binary, True when DSV_FETCH_IMAGE carries it - the init step then runs the image)."""
-    if os.environ.get("DSV_FETCH_BIN"):
-        return Path(os.environ["DSV_FETCH_BIN"]), False
-    dest = tmp / "dsv-fetch-bin"
-    if subprocess.run(["docker", "image", "inspect", DSV_FETCH_IMAGE], capture_output=True).returncode == 0:
-        cid = sh("docker", "create", DSV_FETCH_IMAGE).strip()
-        try:
-            if subprocess.run(["docker", "cp", f"{cid}:/opt/dsv-fetch/dsv-fetch", str(dest)], capture_output=True).returncode == 0:
-                return dest, True
-        finally:
-            sh("docker", "rm", "-f", cid, check=False)
-    go = shutil.which("go") or ("/usr/local/go/bin/go" if Path("/usr/local/go/bin/go").exists() else None)
-    if go and (DSV_FETCH_SRC / "build.sh").exists():
-        env = dict(os.environ, PATH=f"{Path(go).parent}:{os.environ.get('PATH', '')}")
-        res = subprocess.run(["bash", str(DSV_FETCH_SRC / "build.sh"), "--toolchain", "local", "--target", "linux/amd64", "--binary", str(dest)],
-                             capture_output=True, text=True, env=env)
-        if res.returncode == 0:
-            return dest, False
-    pytest.skip("no dsv-fetch static binary (set DSV_FETCH_BIN, or DSV_FETCH_IMAGE with /opt/dsv-fetch/dsv-fetch, or install Go)")
+    found = dsv_fetch_binary(tmp)
+    if found is None:
+        pytest.skip("no dsv-fetch static binary (set DSV_FETCH_BIN, or DSV_FETCH_IMAGE with /opt/dsv-fetch/dsv-fetch, or install Go)")
+    return found
 
 
 def _install_binary(tmp: Path, bin_dir: Path) -> None:

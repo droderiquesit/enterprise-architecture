@@ -57,13 +57,13 @@ def test_no_secret_reading_data_sources():
 def test_sidecar_platforms_have_dsv_fetch():
     """Every place that runs a third-party collector without our code wires the dsv-fetch helper."""
     expect = {
-        "observability/modules/instrumentation/main.tf": ["init_containers", "refresher_containers", "fetcher"],
+        "observability/modules/instrumentation/main.tf": ["init_containers", "refresher_containers", "dsv-fetch-install", "secret_backend_command"],
         "observability/modules/telemetry-transport/apps.tf": ["initContainers = local.agg_init", "initContainers = local.gw_init"],
         "observability/modules/kubernetes/main.tf": ["initContainers", "secretBackend"],
         "observability/modules/dbm/main.tf": ["secret_backend_command"],
-        "observability/modules/host-agents/scripts/linux-install.sh.tftpl": ["ExecStartPre=$DSV_DIR/dsv-fetch", "secret_backend_command"],
+        "observability/lab/telemetry-transport/scripts/batch-log-setup.sh.tftpl": ["ExecStartPre=$DSV_DIR/dsv-fetch", "sha256sum -c --status"],
         "applications/deployments/modules/container-app/main.tf": ['dynamic "init_container"', "local.refreshers"],
-        "applications/deployments/partner-sim/main.tf": ["local.fetcher"],
+        "applications/deployments/partner-sim/main.tf": ["local.sidecar.init_containers", "dsv-fetch-install"],
         "applications/deployments/functions/main.tf": ["initContainers = local.aca_init"],
     }
     for path, needles in expect.items():

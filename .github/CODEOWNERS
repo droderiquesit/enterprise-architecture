@@ -55,9 +55,10 @@
 /applications/shared/dotnet/                   @lab/app-team  # svc-bff,svc-orders-api,svc-inventory-api,svc-durable
 /applications/shared/python/                   @lab/app-team @lab/platform-team @lab/security-team  # svc-catalog-api,svc-dbadapter,svc-worker,svc-partner-sim,svc-functions,svc-jobs,svc-pr-reviewer
 /foundation/identity/secrets.yaml              @lab/platform-team @lab/security-team  # foundation-secrets
-/observability/config/fleet-policy.yaml        @lab/observability-team  # obs-hosts,obs-kubernetes
+/observability/config/fleet-policy.yaml        @lab/observability-team  # obs-hosts,obs-kubernetes,obs-dbm
+/observability/config/tag-policy.yaml          @lab/observability-team  # obs-hosts
 /observability/extras/content/                 @lab/observability-team  # obs-monitoring
-/observability/images/dsv-fetch/               @lab/observability-team  # obs-telemetry-transport,obs-hosts,obs-kubernetes,img-dsv-fetch
+/observability/images/dsv-fetch/               @lab/observability-team  # obs-telemetry-transport,obs-kubernetes,img-dsv-fetch
 /observability/lab/azure-integration/          @lab/observability-team  # obs-azure-integration
 /observability/lab/dbm/                        @lab/observability-team  # obs-dbm
 /observability/lab/diagnostics/                @lab/observability-team  # obs-diagnostics
@@ -65,7 +66,7 @@
 /observability/lab/kubernetes/                 @lab/observability-team  # obs-kubernetes
 /observability/lab/prereqs/                    @lab/observability-team  # obs-prereqs
 /observability/lab/telemetry-transport/        @lab/observability-team  # obs-telemetry-transport
-/observability/onboarding/rendered/            @lab/observability-team  # obs-telemetry-transport,obs-hosts
+/observability/onboarding/rendered/            @lab/observability-team  # obs-telemetry-transport
 /platform/compute/aks/                         @lab/platform-team  # platform-aks
 /platform/compute/appservice/                  @lab/platform-team  # platform-appservice
 /platform/compute/aro/                         @lab/platform-team  # platform-aro
@@ -93,5 +94,4 @@
 /platform/data/sqlmi/                          @lab/platform-team  # platform-db-sqlmi
 /platform/data/sqlvm/                          @lab/platform-team  # platform-db-sqlvm
 /platform/data/table-storage/                  @lab/platform-team  # platform-db-table-storage
-/observability/modules/host-agents/scripts/    @lab/observability-team  # obs-telemetry-transport
 /observability/extras/content/lab/monitoring/  @lab/observability-team  # obs-monitoring

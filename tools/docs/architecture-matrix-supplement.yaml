@@ -22,7 +22,7 @@ architectures:
     runtime_config: KEDA azure-servicebus scaler on queue batch-items authenticated with the user-assigned identity (rules.identity_id), no connection string
     source: applications/deployments/jobs/README.md
   container-instances:
-    runtime_config: container group env; FAULT_TOKEN as a dsv:// reference resolved by the app at start-up; sidecar DD_API_KEY written by the dsv-fetch init container to an in-memory volume (no secret in state)
+    runtime_config: container group env; FAULT_TOKEN as a dsv:// reference resolved by the app at start-up; Datadog Agent sidecar resolves api_key ENC[dsv://...] through the dsv-fetch secret backend (static binary copied by an init container, group identity via IMDS; no secret in env or state)
     source: applications/deployments/partner-sim/README.md
   app-service-linux-code:
     runtime_config: app settings (MYSQL_HOST/PORT/DATABASE/USER, MYSQL_AUTH=entra) + dsv:// references (resolved at start-up by hello_common), VNet integration on appsvc-integration

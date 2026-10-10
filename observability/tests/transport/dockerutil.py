@@ -129,6 +129,33 @@ def ensure_dsv_fetch_image() -> str:
     return DSV_FETCH_IMAGE
 
 
+def dsv_fetch_binary(tmp: Path) -> tuple[Path, bool] | None:
+    """(path to the static dsv-fetch binary, True when it was copied out of DSV_FETCH_IMAGE) or None.
+
+    Order: $DSV_FETCH_BIN, /opt/dsv-fetch/dsv-fetch of DSV_FETCH_IMAGE (when present locally), a local Go build
+    (images/dsv-fetch/build.sh --toolchain local)."""
+    import shutil
+
+    if os.environ.get("DSV_FETCH_BIN"):
+        return Path(os.environ["DSV_FETCH_BIN"]), False
+    dest = tmp / "dsv-fetch-bin"
+    if subprocess.run(["docker", "image", "inspect", DSV_FETCH_IMAGE], capture_output=True).returncode == 0:
+        cid = sh("docker", "create", DSV_FETCH_IMAGE).strip()
+        try:
+            if subprocess.run(["docker", "cp", f"{cid}:/opt/dsv-fetch/dsv-fetch", str(dest)], capture_output=True).returncode == 0:
+                return dest, True
+        finally:
+            sh("docker", "rm", "-f", cid, check=False)
+    go = shutil.which("go") or ("/usr/local/go/bin/go" if Path("/usr/local/go/bin/go").exists() else None)
+    if go and (DSV_FETCH_SRC / "build.sh").exists():
+        env = dict(os.environ, PATH=f"{Path(go).parent}:{os.environ.get('PATH', '')}")
+        res = subprocess.run(["bash", str(DSV_FETCH_SRC / "build.sh"), "--toolchain", "local", "--target", "linux/amd64", "--binary", str(dest)],
+                             capture_output=True, text=True, env=env)
+        if res.returncode == 0:
+            return dest, False
+    return None
+
+
 def dsv_ref(name: str) -> str:
     return f"dsv://eh/test/{name.lower().replace('_', '-')}#value"
 

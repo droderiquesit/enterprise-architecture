@@ -5,7 +5,8 @@ Version: see `VERSION` (semantic versioning). Release notes: `CHANGELOG.md`. Upg
 A portable, versioned package that **connects Azure resources and workloads to Datadog** and makes every signal carry
 the same tags. Telemetry flows through the most mature Datadog path each resource type supports:
 
-* the Datadog Agent wherever it can run;
+* the Datadog Agent wherever it can run (AKS nodes, VM / VMSS hosts via Azure Policy + VM Applications, a sidecar in
+  ACI container groups) and Datadog serverless-init on Container Apps - one log collector per architecture;
 * Datadog tracing libraries with Single Step Instrumentation and the Continuous Profiler;
 * Datadog Observability Pipelines as the central log pipeline;
 * RUM for browsers;
@@ -23,7 +24,8 @@ and unreleased, in `extras/content/` of the source repository.
 | Tag policy (the core product) | `config/tag-policy.yaml`, `schemas/tag-policy.v1.schema.json`, `modules/tagging` (one tagging module, used on every path), `tools/tags/` (Python mirror + read-only Datadog tools) |
 | Fleet collection policy | `config/fleet-policy.yaml`, `schemas/fleet-policy.v1.schema.json`, `modules/fleet-policy` (per-workload decision), `modules/fleet-inventory` (one inventory input -> collection plan per resource) |
 | Log pipeline | `modules/observability-pipeline` (`datadog_observability_pipeline`), `config/observability-pipelines/*.vrl`; Worker on Container Apps (`modules/telemetry-transport`) or AKS (`modules/kubernetes`) |
-| Collection | `modules/{azure-integration,diagnostic-settings,azure-logs,telemetry-transport,fluent-bit,otel-collector,host-agents,kubernetes,dbm}`, `config/{fluent-bit,otel}` |
+| Collection | `modules/{azure-integration,diagnostic-settings,azure-logs,telemetry-transport,fluent-bit,otel-collector,kubernetes,dbm}`, hosts: `modules/{host-agents,host-agent-package,host-agent-policy}` (VM Applications + Azure Policy), `config/{fluent-bit,otel}` |
+| Secret helper | `images/dsv-fetch` (static Go binary `dsv-fetch` 2.x: image + release zip; Delinea DSV with managed identity) |
 | APM / profiling / RUM | `modules/instrumentation` (per-workload hook), `modules/rum` (create or existing application), `modules/fleet-automation` (optional Agent upgrade window) |
 | Onboarding | `schemas/onboarding-manifest.v2.schema.json`, `tools/onboarding/{validate,render,migrate_v1}.py` |
 | Verification | `tools/verify/telemetry_verify.py`, `tools/tags/check_coverage.py`, `tools/markers/send_deployment_event.py`, `modules/deployment-markers` |
@@ -34,7 +36,9 @@ Status vocabulary:
 * Everything here is **implemented**: static validation, `terraform test` with mock providers, and unit tests with
   recorded API responses.
 * The Fluent Bit -> Worker forward path, the VRL programs, the Worker bootstrap, the APM gateway Agent, the OTel
-  gateway, the DBM checks and the Linux installer are **locally verified** with docker (`tests/transport/`).
+  gateway, the DBM checks, the ACI Agent sidecar / ACA serverless-init sidecar, the Datadog chart rendered through
+  the post-renderer and the VM Application Linux installer are **locally verified** with docker / helm
+  (`tests/transport/`, `tests/kubernetes/`, `modules/host-agent-package/tests/`).
 * Nothing has been deployed or verified against a live Datadog organisation by these tests.
 
 ## 1. How it works
@@ -86,12 +90,19 @@ Adopt it in this order:
 `config/fleet-policy.yaml` is the single switch board:
 
 * `log_pipeline`: `observability_pipelines` (default) or `fluent_bit_direct` (2.x).
-* `logs.node_collector`: `agent` or `fluent_bit`.
+* `logs.collector` per architecture (4.0.0): `agent` (AKS, VM, VMSS), `agent_sidecar` (ACI), `serverless_init`
+  (Container Apps), `azure` (App Service, Functions, Logic Apps: diagnostic settings), `fluent_bit` (Batch).
+  `fluent_bit_direct` replaces every Agent-side collector by Fluent Bit. The 3.x key `logs.node_collector`
+  (`agent` | `fluent_bit`) is still honoured on aks / vm / vmss.
+* `logs.hosts`: files the host Agent tails (Linux, Windows) and Windows Event Log channels.
 * `apm.mode`: `datadog` (default), `otel` or `none`. Exceptions: Azure Functions and Durable Functions stay on
   OpenTelemetry, and Windows services fall back to OpenTelemetry.
-* `apm.managed_runtime_path`: `agent_gateway` (default) or `serverless_init` (opt-in, ACA only).
+* `apm.managed_runtime_path`: `agent_gateway` (default), `serverless_init` (Container Apps default) or
+  `agent_sidecar` (ACI default).
 * Profiling types per runtime, DSM, DBM propagation, sampling, ignored resources.
-* Agent version, Remote Configuration and remote updates, OP Worker sizing, RUM sampling and replay.
+* `agent.image` / `agent.version`: the single Agent pin of the fleet (Helm, VM Application, ACI sidecar, APM gateway;
+  equal to `versions.yaml` `images.datadog_agent` in the source repository), `agent.serverless_init`, Remote
+  Configuration (on) and remote updates (off), OP Worker sizing, RUM sampling and replay.
 
 Overrides apply per architecture and per environment. The authoritative path per resource type and signal, the
 duplicate-prevention rules and the robustness of every hop are in `modules/README-transport.md`. The per-resource
@@ -129,7 +140,8 @@ Steps:
 * **Removal:** `terraform destroy` removes only what the root created. That covers:
   * Datadog-side objects: integration, pipeline, RUM application, fleet schedule;
   * diagnostic settings;
-  * Agent / Worker Helm releases, VM extensions and collector Container Apps.
+  * Agent / Worker Helm releases, the host policy assignment / gallery / VM Applications, and collector Container
+    Apps (the Agent stays on enrolled hosts until the application is removed from their model).
 
   Monitored resources and business data are never in the state.
 
@@ -176,17 +188,17 @@ No secret value is an input, output or state value of this package. Every secret
 
 | Consumer | How the secret is read |
 |---|---|
-| Datadog Agents (AKS, VMs, ACI DBM, APM gateway on ACA) | `api_key: ENC[dsv://...]`, with dsv-fetch `agent-backend` as the secret backend. **Verified locally** for the APM gateway and the DBM Agent. |
+| Datadog Agents (AKS node Agent, Cluster Agent, cluster-checks runners; VMs / VMSS Linux + Windows; ACI sidecar and DBM Agent; APM gateway on ACA) | One path: `api_key: ENC[dsv://...]`, with the static dsv-fetch binary (`agent-backend`) as `secret_backend_command` - copied by an init container (containers) or installed from the VM Application package (hosts). **Verified locally** for the APM gateway, the ACI sidecar, the DBM Agent and the chart render. |
 | OP Worker on ACA | dsv-fetch writes a dotenv file (init container on the Consumption profile, refresher elsewhere). The Worker command refuses to start without it (fail closed). |
-| OP Worker on AKS | Existing Secrets maintained by the Delinea dsv-k8s syncer (`apiKeyExistingSecret`, `op_worker.secret_env`). |
-| Fluent Bit sidecars, DaemonSet, hosts | dsv-fetch env-yaml file. In Observability Pipelines mode the edge needs **no** Datadog key at all. |
+| OP Worker on AKS | dsv-fetch init container (workload identity) writes an in-memory env file from `op_worker.secret_env` (`NAME -> dsv://...`); the chart Secret holds only `ENC[]`. No synced Secret. |
+| Container Apps serverless-init | Its start command runs dsv-fetch (managed identity), sources the key into its own process and execs `/datadog-init`; no Container Apps secret. |
+| Fluent Bit (only `fluent_bit_direct` and Batch) | dsv-fetch env-yaml file. In Observability Pipelines mode the edge needs **no** Datadog key at all. |
 | OTel gateway | dsv-fetch files. |
 | Applications | Env values that are `dsv://` references, plus `DSV_*`. |
 | Pipelines | `pipelines/templates/dsv-secrets.yml`. |
 
-Documented exception: `apm.managed_runtime_path = serverless_init`. Datadog serverless-init 1.10.4 does not resolve
-`ENC[]` (verified locally: it sent the literal value), so `DD_API_KEY` must be a Container Apps secret. That option
-is opt-in only.
+Datadog serverless-init 1.10.4 does not resolve `ENC[]` (verified locally: it sent the literal value); since 4.0.0
+its start wrapper reads the key with dsv-fetch instead, so there is no Container Apps secret (verified locally).
 
 ## 10. Known limitations
 
@@ -201,5 +213,9 @@ is opt-in only.
   metrics there.
 * Windows hosts and Azure Functions stay on OpenTelemetry. The Datadog profiler supports neither .NET Function Apps
   nor Python on Functions (preview).
-* AKS workload-identity tokens with DSV are not verified. The fallback is the dsv-k8s syncer
-  (`api_key.mode = existing`).
+* AKS workload-identity tokens with DSV are not verified. 4.0.0 removed the synced-Secret fallback
+  (`api_key.mode = existing`); the documented alternative is the node pool's kubelet identity via IMDS.
+* Not verified on Azure: the policy remediation's partial PUT on VMSS, gallery publishing with the publisher identity,
+  the Windows MSI + `dsv-fetch.exe` ACLs on a real Windows host, the ACI `emptyDir` written by the uid 65532 init
+  container, and the Helm post-renderer on the deploy agents (needs `sh` and `awk`). See `docs/known-limitations.md`
+  in the source repository.

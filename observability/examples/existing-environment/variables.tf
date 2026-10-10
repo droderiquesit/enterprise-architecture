@@ -20,8 +20,8 @@ variable "telemetry" {
     The existing telemetry transport (equivalent of the obs-telemetry-transport contract), supplied by hand:
     OTLP endpoints of your collector/agents, Fluent Bit forward target (the Observability Pipelines Worker's fluent
     source), the Datadog API key as a Delinea DSV reference (dsv://...), the DSV endpoint + dsv-fetch image your
-    workloads use, and env.fleet / env.apm_gateway (package 3.0.0: log pipeline, APM mode and the Datadog Agent APM
-    endpoint of managed runtimes). Used only to compute instrumentation settings for the application owners.
+    workloads use (secrets.fetch_image: digest-pinned img-dsv-fetch >= 2.0.0, the static binary), and env.fleet /
+    env.apm_gateway (log pipeline, APM mode and the Datadog Agent APM endpoint of managed runtimes).
   EOT
   type = object({
     datadog_site = string
@@ -30,7 +30,7 @@ variable "telemetry" {
       tenant      = optional(string)
       tld         = optional(string, "com")
       base_url    = string
-      fetch_image = optional(string)
+      fetch_image = string
     })
     otlp = object({
       grpc_endpoint = string
@@ -63,6 +63,10 @@ variable "telemetry" {
       fleet       = { EH_LOG_PIPELINE = "observability_pipelines", EH_APM_MODE = "datadog", EH_PROFILING_ENABLED = "true" }
       apm_gateway = { DD_TRACE_AGENT_URL = "http://datadog-apm.observability.internal:8126" }
     }
+  }
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$", var.telemetry.secrets.fetch_image))
+    error_message = "telemetry.secrets.fetch_image must be the digest-pinned dsv-fetch image (<registry>/<repo>@sha256:<64 hex>)."
   }
 }
 
@@ -156,26 +160,57 @@ variable "azure_integration" {
 
 variable "kubernetes" {
   description = <<-EOT
-    Existing AKS cluster for the Datadog Agent (DaemonSet + Cluster Agent; collects the pod logs and sends them to the
-    Observability Pipelines Worker, Single Step Instrumentation of ssi_namespaces) and the Worker itself
-    (modules/kubernetes). api_key_mode = dsv_secret_backend (default): the Agents and Fluent Bit read the key from
-    Delinea DSV with workload identity (identity_client_id, federated with the service accounts datadog/datadog,
-    datadog/datadog-cluster-checks and fluent-bit/fluent-bit by your identity team); existing: a Secret
-    "datadog-api-key" synced by the Delinea dsv-k8s syncer. No key passes through Terraform either way.
+    Existing AKS cluster for the Datadog Agent (DaemonSet + Cluster Agent + cluster-checks runners; collects the pod
+    logs and sends them to the Observability Pipelines Worker, Single Step Instrumentation of ssi_namespaces) and the
+    Worker itself (modules/kubernetes, package 4.0.0). One secret path: every Agent component reads the key from
+    Delinea DSV with workload identity identity_client_id (REQUIRED; federated by your identity team with the service
+    accounts datadog/datadog, datadog/datadog-cluster-agent, datadog/datadog-cluster-checks and
+    observability-pipelines/opw-observability-pipelines-worker). No key passes through Terraform or a Kubernetes Secret.
+    values_overrides: per-cluster chart values documents (e.g. [file("clusters/aks-prod-weu.yaml")]), applied last.
   EOT
   type = object({
-    enabled                   = optional(bool, true)
-    api_key_mode              = optional(string, "dsv_secret_backend")
-    identity_client_id        = optional(string, "00000000-0000-0000-0000-000000000000")
-    cluster_agent_secret_name = optional(string)
-    cluster_name              = optional(string, "aks-prod-weu")
-    host                      = optional(string, "https://aks-prod-weu.hcp.westeurope.azmk8s.io:443")
-    cluster_ca_certificate    = optional(string, "")
-    ssi_namespaces            = optional(list(string), ["orders"])
+    enabled                = optional(bool, true)
+    identity_client_id     = optional(string)
+    cluster_name           = optional(string, "aks-prod-weu")
+    host                   = optional(string, "https://aks-prod-weu.hcp.westeurope.azmk8s.io:443")
+    cluster_ca_certificate = optional(string, "")
+    ssi_namespaces         = optional(list(string), ["orders"])
+    values_overrides       = optional(list(string), [])
     # canonical tag-policy values of the cluster infrastructure
     identity = optional(map(string), { team = "platform", owner = "platform-team@contoso.example", application = "platform", domain = "platform", tier = "infrastructure" })
   })
+  default = { identity_client_id = "00000000-0000-0000-0000-000000000000" }
+  validation {
+    condition     = !var.kubernetes.enabled || can(regex("^[0-9a-fA-F-]{36}$", coalesce(var.kubernetes.identity_client_id, "x")))
+    error_message = "kubernetes.identity_client_id (client id of the workload identity that reads the Datadog API key in DSV) is required."
+  }
+}
+
+variable "hosts" {
+  description = <<-EOT
+    Optional: Datadog Agent on existing VMs / VMSS via Azure Policy (DeployIfNotExists) + Azure VM Applications
+    (modules/host-agents, mode = policy). Tag the hosts datadog:enabled = "true". agent_identity: the per-environment
+    DSV-reader user-assigned identity (read on the API key path only). dsv_fetch_release_dir: the img-dsv-fetch
+    release zip, sha256-verified and unzipped by the pipeline before plan. package_version: bumped per change and
+    promoted dev -> test -> prod.
+  EOT
+  type = object({
+    enabled                      = optional(bool, false)
+    resource_group_id            = optional(string)
+    names                        = optional(object({ gallery = string, storage_account = string, publisher_identity = string }))
+    package_version              = optional(string, "1.0.0")
+    dsv_fetch_release_dir        = optional(string, ".dsv-fetch-release")
+    publisher_principal_ids      = optional(list(string), [])
+    agent_identity               = optional(object({ id = string, client_id = string }))
+    scope                        = optional(object({ type = string, id = string, not_scopes = optional(list(string), []) }))
+    identity_resource_group_name = optional(string)
+    op_agent_logs_url            = optional(string)
+  })
   default = {}
+  validation {
+    condition     = !var.hosts.enabled || (var.hosts.resource_group_id != null && var.hosts.names != null && var.hosts.agent_identity != null && var.hosts.scope != null && var.hosts.identity_resource_group_name != null)
+    error_message = "hosts.enabled needs resource_group_id, names, agent_identity, scope and identity_resource_group_name."
+  }
 }
 
 variable "dbm" {
@@ -197,19 +232,16 @@ variable "dbm" {
 variable "observability_pipelines" {
   description = <<-EOT
     Datadog Observability Pipelines (package default log pipeline): the pipeline is created here, the Worker runs on the
-    existing AKS cluster. Its API key comes from the Secret api_key_secret_name and the Event Hubs listen connection
-    string from eventhub.synced_secret_name - both kept by the Delinea dsv-k8s syncer from the DSV references
-    (connection_string_ref documents the source; Terraform never reads a value). enabled = false: Fluent Bit direct.
+    existing AKS cluster. The Worker's dsv-fetch init container reads its API key (telemetry.api_key_ref) and the Event
+    Hubs listen connection string (eventhub.connection_string_ref) from Delinea DSV with workload identity; Terraform
+    never reads a value and no Kubernetes Secret holds one. enabled = false: Fluent Bit direct.
   EOT
   type = object({
-    enabled             = optional(bool, true)
-    api_key_secret_name = optional(string, "datadog-api-key")
+    enabled = optional(bool, true)
     eventhub = optional(object({
       bootstrap             = string
       topics                = list(string)
       connection_string_ref = string
-      synced_secret_name    = optional(string, "eventhub-listen")
-      synced_secret_key     = optional(string, "connection-string")
       }), {
       bootstrap             = "evhns-obs-prod.servicebus.windows.net:9093"
       topics                = ["app-logs", "platform-logs", "activity-logs"]
@@ -217,6 +249,10 @@ variable "observability_pipelines" {
     })
   })
   default = {}
+  validation {
+    condition     = var.observability_pipelines.eventhub == null || can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", try(var.observability_pipelines.eventhub.connection_string_ref, "")))
+    error_message = "observability_pipelines.eventhub.connection_string_ref must be a dsv:// reference."
+  }
 }
 
 variable "rum" {

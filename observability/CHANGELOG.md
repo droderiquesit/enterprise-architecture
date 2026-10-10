@@ -4,6 +4,71 @@ All notable changes to the observability package. Format: Keep a Changelog; vers
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-10-10
+
+**BREAKING** (SemVer major): **Datadog Agent deployment v4** - one Datadog collection path per architecture, one
+secret path for every Agent (Delinea DSV + the static dsv-fetch binary), no per-host Terraform. See `UPGRADING.md`
+"4.0.0". Nothing has been deployed or verified live (status: implemented / locally verified).
+
+### Added
+- **dsv-fetch 2.0.0 is a static Go binary** (`images/dsv-fetch`, component `img-dsv-fetch`): same CLI, env, config,
+  messages, exit codes and Agent protocol as 1.x; `init --refresh-seconds N [--retry-seconds 30]` (refresher mode);
+  `install` copies the running binary (POSIX 0500 + owner, Windows ACL ddagentuser + SYSTEM + Administrators).
+  Distroless image (`/opt/dsv-fetch/dsv-fetch`, uid 65532) and a release zip `dsv-fetch-linux-amd64`,
+  `dsv-fetch-linux-arm64`, `dsv-fetch-windows-amd64.exe`, `SHA256SUMS` (built by `build.sh`, Go 1.24.13 pinned by
+  digest; module path `enterprise-hello/dsv-fetch`, standard library only). The Python conformance suite runs against it.
+- **Kubernetes** (`modules/kubernetes`): chart values in **layers** - `values/base.yaml`, a computed fleet layer and
+  per-cluster `values_overrides` (applied last; overrides of the secret path are rejected) - and a **Helm
+  post-renderer** (`postrender/dsv-fetch-init.sh`, POSIX sh + awk) that adds the `dsv-fetch-install` init container to
+  the node Agent, Cluster Agent and cluster-checks runners. Outputs `datadog_values`, `datadog_postrender_args`;
+  `dsv.cluster_checks_identity_client_id` (e.g. the DBM identity on `datadog/datadog-cluster-checks`).
+- **VM / VMSS via Azure Policy + VM Applications**: `modules/host-agent-package` (Azure Compute Gallery, VM
+  Applications `datadog-agent-linux` / `-windows`, versions = dsv-fetch release binary + rendered installer;
+  `package_version` promoted dev -> test -> prod, immutable content check), `modules/host-agent-policy`
+  (DeployIfNotExists initiative at subscription or management-group scope on hosts tagged `datadog:enabled`,
+  remediation ARM deployment that sets `applicationProfile.galleryApplications` + the DSV-reader identity, least-privilege
+  custom remediation role, remediation tasks), `modules/host-agents` (`mode = policy` default | `direct`). Linux and
+  Windows Agents collect logs (fleet policy `logs.hosts`: files + Windows Event Log channels; per-host `datadog:log_paths`);
+  `dsv-fetch.exe agent-backend` on Windows (the key is never written to `datadog.yaml`). Remote updates off (Fleet
+  Automation inventory only).
+- **ACI Datadog Agent sidecar** (`modules/instrumentation` `aci_sidecar`): traces `localhost:8126`, DogStatsD
+  `localhost:8125`, logs tailed from the shared emptyDir file, key via the dsv-fetch binary (init container copy, root
+  re-install). **Container Apps serverless-init collects logs** (`DD_LOGS_ENABLED=true`, `DD_SERVERLESS_LOG_PATH`),
+  its start wrapper reads the key with dsv-fetch (no Container Apps secret).
+- **DBM**: cluster checks whenever a cluster exists (`modules/dbm` `hosting = cluster_checks` default; lab `obs-dbm`
+  `settings.hosting = auto`, `obs-kubernetes` `settings.dbm = auto`); the ACI DBM Agent only without a cluster.
+- Fleet policy: `logs.collector` per architecture (`agent`, `agent_sidecar`, `serverless_init`, `azure`,
+  `fluent_bit`), `logs.hosts.{linux.files, windows.files, windows.event_channels}`, `agent.image` + `agent.version`
+  (the single Agent pin), `agent.serverless_init`, `apm.managed_runtime_path = agent_sidecar`.
+- Pipeline templates: `dsvFetch` (release zip URL + sha256, `SHA256SUMS` verified, binary installed per job).
+- Contract `obs-kubernetes` **v2** (`logs_enabled` per fleet policy, `log_pipeline`, `log_collector`,
+  `fluent_bit.enabled`, SSI fields); v1 kept for rollback.
+
+### Changed
+- One application-log collector per architecture: Agent (AKS nodes, Linux + Windows VM/VMSS), Agent sidecar (ACI),
+  serverless-init (Container Apps), diagnostic settings (App Service, Functions, Logic Apps). **Fluent Bit only** for
+  `log_pipeline = fluent_bit_direct` and on Azure Batch nodes.
+- Every Agent (node Agent, Cluster Agent, cluster-checks runners, host Agents, ACI sidecar / DBM Agent, APM gateway)
+  resolves `ENC[dsv://...]` with the dsv-fetch binary as `secret_backend_command`; refresher containers run
+  `init --refresh-seconds 3600`.
+- `modules/telemetry-transport`: APM gateway Agent gets the binary from a `dsv-fetch-install` init container (no
+  embedded script, no Python); the OP Worker refresher runs the binary's refresher mode.
+- `modules/dbm`: passwords only as DSV references (`password_ref.kind = dsv`).
+- Agent version: no hard-coded fallbacks; the fleet policy `agent.version` is required.
+
+### Removed
+- **Python dsv-fetch 1.x** (`images/dsv-fetch/dsv_fetch.py`) and every embedding of it (Agent ConfigMap secret
+  backends, the transport `dsv_fetch_source` input, refresher stubs, pipeline `dsvFetchPath`).
+- `modules/kubernetes`: `api_key` (`mode = existing` / synced Secret), `cluster_agent_secret_name`, the
+  unauthenticated Cluster Agent opt-out (`DD_SECRET_BACKEND_COMMAND=""`), `resources`, `cluster_check_env`,
+  `charts.agent_tag`, `op_worker.api_key_secret_name`; `op_worker.secret_env` values are `dsv://` references (no
+  `{secret_name, key}`).
+- `modules/host-agents`: the run-command / CustomScript host path, its `hosts`-driven installer
+  (`scripts/linux-install.sh.tftpl`) and the Fluent Bit host service (policy mode needs no per-host Terraform;
+  `mode = direct` keeps one gallery application assignment per VM).
+- `modules/instrumentation`: the Fluent Bit sidecar as default ACA / ACI log collector (fallback only).
+- `modules/dbm`: `k8s_secret`, `file` and `env` password references.
+
 ## [3.0.0] - 2026-10-10
 
 **BREAKING** (SemVer major): the package is now the **collection and tagging** layer of Datadog on Azure. It connects

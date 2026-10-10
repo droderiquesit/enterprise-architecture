@@ -11,6 +11,16 @@ locals {
   flex       = var.settings.flexible
   uni        = var.settings.uniform
 
+  # Datadog Agent enrolment (observability 4.0.0): the obs-hosts Azure Policy (DeployIfNotExists) adds the DSV-reader
+  # identity (foundation-identity obs-host-agent, contract output) and the Datadog Agent VM Application to every scale
+  # set tagged <datadog.tag_name> = "true" (ADR-0001 §3 rule 3 amendment). The identity stays in identity_ids here (no
+  # drift); gallery_application is ignored on the uniform set (azurerm has no such block on orchestrated sets). New
+  # instances get the application from the model; existing uniform instances on the next `az vmss update-instances`
+  # of the deployment root (upgrade_mode Manual, see below).
+  dd_enabled     = var.settings.datadog.enabled
+  dd_tags        = local.dd_enabled ? { (var.settings.datadog.tag_name) = "true" } : {}
+  dd_identity_id = local.dd_enabled ? try(local.identities[var.settings.datadog.identity_key].id, null) : null
+
   scale_sets = merge(
     local.flex.enabled ? { flexible = merge(local.flex, { id = azurerm_orchestrated_virtual_machine_scale_set.flexible[0].id }) } : {},
     local.uni.enabled ? { uniform = merge(local.uni, { id = azurerm_linux_virtual_machine_scale_set.uniform[0].id }) } : {},
@@ -47,11 +57,11 @@ resource "azurerm_orchestrated_virtual_machine_scale_set" "flexible" {
   encryption_at_host_enabled   = var.settings.encryption_at_host_enabled
   extension_operations_enabled = true # observability adds Datadog Agent + Fluent Bit extensions
   user_data_base64             = null
-  tags                         = local.tags
+  tags                         = merge(local.tags, local.dd_tags)
 
   identity {
     type         = "UserAssigned"
-    identity_ids = [local.identities[local.flex.identity].id]
+    identity_ids = compact([local.identities[local.flex.identity].id, local.dd_identity_id])
   }
 
   os_profile {
@@ -110,7 +120,8 @@ resource "azurerm_orchestrated_virtual_machine_scale_set" "flexible" {
 # the app is installed after the platform (run command), so a Rolling policy would gate every
 # platform model change on an app health signal the platform does not own. The deployment root
 # performs batch-wise rolling reinstalls via run command and applies model updates per instance
-# (`az vmss update-instances`), which keeps rollouts controlled without coupling the layers.
+# (`az vmss update-instances`), which keeps rollouts controlled without coupling the layers. The same per-instance
+# update rolls out the policy-added Datadog Agent VM Application to existing instances (new instances get it at once).
 resource "azurerm_linux_virtual_machine_scale_set" "uniform" {
   #checkov:skip=CKV_AZURE_97:encryption_at_host_enabled is a setting (needs the EncryptionAtHost feature registration).
   count = local.uni.enabled ? 1 : 0
@@ -136,7 +147,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "uniform" {
   encryption_at_host_enabled      = var.settings.encryption_at_host_enabled
   secure_boot_enabled             = true
   vtpm_enabled                    = true
-  tags                            = local.tags
+  tags                            = merge(local.tags, local.dd_tags)
 
   dynamic "admin_ssh_key" {
     for_each = local.ssh_key == null ? [] : [local.ssh_key]
@@ -148,7 +159,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "uniform" {
 
   identity {
     type         = "UserAssigned"
-    identity_ids = [local.identities[local.uni.identity].id]
+    identity_ids = compact([local.identities[local.uni.identity].id, local.dd_identity_id])
   }
 
   network_interface {
@@ -176,7 +187,8 @@ resource "azurerm_linux_virtual_machine_scale_set" "uniform" {
   boot_diagnostics {}
 
   lifecycle {
-    ignore_changes = [instances, extension, custom_data]
+    # instances: autoscale; extension: legacy owner observability; gallery_application: the obs-hosts policy
+    ignore_changes = [instances, extension, custom_data, gallery_application]
   }
 }
 

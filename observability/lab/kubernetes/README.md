@@ -10,7 +10,7 @@
   * `artifacts["img-dsv-fetch"]` (dsv-fetch image >= 2.0.0: secret-backend binary of all Agents, Fluent Bit init)
   * optional `platform_db_*` contracts (`dbm` blocks) -> DBM cluster checks
   * `platform_aks` (resource_group_name, cluster_id, cluster_name, oidc_issuer_url, access.private_cluster/entra_server_app_id)
-* **Produces:** `obs-kubernetes` v1 (`catalog/contracts/obs-kubernetes.v1.schema.json`): the agent local
+* **Produces:** `obs-kubernetes` **v2** (`catalog/contracts/obs-kubernetes.v2.schema.json`; v1 kept for rollback): the agent local
   service, OTLP ports, `DD_AGENT_HOST` convention, cluster-agent service, Fluent Bit namespace and exclusions,
   `log_route = daemonset`, `cluster_id`.
 
@@ -33,7 +33,11 @@ container `dsv-fetch-install` from `artifacts["img-dsv-fetch"]`, else the transp
 the Fluent Bit fallback reads it through a dsv-fetch init container. All with AKS workload identity: this root
 federates `obs-collector` with `datadog/datadog`, `datadog/datadog-cluster-agent`, `fluent-bit/fluent-bit` and - when
 no DBM checks run here - `datadog/datadog-cluster-checks` (`azurerm_federated_identity_credential`; the apply identity
-needs write access to federated credentials of the identities). There is no synced-Secret / existing-Secret mode any
+needs `Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/write` on the identities - included
+in bootstrap's subscription-scope Contributor of the apply identity; a narrower setup grants *Managed Identity
+Contributor* on the foundation-identity resource group). With DBM checks on the cluster the `obs-dbm` identity is
+federated with `datadog/datadog-cluster-checks` instead (the runners read the `dbm-*-password` paths; foundation
+`secrets.yaml` lists obs-kubernetes in their `required_by`). There is no synced-Secret / existing-Secret mode any
 more (observability 4.0.0). **To verify on a real cluster**: DSV accepting AKS workload-identity tokens (`xms_mirid`).
 
 ## DBM (settings.dbm = auto)

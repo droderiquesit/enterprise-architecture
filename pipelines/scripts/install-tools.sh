@@ -5,6 +5,9 @@
 #   pipelines/scripts/install-tools.sh terraform            # version from versions.yaml
 #   pipelines/scripts/install-tools.sh gitleaks trivy syft grype helm kubeconform tflint hadolint shellcheck
 #                                                       # versions: pipelines/variables/tools.yml
+#   pipelines/scripts/install-tools.sh go                   # Go toolchain of the dsv-fetch build (versions.yaml
+#                                                       # images.dsv_fetch_builder golang:<X.Y.Z>-...); only for agents
+#                                                       # WITHOUT Docker - build.sh otherwise uses the pinned golang image
 # Python-distributed tools (uv, ruff, yamllint, pytest-xdist) come hash-pinned from PyPI (setup-agent.sh).
 # Versions for scanners come from environment variables GITLEAKS_VERSION, TRIVY_VERSION, SYFT_VERSION
 # (set by pipelines/variables/tools.yml).
@@ -88,6 +91,19 @@ install_syft() {
   fetch "https://github.com/anchore/syft/releases/download/v${v}/syft_${v}_checksums.txt" "$WORK/sums"
   verify "$WORK/$tgz" "$WORK/sums" "$tgz"
   tar -xzf "$WORK/$tgz" -C "$BIN" syft; syft version
+}
+
+install_go() {
+  # same Go release as the digest-pinned builder image, so the dsv-fetch binaries are byte-identical (build.sh)
+  local v; v="$(python3 -c "import re,yaml;print(re.search(r'golang:(\d+\.\d+\.\d+)-', yaml.safe_load(open('$REPO_ROOT/versions.yaml'))['images']['dsv_fetch_builder']).group(1))")"
+  if command -v go >/dev/null && [[ "$(go env GOVERSION)" == "go${v}" ]]; then echo "go $v present"; return; fi
+  local a; a="$(arch)"; local tgz="go${v}.linux-${a}.tar.gz"
+  fetch "https://go.dev/dl/${tgz}" "$WORK/$tgz"
+  fetch "https://go.dev/dl/?mode=json&include=all" "$WORK/go-releases.json"
+  python3 -c "import json,sys; [print(f['sha256'] + '  ' + f['filename']) for r in json.load(open(sys.argv[1])) for f in r['files'] if f['filename'] == sys.argv[2]]" "$WORK/go-releases.json" "$tgz" > "$WORK/sums"
+  verify "$WORK/$tgz" "$WORK/sums" "$tgz"
+  rm -rf "$BIN/../go"; tar -xzf "$WORK/$tgz" -C "$BIN/.."
+  ln -sf "$BIN/../go/bin/go" "$BIN/go"; ln -sf "$BIN/../go/bin/gofmt" "$BIN/gofmt"; go version
 }
 
 install_helm() {

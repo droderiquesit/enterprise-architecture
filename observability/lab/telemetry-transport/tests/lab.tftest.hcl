@@ -68,7 +68,12 @@ variables {
     }
   }
   artifacts = {
-    "img-dsv-fetch" = { image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+    "img-dsv-fetch" = {
+      image          = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      version        = "2.0.0+1.abc1234"
+      package_url    = "https://ehpkgdev.blob.core.windows.net/packages/img-dsv-fetch/src-0123456789abcdef01234567.zip"
+      package_sha256 = "3333333333333333333333333333333333333333333333333333333333333333"
+    }
   }
   platform_containerapps = {
     environment_id    = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aca/providers/Microsoft.App/managedEnvironments/eh-cae-apps-dev-sec"
@@ -213,6 +218,19 @@ run "batch_log_setup_published" {
     condition     = strcontains(local.batch_setup_script, "--map DD_API_KEY=$API_KEY_REF") && strcontains(local.batch_setup_script, "API_KEY_REF='dsv://eh/dev/datadog-api-key#value'") && !strcontains(local.batch_setup_script, "vault.azure.net") && strcontains(local.batch_setup_script, "INSTALL_AGENT='false'")
     error_message = "No API key value is rendered into the script: dsv-fetch reads it from DSV on the node with the pool identity."
   }
+  assert {
+    condition     = strcontains(local.batch_setup_script, "DSV_FETCH_URL='https://ehpkgdev.blob.core.windows.net/packages/img-dsv-fetch/src-0123456789abcdef01234567.zip'") && strcontains(local.batch_setup_script, "DSV_FETCH_SHA256='3333333333333333333333333333333333333333333333333333333333333333'") && strcontains(local.batch_setup_script, "want_version='2.0.0'") && strcontains(local.batch_setup_script, "sha256sum -c --status --ignore-missing SHA256SUMS") && !strcontains(local.batch_setup_script, "python3 -I") && !strcontains(local.batch_setup_script, "dsv_fetch.py")
+    error_message = "Batch nodes install the static dsv-fetch release binary (sha256-pinned zip + SHA256SUMS), no Python."
+  }
+}
+
+run "batch_direct_needs_dsv_fetch_package" {
+  command = plan
+  variables {
+    settings  = { fleet = { log_pipeline = "fluent_bit_direct" } }
+    artifacts = { "img-dsv-fetch" = { image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222" } }
+  }
+  expect_failures = [output.contract]
 }
 
 run "batch_log_setup_disabled" {

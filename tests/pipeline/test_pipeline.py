@@ -54,7 +54,10 @@ def test_every_component_has_exactly_one_plan_and_apply_stage_in_its_scope(reg, 
                 p, a = stages[f"P_{c.var_id}"], stages[f"C_{c.var_id}"]
                 assert p["lockBehavior"] == a["lockBehavior"] == "${{ parameters.settings.stageLockBehavior }}"
                 assert {"Select", "Validate", "Security"} <= set(p["dependsOn"])
-                assert ("Build" in p["dependsOn"]) == bool(c.artifacts)
+                # Build only for artifacts built in THIS scope; cross-scope ones (e.g. img-dsv-fetch of the platform
+                # pipeline consumed by obs-hosts) come from their deployment records (recordedArtifacts)
+                local_artifacts = [a for a in c.artifacts if reg.get(a) is None or reg.get(a).scope == scope]
+                assert ("Build" in p["dependsOn"]) == bool(local_artifacts), c.id
                 assert f"P_{c.var_id}" in a["dependsOn"]
                 parse(p["condition"])
                 parse(a["condition"])

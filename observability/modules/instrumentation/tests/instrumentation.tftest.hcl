@@ -123,7 +123,7 @@ run "aca_python_fluent_bit_direct_fallback" {
     condition = (length(output.container_app_patch.init_containers) == 1
       && output.container_app_patch.init_containers[0].name == "dsv-fetch"
       && output.container_app_patch.init_containers[0].needs_identity
-      && join(" ", output.container_app_patch.refresher_containers[0].args) == "init --out /dsv-secrets --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value --refresh 3600"
+      && join(" ", output.container_app_patch.refresher_containers[0].args) == "init --out /dsv-secrets --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value --refresh-seconds 3600 --retry-seconds 30"
       && startswith(output.container_app_patch.init_containers[0].image, "ehacr.azurecr.io/dsv-fetch@sha256:")
       && join(" ", output.container_app_patch.init_containers[0].args) == "init --out /dsv-secrets --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value"
     && anytrue([for e in output.container_app_patch.init_containers[0].env : e.name == "AZURE_CLIENT_ID" && e.value == "33333333-3333-3333-3333-333333333333"]))
@@ -336,7 +336,7 @@ run "aci_fluent_bit_direct_fallback" {
     error_message = "one collector per log source: Agent log collection off when Fluent Bit collects"
   }
   assert {
-    condition     = jsonencode(output.aci_sidecar.containers[2].commands) == jsonencode(["/opt/dsv-fetch/dsv-fetch", "init", "--out", "/dsv-secrets", "--format", "env-yaml", "--env-yaml-name", "fluentbit-env.yaml", "--map", "DD_API_KEY=dsv://eh/dev/datadog-api-key#value", "--refresh", "3600"])
+    condition     = jsonencode(output.aci_sidecar.containers[2].commands) == jsonencode(["/opt/dsv-fetch/dsv-fetch", "init", "--out", "/dsv-secrets", "--format", "env-yaml", "--env-yaml-name", "fluentbit-env.yaml", "--map", "DD_API_KEY=dsv://eh/dev/datadog-api-key#value", "--refresh-seconds", "3600", "--retry-seconds", "30"])
     error_message = "the refresher is the dsv-fetch binary in loop mode (ACI init containers have no managed identity)"
   }
   assert {

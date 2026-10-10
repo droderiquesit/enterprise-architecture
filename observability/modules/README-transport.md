@@ -1,4 +1,4 @@
-# Telemetry transport and collection: authoritative paths, robustness, duplicate prevention (3.0.0)
+# Telemetry transport and collection: authoritative paths, robustness, duplicate prevention (4.0.0)
 
 This page is the single reference for **who collects what, where** in the portable Datadog package (`observability/`).
 The decisions come from `config/fleet-policy.yaml` (`modules/fleet-policy`, `modules/fleet-inventory`). Every rule
@@ -13,28 +13,35 @@ Status (ADR §11): everything is **implemented**. The following are **locally ve
 * the APM gateway Agent (DSV secret backend, non-local traces, health);
 * the OTel gateway;
 * the DBM checks;
-* the Linux installer.
+* the ACI Datadog Agent sidecar and the Container Apps serverless-init sidecar (`test_agent_sidecar.py`, docker opt-in);
+* the Datadog chart rendered with the layered values + dsv-fetch post-renderer (`tests/kubernetes/`, helm);
+* the VM Application Linux installer (`modules/host-agent-package/tests`, ubuntu:24.04) and the dsv-fetch binary
+  (conformance suite, `images/dsv-fetch/tests`).
 
 Nothing is **deployed** or **verified** live: this sandbox has no Azure or Datadog credentials.
 
 ## 1. Authoritative path per resource type (package defaults)
 
-`log_pipeline = observability_pipelines`, `logs.node_collector = agent`, `apm.mode = datadog`,
-`apm.managed_runtime_path = agent_gateway`. The 2.x paths come back with `fluent_bit_direct` and `otel`.
+`log_pipeline = observability_pipelines`, `logs.collector` per architecture (agent / agent_sidecar / serverless_init /
+azure / fluent_bit), `apm.mode = datadog`, `apm.managed_runtime_path = agent_gateway` (Container Apps:
+serverless_init, ACI: agent_sidecar). The 2.x paths come back with `fluent_bit_direct` and `otel`. Every Datadog Agent
+reads the API key through the ONE secret path `ENC[dsv://...]` + the static dsv-fetch binary as
+`secret_backend_command`.
 
 | Resource / workload | Application logs | Traces + profiles | Custom / runtime metrics | Platform metrics + tags | Platform logs |
 |---|---|---|---|---|---|
 | AKS pods | Node **Datadog Agent** (container logs, `ad.datadoghq.com/<c>.logs`) -> Worker `datadog_agent` source :8282 | **SSI** (Cluster Agent admission controller, `targets` per namespace, `ddTraceVersions`, `DD_PROFILING_ENABLED=auto`) -> node Agent :8126 | DogStatsD to the node Agent (`DD_AGENT_HOST` = `status.hostIP`, `DD_DOGSTATSD_PORT` 8125) | Azure integration | AKS diagnostic settings -> Event Hubs -> Worker |
-| Linux VM / VMSS | Host **Agent** tails the app log file (`conf.d/eh-applogs.d`) -> Worker :8282 | **host SSI** (installer `DD_APM_INSTRUMENTATION_ENABLED=host`) -> local Agent | DogStatsD `udp://localhost:8125` | Azure integration + Agent | - |
-| Windows VM / VMSS | **Fluent Bit** service -> forward -> Worker :24224 | OpenTelemetry -> Agent OTLP (SSI on Windows is IIS only) | OTel metrics -> Agent OTLP | Azure integration + Agent | - |
-| Container Apps (apps), ACI | **Fluent Bit sidecar** tails `LOG_FILE_PATH` -> forward -> Worker :24224 (no API key on the edge) | Datadog library in the image. Container Apps (default, fleet policy `architectures.aca`): **serverless-init sidecar** on localhost:8126, `DD_API_KEY` from DSV via dsv-fetch (dotenv on the in-memory volume). ACI, ACA jobs and ACA `managed_runtime_path = agent_gateway`: **APM gateway** (Agent on ACA, internal TCP 8126; `DD_TRACE_AGENT_URL`) | serverless-init: DogStatsD `udp://localhost:8125`; off behind the gateway (DogStatsD has no TCP transport) | Azure integration | `ContainerAppSystemLogs` -> Worker |
+| Linux VM / VMSS | Host **Agent** (VM Application installed by the Azure Policy on hosts tagged `datadog:enabled`) tails the files of fleet policy `logs.hosts.linux` + the host's `datadog:log_paths` tag -> Worker :8282 | **host SSI** (installer `DD_APM_INSTRUMENTATION_ENABLED=host`) -> local Agent | DogStatsD `udp://localhost:8125` | Azure integration + Agent | - |
+| Windows VM / VMSS | Host **Agent** (VM Application, `dsv-fetch.exe` secret backend) tails `logs.hosts.windows.files` + Event Log channels (`System`, `Application`) -> Worker :8282 | OpenTelemetry -> Agent OTLP (SSI on Windows is IIS only) | OTel metrics -> Agent OTLP | Azure integration + Agent | - |
+| Container Apps (apps) | **serverless-init sidecar** tails `DD_SERVERLESS_LOG_PATH` (the app's `LOG_FILE_PATH` on a shared EmptyDir, `DD_LOGS_ENABLED=true`) -> Worker :8282 | Datadog library in the image -> serverless-init on localhost:8126, `DD_API_KEY` read by dsv-fetch in the sidecar's start wrapper (no Container Apps secret). ACA jobs and `managed_runtime_path = agent_gateway`: **APM gateway** (Agent on ACA, internal TCP 8126; `DD_TRACE_AGENT_URL`) | DogStatsD `udp://localhost:8125`; off behind the gateway (DogStatsD has no TCP transport) | Azure integration | `ContainerAppSystemLogs` -> Worker |
+| ACI container groups | **Datadog Agent sidecar** tails the shared emptyDir log file -> Worker :8282 (`ENC[dsv://]` via the dsv-fetch binary copied by an init container) | Datadog library -> sidecar `localhost:8126` | DogStatsD `udp://localhost:8125` | Azure integration | - |
 | Container Apps **jobs** | stdout -> `ContainerAppConsoleLogs` -> Event Hub `app-logs` -> Worker (allow-list `aca_console_allow`) | as Container Apps | as Container Apps | Azure integration | as Container Apps |
 | App Service (Linux / Windows code, containers) | `AppServiceConsoleLogs` / `AppServiceAppLogs` -> Event Hubs -> Worker | Datadog library (.NET `Datadog.Trace.Bundle`, Python `ddtrace`) -> APM gateway over VNet integration | as Container Apps | Azure integration | `AppServiceHTTPLogs`, ... -> Worker |
 | Functions, Durable Functions | `FunctionAppLogs` -> Event Hubs -> Worker | **OpenTelemetry** (exception: Datadog documents neither the Functions host nor Durable V2 spans) -> OTel gateway | OTel -> gateway | Azure integration | as App Service |
 | Logic Apps | `WorkflowRuntime` -> Event Hubs -> Worker | none | - | Azure integration | - |
-| Batch nodes | Fluent Bit (job preparation task) -> forward -> Worker (no key on the node) | OpenTelemetry -> gateway | OTel | Azure integration | - |
+| Batch nodes | Fluent Bit (job preparation task; the transport contract `batch_log_setup` of the source repository's transport root) -> forward -> Worker (no key on the node; with `fluent_bit_direct` the static dsv-fetch release binary reads it from DSV) | OpenTelemetry -> gateway | OTel | Azure integration | - |
 | Browser (Static Web Apps) | - | **RUM** (`modules/rum`, create or existing; `allowedTracingUrls` with `propagatorTypes [datadog, tracecontext]`; replay 0) | RUM | - | - |
-| Databases | - | DBM <-> APM propagation `DD_DBM_PROPAGATION_MODE=full` in the tracers | Agent DBM checks (`modules/dbm`: ACI or AKS cluster checks) | Azure integration | diagnostic settings -> Worker |
+| Databases | - | DBM <-> APM propagation `DD_DBM_PROPAGATION_MODE=full` in the tracers | Agent DBM checks (`modules/dbm`: AKS cluster checks whenever a cluster exists; ACI Agent only without one) | Azure integration | diagnostic settings -> Worker |
 | Subscription / tenant | - | - | - | - | Activity Log / Entra ID (`modules/azure-logs`) -> Event Hub `activity-logs` -> Worker |
 
 One inventory drives the plan. `modules/fleet-inventory` takes every resource (`id`, `type`, `architecture`,
@@ -103,7 +110,7 @@ Configuration. The local test stops at API-key validation.
 
 | Hop | Buffering | Retry / backpressure | Self-telemetry |
 |---|---|---|---|
-| App -> Fluent Bit (sidecar / host) | file tail with offset DB | resumes from the offset after a restart | Fluent Bit metrics (`fluentbit_*_total`), canary |
+| App -> Agent / serverless-init / Fluent Bit (file tail) | Agent tailer offsets / Fluent Bit offset DB | resumes from the offset after a restart | Fluent Bit metrics (`fluentbit_*_total`), canary |
 | Fluent Bit -> Worker (forward) | filesystem storage, `storage.total_limit_size 512M` | `require_ack_response`, `retry_limit no_limits`; `retain_metadata_in_forward_mode false` (the Worker's fluent source rejects the metadata form; verified) | Fluent Bit output retries / errors |
 | Agent -> Worker (:8282) | Agent tailer offsets | the Agent retries with backoff; the tailers pause under backpressure | Agent status, `datadog.agent.*` |
 | Event Hubs -> Worker (Kafka) | hub retention (1 day by default) is the buffer | consumer group `observability-pipelines`; offsets survive Worker restarts | Worker metrics in Observability Pipelines |
@@ -113,13 +120,13 @@ Configuration. The local test stops at API-key validation.
 
 Fail-closed secrets: the Worker command, the dsv-fetch init containers and the Agent secret backend refuse to start
 without their DSV-resolved values. No hop falls back to a key in env or config.
-[`test_worker_bootstrap_fail_closed_and_env`, `test_apm_gateway_agent_resolves_key_from_dsv`]
+[`test_worker_bootstrap_fail_closed_and_env`, `test_apm_gateway_agent_resolves_key_from_dsv`, `test_aci_agent_sidecar`]
 
 ## 4. Duplicate-prevention rules
 
 | Rule | Where enforced |
 |---|---|
-| One application-log collector per line: when the Agent collects (AKS, Linux hosts), the Fluent Bit DaemonSet or host service is not installed (`fluent_bit` release count 0); with `fluent_bit_direct` the Agent's log collection is off | `modules/kubernetes` [`fleet_default_agent_logs_to_op_ssi_profiling`, `op_with_fluent_bit_node_collector`], `modules/host-agents` [hosts.tftest `fleet_default_agent_logs_ssi_op`] |
+| One application-log collector per line (fleet policy `logs.collector` per architecture): when the Agent / sidecar / serverless-init collects, no Fluent Bit runs (DaemonSet release count 0; no Fluent Bit sidecar or host service - hosts never get Fluent Bit in 4.0.0); with `fluent_bit_direct` the Agent-side log collection is off | `modules/kubernetes` [`fleet_default_agent_logs_to_op_ssi_profiling`, `op_with_fluent_bit_node_collector`], `modules/host-agent-package` [package.tftest `fluent_bit_direct_skips_worker`], `modules/instrumentation` [instrumentation.tftest] |
 | Apps never export OTLP logs (`OTEL_LOGS_EXPORTER=none` in otel mode; no OTel variables at all in datadog mode) | `modules/instrumentation` [`datadog_mode_aks_ssi`] |
 | One tracer per process: datadog mode emits `TELEMETRY_SDK=datadog` and `DD_TRACE_OTEL_ENABLED=true` (manual OTel-API / Activity spans go into the Datadog tracer); never `OTEL_EXPORTER_OTLP_*`, `OTEL_SDK_DISABLED` or `OTEL_RESOURCE_ATTRIBUTES` (Datadog maps that to `DD_TAGS`, which would duplicate tags) | `modules/fleet-policy`, `modules/instrumentation` |
 | Diagnostic settings export app-log categories only for the `eventhub` route; platform categories are an allow list per type | `modules/diagnostic-settings` [diagnostics.tftest] |

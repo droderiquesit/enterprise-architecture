@@ -14,7 +14,8 @@ the API key and downloads the pipeline definition by DD_OP_PIPELINE_ID through R
   refuses to start without the dsv-fetch dotenv file, and with it accepts the bootstrap env (pipeline id, site, source
   addresses, data dir per replica) and reaches API-key validation (which needs Datadog - not reachable here).
 * test_apm_gateway_agent_resolves_key_from_dsv: the APM gateway of modules/telemetry-transport (Datadog Agent 7.84.2,
-  datadog.yaml rendered by terraform console, the module's start command) resolves api_key ENC[dsv://...] through the
+  datadog.yaml rendered by terraform console, the module's start command re-installing the static dsv-fetch binary
+  that the init container copied into /dsv-bin) resolves api_key ENC[dsv://...] through the
   dsv-fetch secret backend from a mock Delinea DSV, accepts Datadog tracer payloads from another container on 8126
   (apm_non_local_traffic) and reports healthy on 5555 - no API key in env, image or Terraform.
 """
@@ -28,7 +29,7 @@ import time
 from pathlib import Path
 
 import pytest
-from dockerutil import FLUENT_BIT_IMAGE, HERE, Stack, sh, wait_for
+from dockerutil import FLUENT_BIT_IMAGE, HERE, Stack, dsv_fetch_binary, sh, wait_for
 
 PKG = HERE.parents[1]
 SAMPLES = HERE / "samples"
@@ -229,26 +230,30 @@ def test_apm_gateway_agent_resolves_key_from_dsv(tmp_path):
     assert "managed_by:terraform" in dd_yaml["tags"] and "env:test" in dd_yaml["tags"]
     key = "abcdef0123456789abcdef0123456789"
     cfg = tmp_path / "apm"
-    for d in ("dsvmock", "eh-agent", "eh-dsv"):
+    for d in ("dsvmock", "eh-agent", "eh-dsv", "dsv-bin"):
         (cfg / d).mkdir(parents=True)
     (cfg / "dsvmock" / "cfg.json").write_text(json.dumps({
         "clients": {"apm-test": {"secret": "apm-test-secret", "identity": "obs-apm-test"}},
         "users": {"obs-apm-test": {"read": ["eh/test/*"]}},
         "secrets": {"eh/test/datadog-api-key": {"value": key}}}))
     (cfg / "eh-agent" / "datadog.yaml").write_text(yaml.safe_dump(dd_yaml))
-    shutil.copy(PKG / "images/dsv-fetch/dsv_fetch.py", cfg / "eh-dsv" / "dsv_fetch.py")
+    # the dsv-fetch-install init container's result: the static binary in the replica's EmptyDir /dsv-bin
+    found = dsv_fetch_binary(tmp_path)
+    if found is None:
+        pytest.skip("no dsv-fetch static binary (set DSV_FETCH_BIN, DSV_FETCH_IMAGE or install Go)")
+    shutil.copy(found[0], cfg / "dsv-bin" / "dsv-fetch")
     # the module's dsv.json uses managed identity (DSV_AUTH azure); locally the mock DSV authenticates a client
     (cfg / "eh-dsv" / "dsv.json").write_text(json.dumps({
         "DSV_AUTH": "client_credentials", "DSV_CLIENT_ID": "apm-test", "DSV_CLIENT_SECRET": "apm-test-secret",
         "DSV_BASE_URL": "http://dsv:8200/v1", "DSV_ALLOW_INSECURE_HTTP": "true"}))
     for p in cfg.rglob("*"):
-        p.chmod(0o755 if p.is_dir() else 0o644)
+        p.chmod(0o755 if p.is_dir() or p.name == "dsv-fetch" else 0o644)
     s = Stack("apmgw")
     try:
         s.run("dsv", PYTHON_IMAGE, volumes=[f"{REPO / 'tools' / 'secrets'}:/m:ro", f"{cfg / 'dsvmock'}:/c:ro"],
               cmd=["python", "-u", "/m/mock_dsv.py", "--config", "/c/cfg.json", "--host", "0.0.0.0", "--port", "8200"])
         agent = s.run("apm", AGENT_IMAGE, env={**env, "HOSTNAME": "apm-gw-0"},
-                      volumes=[f"{cfg / 'eh-agent'}:/eh/agent:ro", f"{cfg / 'eh-dsv'}:/eh/dsv:ro"],
+                      volumes=[f"{cfg / 'eh-agent'}:/eh/agent:ro", f"{cfg / 'eh-dsv'}:/eh/dsv:ro", f"{cfg / 'dsv-bin'}:/dsv-bin:ro"],
                       entrypoint=start[0], cmd=start[1:])
 
         def secret_resolved():

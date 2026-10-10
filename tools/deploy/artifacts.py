@@ -10,6 +10,10 @@
               and the artifact's record (<env>/<component>.json, kind artifact)
   promote     (environments after the first of a promotion chain) copy the image digest / package sha256 the
               `promote_from` environment recorded for the SAME source fingerprint; never builds; fails if missing
+  unpack      for a deploy root that consumes a zip-package as FILES (UNPACK below, e.g. obs-hosts: the img-dsv-fetch
+              release binaries become VM Application packages): resolve the artifact like `tfvars`, download its
+              package_url from the packages store (Entra ID auth), verify package_sha256 and the SHA256SUMS inside,
+              extract into <root>/<dest> (git-ignored). No-op for other roots.
   tfvars      for a deploy root: write <root>/artifacts.auto.tfvars.json with
               artifacts = {<artifact component id> = {name, image, digest, package_url, package_sha256,
               source_fp, tag}} when the root declares `variable "artifacts"`; print the sha256.
@@ -26,6 +30,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -340,6 +345,82 @@ def artifacts_tfvars(repo: Path, component: str, metadata_dir: Path, write: bool
     return entries, hashlib.sha256(text.encode()).hexdigest()
 
 
+# Roots that need an artifact's zip-package extracted next to them before plan/apply (tf-prepare.sh -> unpack):
+# component -> [(artifact, destination directory relative to the root)]
+UNPACK = {"obs-hosts": [("img-dsv-fetch", ".dsv-fetch-release")]}
+
+
+def _split_package_url(url: str) -> "tuple[str, str]":
+    """packages store base URL + key (<name>/<tag>.zip, as finalize writes it)."""
+    base, name, leaf = url.rstrip("/").rsplit("/", 2)
+    return base, f"{name}/{leaf}"
+
+
+def verify_sha256sums(directory: Path) -> List[str]:
+    """Check every file listed in <directory>/SHA256SUMS (sha256sum format); returns the verified names."""
+    sums = directory / "SHA256SUMS"
+    if not sums.exists():
+        raise SystemExit(f"ERROR: {sums} missing in the package")
+    names = []
+    for line in sums.read_text().splitlines():
+        if not line.strip():
+            continue
+        want, name = line.split(None, 1)
+        name = name.lstrip("*").strip()
+        if "/" in name or name.startswith("."):
+            raise SystemExit(f"ERROR: unexpected path in SHA256SUMS: {name!r}")
+        if sha256_file(directory / name) != want:
+            raise SystemExit(f"ERROR: SHA256SUMS mismatch for {name}")
+        names.append(name)
+    return names
+
+
+def unpack_package(package_url: str, package_sha256: str, dest: Path, store=None) -> List[str]:
+    """Download + verify (zip sha256, SHA256SUMS) + extract a zip-package into dest (replaced atomically)."""
+    import tempfile
+
+    if not package_url or not re.fullmatch(r"[0-9a-f]{64}", package_sha256 or ""):
+        raise SystemExit("ERROR: artifact has no package_url / package_sha256 (zip-package expected)")
+    base, key = _split_package_url(package_url)
+    store = store or open_store(base)
+    with tempfile.TemporaryDirectory() as td:
+        z = Path(td) / "package.zip"
+        if not store.get_file(key, z):
+            raise SystemExit(f"ERROR: package {package_url} not found")
+        if sha256_file(z) != package_sha256:
+            raise SystemExit(f"ERROR: package sha256 mismatch for {package_url}")
+        stage = Path(td) / "x"
+        with zipfile.ZipFile(z) as zf:
+            for n in zf.namelist():
+                if n.startswith("/") or ".." in Path(n).parts:
+                    raise SystemExit(f"ERROR: unsafe path in package: {n!r}")
+            zf.extractall(stage)
+        names = verify_sha256sums(stage)
+        if dest.exists():
+            shutil.rmtree(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(stage, dest)
+    return names
+
+
+def cmd_unpack(args) -> int:
+    targets = UNPACK.get(args.component, [])
+    if not targets:
+        return 0
+    recorded = [a for a in (args.recorded or "").split(",") if a]
+    records = open_store(args.records_url) if recorded and args.records_url else None
+    selection = _selection(args.selection) if args.selection and Path(args.selection).exists() else None
+    repo = Path(args.repo).resolve()
+    entries, _ = artifacts_tfvars(repo, args.component, Path(args.metadata_dir), write=False,
+                                  recorded=recorded, records=records, env=args.env, selection=selection)
+    comp = load_registry(WorkTree(repo)).get(args.component)
+    for artifact, rel in targets:
+        e = entries.get(artifact) or {}
+        names = unpack_package(e.get("package_url") or "", e.get("package_sha256") or "", repo / comp.path / rel)
+        print(f"{args.component}: {artifact} {str(e.get('package_sha256'))[:12]} -> {comp.path}/{rel} ({', '.join(names)})")
+    return 0
+
+
 def cmd_tfvars(args) -> int:
     recorded = [a for a in (args.recorded or "").split(",") if a]
     records = open_store(args.records_url) if recorded and args.records_url else None
@@ -392,6 +473,14 @@ def main(argv=None) -> int:
     v.add_argument("--selection", default="")
     v.add_argument("--env", default="")
     v.set_defaults(func=cmd_tfvars)
+    u = sub.add_parser("unpack", help="extract a zip-package next to a root that consumes it as files (UNPACK)")
+    u.add_argument("--component", required=True)
+    u.add_argument("--metadata-dir", required=True)
+    u.add_argument("--recorded", default="")
+    u.add_argument("--records-url", default="")
+    u.add_argument("--selection", default="")
+    u.add_argument("--env", default="")
+    u.set_defaults(func=cmd_unpack)
     args = ap.parse_args(argv)
     return args.func(args)
 

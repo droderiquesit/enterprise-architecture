@@ -60,11 +60,19 @@ locals {
   op_mode       = local.fleet.log_pipeline == "observability_pipelines"
   libs          = local.fleet.apm.library_versions
   ssi_libraries = join(",", [for lang in sort(keys(local.libs)) : "${lang}:${trimprefix(local.libs[lang], "v")}" if contains(["dotnet", "python", "js", "java"], lang)])
-  fleet_hosts   = try(local.fleet.policy.logs.hosts, {})
+  # host log collection: the caller's host_logs (when set) -> fleet policy logs.hosts (merged section: defaults ->
+  # architectures.<arch> -> environments.<env>) -> nothing
+  fleet_hosts = try(local.fleet.sections.logs.hosts, {})
   host_logs = {
-    linux_files    = try(local.fleet_hosts.linux.files, var.host_logs.linux.files)
-    windows_files  = try(local.fleet_hosts.windows.files, var.host_logs.windows.files)
-    event_channels = try(local.fleet_hosts.windows.event_channels, var.host_logs.windows.event_channels)
+    linux_files = [for f in coalesce(try(var.host_logs.linux.files, null), try(local.fleet_hosts.linux.files, null), []) : {
+      path = f.path, service = try(f.service, null), source = try(f.source, null)
+    }]
+    windows_files = [for f in coalesce(try(var.host_logs.windows.files, null), try(local.fleet_hosts.windows.files, null), []) : {
+      path = f.path, service = try(f.service, null), source = try(f.source, null)
+    }]
+    event_channels = [for c in coalesce(try(var.host_logs.windows.event_channels, null), try(local.fleet_hosts.windows.event_channels, null), []) : {
+      channel = c.channel, source = coalesce(try(c.source, null), "windows.events")
+    }]
   }
 
   # Azure tag key (lower case) -> Datadog key, from the tag policy (azure_tag_keys); env/service/version are read too
@@ -135,6 +143,8 @@ resource "azurerm_storage_account" "packages" {
   #checkov:skip=CKV2_AZURE_33:No private endpoint: the gallery reads through its managed identity as a trusted service; publishers are admitted by ip_rules / subnet_ids.
   #checkov:skip=CKV2_AZURE_21:Blob service logging is a diagnostic setting owned by obs-diagnostics (ADR-0001 §3 rule 4).
   #checkov:skip=CKV_AZURE_33:Queue service is not used.
+  #checkov:skip=CKV_AZURE_59:network_rules default_action = Deny (only ip_rules / subnet_ids / trusted Azure services); public_network_access is a caller setting for publishers without VNet access.
+  #checkov:skip=CKV_AZURE_206:ZRS is replicated (3 zones); geo-redundancy comes from the gallery replicas (replica_regions), not the package source.
   name                             = var.names.storage_account
   resource_group_name              = local.rg_name
   location                         = var.location
@@ -171,6 +181,7 @@ resource "azurerm_storage_account" "packages" {
 }
 
 resource "azurerm_storage_container" "packages" {
+  #checkov:skip=CKV2_AZURE_21:Blob service logging is a diagnostic setting owned by obs-diagnostics (ADR-0001 §3 rule 4).
   name                  = var.names.container
   storage_account_id    = azurerm_storage_account.packages.id
   container_access_type = "private"

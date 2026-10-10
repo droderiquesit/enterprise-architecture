@@ -128,6 +128,7 @@ locals {
 }
 
 resource "azurerm_container_group" "dbm" {
+  #checkov:skip=CKV_AZURE_235:No secret in environment_variables: DD_API_KEY is only the ENC[dsv://...] reference, resolved by the dsv-fetch secret backend (ADR-0001 §14).
   count               = var.hosting == "aci" ? 1 : 0
   name                = var.aci.name
   resource_group_name = var.aci.resource_group_name

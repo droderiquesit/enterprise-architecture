@@ -96,7 +96,7 @@ variable "platform_containerapps" {
 }
 
 variable "artifacts" {
-  description = "Immutable build outputs keyed by artifact component id (tools/deploy/artifacts.py tfvars); this root uses img-dsv-fetch (digest-pinned)."
+  description = "Immutable build outputs keyed by artifact component id (tools/deploy/artifacts.py tfvars); this root uses img-dsv-fetch (image digest-pinned; package_url/package_sha256 of its release zip for Batch nodes)."
   type = map(object({
     name    = optional(string)
     image   = optional(string)
@@ -104,6 +104,9 @@ variable "artifacts" {
     version = optional(string)
     commit  = optional(string)
     tag     = optional(string)
+    # zip-package of the same build (img-dsv-fetch: release binaries + SHA256SUMS; used by the Batch log setup)
+    package_url    = optional(string)
+    package_sha256 = optional(string)
   }))
   default = {}
   validation {

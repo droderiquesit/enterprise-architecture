@@ -45,11 +45,19 @@ Fluent Bit aggregator and the OTel gateway (Container Apps, internal ingress).
 * `batch_log_setup_enabled` (true): publish `batch_log_setup` in the contract (below)
 
 ## Batch log setup (`batch_log_setup`)
-ADR-0001 §13: the contract carries a gzip+base64 Linux installer rendered from
-`modules/host-agents/scripts/linux-install.sh.tftpl` with the `linux-host` Fluent Bit config (`batch.tf`): pinned
-Fluent Bit 5.1.3, no Datadog Agent, Datadog API key read from Delinea DSV on the node (embedded dsv-fetch, `ExecStartPre`) with the identity named in
-`EH_IDENTITY_CLIENT_ID`, tail paths from `EH_LOG_PATHS` (`$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt`).
-deploy-jobs runs it as the Batch job preparation task. No secrets are rendered.
+ADR-0001 §13: the contract carries a gzip+base64 Linux installer rendered from the Batch-specific
+`scripts/batch-log-setup.sh.tftpl` with the `linux-host` Fluent Bit config (`batch.tf`): pinned Fluent Bit 5.1.3,
+no Datadog Agent (Batch is, besides `log_pipeline = fluent_bit_direct`, the only place Fluent Bit remains in 4.0.0),
+tail paths from `EH_LOG_PATHS` (`$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt`). deploy-jobs runs it as
+the Batch job preparation task. No secrets are rendered.
+
+* Observability Pipelines (default): Fluent Bit forwards to the in-VNet Worker; no API key and no dsv-fetch on the node.
+* `fluent_bit_direct`: the node downloads the **static dsv-fetch release** (`artifacts["img-dsv-fetch"].package_url`,
+  the img-dsv-fetch zip-package) with the pool identity named in `EH_IDENTITY_CLIENT_ID` (IMDS token for Azure
+  Storage; the pool identity already reads the packages store for the svc-jobs package), checks the pinned
+  `package_sha256` and `SHA256SUMS`, installs `dsv-fetch-linux-<arch>` root-only (0500) and the Fluent Bit unit's
+  `ExecStartPre` reads the API key from Delinea DSV into a tmpfs file. The output precondition fails the plan when the
+  package URL/sha256 are missing. No Python is involved (package 4.0.0 retired the 1.x `dsv_fetch.py`).
 
 ## Cost at defaults
 About $110/month. Event Hubs Standard 1 TU is about $22; two always-on 0.5 vCPU / 1 GiB Container Apps are about

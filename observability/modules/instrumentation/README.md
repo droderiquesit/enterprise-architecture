@@ -30,7 +30,7 @@ One Datadog collection path per platform (observability 4.0.0, fleet policy `log
   the dsv-fetch binary (installed by the identity-free `dsv-fetch-install` init container, so every workload profile
   works) into its own `/tmp`, sources and truncates the dotenv and execs `/datadog-init`.
 * **Fluent Bit** only with `log_pipeline = fluent_bit_direct` (Container Apps / ACI sidecar + dsv-fetch env-yaml init
-  or refresher container `init --refresh`); the Datadog sidecars then keep traces / DogStatsD with log collection off.
+  or refresher container `init --refresh-seconds`); the Datadog sidecars then keep traces / DogStatsD with log collection off.
 
 Datadog mode on managed runtimes (fleet policy): Container Apps default to the **serverless-init sidecar**
 (`architectures.aca.apm.managed_runtime_path = serverless_init`) and ACI to the **Agent sidecar**

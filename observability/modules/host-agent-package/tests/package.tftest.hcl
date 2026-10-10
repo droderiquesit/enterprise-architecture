@@ -145,6 +145,17 @@ run "fluent_bit_direct_skips_worker" {
   }
 }
 
+run "host_logs_default_from_fleet_policy" {
+  command = plan
+  variables {
+    host_logs = {}
+  }
+  assert {
+    condition     = strcontains(output.installers["linux"], "/var/log/enterprise-hello/*.log") && !strcontains(output.installers["linux"], "/var/log/hello-worker/*.log") && strcontains(output.installers["windows"], "System") && strcontains(output.installers["windows"], "Application") && strcontains(output.installers["windows"], "enterprise-hello")
+    error_message = "No host_logs input: the fleet policy logs.hosts defaults (Linux/Windows files, Windows System + Application channels) are rendered."
+  }
+}
+
 run "op_mode_needs_worker_url" {
   command = plan
   variables {

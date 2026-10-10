@@ -162,9 +162,10 @@ variable "op_agent_logs_url" {
 
 variable "host_logs" {
   description = <<-EOT
-    Host log collection by the Agent (fleet policy logs.hosts.* wins when present). Per OS: `files` (path, optional
-    service / source; null service = the instance's service tag) and, on Windows, Event Log `event_channels`.
-    Hosts add files with the Azure tag <metadata_tag_prefix>log_paths (comma separated absolute paths).
+    Host log collection by the Agent. Default (null fields): the fleet policy `logs.hosts` section (package defaults
+    in config/fleet-policy.yaml; per-environment via environments.<env>.logs.hosts). A field set here wins over the
+    policy. Per OS: `files` (path, optional service / source; null service = the instance's service tag) and, on
+    Windows, Event Log `event_channels`. Hosts add files with the Azure tag <metadata_tag_prefix>log_paths.
   EOT
   type = object({
     linux = optional(object({
@@ -172,26 +173,26 @@ variable "host_logs" {
         path    = string
         service = optional(string)
         source  = optional(string)
-      })), [])
+      })))
     }), {})
     windows = optional(object({
       files = optional(list(object({
         path    = string
         service = optional(string)
         source  = optional(string)
-      })), [])
+      })))
       event_channels = optional(list(object({
         channel = string
         source  = optional(string, "windows.events")
-      })), [{ channel = "System" }, { channel = "Application" }])
+      })))
     }), {})
   })
   default = {}
   validation {
     condition = alltrue(concat(
-      [for f in var.host_logs.linux.files : startswith(f.path, "/") && !strcontains(f.path, "'") && !strcontains(f.path, "\"")],
-      [for f in var.host_logs.windows.files : can(regex("^[A-Za-z]:\\\\", f.path)) && !strcontains(f.path, "'") && !strcontains(f.path, "\"")],
-      [for c in var.host_logs.windows.event_channels : can(regex("^[A-Za-z0-9 ._/-]+$", c.channel))],
+      [for f in coalesce(var.host_logs.linux.files, []) : startswith(f.path, "/") && !strcontains(f.path, "'") && !strcontains(f.path, "\"")],
+      [for f in coalesce(var.host_logs.windows.files, []) : can(regex("^[A-Za-z]:\\\\", f.path)) && !strcontains(f.path, "'") && !strcontains(f.path, "\"")],
+      [for c in coalesce(var.host_logs.windows.event_channels, []) : can(regex("^[A-Za-z0-9 ._/-]+$", c.channel))],
     ))
     error_message = "host_logs: Linux paths absolute, Windows paths drive-rooted (C:\\...), no quotes; event channels [A-Za-z0-9 ._/-]."
   }

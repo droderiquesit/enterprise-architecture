@@ -2,7 +2,9 @@
 # (./vendor.sh -> ./.vendor/observability-<version>/). It CONNECTS existing resources to Datadog with the package tag
 # policy: Datadog-side collection objects (Azure integration, Observability Pipelines pipeline, RUM application),
 # diagnostic settings on the supplied resources, the Datadog Agent / Observability Pipelines Worker on the existing
-# AKS cluster, DBM cluster checks and the instrumentation settings the application owners apply. Azure resources are
+# AKS cluster (layered Helm values + dsv-fetch post-renderer, one DSV secret path), DBM cluster checks, optionally
+# the VM / VMSS Agent via Azure Policy + VM Applications (host_agents, policy mode) and the instrumentation settings
+# the application owners apply. Azure resources are
 # referenced by the ids written in manifests/<env>/*.yaml and are never created, changed or destroyed here.
 # Monitors, SLOs and dashboards are not part of the package (they exist in your organisation; extras/content in the
 # source repository holds the optional 2.x content modules).
@@ -32,20 +34,20 @@ locals {
 }
 
 module "fleet" {
-  source    = "./.vendor/observability-3.0.0/modules/fleet-inventory"
+  source    = "./.vendor/observability-4.0.0/modules/fleet-inventory"
   resources = local.inventory
   env       = var.env
 }
 
 # Environment-level tags (filled into telemetry that arrives without them; never overwrite a client value)
 module "env_tags" {
-  source           = "./.vendor/observability-3.0.0/modules/tagging"
+  source           = "./.vendor/observability-4.0.0/modules/tagging"
   enforce_required = false
   identity         = { env = var.env, region = var.region, managed_by = "terraform" }
 }
 
 module "azure_integration" {
-  source = "./.vendor/observability-3.0.0/modules/azure-integration"
+  source = "./.vendor/observability-4.0.0/modules/azure-integration"
   count  = var.azure_integration.enabled ? 1 : 0
 
   mode             = "app_registration"
@@ -60,7 +62,7 @@ module "azure_integration" {
 }
 
 module "diagnostics" {
-  source = "./.vendor/observability-3.0.0/modules/diagnostic-settings"
+  source = "./.vendor/observability-4.0.0/modules/diagnostic-settings"
   count  = var.diagnostics.enabled ? 1 : 0
 
   resources = module.fleet.diagnostic_targets
@@ -74,7 +76,7 @@ module "diagnostics" {
 
 # Subscription Activity Log (+ optional Entra ID) of the supplied subscriptions -> activity-logs hub.
 module "azure_logs" {
-  source = "./.vendor/observability-3.0.0/modules/azure-logs"
+  source = "./.vendor/observability-4.0.0/modules/azure-logs"
   count  = var.diagnostics.enabled ? 1 : 0
 
   activity_log = {
@@ -91,10 +93,11 @@ module "azure_logs" {
 
 # Datadog Observability Pipelines: one pipeline per environment. Sources: Datadog Agents and Fluent Bit edge
 # collectors, plus the Event Hubs (Kafka endpoint) the diagnostic settings above export to. The Worker runs on the
-# existing AKS cluster (module.kubernetes op_worker); its API key and the Event Hubs listen connection string come
-# from Secrets kept by the Delinea dsv-k8s syncer - never through Terraform.
+# existing AKS cluster (module.kubernetes op_worker); its API key and the Event Hubs listen connection string are read
+# from Delinea DSV by the Worker pod's dsv-fetch init container (workload identity) - never through Terraform or a
+# Kubernetes Secret.
 module "observability_pipeline" {
-  source = "./.vendor/observability-3.0.0/modules/observability-pipeline"
+  source = "./.vendor/observability-4.0.0/modules/observability-pipeline"
   count  = local.op_enabled ? 1 : 0
 
   name         = "${var.env}-logs"
@@ -115,7 +118,7 @@ module "observability_pipeline" {
 }
 
 module "rum" {
-  source       = "./.vendor/observability-3.0.0/modules/rum"
+  source       = "./.vendor/observability-4.0.0/modules/rum"
   count        = length(var.rum) > 0 ? 1 : 0
   datadog_site = var.datadog_site
   applications = { for k, a in var.rum : k => merge(a, {
@@ -126,7 +129,7 @@ module "rum" {
 }
 
 module "dbm" {
-  source = "./.vendor/observability-3.0.0/modules/dbm"
+  source = "./.vendor/observability-4.0.0/modules/dbm"
   count  = var.dbm.enabled ? 1 : 0
 
   hosting  = "cluster_checks"
@@ -148,17 +151,17 @@ module "dbm" {
 }
 
 module "kubernetes" {
-  source = "./.vendor/observability-3.0.0/modules/kubernetes"
+  source = "./.vendor/observability-4.0.0/modules/kubernetes"
   count  = var.kubernetes.enabled ? 1 : 0
 
   cluster_name = var.kubernetes.cluster_name
   datadog      = { site = var.datadog_site, env = var.env }
   identity     = merge(var.kubernetes.identity, { region = var.region })
   log_pipeline = local.op_enabled ? "observability_pipelines" : "fluent_bit_direct"
-  api_key = {
-    mode                      = var.kubernetes.api_key_mode
-    cluster_agent_secret_name = var.kubernetes.cluster_agent_secret_name
-  }
+  # ONE secret path (4.0.0): node Agent, Cluster Agent and cluster-checks runners resolve ENC[dsv://...] with the
+  # static dsv-fetch binary (copied by an init container injected by the module's post-renderer). Federate the
+  # identity with datadog/datadog, datadog/datadog-cluster-agent, datadog/datadog-cluster-checks and (Worker on the
+  # cluster) observability-pipelines/opw-observability-pipelines-worker.
   dsv = {
     api_key_ref        = var.telemetry.api_key_ref
     tenant             = var.telemetry.secrets.tenant
@@ -168,14 +171,14 @@ module "kubernetes" {
     identity_client_id = var.kubernetes.identity_client_id
   }
   apm = { namespaces = var.kubernetes.ssi_namespaces }
+  # per-cluster chart values applied last (sizing, tolerations, envDict ...); the secret path cannot be overridden
+  values_overrides = var.kubernetes.values_overrides
   op_worker = {
-    enabled             = local.op_enabled
-    pipeline_id         = local.op_enabled ? module.observability_pipeline[0].pipeline_id : null
-    api_key_secret_name = var.observability_pipelines.api_key_secret_name
-    env                 = { for k, v in try(module.observability_pipeline[0].worker_env, {}) : k => v }
-    secret_env = { for k, v in {
-      DD_OP_SOURCE_KAFKA_SASL_PASSWORD = { secret_name = try(var.observability_pipelines.eventhub.synced_secret_name, ""), key = try(var.observability_pipelines.eventhub.synced_secret_key, "") }
-    } : k => v if local.eh }
+    enabled     = local.op_enabled
+    pipeline_id = local.op_enabled ? module.observability_pipeline[0].pipeline_id : null
+    env         = { for k, v in try(module.observability_pipeline[0].worker_env, {}) : k => v }
+    # NAME -> dsv:// reference; the Worker's dsv-fetch init container resolves it (no synced Kubernetes Secret)
+    secret_env = local.eh ? { DD_OP_SOURCE_KAFKA_SASL_PASSWORD = var.observability_pipelines.eventhub.connection_string_ref } : {}
   }
 
   cluster_checks = var.dbm.enabled ? module.dbm[0].cluster_check_confd : {}
@@ -184,7 +187,7 @@ module "kubernetes" {
 # Instrumentation settings (env vars / app settings / k8s patches) the application owners apply in their own
 # deployment code (this root never changes application settings).
 module "instrumentation" {
-  source   = "./.vendor/observability-3.0.0/modules/instrumentation"
+  source   = "./.vendor/observability-4.0.0/modules/instrumentation"
   for_each = var.instrumented_services
 
   service = merge(
@@ -195,4 +198,34 @@ module "instrumentation" {
   architecture = local.by_service[each.key].architecture
   os_type      = local.by_service[each.key].os_type
   telemetry    = var.telemetry
+}
+
+# VMs / VMSS (optional): Azure Policy DeployIfNotExists enrols every VM / VMSS tagged datadog:enabled = "true" in the
+# scope - attaches the DSV-reader identity and the pinned Datadog Agent VM Application; no per-host Terraform. Needs
+# the dsv-fetch release files (img-dsv-fetch zip-package, SHA256SUMS verified) unzipped into dsv_fetch_release_dir
+# before plan, and Resource Policy Contributor + User Access Administrator (condition-restricted) at the policy scope.
+module "host_agents" {
+  source = "./.vendor/observability-4.0.0/modules/host-agents"
+  count  = var.hosts.enabled ? 1 : 0
+
+  mode           = "policy"
+  env            = var.env
+  datadog        = { site = var.datadog_site, api_key_ref = var.telemetry.api_key_ref }
+  dsv            = { tenant = var.telemetry.secrets.tenant, tld = var.telemetry.secrets.tld, base_url = var.telemetry.secrets.base_url }
+  agent_identity = var.hosts.agent_identity
+  package = {
+    resource_group_id       = var.hosts.resource_group_id
+    location                = var.region
+    names                   = var.hosts.names
+    version                 = var.hosts.package_version
+    dsv_fetch_release_dir   = var.hosts.dsv_fetch_release_dir
+    publisher_principal_ids = var.hosts.publisher_principal_ids
+  }
+  policy = {
+    name_prefix                  = "${var.env}-datadog"
+    scope                        = var.hosts.scope
+    identity_resource_group_name = var.hosts.identity_resource_group_name
+  }
+  log_pipeline      = local.op_enabled ? "observability_pipelines" : "fluent_bit_direct"
+  op_agent_logs_url = var.hosts.op_agent_logs_url
 }

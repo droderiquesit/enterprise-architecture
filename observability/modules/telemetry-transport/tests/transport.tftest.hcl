@@ -300,7 +300,7 @@ run "reject_without_fetch_image" {
   variables {
     secrets = { tenant = "contoso" }
   }
-  expect_failures = [azapi_resource.aggregator, azapi_resource.gateway]
+  expect_failures = [azapi_resource.aggregator, azapi_resource.gateway, azapi_resource.apm_gateway]
 }
 
 run "reject_aggregator_without_shared_key" {
@@ -420,6 +420,10 @@ run "observability_pipelines_mode" {
     condition     = strcontains(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value, "\"apm_non_local_traffic\": true") && strcontains(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value, "ENC[dsv://eh/dev/datadog-api-key#value]") && contains(yamldecode(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value).apm_config.ignore_resources, "GET /healthz")
     error_message = "APM gateway Agent: non-local APM traffic, API key resolved from DSV"
   }
+  assert {
+    condition     = azapi_resource.apm_gateway[0].body.properties.template.initContainers[0].args == ["install", "--dest", "/dsv-bin/dsv-fetch"] && strcontains(azapi_resource.apm_gateway[0].body.properties.template.containers[0].command[2], "/dsv-bin/dsv-fetch install --dest /opt/dsv-fetch/dsv-fetch") && !strcontains(jsonencode(azapi_resource.apm_gateway[0].body), "python") && !strcontains(jsonencode(azapi_resource.apm_gateway[0].body), "dsv_fetch.py")
+    error_message = "APM gateway: init container copies the static dsv-fetch binary; the Agent re-installs it as root (no Python, no embedded script)"
+  }
 }
 
 run "op_dedicated_profile_uses_refresher" {
@@ -431,6 +435,10 @@ run "op_dedicated_profile_uses_refresher" {
   assert {
     condition     = length(azapi_resource.op_worker[0].body.properties.template.initContainers) == 0 && length(azapi_resource.op_worker[0].body.properties.template.containers) == 2
     error_message = "Dedicated profile: dsv-fetch as refresher sidecar (init containers get no managed identity)"
+  }
+  assert {
+    condition     = azapi_resource.op_worker[0].body.properties.template.containers[1].name == "dsv-fetch-refresher" && !contains(keys(azapi_resource.op_worker[0].body.properties.template.containers[1]), "command") && contains(azapi_resource.op_worker[0].body.properties.template.containers[1].args, "--refresh-seconds") && contains(azapi_resource.op_worker[0].body.properties.template.containers[1].args, "3600")
+    error_message = "Refresher = the static binary's own `init --refresh-seconds 3600` (no Python stub)"
   }
 }
 

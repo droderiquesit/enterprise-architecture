@@ -93,6 +93,14 @@ variable "obs_telemetry_transport" {
       logs_intake_host       = optional(string)
       forward_shared_key_ref = optional(string)
     })
+    # log hop of the environment (instrumentation selects the per-architecture collector from it)
+    aggregator = optional(object({
+      kind           = optional(string)
+      fqdn           = optional(string)
+      pipeline_id    = optional(string)
+      agent_logs_url = optional(string)
+      log_pipeline   = optional(string)
+    }))
     env = optional(map(map(string)), {})
   })
 }

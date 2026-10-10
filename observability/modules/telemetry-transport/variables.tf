@@ -388,12 +388,6 @@ variable "apm_gateway" {
   }
 }
 
-variable "dsv_fetch_source" {
-  description = "Path of dsv_fetch.py (embedded into the APM gateway Agent as its secret backend). Default: the package copy images/dsv-fetch/dsv_fetch.py."
-  type        = string
-  default     = null
-}
-
 variable "service_tags" {
   description = "Per service: its rendered Datadog tag set (onboarding rendered `tags`, modules/tagging). The OTel gateway fills missing policy tags of that service.name (never overwriting a client value)."
   type        = map(map(string))

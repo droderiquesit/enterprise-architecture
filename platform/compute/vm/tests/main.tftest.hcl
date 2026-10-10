@@ -74,6 +74,7 @@ variables {
       "hello-frontend"      = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-hello-frontend", principal_id = "00000000-0000-0000-0001-000000000011", client_id = "00000000-0000-0000-0002-000000000011", name = "id-hello-frontend" }
       "obs-collector"       = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-obs-collector", principal_id = "00000000-0000-0000-0001-000000000012", client_id = "00000000-0000-0000-0002-000000000012", name = "id-obs-collector" }
       "obs-dbm"             = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-obs-dbm", principal_id = "00000000-0000-0000-0001-000000000013", client_id = "00000000-0000-0000-0002-000000000013", name = "id-obs-dbm" }
+      "obs-host-agent"      = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-obs-host-agent", principal_id = "00000000-0000-0000-0001-000000000017", client_id = "00000000-0000-0000-0002-000000000017", name = "id-obs-host-agent" }
       "aks-control-plane"   = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-aks-control-plane", principal_id = "00000000-0000-0000-0001-000000000014", client_id = "00000000-0000-0000-0002-000000000014", name = "id-aks-control-plane" }
       "aks-kubelet"         = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-aks-kubelet", principal_id = "00000000-0000-0000-0001-000000000015", client_id = "00000000-0000-0000-0002-000000000015", name = "id-aks-kubelet" }
       "deploy-agent"        = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-deploy-agent", principal_id = "00000000-0000-0000-0001-000000000016", client_id = "00000000-0000-0000-0002-000000000016", name = "id-deploy-agent" }
@@ -104,6 +105,10 @@ run "defaults" {
   assert {
     condition     = contains(azurerm_windows_virtual_machine.this[0].identity[0].identity_ids, var.foundation_identity.identities["hello-inventory-api"].id)
     error_message = "Windows VM runs as hello-inventory-api."
+  }
+  assert {
+    condition     = contains(azurerm_linux_virtual_machine.this[0].identity[0].identity_ids, var.foundation_identity.identities["obs-host-agent"].id) && contains(azurerm_windows_virtual_machine.this[0].identity[0].identity_ids, var.foundation_identity.identities["obs-host-agent"].id) && azurerm_linux_virtual_machine.this[0].tags["datadog:enabled"] == "true" && azurerm_windows_virtual_machine.this[0].tags["datadog:enabled"] == "true" && !contains(keys(azurerm_resource_group.this.tags), "datadog:enabled")
+    error_message = "Datadog enrolment (obs-hosts policy): VMs tagged datadog:enabled and keep the policy-attached DSV-reader identity obs-host-agent."
   }
   assert {
     condition     = alltrue([for s in azurerm_dev_test_global_vm_shutdown_schedule.this : s.daily_recurrence_time == "1900" && s.timezone == "UTC"])
@@ -143,5 +148,16 @@ run "ssh_key_and_linux_only" {
   assert {
     condition     = length(azurerm_windows_virtual_machine.this) == 0 && length(azurerm_dev_test_global_vm_shutdown_schedule.this) == 0
     error_message = "toggles honoured."
+  }
+}
+
+run "datadog_enrolment_off" {
+  command = plan
+  variables {
+    settings = { datadog = { enabled = false } }
+  }
+  assert {
+    condition     = !contains(keys(azurerm_linux_virtual_machine.this[0].tags), "datadog:enabled") && length(azurerm_linux_virtual_machine.this[0].identity[0].identity_ids) == 1
+    error_message = "settings.datadog.enabled = false: no enrolment tag, no DSV-reader identity."
   }
 }

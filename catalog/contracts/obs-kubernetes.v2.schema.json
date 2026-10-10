@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "obs-kubernetes contract v2 (observability package 4.0.0: Datadog Agent on a Kubernetes cluster - node Agent, Cluster Agent, cluster-checks runners; optional Fluent Bit fallback DaemonSet; no secrets)",
+  "type": "object",
+  "required": ["cluster_name", "namespace", "agent", "fluent_bit", "log_route", "log_pipeline", "log_collector"],
+  "properties": {
+    "cluster_name": {"type": "string"},
+    "cluster_id": {"type": ["string", "null"], "pattern": "^/subscriptions/[^/]+/"},
+    "namespace": {"type": "string", "description": "namespace of the Datadog Agent release"},
+    "agent": {
+      "type": "object",
+      "required": ["otlp_grpc_port", "otlp_http_port", "host_ip_env", "local_service", "logs_enabled", "cluster_checks"],
+      "properties": {
+        "daemonset": {"type": "string"},
+        "local_service": {"type": "string", "description": "internalTrafficPolicy=Local service of the node agents"},
+        "host_ip_env": {"type": "string", "description": "env var apps set from status.hostIP (downward API)"},
+        "otlp_grpc_port": {"type": "integer"},
+        "otlp_http_port": {"type": "integer"},
+        "apm_port": {"type": "integer"},
+        "dogstatsd_port": {"type": "integer"},
+        "otlp_endpoint_grpc": {"type": "string"},
+        "otlp_endpoint_http": {"type": "string"},
+        "cluster_agent_service": {"type": "string"},
+        "logs_enabled": {"type": "boolean", "description": "true = the node Agent collects container logs (fleet policy node collector agent, 4.0.0 default); false = the Fluent Bit fallback DaemonSet does"},
+        "logs_destination": {"type": ["string", "null"], "description": "Observability Pipelines Worker Datadog Agent source URL, 'datadog' (direct) or null when the Agent does not collect logs"},
+        "ssi_enabled": {"type": "boolean", "description": "Single Step Instrumentation by the Cluster Agent admission controller"},
+        "ssi_namespaces": {"type": "array", "items": {"type": "string"}},
+        "cluster_checks": {"type": "boolean", "description": "cluster-checks runners deployed (DBM cluster checks)"}
+      }
+    },
+    "fluent_bit": {
+      "type": "object",
+      "required": ["enabled", "namespace", "daemonset"],
+      "properties": {
+        "enabled": {"type": "boolean", "description": "Fluent Bit DaemonSet installed (fallback only: log_pipeline = fluent_bit_direct / node collector fluent_bit)"},
+        "namespace": {"type": "string"},
+        "daemonset": {"type": "string"},
+        "excluded_namespaces": {"type": "array", "items": {"type": "string"}},
+        "opt_out_annotation": {"type": "string"}
+      }
+    },
+    "log_route": {"const": "daemonset"},
+    "log_pipeline": {"enum": ["observability_pipelines", "fluent_bit_direct"]},
+    "log_collector": {"enum": ["datadog-agent", "fluent-bit"], "description": "the ONE collector of container logs on this cluster"},
+    "charts": {
+      "type": "object",
+      "properties": {
+        "datadog": {"type": "string"},
+        "fluent_bit": {"type": "string"},
+        "agent_tag": {"type": ["string", "null"], "description": "Agent / Cluster Agent image tag = fleet policy agent.version (informational; null only in a plan the agent.version precondition rejects)"}
+      }
+    },
+    "api_key_secret_name": {"type": "string", "description": "name of the chart Secret; it holds only the ENC[dsv://...] reference, never the key"}
+  }
+}

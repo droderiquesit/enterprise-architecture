@@ -159,9 +159,14 @@ variable "platform_db_redis" {
 }
 
 variable "obs_kubernetes" {
-  description = "obs-kubernetes contract v1 (optional; null when the producer is not enabled)."
+  description = "obs-kubernetes contract v2 (optional; null when the producer is not enabled). Not read today."
   type = object({
-    agent_namespace = optional(string)
+    namespace     = optional(string)
+    log_collector = optional(string)
+    agent = optional(object({
+      local_service = optional(string)
+      logs_enabled  = optional(bool)
+    }))
   })
   default = null
 }

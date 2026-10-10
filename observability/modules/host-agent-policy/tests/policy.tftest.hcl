@@ -128,10 +128,10 @@ run "audit_only_no_remediation" {
 run "gallery_in_other_subscription" {
   command = plan
   variables {
-    gallery_id = "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg/providers/Microsoft.Compute/galleries/g"
+    gallery_id = "/subscriptions/11111111-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/galleries/g"
   }
   assert {
-    condition     = length(azurerm_role_assignment.remediation_gallery) == 1 && contains(azurerm_role_definition.remediation.assignable_scopes, "/subscriptions/11111111-1111-1111-1111-111111111111")
+    condition     = length(azurerm_role_assignment.remediation_gallery) == 1 && contains(azurerm_role_definition.remediation.assignable_scopes, "/subscriptions/11111111-0000-0000-0000-000000000000")
     error_message = "A gallery outside the subscription scope gets its own read grant."
   }
 }

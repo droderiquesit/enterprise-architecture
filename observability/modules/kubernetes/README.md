@@ -70,7 +70,7 @@ installed this way (uid 0, `--cap-drop ALL`, read-only rootfs) runs `agent-backe
 * SSI (fleet `apm.mode = datadog`): target namespaces `apm.namespaces`, library majors of the fleet policy, profiler
   `auto`, restricted-PSS securityContext for injected init containers.
 
-Output `contract` = obs-kubernetes v1 (`catalog/contracts/obs-kubernetes.v1.schema.json`).
+Output `contract` = obs-kubernetes **v2** (`catalog/contracts/obs-kubernetes.v2.schema.json`; 4.0.0: `logs_enabled` follows the fleet policy - true when the node Agent collects container logs - plus `log_pipeline`, `log_collector`, `fluent_bit.enabled`, SSI fields; v1 with `logs_enabled: false` kept for rollback).
 
 References:
 - https://docs.datadoghq.com/containers/kubernetes/distributions/?tab=helm#AKS
