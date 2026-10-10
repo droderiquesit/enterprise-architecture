@@ -71,6 +71,19 @@ variable "settings" {
       #   az ad sp list --display-name DevOpsInfrastructure --query "[].id" -o tsv
       devops_infrastructure_principal_id = optional(string, "")
     }), {})
+
+    # Dedicated Managed DevOps Pool for GitHub Copilot code review in Azure Repos (self-hosted/VMSS pools and
+    # Windows images are not supported by Copilot code review; latest Ubuntu image required). No VNet injection:
+    # Copilot reviews only read the repository. Select this pool in Organization settings > Repos > Repositories >
+    # GitHub Copilot code review > Compute pool. Independent of `mode` (works with vmss deploy agents).
+    copilot_review_pool = optional(object({
+      enabled          = optional(bool, false)
+      organization_url = optional(string, "") # https://dev.azure.com/<org>
+      projects         = optional(list(string), [])
+      max_concurrency  = optional(number, 2)
+      sku_name         = optional(string, "Standard_D2ads_v5")
+      image_name       = optional(string, "ubuntu-24.04/latest")
+    }), {})
   })
   default = {}
 
@@ -88,5 +101,13 @@ variable "settings" {
       can(regex("^[0-9a-f-]{36}$", var.settings.managed_devops_pool.devops_infrastructure_principal_id))
     )
     error_message = "managed-devops-pool mode requires organization_url (https://dev.azure.com/<org>) and devops_infrastructure_principal_id."
+  }
+  validation {
+    condition     = !var.settings.copilot_review_pool.enabled || can(regex("^https://dev\\.azure\\.com/[^/]+/?$", var.settings.copilot_review_pool.organization_url))
+    error_message = "copilot_review_pool.enabled requires organization_url (https://dev.azure.com/<org>)."
+  }
+  validation {
+    condition     = can(regex("^ubuntu-", var.settings.copilot_review_pool.image_name))
+    error_message = "Copilot code review supports only Ubuntu images (Windows images are not supported)."
   }
 }

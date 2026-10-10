@@ -102,3 +102,32 @@ run "reject_bad_kubelogin_mode" {
   }
   expect_failures = [var.settings]
 }
+
+run "fleet_from_transport_contract" {
+  command = plan
+  variables {
+    obs_telemetry_transport = {
+      datadog_site = "datadoghq.com"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { tenant = "contoso", tld = "com", base_url = "https://contoso.secretsvaultcloud.com/v1" }
+      aggregator   = { kind = "observability_pipelines", fqdn = "eh-obs-dev-opw.internal.example.io", agent_logs_url = "http://eh-obs-dev-opw.internal.example.io:8282" }
+      env          = { fleet = { EH_LOG_PIPELINE = "observability_pipelines", EH_APM_MODE = "datadog", EH_PROFILING_ENABLED = "true" } }
+    }
+  }
+  assert {
+    condition     = anytrue([for e in yamldecode(module.kubernetes.datadog_values).datadog.env : e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL" && e.value == "http://eh-obs-dev-opw.internal.example.io:8282"])
+    error_message = "Package 3.0.0 transport: the node Agents send logs to the OP Worker of the contract."
+  }
+  assert {
+    condition     = yamldecode(module.kubernetes.datadog_values).datadog.apm.instrumentation.enabled && yamldecode(module.kubernetes.datadog_values).datadog.apm.instrumentation.targets[0].namespaceSelector.matchNames[0] == "hello" && output.contract.log_collector == "datadog-agent"
+    error_message = "Single Step Instrumentation of the hello namespace; the Agent collects the logs."
+  }
+}
+
+run "transport_2x_contract_keeps_fluent_bit" {
+  command = plan
+  assert {
+    condition     = output.contract.log_collector != "datadog-agent" && !try(yamldecode(module.kubernetes.datadog_values).datadog.apm.instrumentation.enabled, false)
+    error_message = "Without env.fleet in the contract the root stays on Fluent Bit + OpenTelemetry (2.x path)."
+  }
+}

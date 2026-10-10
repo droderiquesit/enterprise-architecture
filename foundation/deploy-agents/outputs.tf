@@ -14,3 +14,8 @@ output "contract" {
     agent_pool_name = local.vmss_mode ? azurerm_linux_virtual_machine_scale_set.agents[0].name : azurerm_managed_devops_pool.this[0].name
   }
 }
+
+output "copilot_review_pool" {
+  description = "Managed DevOps Pool for GitHub Copilot code review (select it in Organization settings > Repos > Repositories)."
+  value       = local.copilot_pool.enabled ? { id = azurerm_managed_devops_pool.copilot_review[0].id, name = azurerm_managed_devops_pool.copilot_review[0].name } : null
+}

@@ -107,7 +107,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "agents" {
 # ------------------------------------------------------------------ Managed DevOps Pools (optional)
 # azurerm 5.9 ships azurerm_managed_devops_pool + azurerm_dev_center(_project): no AzAPI needed.
 resource "azurerm_dev_center" "this" {
-  count = local.mdp_mode ? 1 : 0
+  count = local.mdp_mode || local.copilot_pool.enabled ? 1 : 0
 
   name                = local.names.dev_center
   resource_group_name = azurerm_resource_group.agents.name
@@ -116,7 +116,7 @@ resource "azurerm_dev_center" "this" {
 }
 
 resource "azurerm_dev_center_project" "this" {
-  count = local.mdp_mode ? 1 : 0
+  count = local.mdp_mode || local.copilot_pool.enabled ? 1 : 0
 
   name                = "${local.names.dev_center}-pipelines"
   resource_group_name = azurerm_resource_group.agents.name
@@ -190,6 +190,45 @@ resource "azurerm_managed_devops_pool" "this" {
     precondition {
       condition     = try(local.subnet.delegation, null) == "Microsoft.DevOpsInfrastructure/pools"
       error_message = "Managed DevOps Pools need deploy-agents delegated to Microsoft.DevOpsInfrastructure/pools (foundation-network settings.deploy_agents_mode = managed-devops-pool)."
+    }
+  }
+}
+
+# ------------------------------------------------------------- Copilot code review compute pool
+locals {
+  copilot_pool = var.settings.copilot_review_pool
+}
+
+resource "azurerm_managed_devops_pool" "copilot_review" {
+  count = local.copilot_pool.enabled ? 1 : 0
+
+  name                  = "${local.names.devops_pool}-copilot"
+  resource_group_name   = azurerm_resource_group.agents.name
+  location              = local.location
+  dev_center_project_id = azurerm_dev_center_project.this[0].id
+  maximum_concurrency   = local.copilot_pool.max_concurrency
+  tags                  = merge(local.tags, { purpose = "github-copilot-code-review" })
+
+  azure_devops_organization {
+    organization {
+      url         = local.copilot_pool.organization_url
+      projects    = local.copilot_pool.projects
+      parallelism = local.copilot_pool.max_concurrency
+    }
+    permission {
+      kind = "CreatorOnly"
+    }
+  }
+
+  stateless_agent {}
+
+  # Microsoft-hosted networking (no subnet): Copilot reviews need no private network access.
+  virtual_machine_scale_set_fabric {
+    sku_name = local.copilot_pool.sku_name
+
+    image {
+      well_known_image_name = local.copilot_pool.image_name
+      buffer                = "*"
     }
   }
 }

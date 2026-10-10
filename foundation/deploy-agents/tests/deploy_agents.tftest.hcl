@@ -126,3 +126,11 @@ run "vmss_requires_ssh_key" {
   }
   expect_failures = [var.settings]
 }
+
+run "copilot_review_pool_off_by_default" {
+  command = plan
+  assert {
+    condition     = length(azurerm_managed_devops_pool.copilot_review) == 0
+    error_message = "The Copilot review pool must be opt-in."
+  }
+}

@@ -82,3 +82,13 @@ scale a missing scale set). MDP: the subnet keeps a service association link unt
 - https://learn.microsoft.com/azure/devops/pipelines/agents/scale-set-agents
 - https://learn.microsoft.com/azure/devops/managed-devops-pools/configure-networking
 - https://learn.microsoft.com/azure/devops/pipelines/agents/hosted (Microsoft-hosted agent networking)
+
+## GitHub Copilot code review pool
+
+Copilot code review for Azure Repos runs only on Microsoft-hosted agents or a Managed DevOps Pool with the latest
+Ubuntu image - **not** on self-hosted/VMSS pools and not on Windows images
+([Microsoft Learn](https://learn.microsoft.com/azure/devops/repos/git/copilot-code-reviews#select-an-agent-pool)).
+Set `settings.copilot_review_pool.enabled = true` (+ `organization_url`, `projects`) to create a dedicated pool
+`<prefix>-mdp-...-copilot` (Ubuntu 24.04, Standard_D2ads_v5, max concurrency 2, Microsoft-hosted networking - no VNet
+needed because reviews only read the repository). It is independent of `mode`, so the VMSS deploy agents stay as they
+are. Then select it in **Organization settings > Repos > Repositories > GitHub Copilot code review > Compute pool**.

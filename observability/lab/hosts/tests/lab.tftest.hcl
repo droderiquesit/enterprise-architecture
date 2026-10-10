@@ -95,3 +95,24 @@ run "sqlvm_without_identity_is_skipped" {
     error_message = "A SQL VM without a DSV-mapped identity is skipped (it could not read the key)."
   }
 }
+
+run "fleet_from_transport_contract" {
+  command = plan
+  variables {
+    obs_telemetry_transport = {
+      datadog_site = "datadoghq.com"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { tenant = "contoso", tld = "com", base_url = "https://contoso.secretsvaultcloud.com/v1" }
+      aggregator   = { kind = "observability_pipelines", fqdn = "eh-obs-dev-opw.internal.example.io", agent_logs_url = "http://eh-obs-dev-opw.internal.example.io:8282" }
+      env          = { fleet = { EH_LOG_PIPELINE = "observability_pipelines", EH_APM_MODE = "datadog", EH_PROFILING_ENABLED = "true" } }
+    }
+  }
+  assert {
+    condition     = strcontains(module.hosts.installer_scripts["vm-worker"], "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL=http://eh-obs-dev-opw.internal.example.io:8282") && strcontains(module.hosts.installer_scripts["vm-worker"], "DD_APM_INSTRUMENTATION_ENABLED=host")
+    error_message = "Linux hosts: the Agent collects logs to the OP Worker; host Single Step Instrumentation."
+  }
+  assert {
+    condition     = strcontains(module.hosts.installer_scripts["vm-inventory"], "eh-obs-dev-opw.internal.example.io") && !strcontains(module.hosts.installer_scripts["vm-inventory"], "DD_APM_INSTRUMENTATION_ENABLED")
+    error_message = "Windows hosts: Fluent Bit forwards to the OP Worker; no SSI (OpenTelemetry fallback)."
+  }
+}
