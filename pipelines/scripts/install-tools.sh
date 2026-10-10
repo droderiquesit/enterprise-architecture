@@ -3,7 +3,9 @@
 # SHA-256 checksums published by each project. Idempotent: an existing binary of the requested
 # version is reused. Usage:
 #   pipelines/scripts/install-tools.sh terraform            # version from versions.yaml
-#   pipelines/scripts/install-tools.sh gitleaks trivy syft helm kubeconform  # versions: pipelines/variables/tools.yml
+#   pipelines/scripts/install-tools.sh gitleaks trivy syft grype helm kubeconform tflint hadolint shellcheck
+#                                                       # versions: pipelines/variables/tools.yml
+# Python-distributed tools (uv, ruff, yamllint, pytest-xdist) come hash-pinned from PyPI (setup-agent.sh).
 # Versions for scanners come from environment variables GITLEAKS_VERSION, TRIVY_VERSION, SYFT_VERSION
 # (set by pipelines/variables/tools.yml).
 # Agent resilience: every downloaded archive and checksum file is also kept in $TOOL_CACHE_DIR (restored/saved by the
@@ -109,6 +111,44 @@ install_kubeconform() {
 install_checkov() {
   local v="${CHECKOV_VERSION:?CHECKOV_VERSION not set}"
   python3 -m pip install --quiet --user "checkov==${v}"; checkov --version
+}
+
+install_tflint() {
+  local v="${TFLINT_VERSION:?TFLINT_VERSION not set}"; local a; a="$(arch)"
+  local zip="tflint_linux_${a}.zip"
+  if command -v tflint >/dev/null && tflint --version | grep -q "version ${v}"; then echo "tflint $v present"; return; fi
+  fetch "https://github.com/terraform-linters/tflint/releases/download/v${v}/${zip}" "$WORK/$zip"
+  fetch "https://github.com/terraform-linters/tflint/releases/download/v${v}/checksums.txt" "$WORK/sums"
+  verify "$WORK/$zip" "$WORK/sums" "$zip"
+  python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extract('tflint', sys.argv[2])" "$WORK/$zip" "$BIN"
+  chmod +x "$BIN/tflint"; tflint --version
+}
+
+install_hadolint() {
+  # pinned container image, verified by its registry digest (HADOLINT_IMAGE = repo:tag@sha256:...)
+  local img="${HADOLINT_IMAGE:?HADOLINT_IMAGE not set}"
+  docker pull --quiet "$img" >/dev/null
+  printf '#!/usr/bin/env bash\nexec docker run --rm -i -v "$PWD:$PWD" -w "$PWD" %s hadolint "$@"\n' "$img" > "$BIN/hadolint"
+  chmod +x "$BIN/hadolint"; hadolint --version
+}
+
+install_grype() {
+  local v="${GRYPE_VERSION:?GRYPE_VERSION not set}"; local a; a="$(arch)"
+  local tgz="grype_${v}_linux_${a}.tar.gz"
+  fetch "https://github.com/anchore/grype/releases/download/v${v}/${tgz}" "$WORK/$tgz"
+  fetch "https://github.com/anchore/grype/releases/download/v${v}/grype_${v}_checksums.txt" "$WORK/sums"
+  verify "$WORK/$tgz" "$WORK/sums" "$tgz"
+  tar -xzf "$WORK/$tgz" -C "$BIN" grype; grype version
+}
+
+install_shellcheck() {
+  # Microsoft-hosted ubuntu images ship shellcheck; shellcheck publishes no checksum file, so anywhere else the
+  # pinned container image is used, verified by its registry digest (SHELLCHECK_IMAGE = repo:tag@sha256:...)
+  if command -v shellcheck >/dev/null; then shellcheck --version | sed -n 2p; return; fi
+  local img="${SHELLCHECK_IMAGE:?SHELLCHECK_IMAGE not set}"
+  docker pull --quiet "$img" >/dev/null
+  printf '#!/usr/bin/env bash\nexec docker run --rm -v "$PWD:$PWD" -w "$PWD" %s "$@"\n' "$img" > "$BIN/shellcheck"
+  chmod +x "$BIN/shellcheck"; shellcheck --version | sed -n 2p
 }
 
 for tool in "$@"; do "install_${tool}"; done

@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -28,11 +30,19 @@ public static class OpenTelemetryExtensions
     private static readonly string[] ProbePaths = ["/healthz", "/readyz", "/api/healthz"];
 
     /// <summary>
-    /// Traces + metrics via OTLP (honours OTEL_EXPORTER_OTLP_* env vars). Logs are deliberately NOT exported via
-    /// OTLP: application logs travel stdout/file → Fluent Bit → Datadog (ADR-0001 §10), so OTLP logs would duplicate them.
-    /// Exporters are only attached when an OTLP endpoint is configured, so unit tests and local runs stay quiet.
+    /// TELEMETRY_SDK=otel (default): traces + metrics via OTLP (honours OTEL_EXPORTER_OTLP_* env vars). Logs are
+    /// deliberately NOT exported via OTLP: application logs travel stdout/file → Fluent Bit → Datadog (ADR-0001 §10), so
+    /// OTLP logs would duplicate them. Exporters are only attached when an OTLP endpoint is configured.
+    /// <para>
+    /// TELEMETRY_SDK=datadog, or OTEL_SDK_DISABLED=true: NO OpenTelemetry provider/exporter is registered and
+    /// <c>null</c> is returned. In datadog mode the Datadog CLR profiler (SSI / serverless-init / site extension / tracer
+    /// home in the image) traces the process; <see cref="HelloTelemetry.Source"/> Activities become Datadog spans with
+    /// DD_TRACE_OTEL_ENABLED=true; hello.* metrics are forwarded to DogStatsD by <see cref="DogStatsdMetricsBridge"/> unless
+    /// DD_METRICS_OTEL_ENABLED=true (then the tracer exports the Meter over OTLP to the Agent). Hello.Common never sets
+    /// CORECLR_*/COR_*/DD_PROFILING_* — the injector's profiler (tracing + Continuous Profiler) is left untouched.
+    /// </para>
     /// </summary>
-    public static OpenTelemetryBuilder AddHelloOpenTelemetry(
+    public static OpenTelemetryBuilder? AddHelloOpenTelemetry(
         this IServiceCollection services,
         IConfiguration configuration,
         HelloServiceInfo info,
@@ -45,9 +55,29 @@ public static class OpenTelemetryExtensions
 
         AppContext.SetSwitch(AzureActivitySourceSwitch, true);
 
+        var mode = HelloTelemetryMode.Resolve(configuration);
+        var otelDisabled = HelloTelemetryMode.OtelSdkDisabled(configuration);
+        services.TryAddSingleton(new HelloTelemetryState(mode, otelDisabled, HelloTelemetryMode.DatadogOtelMetrics(configuration)));
+        services.AddHostedService<TelemetryStartupReporter>();
+        if (mode == TelemetrySdk.Datadog)
+        {
+            if (!HelloTelemetryMode.DatadogOtelMetrics(configuration))
+            {
+                services.TryAddSingleton<IDogStatsdSink>(sp => new DogStatsdSink(configuration));
+                services.TryAddSingleton<DogStatsdMetricsBridge>();
+                services.AddHostedService(sp => sp.GetRequiredService<DogStatsdMetricsBridge>());
+            }
+
+            return null;
+        }
+
+        if (otelDisabled)
+        {
+            return null;
+        }
+
         var tracesEndpoint = First(configuration["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"], configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
         var metricsEndpoint = First(configuration["OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"], configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
-        var sdkDisabled = string.Equals(configuration["OTEL_SDK_DISABLED"], "true", StringComparison.OrdinalIgnoreCase);
         var temporalityFromEnv = !string.IsNullOrWhiteSpace(configuration["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"]);
 
         var builder = services.AddOpenTelemetry();
@@ -84,7 +114,7 @@ public static class OpenTelemetryExtensions
 
             options.ConfigureTracing?.Invoke(tracing);
 
-            if (!sdkDisabled && !string.IsNullOrWhiteSpace(tracesEndpoint))
+            if (!string.IsNullOrWhiteSpace(tracesEndpoint))
             {
                 tracing.AddOtlpExporter();
             }
@@ -104,7 +134,7 @@ public static class OpenTelemetryExtensions
 
             options.ConfigureMetrics?.Invoke(metrics);
 
-            if (!sdkDisabled && !string.IsNullOrWhiteSpace(metricsEndpoint))
+            if (!string.IsNullOrWhiteSpace(metricsEndpoint))
             {
                 metrics.AddOtlpExporter((_, reader) =>
                 {

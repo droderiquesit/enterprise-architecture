@@ -11,6 +11,7 @@ components:
 - foundation-governance
 - foundation-deploy-agents
 - foundation-edge
+- foundation-pr-reviewer
 - platform-shared
 - platform-messaging
 - platform-aks
@@ -55,6 +56,7 @@ components:
 - deploy-vm-workloads
 - deploy-logicapps
 - svc-bff
+- svc-pr-reviewer
 - svc-catalog-api
 - svc-dbadapter
 - svc-durable
@@ -89,6 +91,7 @@ groups:
   - foundation-governance
   - foundation-deploy-agents
   - foundation-edge
+  - foundation-pr-reviewer
 - name: g2-core-platform
   components:
   - platform-shared

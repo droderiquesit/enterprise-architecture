@@ -51,7 +51,10 @@ def test_desired_policies():
     want = {w["key"]: w for w in bp.desired(ROOT, "repo-1", {"lab-platform": 11, "lab-applications": 12},
                                             {"platform-team": "g-plat"})}
     mr = want["min-reviewers"]["settings"]
-    assert mr["minimumApproverCount"] == 2 and mr["resetOnSourcePush"] and not mr["creatorVoteCounts"]
+    # 1 on main by design: the required eh-review/policy status keeps non-low-risk PRs pending until a human approves
+    assert mr["minimumApproverCount"] == 1 and mr["resetOnSourcePush"] and not mr["creatorVoteCounts"]
+    assert mr["blockLastPusherVote"] is True
+    assert want["min-reviewers-release"]["settings"]["minimumApproverCount"] == 2
     for name, did in (("lab-platform", 11), ("lab-applications", 12)):
         b = want[f"build-{name}"]["settings"]
         assert b["buildDefinitionId"] == did and b["validDuration"] == 0 and b["queueOnSourceUpdateOnly"] is True
@@ -67,6 +70,14 @@ def test_desired_policies():
     assert st["type"] == "status" and st["isBlocking"]
     assert (st["settings"]["statusGenre"], st["settings"]["statusName"]) == ("eh-review", "policy")
     assert st["settings"]["invalidateOnSourceUpdate"] is True and "status-eh-review-policy-release" in want
+    assert st["settings"]["unresolvedGroup"] == "eh-pr-reviewer"          # only the bot may post the status
+    # protected path classes from the reviewer's fragment: human owner groups, never the bot
+    prot = want["protected-review-governance"]["settings"]
+    assert "/tools/review/*" in prot["filenamePatterns"] and prot["requiredReviewerIds"] == ["g-plat"]
+    assert {k for k in want if k.startswith("protected-") and not k.endswith("-release")} == {
+        "protected-identity-secrets", "protected-network-security", "protected-pipeline-governance",
+        "protected-prod-config", "protected-review-governance"}
+    assert want["protected-identity-secrets"]["settings"]["unresolvedGroup"] == "security-team"
 
 
 class FakeAdo:
@@ -103,13 +114,14 @@ class FakeAdo:
 
 def test_apply_is_idempotent_and_never_touches_unmanaged(monkeypatch):
     doc = branching_doc(ROOT)
-    doc["identities"] = {g: f"id-{g}" for g in ("app-team", "docs-team", "observability-team", "platform-team", "security-team")}
+    doc["identities"] = {g: f"id-{g}" for g in ("app-team", "docs-team", "observability-team", "platform-team", "security-team",
+                                                 "eh-pr-reviewer")}
     monkeypatch.setattr(bp, "branching_doc", lambda repo=ROOT: doc)
     unmanaged = {"id": 1, "isEnabled": True, "isBlocking": True, "type": {"id": "aaaa"},
                  "settings": {"scope": [{"repositoryId": "repo-1", "refName": "refs/heads/main", "matchKind": "exact"}]}}
     fake = FakeAdo([unmanaged])
     first = bp.run("apply", "https://dev.azure.com/org", "lab", "enterprise-architecture", fake)
-    assert {a["action"] for a in first} == {"create"} and len(first) == 19
+    assert {a["action"] for a in first} == {"create"} and len(first) == 29
     second = bp.run("apply", "https://dev.azure.com/org", "lab", "enterprise-architecture", fake)
     assert {a["action"] for a in second} == {"unchanged"}
     assert 1 in fake.configs                                         # unmanaged policy untouched

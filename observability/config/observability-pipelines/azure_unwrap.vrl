@@ -1,0 +1,13 @@
+# Azure Event Hubs (Kafka source): the message is a diagnostic-settings batch {"records":[...]} (or one record).
+# Produces .records (array) for the split_array processor that follows; keeps the hub name in .eventhub.
+# Preceded by `cfg = {...}` (unused here).
+.eventhub = .topic
+batch, err = parse_json(to_string(.message) ?? "")
+if err != null {
+  .records = [{"message": .message}]
+} else if is_object(batch) && is_array(batch.records) {
+  .records = batch.records
+} else {
+  .records = [batch]
+}
+del(.message)

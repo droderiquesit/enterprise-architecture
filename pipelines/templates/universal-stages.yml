@@ -88,6 +88,26 @@ stages:
                     ${{ iif(parameters.withConsumers, '--with-consumers', '') }} \
                     --records-url "$blob/deployments" --contracts-url "$blob/contracts" --build-reason "$(Build.Reason)" \
                     "${extra[@]}" --out "$(Build.ArtifactStagingDirectory)/selection/selection.json" --ado
+          - task: Cache@2
+            displayName: Test result cache + timings (restore)
+            continueOnError: true
+            inputs:
+              key: 'ci-testcache | "$(Agent.OS)" | ${{ parameters.scope }} | select | "$(Build.BuildId)"'
+              restoreKeys: |
+                ci-testcache | "$(Agent.OS)" | ${{ parameters.scope }}
+              path: $(Pipeline.Workspace)/.ci-cache
+          - script: |
+              set -euo pipefail
+              full=()
+              # full runs (every suite, cache hits ignored: bounds cache poisoning): nightly schedules and release/*
+              if [[ "$(Build.Reason)" == "Schedule" || "$(Build.SourceBranch)" == refs/heads/release/* ]]; then full=(--full); fi
+              python3 -m tools.ci plan --selection "$(Build.ArtifactStagingDirectory)/selection/selection.json" \
+                --scope "${{ parameters.scope }}" --env "${{ parameters.environment }}" \
+                --cache "$(Pipeline.Workspace)/.ci-cache/testcache" --timings "$(Pipeline.Workspace)/.ci-cache/timings.json" \
+                --max-legs "${{ variables.ciMaxLegs }}" "${full[@]}" \
+                --out "$(Build.ArtifactStagingDirectory)/selection/ci-plan.json" --ado
+            name: ciplan
+            displayName: Plan tests (impact selection, test result cache, duration-balanced legs)
           - task: PublishPipelineArtifact@1
             displayName: Publish selection document
             inputs:
@@ -123,7 +143,7 @@ stages:
           environment: ${{ parameters.environment }}
           hostedImage: ${{ variables.hostedImage }}
           maxParallel: ${{ variables.validateMaxParallel }}
-          testShards: ${{ variables.testShards }}
+          scope: ${{ parameters.scope }}
       - ${{ if eq(parameters.scope, 'applications') }}:
         - template: helm-charts.yml
           parameters:

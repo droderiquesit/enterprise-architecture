@@ -1,0 +1,172 @@
+# Azure platform / control-plane / application-category record -> Datadog Azure forwarder shape.
+# Port of eh_azure_split / azure_entry (observability/config/fluent-bit/lua/enterprise_hello.lua).
+# Preceded by `cfg = {"app_topic": "app-logs", "azure_service": "azure", "aca_allow": ["eh-caj-*"],
+#   "tag_key_map": {"<lowercase azure tag key>": ["<datadog key>"...]},
+#   "scope_tags": {"<lowercase resource id prefix>": {"<datadog key>": "<value>"}}, "static_tags": {k: v},
+#   "max_message_bytes": 900000, "forwarder": "observability-pipelines"}`.
+topic = to_string(.eventhub) ?? ""
+r = object(.records) ?? {"message": to_string(.records) ?? ""}
+. = r
+rid = string(r.resourceId) ?? string(r.ResourceId) ?? string(r.resource_id) ?? ""
+cat = string(r.category) ?? string(r.Category) ?? ""
+app_cats = ["AppServiceConsoleLogs", "AppServiceAppLogs", "FunctionAppLogs", "WorkflowRuntime", "ContainerAppConsoleLogs", "ContainerAppConsoleLogs_CL"]
+activity_cats = ["Administrative", "Security", "ServiceHealth", "Alert", "Recommendation", "Policy", "Autoscale", "ResourceHealth"]
+is_app = includes(app_cats, cat)
+
+# duplicate prevention: application categories are valid only on the app-logs hub (hand-made portal settings)
+drop = is_app && topic != "" && topic != string!(cfg.app_topic)
+# ACA console logs: apps with a Fluent Bit sidecar are already collected; keep only allow-listed apps/jobs
+if cat == "ContainerAppConsoleLogs" || cat == "ContainerAppConsoleLogs_CL" {
+  props = object(r.properties) ?? {}
+  container = string(props.ContainerName) ?? string(props.ContainerName_s) ?? ""
+  if container == "fluent-bit" || container == "datadog" {
+    drop = true
+  }
+  allow = array!(cfg.aca_allow)
+  if length(allow) > 0 {
+    name = string(props.ContainerAppName) ?? string(props.ContainerAppName_s) ?? string(props.JobName) ?? ""
+    ok = false
+    for_each(allow) -> |_i, a| {
+      sa = string!(a)
+      if ends_with(sa, "*") {
+        if starts_with(name, slice!(sa, 0, length(sa) - 1)) { ok = true }
+      } else if name == sa {
+        ok = true
+      }
+    }
+    if !ok { drop = true }
+  }
+}
+
+# ---------------------------------------------------------------- resource id metadata (Datadog forwarder port)
+p = filter(split(downcase(rid), "/")) -> |_i, v| { v != "" }
+n = length(p)
+src = null
+sub = null
+rg = null
+tenant = null
+if n >= 2 && p[0] == "subscriptions" {
+  sub = p[1]
+  if n == 2 { src = "azure.subscription" }
+  if n > 3 {
+    if p[2] == "providers" && starts_with(string!(p[3]), "microsoft.") {
+      src = replace(string!(p[3]), "microsoft.", "azure.", count: 1)
+    } else {
+      rg = p[3]
+      if n == 4 { src = "azure.resourcegroup" }
+    }
+  }
+  if n > 5 && starts_with(string!(p[5]), "microsoft.") {
+    src = replace(string!(p[5]), "microsoft.", "azure.", count: 1)
+  }
+} else if n >= 1 && p[0] == "tenants" {
+  if n > 3 {
+    tenant = p[1]
+    src = replace(replace(string!(p[3]), "microsoft.", "azure.", count: 1), "aadiam", "activedirectory")
+  }
+}
+pidx = -1
+for_each(p) -> |i, v| { if v == "providers" { pidx = i } }
+rtype = null
+rname = null
+if pidx >= 0 && pidx + 1 < n {
+  t = []
+  for_each(p) -> |j, v| {
+    if j == pidx + 1 || (j >= pidx + 2 && mod(j - pidx, 2) == 0) { t = push(t, v) }
+  }
+  if length(t) > 1 {
+    rtype = join!(t, "/")
+    rname = get!(p, [n - 1])
+  }
+}
+
+# ---------------------------------------------------------------- message / source / service
+props = object(r.properties) ?? {}
+msg = null
+for_each(["ResultDescription", "resultDescription", "message", "Message", "Log", "log", "msg"]) -> |_i, f| {
+  if msg == null {
+    v = get(props, [f]) ?? null
+    if is_string(v) && v != "" { msg = v }
+  }
+}
+for_each(["ResultDescription", "resultDescription", "message", "Message", "Log", "log", "msg"]) -> |_i, f| {
+  if msg == null {
+    v = get(r, [f]) ?? null
+    if is_string(v) && v != "" { msg = v }
+  }
+}
+if msg != null {
+  m = replace(string!(msg), r'[\r\n]+$', "")
+  if is_app || !starts_with(m, "{") { .message = m }
+}
+.ddsource = if src == null { "azure" } else { src }
+.ddsourcecategory = "azure"
+is_json = is_string(.message) && starts_with(string!(.message), "{")
+if is_app {
+  if !is_json && !exists(.service) && rname != null { .service = rname }
+} else if !exists(.service) {
+  .service = cfg.azure_service
+}
+log_type = "resource"
+if is_app {
+  log_type = "application"
+} else if tenant != null || .ddsource == "azure.activedirectory" {
+  log_type = "entra"
+} else if includes(activity_cats, cat) {
+  log_type = "activity"
+}
+if (cat == "kube-audit" || cat == "kube-audit-admin") && is_string(props.log) {
+  a, aerr = parse_json(string!(props.log))
+  if aerr == null && is_object(a) {
+    .aks_audit = compact({
+      "verb": a.verb,
+      "objectRef": compact({"resource": a.objectRef.resource, "subresource": a.objectRef.subresource, "namespace": a.objectRef.namespace, "name": a.objectRef.name}),
+      "user": compact({"username": a.user.username}),
+      "responseStatus": compact({"code": a.responseStatus.code}),
+      "auditID": a.auditID,
+    })
+  }
+}
+
+# ---------------------------------------------------------------- tags (precedence: record Azure tags > resource
+# scope tags (longest matching resource id prefix wins per key) > forwarder-derived > static)
+tags = {}
+for_each(object!(cfg.static_tags)) -> |k, v| { tags = set!(tags, [k], v) }
+loc = string(r.location) ?? string(r.Location) ?? ""
+if log_type != "activity" && loc != "" && downcase(loc) != "global" {
+  tags = set!(tags, ["region"], replace(downcase(loc), r'\s+', ""))
+}
+rid_l = downcase(rid)
+best = {}
+best_len = {}
+for_each(object!(cfg.scope_tags)) -> |scope, st| {
+  if rid_l != "" && (rid_l == scope || starts_with(rid_l, scope + "/")) {
+    for_each(object!(st)) -> |k, v| {
+      l = int(get(best_len, [k]) ?? 0) ?? 0
+      if length(scope) > l {
+        best = set!(best, [k], v)
+        best_len = set!(best_len, [k], length(scope))
+      }
+    }
+  }
+}
+for_each(best) -> |k, v| { tags = set!(tags, [k], v) }
+rtags = object(r.tags) ?? {}
+for_each(rtags) -> |k, v| {
+  dks = get(cfg.tag_key_map, [downcase(k)]) ?? null
+  if is_array(dks) && is_string(v) && v != "" {
+    for_each(array!(dks)) -> |_i, dk| { tags = set!(tags, [dk], v) }
+  }
+}
+out = []
+for_each([["subscription_id", sub], ["resource_group", rg], ["tenant", tenant], ["resource_type", rtype], ["resource_name", rname], ["category", cat], ["azure_log_type", log_type], ["eventhub", topic], ["forwarder", cfg.forwarder]]) -> |_i, kv| {
+  if kv[1] != null && kv[1] != "" { out = push(out, string!(kv[0]) + ":" + string!(kv[1])) }
+}
+if rid != "" { out = push(out, "resource_id:" + rid_l) }
+for_each(tags) -> |k, v| { out = push(out, k + ":" + downcase(string!(v))) }
+if is_string(.message) && length(string!(.message)) > int!(cfg.max_message_bytes) {
+  .message = truncate(string!(.message), int!(cfg.max_message_bytes)) + "...[TRUNCATED by observability-pipelines: Datadog 1MB log limit]"
+  out = push(out, "truncated:true")
+}
+.ddtags = join!(out, ",")
+if drop { .eh_drop = true }

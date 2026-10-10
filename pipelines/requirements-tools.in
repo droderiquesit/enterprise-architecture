@@ -1,0 +1,7 @@
+# Python dependencies of tools/ (changeset, config, contracts, validate, deploy, smoke, report, ci) and of the
+# CI test legs. Compile (hashes, deterministic):
+#   uv pip compile --generate-hashes --python-version 3.12 --universal pipelines/requirements-tools.in -o pipelines/requirements-tools.txt
+pyyaml==6.0.3
+jsonschema==4.26.0
+pytest==9.1.1
+pytest-xdist==3.8.0

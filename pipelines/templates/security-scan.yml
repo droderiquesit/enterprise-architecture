@@ -4,7 +4,9 @@
 #   gitleaks  secrets in the working tree (and git history of the PR range when available)
 #   trivy     filesystem scan: vulnerable dependencies (lock files) + misconfiguration (Dockerfiles)
 #   checkov   Terraform static analysis (soft-fail on findings already accepted in .checkov.yaml)
-# Results are published as SARIF/JSON pipeline artifacts.
+#   hadolint  Dockerfiles; shellcheck  shell scripts
+# All scanners run in parallel (python3 -m tools.ci scan: background processes, aggregated exit codes), on the
+# changed scope for PRs and on everything for nightly / release runs. Results: SARIF/JSON pipeline artifacts.
 parameters:
   - name: hostedImage
     type: string
@@ -23,29 +25,23 @@ jobs:
     steps:
       - checkout: self
         fetchDepth: 0
+      - task: DownloadPipelineArtifact@2
+        displayName: Download selection (changed scope)
+        retryCountOnTaskFailure: 2
+        inputs:
+          artifact: selection
+          path: $(Pipeline.Workspace)/selection
       - template: steps-setup.yml
         parameters:
-          tools: gitleaks trivy checkov
+          tools: gitleaks trivy checkov hadolint shellcheck
       - script: |
           set -euo pipefail
-          out="$(Build.ArtifactStagingDirectory)/security"; mkdir -p "$out"
-          gitleaks dir . --redact --no-banner --report-format sarif --report-path "$out/gitleaks.sarif"
-        displayName: gitleaks (secrets)
-      - script: |
-          set -euo pipefail
-          out="$(Build.ArtifactStagingDirectory)/security"
-          trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed \
-            --skip-dirs '**/node_modules' --skip-dirs '**/.terraform' \
-            --format sarif --output "$out/trivy.sarif" --exit-code ${{ iif(parameters.failOnFindings, 1, 0) }} .
-        displayName: trivy (dependencies, Dockerfiles)
-      - script: |
-          set -euo pipefail
-          out="$(Build.ArtifactStagingDirectory)/security"
-          args=(--directory . --framework terraform --quiet --compact --output cli --output sarif --output-file-path "$out")
-          [[ -f .checkov.yaml ]] && args+=(--config-file .checkov.yaml)
+          args=(--out "$(Build.ArtifactStagingDirectory)/security" --selection "$(Pipeline.Workspace)/selection/selection.json")
+          # PRs: changed scope only; nightly schedules and release/*: everything
+          if [[ "$(Build.Reason)" == "Schedule" || "$(Build.SourceBranch)" == refs/heads/release/* ]]; then args+=(--full); fi
           ${{ iif(parameters.failOnFindings, '', 'args+=(--soft-fail)') }}
-          checkov "${args[@]}"
-        displayName: checkov (Terraform)
+          python3 -m tools.ci scan "${args[@]}"
+        displayName: Scanners in parallel (gitleaks, trivy, checkov, hadolint, shellcheck)
       - task: PublishPipelineArtifact@1
         displayName: Publish scan results
         condition: not(canceled())

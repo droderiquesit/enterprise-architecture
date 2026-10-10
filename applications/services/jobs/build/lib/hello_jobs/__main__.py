@@ -14,6 +14,7 @@ from opentelemetry.trace import Status, StatusCode
 
 from hello_common.config import service_info
 from hello_common.logging import configure_logging
+from hello_common.secrets import SecretResolutionError, resolve_env
 from hello_common.telemetry import meter, setup_telemetry, shutdown_telemetry
 
 from . import commands
@@ -26,6 +27,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hello_jobs", description="Enterprise Hello jobs")
     parser.add_argument("command", choices=COMMANDS)
     args = parser.parse_args(argv)
+    try:
+        resolve_env()  # dsv:// references -> values (Delinea DSV) before any setting is read
+    except SecretResolutionError as exc:  # message names variables only, never values
+        print(f"startup failed: {exc}", file=sys.stderr)
+        return 1
     info = service_info("hello-jobs")
     configure_logging(info)
     setup_telemetry(info)

@@ -35,7 +35,9 @@
         "required_statuses": {"type": "array", "items": {"type": "object", "additionalProperties": false,
           "required": ["genre", "name"],
           "properties": {"genre": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}, "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
-                         "author_id": {"type": "string"}, "blocking": {"type": "boolean"}}}}
+                         "author": {"type": "string"}, "blocking": {"type": "boolean"}}}},
+        "protected_paths_from": {"type": "string"},
+        "protected_owners": {"type": "object", "additionalProperties": {"type": "string"}}
       }
     },
     "owners_by_layer": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},

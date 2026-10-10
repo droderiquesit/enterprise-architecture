@@ -63,9 +63,10 @@ def command(unit: Unit, suite, repo: Path, env_name: str, workers: int, junit: P
         return ["bash", "tools/validate/terraform.sh", suite.id.split(":", 1)[1]]
     if suite.kind == "dotnet":
         # Microsoft.Testing.Platform (applications/dotnet/global.json; run from that directory): test modules in
-        # parallel (--max-parallel-test-modules), MSBuild nodes for the build (-maxcpucount)
-        cmd = ["dotnet", "test", "-c", "Release", f"-maxcpucount:{max(1, workers)}",
-               "--max-parallel-test-modules", str(max(1, workers))]
+        # parallel (--max-parallel-test-modules)
+        # (an MSBuild -maxcpucount switch is passed on to the MTP test host and makes it run zero tests; the dotnet
+        # CLI builds with parallel nodes by default anyway)
+        cmd = ["dotnet", "test", "-c", "Release", "--max-parallel-test-modules", str(max(1, workers))]
         for p in suite.projects:
             cmd += ["--project", os.path.relpath(repo / p, repo / DOTNET_DIR)]
         return cmd
@@ -114,13 +115,18 @@ def run_units(units: List[Unit], suites: dict, repo: Path, *, jobs: int, out_dir
                     "reason": f"needs {' '.join(f'{k}={v}' for k, v in s.needs_env.items())}", "seconds": 0.0}
         if s.kind == "pytest":
             want = len(u.files or _files_of(repo, s)) or 1     # loadfile: more workers than files is idle CPU
+        elif s.kind == "dotnet" or (s.kind == "component" and s.toolchain == "dotnet"):
+            want = tokens.total
+        elif s.kind == "component" and s.toolchain in ("python", "node"):
+            want = 2
         else:
-            want = tokens.total if s.kind == "dotnet" else 1
+            want = 1
         got = tokens.acquire(want)
         log = out_dir / "logs" / f"{_safe(u.name)}.log"
         junit = out_dir / "logs" / f"{_safe(u.name)}.junit.xml"
         env = dict(os.environ, **({k: v for k, v in s.needs_env.items()} if enable_env_suites else {}))
         env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        env["CI_CPUS"] = str(got)            # tools/validate/component.py sizes xdist / dotnet parallelism by it
         cmd = command(u, s, repo, env_name, got, junit)
         start = time.monotonic()
         try:

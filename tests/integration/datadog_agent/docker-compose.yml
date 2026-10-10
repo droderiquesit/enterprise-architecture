@@ -1,0 +1,111 @@
+# Local "Datadog Agent" variant of the e2e run (TELEMETRY_SDK=datadog): a REAL Datadog Agent 7.84.2 receives traces
+# (:8126), profiles (:8126/profiling/v1/input), DogStatsD (:8125/udp) and container logs (docker socket) from
+#   * hello-catalog-api - Python, ddtrace enabled in-process by hello_common (import ddtrace.auto) + Continuous Profiler
+#   * hello-orders-api  - .NET, Datadog CLR profiler from a tracer home baked into a TEST-ONLY derived image
+#                         (Dockerfile.orders-api-ddtrace), i.e. what SSI / serverless-init / the site extension inject
+# and forwards everything to `tap` (records + decodes payloads) -> `intake` (the existing mock intake, unmodified).
+# Driven by tests/integration/run_dd_agent_e2e.py. Fake API key, synthetic data, ports on 127.0.0.1 only.
+name: eh-dd
+
+x-dd-app-env: &dd-app-env
+  TELEMETRY_SDK: datadog
+  DD_ENV: e2e-dd
+  DD_VERSION: 0.1.0-e2e
+  DD_AGENT_HOST: datadog-agent
+  DD_TRACE_OTEL_ENABLED: "true"
+  DD_PROFILING_ENABLED: "true"
+  DD_LOGS_INJECTION: "true"
+  DD_RUNTIME_METRICS_ENABLED: "false"
+  DD_REMOTE_CONFIGURATION_ENABLED: "false"
+  DD_INSTRUMENTATION_TELEMETRY_ENABLED: "false"
+  DD_TAGS: team:hello,application:enterprise-hello
+  # deliberately set: proves the OTLP exporter stays off in datadog mode (nothing listens there)
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otlp-must-not-be-used:4317
+  LOG_LEVEL: info
+  FAULTS_ENABLED: "false"
+
+services:
+  intake:
+    image: python:3.13-slim
+    command: ["python", "-u", "/mock/mock_intake.py"]
+    volumes: ["../../../observability/tests/transport/mock_intake:/mock:ro"]
+    ports: ["127.0.0.1:18190:8080"]
+
+  tap:
+    # Python 3.14 for the stdlib zstd decoder (the Agent compresses traces/series/logs with zstd)
+    image: python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+    command: ["python", "-u", "/tap/tap_intake.py"]
+    environment: { UPSTREAM: "http://intake:8080" }
+    volumes: ["./tap_intake.py:/tap/tap_intake.py:ro"]
+    ports: ["127.0.0.1:18191:8080"]
+    depends_on: [intake]
+
+  datadog-agent:
+    image: datadog/agent:7.84.2
+    environment:
+      DD_API_KEY: 0123456789abcdef0123456789abcdef   # fake
+      DD_HOSTNAME: eh-dd-agent
+      DD_SITE: datadoghq.com
+      # every intake the Agent uses points at the tap (plain HTTP, local only)
+      DD_DD_URL: http://tap:8080
+      DD_APM_DD_URL: http://tap:8080
+      DD_APM_PROFILING_DD_URL: http://tap:8080/api/v2/profile
+      DD_LOGS_CONFIG_LOGS_DD_URL: tap:8080
+      DD_LOGS_CONFIG_LOGS_NO_SSL: "true"
+      DD_LOGS_CONFIG_FORCE_USE_HTTP: "true"
+      DD_LOGS_CONFIG_USE_COMPRESSION: "true"
+      DD_LOGS_CONFIG_BATCH_WAIT: "2"
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "false"   # only containers labelled com.datadoghq.ad.logs
+      DD_LOGS_CONFIG_DOCKER_CONTAINER_USE_FILE: "false"
+      DD_CONTAINER_EXCLUDE: "name:datadog-agent"
+      DD_PROCESS_AGENT_ENABLED: "false"
+      DD_REMOTE_CONFIGURATION_ENABLED: "false"
+      DD_INVENTORIES_ENABLED: "false"
+      DD_ENABLE_METADATA_COLLECTION: "false"
+      DD_SBOM_ENABLED: "false"
+      DD_CHECKS_TAG_CARDINALITY: low
+      DD_LOG_LEVEL: info
+      DD_FORWARDER_FLUSH_TO_DISK_MEM_RATIO: "0"
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    healthcheck:
+      test: ["CMD", "agent", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    depends_on: [tap]
+
+  catalog-api:
+    image: hello-catalog-api:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      <<: *dd-app-env
+      DD_SERVICE: hello-catalog-api
+      OTEL_SERVICE_NAME: hello-catalog-api
+      CATALOG_STORAGE: memory
+      SEED_ON_STARTUP: "true"
+      DD_PROFILING_UPLOAD_INTERVAL: "10"
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "python", "service": "hello-catalog-api"}]'
+    ports: ["127.0.0.1:18182:8080"]
+    depends_on:
+      datadog-agent: { condition: service_healthy }
+
+  orders-api:
+    image: hello-orders-api-ddtrace:${E2E_VERSION:-0.1.0-e2e}
+    environment:
+      <<: *dd-app-env
+      DD_SERVICE: hello-orders-api
+      OTEL_SERVICE_NAME: hello-orders-api
+      STORAGE_MODE: memory
+      MESSAGING_MODE: log
+      CATALOG_API_URL: http://catalog-api:8080
+      DD_PROFILING_UPLOAD_PERIOD: "10"
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "csharp", "service": "hello-orders-api"}]'
+    ports: ["127.0.0.1:18183:8080"]
+    depends_on:
+      datadog-agent: { condition: service_healthy }
+      catalog-api: { condition: service_started }

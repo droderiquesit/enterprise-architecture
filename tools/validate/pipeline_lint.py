@@ -45,7 +45,7 @@ from tools.pipeline.conditions import ExpressionError, functions_used, parse, to
 
 RETRY_OK_TASKS = ("DownloadPipelineArtifact@", "UseDotNet@", "NodeTool@", "UsePythonVersion@")
 RETRY_OK_NAMES = {"init", "resolve"}
-RETRY_OK_SCRIPT = re.compile(r"(pip install|install-tools\.sh|setup-agent\.sh|npm ci)")
+RETRY_OK_SCRIPT = re.compile(r"(pip install|install-tools\.sh|setup-agent\.sh|npm ci|tools\.ci tf-mirror)")   # tf-mirror: idempotent download into a mirror dir
 SECRET_ECHO = re.compile(r"echo[^\n]*\$\((datadog-[a-z-]+|[A-Za-z_.]*[Ss]ecret[A-Za-z_.]*)\)")
 FETCHED_ECHO = re.compile(r"\b(echo|printf)\b[^\n]*\$(\{|\()?(DD_API_KEY|DD_APP_KEY|TF_VAR_[A-Za-z0-9_]+|DSV_CLIENT_SECRET)\b")
 

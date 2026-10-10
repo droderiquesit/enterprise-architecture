@@ -83,6 +83,7 @@ pipeline:
       call: eh_finalize
 
   outputs:
+    # >>> datadog-output (modules/fluent-bit replaces this block for log_destination = observability_pipelines)
     - name: datadog
       match: '*'
       host: ${FLB_DD_HOST}
@@ -97,3 +98,4 @@ pipeline:
       storage.total_limit_size: 1G
       net.keepalive: on
       workers: 2
+    # <<< datadog-output

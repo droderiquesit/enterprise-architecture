@@ -34,8 +34,8 @@ been deployed by them. See [What only a real Azure DevOps organisation can prove
 | Stage | Agent | Credentials | What it does |
 |---|---|---|---|
 | Select | hosted (PR) / `deployPool` | none (PR) / plan identity | validates registry, scopes, environment config and promotion policy; `python3 -m tools.changeset select --scope <scope>`; publishes `selection.json`; tags the run `env-<env>`, `scope-<scope>` |
-| Validate | Microsoft-hosted | **none** | matrix over selected components of the scope (`tools/validate/component.py`), Helm lint (applications), tooling tests, pipeline lint, template-contract lint, ownership, provider pins, generated-file check |
-| Security | Microsoft-hosted | **none** | gitleaks, trivy fs, checkov (pinned, checksum-verified) |
+| Validate | Microsoft-hosted | **none** | the Select stage's CI plan (`python3 -m tools.ci plan`: test impact selection + test result cache + duration-balanced legs) as a leg matrix: gates leg (static checks, fail fast), component suites (`tools/validate/component.py`), pytest / .NET suites; Helm lint (applications); timing report ([Fast CI](#fast-ci)) |
+| Security | Microsoft-hosted | **none** | gitleaks, trivy fs, checkov, hadolint, shellcheck in parallel (`python3 -m tools.ci scan`; changed scope on PRs, everything nightly/release) |
 | Build (both scopes: platform builds `img-dsv-fetch`, applications the `svc-*` artifacts + Helm charts) | `deployPool` | build identity | per artifact of the pipeline's scope (an applications root that consumes a **platform** artifact reads its digest from the artifact's deployment record and waits while the platform pipeline still has to build it): first environment of a chain resolves the image/package tagged with the source fingerprint or builds + pushes it **by digest** (provenance, SBOM); later environments **promote** the exact digest/sha256 the previous environment recorded (never rebuild). Helm charts: content-addressed `helm package` + OCI push |
 | P_&lt;x&gt; | `deployPool` | plan identity | render config, materialize contracts, artifact digests, `terraform plan -detailed-exitcode`, plan policy, binding manifest, plan file to the protected `plans` container; publishes the summary |
 | C_&lt;x&gt; | `deployPool` | apply identity, environment `lab-<env>` | runs only when the plan has changes and the component is an apply candidate. Approvals are evaluated when this stage starts, i.e. **after** the plan summary exists. Verifies the binding (stale plan → fail), applies, deploys code + smoke (deployment roots), publishes the contract, writes the deployment record |
@@ -189,6 +189,33 @@ refused drift remediation.
 | `PREFLIGHT_FAIL class=dns` | agent cannot resolve a private endpoint / DSV | fix agent DNS / private DNS zone links; rerun |
 | Stage waits on "Exclusive lock" | another run holds `lab-<env>` | expected (`lockBehavior: sequential`); cancel the older run if obsolete |
 
+## Fast CI
+
+Goal: PR feedback for a single-service change in **<= 10 min**, docs-only **<= 2 min**, bounded full nightly runs.
+Everything is open source (uv, pytest-xdist, ruff, yamllint from PyPI with hashes; terraform test, tflint, checkov,
+trivy, gitleaks, syft/grype, kubeconform, helm, hadolint, shellcheck pinned and checksum/digest-verified by
+`install-tools.sh`) and reproducible locally with `python3 -m tools.ci run`.
+
+| Mechanism | What | Where |
+|---|---|---|
+| Test impact selection | the changeset selection (changed components + transitive consumers of infrastructure changes) mapped to suites: `component:<id>` per validated component, `module:<dir>` per changed shared module, suites of [`tools/ci/suites.yaml`](../tools/ci/suites.yaml) whose `inputs` changed or whose `covers` were selected; `e2e` only when the vertical slice changed; `global_inputs` (versions.yaml, tools/ci) select everything | `tools/ci/impact.py` |
+| Test result cache | key = fingerprint (component: changeset validation fingerprint = sources incl. tests, shared modules, rendered config, tool versions, contract majors; other suites: their input files + tool versions + command). A suite whose key already passed is a recorded "cached pass". Cache: Cache@2 directory `ci-testcache` per scope (no credentials, PR-safe; PRs read main's entries), or a blob container (`--cache https://<acct>.blob.core.windows.net/testcache`). **Full runs (nightly schedule, `release/*`) ignore hits**, so a poisoned entry lives at most a day; failures are never cached | `tools/ci/cache.py` |
+| Multi-agent fan-out | the Select stage writes `ci-plan.json` and a matrix of legs (bounded by `ciMaxLegs` and `validateMaxParallel`); legs are grouped by toolchain and packed to ~4 min with LPT over previous timings (EWMA in the cache, committed defaults in `tools/ci/timings.json`); pytest suites are sharded by file; the gates leg cancels the run on failure (`tools.ci failfast`) - expensive legs never wait for it | `tools/ci/balance.py`, `pipelines/templates/validate.yml` |
+| Multi-threading in a job | CPU-token scheduler: pytest units with `-n <cpus> --dist loadfile` (pytest-xdist), Terraform roots one token each in parallel, `.NET` test modules in parallel (`--max-parallel-test-modules`), scanners as parallel processes | `tools/ci/runner.py`, `tools/ci/scan.py` |
+| Terraform provider mirror | one read-only filesystem mirror per job (Cache@2 keyed by every `.terraform.lock.hcl`), populated once with `terraform providers mirror`; every init installs from it (symlinks), no shared plugin cache is written, so parallel inits cannot race ("text file busy") | `tools/ci/tfmirror.py` |
+| Caches (Cache@2) | uv (requirement hashes), NuGet (`Directory.Packages.props`/`packages.lock.json`), npm (`package-lock.json`), provider mirror (lock files), tool downloads (pinned versions), Helm/kubeconform schemas, test results + timings; Docker BuildKit registry cache on self-hosted builds (`container-image.yml`) | templates |
+| Build once per fingerprint | an artifact whose source fingerprint was built on any branch is resolved by digest instead of rebuilt | `tools/deploy/artifacts.py resolve` |
+| Visibility | per run: `ci-report/timing.json` + run summary (critical path, slowest units, cache hit rate, cached-test skips, legs vs estimates, budget verdict); PR time budget stage | `tools/ci/report.py`, `tools/report/pr_budget.py` |
+
+**Agent capacity.** Hosted parallel jobs bound the PR fan-out (`validateMaxParallel` defaults to 8: buy >= 8
+Microsoft-hosted parallel jobs, or run Validate on a Managed DevOps Pool). For the self-hosted `deployPool`
+(`foundation/deploy-agents`, owned by the platform team) burst parallelism needs a scale-set / Managed DevOps
+Pools agent pool with: maximum agents >= `validateMaxParallel` + the widest Build stage (14 jobs in applications) +
+2; 2 standby agents during working hours (0 at night); an image with the pinned tools pre-baked (terraform, az,
+python3.13 + uv, dotnet 10 SDK, node 24, helm, kubeconform, trivy, syft, gitleaks, docker buildx) and warm caches
+kept on the agent between jobs (`~/.cache/uv`, NuGet, npm, the provider mirror, BuildKit) - state is not shared
+between jobs except through these caches, and `workspace: clean: all` still applies to sources.
+
 ## Scaling and limits
 
 Azure Pipelines limits (Learn, *Templates*: at most 100 included YAML files, 100 nesting levels, 20 MB parse
@@ -198,7 +225,7 @@ estimated expanded size >1,000,000 bytes (warning above 600,000), >200 jobs in a
 validate matrix legs). Current estimate: platform ~540 KB, applications ~380 KB (self-healing steps included). When a budget is exceeded:
 split the scope further (another `scope` value and generated file, chained by a pipeline resource trigger),
 shard the Build stage, and keep parallelism bounded by the `deployPool` size (`validateMaxParallel` bounds
-the validation matrix).
+the validation matrix; `ciMaxLegs` bounds how many legs one run plans).
 
 ## One-time Azure DevOps setup checklist
 
@@ -228,9 +255,12 @@ the validation matrix).
    Secret hooks: `foundation-secrets` plan = `dsv_apply.py plan` diff in the plan summary (a DSV diff forces the apply
    stage), apply = `dsv_apply.py apply` + `check.py`; `obs-telemetry-transport` apply runs `publish.py`
    (`generated_secrets` → DSV); Verify starts with `check.py`.
-6. **Branch policies** (Azure Repos ignores YAML `pr:`): on `main` add *Build validation* for **both**
-   pipelines (required, automatic). PR builds compile only Select/Validate/Security on hosted agents without
-   credentials; each validates its own scope; a docs-only PR selects nothing.
+6. **Branch policies** (Azure Repos ignores YAML `pr:`): `python3 tools/ado/branch_policies.py plan|apply`
+   (idempotent; [branching guide](../docs/guides/branching-and-development.md#who-approves-what)): build validation of
+   **both** pipelines (`validDuration: 0`), 1 reviewer + required status `eh-review/policy` from the automated
+   reviewer, protected path classes and registry owners as required reviewers, work items, comments, squash only.
+   PR builds compile only Select/Validate/Security on hosted agents without credentials; each validates its own
+   scope; a docs-only PR runs only the gates and the link check.
 7. **Agent pools**: Microsoft-hosted for Validate/Security/PR/release; self-hosted `foundation-deploy-agents`
    (VNet) for everything that reaches private endpoints (needs `python3`, `az`, `git`, `docker` or
    `useAcrBuild`, `curl`).
@@ -254,7 +284,10 @@ identity federation token refresh during long applies, `az acr import` digest pr
 Universal Package publishing, and the real expanded-size margin. Self-healing: `Build.CronSchedule.DisplayName`
 reaching the Select step, the Runs API fan-out with `templateParameters`, Boards work item creation with
 System.AccessToken, `Cache@2` restore/save, real Azure error texts beyond the captured samples, `force-unlock` /
-lease break against a real azurerm backend, ACA/App Service/AKS rollback commands against live resources. The repository proves the logic (selection,
+lease break against a real azurerm backend, ACA/App Service/AKS rollback commands against live resources. Fast CI:
+Cache@2 scoping between PR and main runs, the matrix of legs from the `ciplan` output variable, run cancellation by
+the gates leg, real hosted-agent timings. Branch policies: the Status policy settings (`statusGenre`, `authorId`)
+accepted by a real organisation. The repository proves the logic (selection,
 conditions, ordering, promotion gates, lint) with tests and static checks only.
 
 ## Files

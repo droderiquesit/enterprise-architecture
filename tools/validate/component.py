@@ -15,6 +15,8 @@ A registry component whose path does not exist yet is reported as `cataloged` (n
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import os
 import re
 import subprocess
 import sys
@@ -26,6 +28,9 @@ from tools.changeset.registry import load_registry  # noqa: E402
 from tools.changeset.trees import WorkTree  # noqa: E402
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+CPUS = int(os.environ.get("CI_CPUS") or os.cpu_count() or 2)
+# pytest-xdist when available (pipelines/requirements-tools.txt): one worker per CPU, files kept together
+XDIST = ["-n", str(CPUS), "--dist", "loadfile"] if importlib.util.find_spec("xdist") and CPUS > 1 else []
 
 
 def run(cmd, cwd=None) -> int:
@@ -45,9 +50,13 @@ def validate_artifact(repo: Path, comp) -> int:
     rc = 0
     test_projects = sorted(p for p in path.rglob("*.csproj") if p.stem.endswith("Tests"))
     if test_projects:
+        # Microsoft.Testing.Platform runner (applications/dotnet/global.json applies from that directory): all test
+        # projects of the component in one invocation, modules in parallel, parallel MSBuild nodes
+        dotnet_dir = repo / "applications/dotnet"
+        cmd = ["dotnet", "test", "-c", "Release", "--max-parallel-test-modules", str(CPUS)]   # MSBuild builds in parallel by default
         for proj in test_projects:
-            rc |= run(["dotnet", "test", str(proj), "--configuration", "Release"], cwd=repo)
-        return rc
+            cmd += ["--project", os.path.relpath(proj, dotnet_dir)]
+        return run(cmd, cwd=dotnet_dir if dotnet_dir.is_dir() else repo)
     if list(path.rglob("*.csproj")):
         return run(["dotnet", "build", str(next(path.rglob("*.csproj"))), "--configuration", "Release"], cwd=repo)
     if (path / "package.json").exists():
@@ -64,11 +73,11 @@ def validate_artifact(repo: Path, comp) -> int:
         if (path / "pyproject.toml").exists():
             rc |= run([sys.executable, "-m", "pip", "install", "--quiet", str(path)])
         if (path / "tests").is_dir():
-            rc |= run([sys.executable, "-m", "pytest", "-q", str(path / "tests")], cwd=repo)
+            rc |= run([sys.executable, "-m", "pytest", "-q", *XDIST, str(path / "tests")], cwd=repo)
         return rc
     if (path / "tests").is_dir() and list(path.glob("*.py")):
         # stdlib-only Python helpers (e.g. observability/images/dsv-fetch): unit tests only
-        return run([sys.executable, "-m", "pytest", "-q", str(path / "tests")], cwd=repo)
+        return run([sys.executable, "-m", "pytest", "-q", *XDIST, str(path / "tests")], cwd=repo)
     print(f"{comp.id}: no recognised toolchain; structure only")
     return 0
 

@@ -81,6 +81,8 @@ _STANDARD_ATTRS = frozenset(
         "otelTraceID",
         "otelServiceName",
         "otelTraceSampled",
+        # attributes injected by ddtrace's logging integration (DD_LOGS_INJECTION); ours are written explicitly
+        "dd",
     }
 )
 _RESERVED = frozenset(
@@ -126,17 +128,42 @@ def _redact_value(key: str, value: Any) -> Any:
     return value
 
 
+def _ids(trace_id: int, span_id: int) -> dict[str, str]:
+    return {
+        "trace_id": format(trace_id, "032x"),
+        "span_id": format(span_id, "016x"),
+        "dd.trace_id": str(trace_id & 0xFFFFFFFFFFFFFFFF),
+        "dd.span_id": str(span_id),
+    }
+
+
+def _datadog_span_ids() -> tuple[int, int] | None:
+    """Active ddtrace span (TELEMETRY_SDK=datadog), or None. Never imports ddtrace itself."""
+    ddtrace = sys.modules.get("ddtrace")
+    if ddtrace is None or "ddtrace.bootstrap.sitecustomize" not in sys.modules:
+        return None
+    try:
+        span = ddtrace.tracer.current_span()
+    except Exception:  # pragma: no cover
+        return None
+    if span is None or not span.trace_id or not span.span_id:
+        return None
+    return span.trace_id, span.span_id
+
+
 def trace_fields() -> dict[str, str]:
-    """Correlation fields for the current OTel span (empty when no valid span is active)."""
+    """Correlation fields for the active span (empty when no valid span is active).
+
+    Datadog tracer loaded (TELEMETRY_SDK=datadog): the current ddtrace span - ddtrace's 128-bit trace id renders as
+    the same 32-hex ``trace_id`` and its low 64 bits as ``dd.trace_id``. Otherwise the current OpenTelemetry span.
+    """
+    ids = _datadog_span_ids()
+    if ids is not None:
+        return _ids(*ids)
     ctx = trace.get_current_span().get_span_context()
     if not ctx.is_valid:
         return {}
-    return {
-        "trace_id": format(ctx.trace_id, "032x"),
-        "span_id": format(ctx.span_id, "016x"),
-        "dd.trace_id": str(ctx.trace_id & 0xFFFFFFFFFFFFFFFF),
-        "dd.span_id": str(ctx.span_id),
-    }
+    return _ids(ctx.trace_id, ctx.span_id)
 
 
 class JsonFormatter(logging.Formatter):

@@ -59,7 +59,7 @@ var otel = services.AddHelloOpenTelemetry(builder.Configuration, info, o =>
 });
 if (string.Equals(builder.Configuration["FUNCTIONS_WORKER_OTEL_DEFAULTS"], "true", StringComparison.OrdinalIgnoreCase))
 {
-    otel.UseFunctionsWorkerDefaults();
+    otel?.UseFunctionsWorkerDefaults(); // null when TELEMETRY_SDK=datadog / OTEL_SDK_DISABLED=true (no OTel SDK)
 }
 
 services.TryAddSingleton<HelloMetrics>();

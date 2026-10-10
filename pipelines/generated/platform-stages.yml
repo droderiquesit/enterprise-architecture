@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: platform pipeline.
-# Source: catalog/components.yaml (sha256 prefix 18837edab4f2a5a7)
+# Source: catalog/components.yaml (sha256 prefix 4b49d95f645c3a4f)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -31,6 +31,18 @@ stages:
           formats:
             - container-image
           language: generic
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          settings: ${{ parameters.settings }}
+      - template: ../templates/build-artifact.yml
+        parameters:
+          component: svc-pr-reviewer
+          jobName: B_svc_pr_reviewer
+          componentPath: applications/services/pr-reviewer
+          artifactName: eh-pr-reviewer
+          formats:
+            - zip-package
+          language: python
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           settings: ${{ parameters.settings }}
@@ -266,6 +278,51 @@ stages:
           secretEnv: false
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
+  - stage: P_foundation_pr_reviewer
+    displayName: plan foundation-pr-reviewer
+    dependsOn:
+      - Select
+      - Validate
+      - Security
+      - Build
+      - P_foundation_identity
+      - C_foundation_identity
+      - P_foundation_network
+      - C_foundation_network
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_foundation_pr_reviewer'], 'true'), eq(dependencies.Build.outputs['B_svc_pr_reviewer.ready.ready'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-plan.yml
+        parameters:
+          component: foundation-pr-reviewer
+          componentPath: foundation/pr-reviewer
+          artifacts: &id008
+            - svc-pr-reviewer
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: false
+          settings: ${{ parameters.settings }}
+  - stage: C_foundation_pr_reviewer
+    displayName: apply foundation-pr-reviewer
+    dependsOn:
+      - Select
+      - P_foundation_pr_reviewer
+      - Build
+    lockBehavior: ${{ parameters.settings.stageLockBehavior }}
+    condition: and(not(canceled()), ne(variables['DRY_RUN'], 'true'), in(dependencies.P_foundation_pr_reviewer.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.P_foundation_pr_reviewer.outputs['Plan.plan.has_changes'], 'true'), eq(dependencies.Select.outputs['select.detect.apply_foundation_pr_reviewer'], 'true'))
+    pool: *id001
+    jobs:
+      - template: ../templates/terraform-apply.yml
+        parameters:
+          component: foundation-pr-reviewer
+          componentPath: foundation/pr-reviewer
+          artifacts: *id008
+          timeoutMinutes: 60
+          environment: ${{ parameters.environment }}
+          secretEnv: false
+          settings: ${{ parameters.settings }}
+          dryRun: ${{ parameters.dryRun }}
   - stage: P_foundation_secrets
     displayName: plan foundation-secrets
     dependsOn:
@@ -282,7 +339,7 @@ stages:
         parameters:
           component: foundation-secrets
           componentPath: foundation/secrets
-          artifacts: &id008 []
+          artifacts: &id009 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -300,7 +357,7 @@ stages:
         parameters:
           component: foundation-secrets
           componentPath: foundation/secrets
-          artifacts: *id008
+          artifacts: *id009
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -324,7 +381,7 @@ stages:
         parameters:
           component: platform-appservice
           componentPath: platform/compute/appservice
-          artifacts: &id009 []
+          artifacts: &id010 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -342,7 +399,7 @@ stages:
         parameters:
           component: platform-appservice
           componentPath: platform/compute/appservice
-          artifacts: *id009
+          artifacts: *id010
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -366,7 +423,7 @@ stages:
         parameters:
           component: platform-data-analytics
           componentPath: platform/data/analytics
-          artifacts: &id010 []
+          artifacts: &id011 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -384,7 +441,7 @@ stages:
         parameters:
           component: platform-data-analytics
           componentPath: platform/data/analytics
-          artifacts: *id010
+          artifacts: *id011
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -408,7 +465,7 @@ stages:
         parameters:
           component: platform-db-cosmos-cassandra
           componentPath: platform/data/cosmos-cassandra
-          artifacts: &id011 []
+          artifacts: &id012 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -426,7 +483,7 @@ stages:
         parameters:
           component: platform-db-cosmos-cassandra
           componentPath: platform/data/cosmos-cassandra
-          artifacts: *id011
+          artifacts: *id012
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -450,7 +507,7 @@ stages:
         parameters:
           component: platform-db-cosmos-gremlin
           componentPath: platform/data/cosmos-gremlin
-          artifacts: &id012 []
+          artifacts: &id013 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -468,7 +525,7 @@ stages:
         parameters:
           component: platform-db-cosmos-gremlin
           componentPath: platform/data/cosmos-gremlin
-          artifacts: *id012
+          artifacts: *id013
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -492,7 +549,7 @@ stages:
         parameters:
           component: platform-db-cosmos-mongo
           componentPath: platform/data/cosmos-mongo
-          artifacts: &id013 []
+          artifacts: &id014 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -510,7 +567,7 @@ stages:
         parameters:
           component: platform-db-cosmos-mongo
           componentPath: platform/data/cosmos-mongo
-          artifacts: *id013
+          artifacts: *id014
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -534,7 +591,7 @@ stages:
         parameters:
           component: platform-db-cosmos-nosql
           componentPath: platform/data/cosmos-nosql
-          artifacts: &id014 []
+          artifacts: &id015 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -552,7 +609,7 @@ stages:
         parameters:
           component: platform-db-cosmos-nosql
           componentPath: platform/data/cosmos-nosql
-          artifacts: *id014
+          artifacts: *id015
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -576,7 +633,7 @@ stages:
         parameters:
           component: platform-db-cosmos-table
           componentPath: platform/data/cosmos-table
-          artifacts: &id015 []
+          artifacts: &id016 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -594,7 +651,7 @@ stages:
         parameters:
           component: platform-db-cosmos-table
           componentPath: platform/data/cosmos-table
-          artifacts: *id015
+          artifacts: *id016
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -618,7 +675,7 @@ stages:
         parameters:
           component: platform-db-horizondb
           componentPath: platform/data/horizondb
-          artifacts: &id016 []
+          artifacts: &id017 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -636,7 +693,7 @@ stages:
         parameters:
           component: platform-db-horizondb
           componentPath: platform/data/horizondb
-          artifacts: *id016
+          artifacts: *id017
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -660,7 +717,7 @@ stages:
         parameters:
           component: platform-db-ledger
           componentPath: platform/data/ledger
-          artifacts: &id017 []
+          artifacts: &id018 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -678,7 +735,7 @@ stages:
         parameters:
           component: platform-db-ledger
           componentPath: platform/data/ledger
-          artifacts: *id017
+          artifacts: *id018
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -702,7 +759,7 @@ stages:
         parameters:
           component: platform-db-mysql
           componentPath: platform/data/mysql
-          artifacts: &id018 []
+          artifacts: &id019 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -720,7 +777,7 @@ stages:
         parameters:
           component: platform-db-mysql
           componentPath: platform/data/mysql
-          artifacts: *id018
+          artifacts: *id019
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -744,7 +801,7 @@ stages:
         parameters:
           component: platform-db-postgresql
           componentPath: platform/data/postgresql
-          artifacts: &id019 []
+          artifacts: &id020 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -762,7 +819,7 @@ stages:
         parameters:
           component: platform-db-postgresql
           componentPath: platform/data/postgresql
-          artifacts: *id019
+          artifacts: *id020
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -786,7 +843,7 @@ stages:
         parameters:
           component: platform-db-redis
           componentPath: platform/data/redis
-          artifacts: &id020 []
+          artifacts: &id021 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -804,7 +861,7 @@ stages:
         parameters:
           component: platform-db-redis
           componentPath: platform/data/redis
-          artifacts: *id020
+          artifacts: *id021
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -828,7 +885,7 @@ stages:
         parameters:
           component: platform-db-sql
           componentPath: platform/data/sql
-          artifacts: &id021 []
+          artifacts: &id022 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -846,7 +903,7 @@ stages:
         parameters:
           component: platform-db-sql
           componentPath: platform/data/sql
-          artifacts: *id021
+          artifacts: *id022
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -870,7 +927,7 @@ stages:
         parameters:
           component: platform-db-sqlmi
           componentPath: platform/data/sqlmi
-          artifacts: &id022 []
+          artifacts: &id023 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -888,7 +945,7 @@ stages:
         parameters:
           component: platform-db-sqlmi
           componentPath: platform/data/sqlmi
-          artifacts: *id022
+          artifacts: *id023
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -912,7 +969,7 @@ stages:
         parameters:
           component: platform-db-table-storage
           componentPath: platform/data/table-storage
-          artifacts: &id023 []
+          artifacts: &id024 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -930,7 +987,7 @@ stages:
         parameters:
           component: platform-db-table-storage
           componentPath: platform/data/table-storage
-          artifacts: *id023
+          artifacts: *id024
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -954,7 +1011,7 @@ stages:
         parameters:
           component: platform-functions
           componentPath: platform/compute/functions
-          artifacts: &id024 []
+          artifacts: &id025 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -972,7 +1029,7 @@ stages:
         parameters:
           component: platform-functions
           componentPath: platform/compute/functions
-          artifacts: *id024
+          artifacts: *id025
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -996,7 +1053,7 @@ stages:
         parameters:
           component: platform-messaging
           componentPath: platform/messaging
-          artifacts: &id025 []
+          artifacts: &id026 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1014,7 +1071,7 @@ stages:
         parameters:
           component: platform-messaging
           componentPath: platform/messaging
-          artifacts: *id025
+          artifacts: *id026
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1038,7 +1095,7 @@ stages:
         parameters:
           component: platform-servicefabric
           componentPath: platform/compute/servicefabric
-          artifacts: &id026 []
+          artifacts: &id027 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1056,7 +1113,7 @@ stages:
         parameters:
           component: platform-servicefabric
           componentPath: platform/compute/servicefabric
-          artifacts: *id026
+          artifacts: *id027
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1080,7 +1137,7 @@ stages:
         parameters:
           component: platform-shared
           componentPath: platform/shared
-          artifacts: &id027 []
+          artifacts: &id028 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1098,7 +1155,7 @@ stages:
         parameters:
           component: platform-shared
           componentPath: platform/shared
-          artifacts: *id027
+          artifacts: *id028
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1122,7 +1179,7 @@ stages:
         parameters:
           component: platform-specialized-compute
           componentPath: platform/compute/specialized
-          artifacts: &id028 []
+          artifacts: &id029 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1140,7 +1197,7 @@ stages:
         parameters:
           component: platform-specialized-compute
           componentPath: platform/compute/specialized
-          artifacts: *id028
+          artifacts: *id029
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1164,7 +1221,7 @@ stages:
         parameters:
           component: platform-vm
           componentPath: platform/compute/vm
-          artifacts: &id029 []
+          artifacts: &id030 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1182,7 +1239,7 @@ stages:
         parameters:
           component: platform-vm
           componentPath: platform/compute/vm
-          artifacts: *id029
+          artifacts: *id030
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1206,7 +1263,7 @@ stages:
         parameters:
           component: platform-vmss
           componentPath: platform/compute/vmss
-          artifacts: &id030 []
+          artifacts: &id031 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1224,7 +1281,7 @@ stages:
         parameters:
           component: platform-vmss
           componentPath: platform/compute/vmss
-          artifacts: *id030
+          artifacts: *id031
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1248,7 +1305,7 @@ stages:
         parameters:
           component: foundation-edge
           componentPath: foundation/edge
-          artifacts: &id031 []
+          artifacts: &id032 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1266,7 +1323,7 @@ stages:
         parameters:
           component: foundation-edge
           componentPath: foundation/edge
-          artifacts: *id031
+          artifacts: *id032
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1292,7 +1349,7 @@ stages:
         parameters:
           component: platform-aks
           componentPath: platform/compute/aks
-          artifacts: &id032 []
+          artifacts: &id033 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1310,7 +1367,7 @@ stages:
         parameters:
           component: platform-aks
           componentPath: platform/compute/aks
-          artifacts: *id032
+          artifacts: *id033
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1334,7 +1391,7 @@ stages:
         parameters:
           component: platform-aro
           componentPath: platform/compute/aro
-          artifacts: &id033 []
+          artifacts: &id034 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1352,7 +1409,7 @@ stages:
         parameters:
           component: platform-aro
           componentPath: platform/compute/aro
-          artifacts: *id033
+          artifacts: *id034
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1378,7 +1435,7 @@ stages:
         parameters:
           component: platform-batch
           componentPath: platform/compute/batch
-          artifacts: &id034 []
+          artifacts: &id035 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1396,7 +1453,7 @@ stages:
         parameters:
           component: platform-batch
           componentPath: platform/compute/batch
-          artifacts: *id034
+          artifacts: *id035
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1422,7 +1479,7 @@ stages:
         parameters:
           component: platform-containerapps
           componentPath: platform/compute/containerapps
-          artifacts: &id035 []
+          artifacts: &id036 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1440,7 +1497,7 @@ stages:
         parameters:
           component: platform-containerapps
           componentPath: platform/compute/containerapps
-          artifacts: *id035
+          artifacts: *id036
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1466,7 +1523,7 @@ stages:
         parameters:
           component: platform-db-cassandra-mi
           componentPath: platform/data/cassandra-mi
-          artifacts: &id036 []
+          artifacts: &id037 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1484,7 +1541,7 @@ stages:
         parameters:
           component: platform-db-cassandra-mi
           componentPath: platform/data/cassandra-mi
-          artifacts: *id036
+          artifacts: *id037
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1510,7 +1567,7 @@ stages:
         parameters:
           component: platform-db-documentdb
           componentPath: platform/data/documentdb
-          artifacts: &id037 []
+          artifacts: &id038 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1528,7 +1585,7 @@ stages:
         parameters:
           component: platform-db-documentdb
           componentPath: platform/data/documentdb
-          artifacts: *id037
+          artifacts: *id038
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1554,7 +1611,7 @@ stages:
         parameters:
           component: platform-db-sqlvm
           componentPath: platform/data/sqlvm
-          artifacts: &id038 []
+          artifacts: &id039 []
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1572,7 +1629,7 @@ stages:
         parameters:
           component: platform-db-sqlvm
           componentPath: platform/data/sqlvm
-          artifacts: *id038
+          artifacts: *id039
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: true
@@ -1601,7 +1658,7 @@ stages:
         parameters:
           component: obs-telemetry-transport
           componentPath: observability/lab/telemetry-transport
-          artifacts: &id039
+          artifacts: &id040
             - img-dsv-fetch
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
@@ -1621,7 +1678,7 @@ stages:
         parameters:
           component: obs-telemetry-transport
           componentPath: observability/lab/telemetry-transport
-          artifacts: *id039
+          artifacts: *id040
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1658,7 +1715,7 @@ stages:
         parameters:
           component: obs-dbm
           componentPath: observability/lab/dbm
-          artifacts: &id040
+          artifacts: &id041
             - img-dsv-fetch
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
@@ -1678,7 +1735,7 @@ stages:
         parameters:
           component: obs-dbm
           componentPath: observability/lab/dbm
-          artifacts: *id040
+          artifacts: *id041
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1705,7 +1762,7 @@ stages:
         parameters:
           component: obs-kubernetes
           componentPath: observability/lab/kubernetes
-          artifacts: &id041
+          artifacts: &id042
             - img-dsv-fetch
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
@@ -1725,7 +1782,7 @@ stages:
         parameters:
           component: obs-kubernetes
           componentPath: observability/lab/kubernetes
-          artifacts: *id041
+          artifacts: *id042
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
           secretEnv: false
@@ -1741,6 +1798,7 @@ stages:
         - P_obs_azure_integration
         - P_obs_prereqs
         - P_foundation_deploy_agents
+        - P_foundation_pr_reviewer
         - P_foundation_secrets
         - P_platform_appservice
         - P_platform_data_analytics
@@ -1781,6 +1839,7 @@ stages:
         - C_obs_azure_integration
         - C_obs_prereqs
         - C_foundation_deploy_agents
+        - C_foundation_pr_reviewer
         - C_foundation_secrets
         - C_platform_appservice
         - C_platform_data_analytics
@@ -1815,7 +1874,7 @@ stages:
         - C_obs_telemetry_transport
         - C_obs_dbm
         - C_obs_kubernetes
-      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.P_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
+      condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.has_retirements'], 'true'), in(dependencies.P_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_pr_reviewer.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.P_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_governance.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_azure_integration.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_prereqs.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_deploy_agents.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_pr_reviewer.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_appservice.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_data_analytics.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_cassandra.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_gremlin.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_mongo.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_nosql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cosmos_table.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_horizondb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_ledger.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_mysql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_postgresql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_redis.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sql.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlmi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_table_storage.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_functions.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_messaging.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_servicefabric.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_shared.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_specialized_compute.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_vmss.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_foundation_edge.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aks.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_aro.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_batch.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_containerapps.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_cassandra_mi.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_documentdb.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_platform_db_sqlvm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_telemetry_transport.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_dbm.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(dependencies.C_obs_kubernetes.result, 'Succeeded', 'SucceededWithIssues', 'Skipped'))
       environment: ${{ parameters.environment }}
       dryRun: ${{ parameters.dryRun }}
       settings: ${{ parameters.settings }}
@@ -1829,6 +1888,7 @@ stages:
       - P_obs_azure_integration
       - P_obs_prereqs
       - P_foundation_deploy_agents
+      - P_foundation_pr_reviewer
       - P_foundation_secrets
       - P_platform_appservice
       - P_platform_data_analytics
@@ -1881,6 +1941,7 @@ stages:
       - P_obs_azure_integration
       - P_obs_prereqs
       - P_foundation_deploy_agents
+      - P_foundation_pr_reviewer
       - P_foundation_secrets
       - P_platform_appservice
       - P_platform_data_analytics
@@ -1921,6 +1982,7 @@ stages:
       - C_obs_azure_integration
       - C_obs_prereqs
       - C_foundation_deploy_agents
+      - C_foundation_pr_reviewer
       - C_foundation_secrets
       - C_platform_appservice
       - C_platform_data_analytics

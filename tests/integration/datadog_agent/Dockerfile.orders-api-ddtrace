@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1.7
+# TEST-ONLY image: hello-orders-api + the Datadog .NET tracer home baked in, to emulate what Single Step
+# Instrumentation / serverless-init / the App Service site extension inject in Azure (the CLR profiler). The application
+# image itself never references the tracer. Build context: tests/integration/datadog_agent
+#   docker build -f Dockerfile.orders-api-ddtrace --build-arg BASE=hello-orders-api:0.1.0-e2e -t hello-orders-api-ddtrace:0.1.0-e2e .
+# The tracer tarball is downloaded at build time from the dd-trace-dotnet GitHub release and verified against the pinned
+# SHA-256 (computed on 2026-10-09 from the release asset; Datadog publishes no checksum file for this asset).
+ARG BASE=hello-orders-api:0.1.0-e2e
+ARG FETCH_IMAGE=python:3.13-slim
+
+FROM ${FETCH_IMAGE} AS fetch
+ARG DD_TRACER_VERSION=3.55.1
+ARG DD_TRACER_SHA256=83b6dd74600012fb8ba8aac8110981f126010cebfe0ef018d60013e756ef5895
+ARG HTTPS_PROXY
+RUN --mount=type=secret,id=ca_bundle,required=false python - <<'PY'
+import hashlib, os, ssl, tarfile, urllib.request
+version = os.environ["DD_TRACER_VERSION"]; want = os.environ["DD_TRACER_SHA256"]
+url = f"https://github.com/DataDog/dd-trace-dotnet/releases/download/v{version}/datadog-dotnet-apm-{version}.tar.gz"
+ca = "/run/secrets/ca_bundle"  # optional build secret: CA of a TLS-intercepting egress proxy (never stored in a layer)
+ctx = ssl.create_default_context(cafile=ca) if os.path.exists(ca) and os.path.getsize(ca) else ssl.create_default_context()
+with urllib.request.urlopen(url, context=ctx, timeout=300) as r:
+    data = r.read()
+got = hashlib.sha256(data).hexdigest()
+if got != want:
+    raise SystemExit(f"checksum mismatch for {url}: {got} != {want}")
+open("/tmp/dd.tar.gz", "wb").write(data)
+os.makedirs("/opt/datadog", exist_ok=True)
+with tarfile.open("/tmp/dd.tar.gz") as t:
+    t.extractall("/opt/datadog", filter="data")
+# glibc x64 + net6.0 only (the base image is Ubuntu chiseled .NET 10): drop musl / netstandard / netcoreapp3.1 payloads
+import shutil
+for d in ("linux-musl-x64", "netstandard2.0", "netcoreapp3.1"):
+    shutil.rmtree(os.path.join("/opt/datadog", d), ignore_errors=True)
+os.makedirs("/opt/datadog-logs", exist_ok=True)
+os.chmod("/opt/datadog-logs", 0o1777)
+print("datadog .NET tracer", version, "verified", got)
+PY
+
+FROM ${BASE}
+ARG DD_TRACER_VERSION=3.55.1
+COPY --from=fetch /opt/datadog /opt/datadog
+COPY --from=fetch /opt/datadog-logs /var/log/datadog/dotnet
+# What SSI / serverless-init / the site extension set for .NET (CLR profiler + tracer home). TELEMETRY_SDK and the
+# DD_* tags come from the compose file, as the observability instrumentation module would set them.
+ENV CORECLR_ENABLE_PROFILING=1 \
+    CORECLR_PROFILER={846F5F1C-F9AE-4B07-969E-05C26BC060D8} \
+    CORECLR_PROFILER_PATH=/opt/datadog/linux-x64/Datadog.Trace.ClrProfiler.Native.so \
+    DD_DOTNET_TRACER_HOME=/opt/datadog \
+    DD_TRACE_LOG_DIRECTORY=/var/log/datadog/dotnet \
+    LD_PRELOAD=/opt/datadog/linux-x64/Datadog.Linux.ApiWrapper.x64.so
+LABEL org.opencontainers.image.description="TEST ONLY: hello-orders-api with Datadog .NET tracer ${DD_TRACER_VERSION}"

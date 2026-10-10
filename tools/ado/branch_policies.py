@@ -20,7 +20,13 @@ Policies on the trunk (and release/* prefix), policy type ids from the Policy Co
                                against the newest main before it can complete (the Azure Repos substitute for a merge
                                queue; auto-complete re-queues expired builds)
   Status (required PR status)  resolved by display name "Status"; `policies.required_statuses` (eh-review/policy =
-                               the automated PR reviewer's verdict), reset on every push, applies by default
+                               the automated PR reviewer's verdict), reset on every push, applies by default, only
+                               the reviewer bot identity (`author`) may post it
+  Protected classes            Required reviewers per class of tools/review/branch-policy-fragment.json (owner group
+                               from `protected_owners`): reviewer, pipeline, identity/secrets, network, prod config
+Minimum reviewers on main = 1 by design: together with the required eh-review/policy status (which stays pending
+unless the change is allowlisted low-risk or a non-author human approved), reset-on-push and "creator vote does not
+count", allowlisted low-risk changes can complete with the bot's approval alone; everything else needs a human.
   Required reviewers           fd2167ab-b0be-447a-8ec8-39368250530e  one per owner group, path filtered by the
                                component paths (same map as .github/CODEOWNERS); group ids from `identities` in
                                environments/branching.yaml or the Identities API
@@ -106,10 +112,27 @@ def desired(repo: Path = REPO, repo_id: Optional[str] = None, definitions: Optio
         # apply by default (pending until posted), reset on every push, any poster unless author_id is set
         for st in pol.get("required_statuses") or []:
             sk = f"status-{st['genre']}-{st['name']}{sfx}"
-            add(sk, "status", {"statusGenre": st["genre"], "statusName": st["name"], "authorId": st.get("author_id"),
-                               "invalidateOnSourceUpdate": True, "policyApplicability": None,
-                               "defaultDisplayName": f"{st['genre']}/{st['name']} {MARK.format(sk)}"},
-                blocking=bool(st.get("blocking", True)), ref=ref, kind=kind)
+            author = st.get("author")            # identity allowed to post it (the reviewer bot), via `identities`
+            settings = {"statusGenre": st["genre"], "statusName": st["name"],
+                        "authorId": identities.get(author) if author else None,
+                        "invalidateOnSourceUpdate": True, "policyApplicability": None,
+                        "defaultDisplayName": f"{st['genre']}/{st['name']} {MARK.format(sk)}"}
+            if author and not identities.get(author):
+                settings["unresolvedGroup"] = author
+            add(sk, "status", settings, blocking=bool(st.get("blocking", True)), ref=ref, kind=kind)
+        # protected path classes of the automated reviewer (tools/review/branch-policy-fragment.json): a human of
+        # the owning group must approve; the bot is never a member of these groups and has no bypass permission
+        for cls, patterns in sorted(protected_classes(repo).items()):
+            group = (pol.get("protected_owners") or {}).get(cls)
+            if not group:
+                continue
+            pk = f"protected-{cls}{sfx}"
+            add(pk, "required-reviewers", {
+                "requiredReviewerIds": [identities[group]] if identities.get(group) else [],
+                "unresolvedGroup": None if identities.get(group) else group,
+                "minimumApproverCount": 1, "creatorVoteCounts": False, "filenamePatterns": patterns,
+                "message": f"protected class {cls}: {group} must approve (never bot-approved) {MARK.format(pk)}"},
+                ref=ref, kind=kind)
     # path-filtered required reviewers per owner group (same map as CODEOWNERS)
     by_group: Dict[str, List[str]] = {}
     for path, owners, _src in ownership(load_registry(WorkTree(repo)), doc):
@@ -124,6 +147,15 @@ def desired(repo: Path = REPO, repo_id: Optional[str] = None, definitions: Optio
             "filenamePatterns": sorted(set(patterns)),
             "message": f"{group} owns these paths (catalog/components.yaml owners) {MARK.format(f'owners-{group}')}"})
     return out
+
+
+def protected_classes(repo: Path = REPO) -> Dict[str, List[str]]:
+    """{class: filenamePatterns} from the reviewer's generated fragment (pol.protected_paths_from)."""
+    rel = (branching_doc(repo).get("policies") or {}).get("protected_paths_from")
+    if not rel or not (Path(repo) / rel).exists():
+        return {}
+    doc = json.loads((Path(repo) / rel).read_text())
+    return {c["class"]: sorted(c["settings"]["filenamePatterns"]) for c in doc.get("required_reviewers_protected_paths") or []}
 
 
 def branch_acl_commands(org: str, project_id: str, repo_id: str, doc: dict) -> List[str]:

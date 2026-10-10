@@ -78,7 +78,7 @@ pipeline:
       merge_log: off
       keep_log: on
       labels: on
-      annotations: off
+      annotations: on
       k8s-logging.parser: off
       k8s-logging.exclude: on
       buffer_size: 0
@@ -119,6 +119,7 @@ pipeline:
       call: eh_finalize
 
   outputs:
+    # >>> datadog-output (modules/fluent-bit replaces this block for log_destination = observability_pipelines)
     - name: datadog
       match: '*'
       host: ${FLB_DD_HOST}
@@ -133,6 +134,7 @@ pipeline:
       storage.total_limit_size: 512M
       net.keepalive: on
       workers: 2
+    # <<< datadog-output
 
     - name: opentelemetry
       match: flb.metrics

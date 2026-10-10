@@ -8,7 +8,9 @@ batch several producers).
 
 from __future__ import annotations
 
+import logging
 import re
+import sys
 from collections.abc import Mapping
 from typing import Any
 
@@ -18,6 +20,7 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 
 _TRACEPARENT = re.compile(r"^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$")
 _propagator = TraceContextTextMapPropagator()
+_log = logging.getLogger(__name__)
 
 
 def _text(value: Any) -> str | None:
@@ -39,10 +42,36 @@ def normalize_properties(props: Mapping[Any, Any] | None) -> dict[str, str]:
     return out
 
 
+def _datadog_current_span():
+    if "ddtrace.bootstrap.sitecustomize" not in sys.modules:
+        return None
+    try:
+        return sys.modules["ddtrace"].tracer.current_span()
+    except Exception:  # pragma: no cover
+        return None
+
+
 def inject_current() -> dict[str, str]:
-    """traceparent/tracestate for the current span (empty dict when no valid span)."""
+    """traceparent/tracestate for the current span (empty dict when no valid span).
+
+    The OpenTelemetry API span is used first (with TELEMETRY_SDK=datadog and DD_TRACE_OTEL_ENABLED=true it *is* the
+    active ddtrace span). With ddtrace's OTel support off, the active ddtrace span is propagated by ddtrace's own
+    HTTPPropagator (W3C ``traceparent``/``tracestate`` among the DD_TRACE_PROPAGATION_STYLE headers).
+    """
     carrier: dict[str, str] = {}
     _propagator.inject(carrier)
+    if "traceparent" in carrier:
+        return carrier
+    span = _datadog_current_span()
+    if span is not None:
+        try:
+            from ddtrace.propagation.http import HTTPPropagator
+
+            headers: dict[str, str] = {}
+            HTTPPropagator.inject(span.context, headers)
+            carrier.update({k: v for k, v in headers.items() if k in ("traceparent", "tracestate")})
+        except Exception as exc:  # pragma: no cover
+            _log.debug("ddtrace propagation failed: %s", exc)
     return carrier
 
 
@@ -88,5 +117,8 @@ def links_from_properties(props: Mapping[Any, Any] | None, **attributes: Any) ->
 def current_trace_ids() -> tuple[str, str] | None:
     ctx = trace.get_current_span().get_span_context()
     if not ctx.is_valid:
-        return None
+        span = _datadog_current_span()
+        if span is None or not span.trace_id:
+            return None
+        return format(span.trace_id, "032x"), format(span.span_id, "016x")
     return format(ctx.trace_id, "032x"), format(ctx.span_id, "016x")

@@ -6,7 +6,7 @@ locals {
   policy = [for p in [var.policy, yamldecode(file("${path.module}/../../config/fleet-policy.yaml"))] : p if p != null][0]
   arch_o = try(local.policy.architectures[var.architecture], {})
   env_o  = try(local.policy.environments[var.env], {})
-  o      = var.overrides == null ? {} : var.overrides
+  o      = [for x in [var.overrides, {}] : x if x != null][0]
 
   section = { for s in ["logs", "apm", "profiling", "agent", "rum", "op_worker"] : s => merge(
     try(local.policy[s], {}), try(local.arch_o[s], {}), try(local.env_o[s], {}), try(local.o[s], {}),

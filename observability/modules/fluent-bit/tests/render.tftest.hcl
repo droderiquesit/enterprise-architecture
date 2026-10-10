@@ -87,3 +87,54 @@ run "reject_unknown_role" {
   }
   expect_failures = [var.role]
 }
+
+run "sidecar_to_observability_pipelines" {
+  command = plan
+  variables {
+    role            = "sidecar"
+    log_destination = "observability_pipelines"
+    op_endpoint     = { host = "eh-obs-dev-opw", port = 24224 }
+    static_tags     = { env = "dev", service = "hello-orders-api", team = "orders" }
+  }
+  assert {
+    condition     = strcontains(output.main_config, "- name: forward") && !strcontains(output.main_config, "- name: datadog") && !strcontains(output.main_config, "apikey")
+    error_message = "datadog output replaced by the Worker forward output"
+  }
+  assert {
+    condition     = !strcontains(output.main_config, "  - /dsv-secrets/fluentbit-env.yaml") && strcontains(output.main_config, "  - parsers.yaml") && length(output.secret_env_names) == 0
+    error_message = "no secret on the edge: dsv-fetch include removed"
+  }
+  assert {
+    condition     = output.env["FLB_FORWARD_HOST"] == "eh-obs-dev-opw" && output.env["FLB_FORWARD_PORT"] == "24224" && output.env["FLB_DD_TAGS"] == "env:dev,service:hello-orders-api,team:orders"
+    error_message = "forward endpoint env + policy tags"
+  }
+  assert {
+    condition     = strcontains(output.main_config, "require_ack_response: true") && strcontains(output.main_config, "retry_limit: no_limits")
+    error_message = "acknowledged delivery, no retry limit (filesystem buffered)"
+  }
+}
+
+run "daemonset_label_map_and_aggregator_azure_maps" {
+  command = plan
+  variables {
+    role           = "k8s-daemonset"
+    k8s_label_tags = { team = "team", "cost_center" = "cost_center" }
+  }
+  assert {
+    condition     = output.env["FLB_K8S_LABEL_TAGS"] == "cost_center=cost_center,team=team"
+    error_message = "pod label -> tag map from the policy"
+  }
+}
+
+run "aggregator_azure_tag_and_scope_maps" {
+  command = plan
+  variables {
+    role              = "aggregator"
+    azure_tag_key_map = { environment = ["env"], costcenter = ["cost_center"] }
+    azure_scope_tags  = { "/subscriptions/00000000-0000-0000-0000-000000000000" = { env = "dev", team = "platform" } }
+  }
+  assert {
+    condition     = output.env["FLB_AZURE_TAG_MAP"] == "costcenter=cost_center,environment=env" && output.env["FLB_AZURE_SCOPE_TAGS"] == "/subscriptions/00000000-0000-0000-0000-000000000000=env:dev;team:platform"
+    error_message = "Azure tag key map and scope tags env"
+  }
+}

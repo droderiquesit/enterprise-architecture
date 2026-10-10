@@ -40,4 +40,5 @@ variables:
   promoteFromContainerRegistry: ''
   # Bounded parallelism of the Validate matrix (component stages are bounded by the deployPool agent count).
   validateMaxParallel: 8
+  ciMaxLegs: 24                 # upper bound of test legs one run plans (tools/ci; jobs per stage stay far below 256)
   stageLockBehavior: runLatest   # per-component P_/C_ stage locks; dev: newer main runs supersede queued older ones (fingerprints make the latest a superset)

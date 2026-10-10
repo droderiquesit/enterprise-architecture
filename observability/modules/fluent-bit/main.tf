@@ -17,10 +17,21 @@ locals {
     var.role == "windows-host" && var.windows_event_log ? file("${local.dir}/windows-host-winevtlog.yaml") : file("${local.dir}/inputs-extra.yaml")
   )
 
+  # log_destination = observability_pipelines: the marked datadog output block becomes a forward output to the
+  # Observability Pipelines Worker; without any secret left (no API key, no shared key) the dsv-fetch include goes too.
+  op                 = var.log_destination == "observability_pipelines"
+  raw_main           = file("${local.dir}/${local.main_file}")
+  op_forward         = file("${local.dir}/outputs/op-forward.yaml")
+  op_main            = replace(local.raw_main, "/(?s)    # >>> datadog-output[^\n]*\n.*?    # <<< datadog-output\n/", replace(local.op_forward, "$", "$$"))
+  needs_secrets_file = length(local.secret_env) > 0
+  main_config = !local.op ? local.raw_main : (
+    local.needs_secrets_file ? local.op_main : replace(local.op_main, "/\n  - [^\n]*fluentbit-env\\.yaml\n/", "\n")
+  )
+
   # files keyed by their path relative to the config directory (the main config is always fluent-bit.yaml)
   files = merge(
     {
-      "fluent-bit.yaml"          = file("${local.dir}/${local.main_file}")
+      "fluent-bit.yaml"          = local.main_config
       "parsers.yaml"             = file("${local.dir}/parsers.yaml")
       "lua/enterprise_hello.lua" = file("${local.dir}/lua/enterprise_hello.lua")
     },
@@ -38,6 +49,10 @@ locals {
   }[var.role]
 
   tags_string = join(",", [for k in sort(keys(var.static_tags)) : "${k}:${var.static_tags[k]}"])
+  # tag policy maps (modules/tagging): pod label -> tag, Azure tag key -> Datadog keys, resource scope -> tags
+  k8s_label_tags   = join(",", [for l in sort(keys(var.k8s_label_tags)) : "${l}=${var.k8s_label_tags[l]}"])
+  azure_tag_map    = join(",", [for a in sort(keys(var.azure_tag_key_map)) : "${a}=${join("|", var.azure_tag_key_map[a])}"])
+  azure_scope_tags = join("|", [for sc in sort(keys(var.azure_scope_tags)) : "${lower(sc)}=${join(";", [for k in sort(keys(var.azure_scope_tags[sc])) : "${k}:${var.azure_scope_tags[sc][k]}"])}"])
 
   env = merge(
     {
@@ -58,6 +73,15 @@ locals {
     } : {},
     local.is_host ? { FLB_LOG_PATHS = join(",", var.log_paths) } : {},
     var.role == "aggregator" ? { FLB_ACA_CONSOLE_ALLOW = join(",", var.aca_console_allow) } : {},
+    var.role == "aggregator" && local.azure_tag_map != "" ? { FLB_AZURE_TAG_MAP = local.azure_tag_map } : {},
+    var.role == "aggregator" && local.azure_scope_tags != "" ? { FLB_AZURE_SCOPE_TAGS = local.azure_scope_tags } : {},
+    var.role == "k8s-daemonset" && local.k8s_label_tags != "" ? { FLB_K8S_LABEL_TAGS = local.k8s_label_tags } : {},
+    local.op ? {
+      FLB_FORWARD_HOST       = var.op_endpoint.host
+      FLB_FORWARD_PORT       = tostring(var.op_endpoint.port)
+      FLB_FORWARD_TLS        = var.op_endpoint.tls ? "on" : "off"
+      FLB_FORWARD_TLS_VERIFY = "on"
+    } : {},
     var.role == "linux-host" && var.systemd_unit != null ? { FLB_SYSTEMD_UNIT = var.systemd_unit } : {},
     var.role == "k8s-daemonset" ? {
       FLB_EXCLUDE_PATHS = join(",", [for ns in var.exclude_namespaces : "/var/log/containers/*_${ns}_*.log"])
@@ -73,7 +97,7 @@ locals {
   }
   secrets_file = lookup(local.secrets_env_file, var.role, "/dsv-secrets/fluentbit-env.yaml")
 
-  secret_env = concat(
+  secret_env = local.op ? [] : concat(
     contains(["sidecar-forward"], var.role) ? ["FLB_FORWARD_SHARED_KEY"] : ["DD_API_KEY"],
     contains(["aggregator", "aggregator-forward"], var.role) ? ["FLB_FORWARD_SHARED_KEY"] : [],
     var.role == "aggregator" ? ["EVENTHUB_CONNECTION_STRING"] : [],

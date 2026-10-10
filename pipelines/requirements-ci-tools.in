@@ -1,0 +1,6 @@
+# Open-source CI tools installed from PyPI (hash-verified), into the job's virtualenv next to requirements-tools.txt.
+# uv itself is listed so `uv pip sync` keeps it. Compile:
+#   uv pip compile --generate-hashes --python-version 3.12 --universal pipelines/requirements-ci-tools.in -o pipelines/requirements-ci-tools.txt
+uv==0.12.18
+ruff==0.16.10
+yamllint==1.38.0

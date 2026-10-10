@@ -573,3 +573,14 @@ def test_preflight_classifies_disk_failure(tmp_path):
     p = subprocess.run(["bash", str(ROOT / "pipelines/scripts/preflight.sh")], env=dict(env, PREFLIGHT="skip"),
                        capture_output=True, text=True, cwd=ROOT)
     assert p.returncode == 0
+
+
+# ------------------------------------------------------- PR reviewer deploy guard
+@pytest.mark.parametrize("branch,reason", [("refs/heads/feature/x", "IndividualCI"), ("refs/heads/main", "PullRequest"),
+                                           ("refs/heads/release/2026.10", "Manual"), ("", "")])
+def test_pr_reviewer_code_is_deployed_from_main_only(branch, reason, tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    env = dict(os.environ, BUILD_SOURCEBRANCH=branch, BUILD_REASON=reason, PATH="/usr/bin:/bin")
+    p = subprocess.run(["bash", str(root / "applications/deployments/scripts/deploy-pr-reviewer.sh"), "--root", str(tmp_path)],
+                       capture_output=True, text=True, env=env)
+    assert p.returncode == 0 and "main only" in p.stderr       # exits before any az / terraform call

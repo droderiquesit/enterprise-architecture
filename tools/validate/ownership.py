@@ -12,7 +12,8 @@ Rules
   OWN006  one Azure resource => one root: the same (type, literal name) must not appear in two roots (heuristic;
           names computed by the naming module are not comparable statically and are skipped)
   OWN007  app resources and app settings only in applications/deployments/ (observability may own its
-          telemetry-transport apps; foundation/deploy-agents may own agent container jobs/groups)
+          telemetry-transport apps; foundation/deploy-agents may own agent container jobs/groups;
+          foundation/pr-reviewer owns the reviewer's Flex Consumption Function App and its app settings)
   OWN008  no Azure Key Vault for secrets anywhere (ADR-0001 section 14: all keys/secrets live in Delinea DSV):
           no azurerm_key_vault* resources/data sources, no `@Microsoft.KeyVault(` references, no
           `key_vault_secret_id` / `key_vault_reference_identity_id` arguments (container app secrets, App Gateway
@@ -50,7 +51,11 @@ APP_TYPES = {
     "kubernetes_cron_job_v1", "kubernetes_job_v1",
 }
 APP_OWNER_PREFIXES = ("applications/deployments/", "observability/")
-APP_EXCEPTIONS = {"foundation/deploy-agents/": {"azurerm_container_app_job", "azurerm_container_group"}}
+APP_EXCEPTIONS = {"foundation/deploy-agents/": {"azurerm_container_app_job", "azurerm_container_group"},
+                  # the automated PR reviewer: governance tooling whose identity, storage and Function App form one
+                  # trust boundary owned by a foundation root (docs/guides/automated-pr-review.md)
+                  "foundation/pr-reviewer/": {"azurerm_function_app_flex_consumption"}}
+APP_SETTINGS_EXCEPTIONS = ("foundation/pr-reviewer/",)   # app_settings of the reviewer's own Function App
 APP_SETTINGS_RE = re.compile(r'^\s*app_settings\s*=', re.M)
 KV_REF_RE = re.compile(r"@Microsoft\.KeyVault\(")
 KV_ARG_RE = re.compile(r'^\s*(key_vault_secret_id|key_vault_reference_identity_id)\s*=', re.M)
@@ -129,7 +134,7 @@ def scan(repo: Path) -> list[dict]:
                     add("OWN003", path, 'provider "datadog" configured outside observability/')
             if DD_SOURCE_RE.search(text):
                 add("OWN003", path, "datadog provider required outside observability/")
-            if not path.startswith(APP_OWNER_PREFIXES):
+            if not path.startswith(APP_OWNER_PREFIXES + APP_SETTINGS_EXCEPTIONS):
                 for m in APP_SETTINGS_RE.finditer(text):
                     if not _suppressed(text, m.start(), "OWN007"):
                         add("OWN007", path, "app_settings outside applications/deployments/")

@@ -33,6 +33,11 @@ touch "$APPLIED_MARKER"   # infrastructure applied: a later failure records `par
 python3 tools/secrets/hooks.py post-apply --env "$LAB_ENV" --component "$component" --root "$root"
 # Application deployment roots: code deployment (zip/one-deploy/slot swap/SWA/VMSS rollout) declared by the root in
 # contract.deploy_steps, then the root's own smoke test.
+# The automated PR reviewer (foundation root + Function App code): code from main only, never PR builds.
+if [[ "$component" == "foundation-pr-reviewer" ]]; then
+  bash applications/deployments/scripts/deploy-pr-reviewer.sh --root "$root" \
+    || { echo "##vso[task.logissue type=error]$component: reviewer code deploy or /api/healthz smoke failed"; exit 1; }
+fi
 if [[ "$root" == applications/deployments/* ]]; then
   : > "$DEPLOY_PROGRESS_FILE"
   # deploy-zip.sh retries its idempotent az calls itself (lib.sh with_retry); slot swaps are never repeated blindly

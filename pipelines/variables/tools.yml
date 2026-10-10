@@ -8,6 +8,12 @@ variables:
   CHECKOV_VERSION: "3.3.26"
   HELM_VERSION: "4.3.0"               # Helm CLI (chart lint/package/OCI push); not the Terraform helm provider
   KUBECONFORM_VERSION: "0.8.0"
+  # Added 2026-10-10 (versions from the projects' registries: ghcr.io / Docker Hub tags; release checksums verified by
+  # install-tools.sh at download time). uv / ruff / yamllint / pytest-xdist: pipelines/requirements-ci-tools.in (PyPI, hashes).
+  TFLINT_VERSION: "0.64.0"
+  HADOLINT_IMAGE: hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d
+  GRYPE_VERSION: "0.119.0"
+  SHELLCHECK_IMAGE: koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
   PYTHON_TOOLS_REQUIREMENTS: pipelines/requirements-tools.txt
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "0"
@@ -16,7 +22,6 @@ variables:
   hostedImage: ubuntu-24.04
   # Azure Artifacts feed (project/feed or feed) receiving the observability package as a Universal Package.
   observabilityFeed: lab/observability
-  # PR builds at high commit rates: tooling tests run in N deterministic shards (tools/pipeline/shard.py) and every
-  # PR gets a time-budget report (tools/report/pr_budget.py) against prTimeBudgetMinutes.
-  testShards: '2'
+  # PR builds at high commit rates: tests are planned by tools/ci (impact selection, test result cache,
+  # duration-balanced legs); every PR gets a time-budget report (tools/report/pr_budget.py, tools/ci report).
   prTimeBudgetMinutes: '20'

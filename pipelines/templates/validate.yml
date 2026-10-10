@@ -1,49 +1,55 @@
-# Validate stage jobs (job template). Microsoft-hosted agents, NO service connection, no secrets:
-# safe for untrusted PR code.
-#   matrix     relays the Select stage's validate_matrix output into a same-stage output variable
-#              (matrix-from-output-variable is documented for dependencies.<job>.outputs)
-#   component  one matrix leg per selected component: tools/validate/component.py
-#              (terraform: fmt/init -backend=false/validate/test + tflint when present;
-#               artifacts: unit tests; contracts/schemas)
-#   tooling    pipeline tooling tests + static lint (registry graph, generated stages up to date,
-#              pipeline conditions, ownership rules, provider pins, environment schema)
+# Validate stage jobs (job template). Microsoft-hosted agents, NO service connection, no secrets: safe for untrusted
+# PR code. The Select stage planned the work (python3 -m tools.ci plan -> selection/ci-plan.json):
+#   * test impact selection: only suites covering changed components and their consumers (+ suites whose inputs
+#     changed); fingerprint test result cache: suites whose fingerprint already passed are skipped ("cached pass");
+#     full runs (nightly schedule, release/*) ignore the cache;
+#   * legs: suites (pytest suites sharded by file, duration-balanced; Terraform roots in batches) packed into
+#     legs of ~4 min, grouped by toolchain, bounded by maxParallel.
+#   matrix     relays the plan's leg matrix into a same-stage output variable (matrix-from-output-variable needs
+#              dependencies.<job>.outputs)
+#   ci         one job per leg: `python3 -m tools.ci run --plan --leg` (CPU-token scheduler; pytest-xdist
+#              -n <cpus> --dist loadfile; Terraform roots in parallel against a read-only provider mirror). The
+#              gates leg (cheap static checks, ~1 min) cancels the whole run when it fails (fail fast) - expensive
+#              legs never wait for it.
+#   ci_report  timing report (critical leg, slowest units, cache hit rate) -> run summary + evidence; records the
+#              passes in the test result cache (Cache@2) for the next run.
 parameters:
   - name: environment
     type: string
   - name: hostedImage
     type: string
     default: ubuntu-24.04
-  - name: maxParallel          # bounded parallelism of the matrix (pipelines/variables/<env>.yml validateMaxParallel)
+  - name: maxParallel          # bounded parallelism of the leg matrix (pipelines/variables/<env>.yml validateMaxParallel)
     type: string
     default: '8'
-  - name: testShards           # tooling test shards (pipelines/variables/tools.yml testShards)
+  - name: scope
     type: string
-    default: '2'
+    default: platform
 
 jobs:
   - job: matrix
-    displayName: Expand validation matrix
+    displayName: Expand test legs
     timeoutInMinutes: 5
     cancelTimeoutInMinutes: 5
     pool:
       vmImage: ${{ parameters.hostedImage }}
     variables:
-      SELECTED_MATRIX: $[ stageDependencies.Select.select.outputs['detect.validate_matrix'] ]
-      SELECTED_COUNT: $[ stageDependencies.Select.select.outputs['detect.validate_count'] ]
+      CI_MATRIX: $[ stageDependencies.Select.select.outputs['ciplan.matrix'] ]
+      CI_COUNT: $[ stageDependencies.Select.select.outputs['ciplan.count'] ]
     steps:
       - checkout: none
       - script: |
           set -euo pipefail
-          m="${SELECTED_MATRIX:-}"; [[ -n "$m" ]] || m='{}'
-          c="${SELECTED_COUNT:-}"; [[ -n "$c" ]] || c=0
+          m="${CI_MATRIX:-}"; [[ -n "$m" ]] || m='{}'
+          c="${CI_COUNT:-}"; [[ -n "$c" ]] || c=0
           printf '##vso[task.setvariable variable=json;isOutput=true]%s\n' "$m"
           printf '##vso[task.setvariable variable=count;isOutput=true]%s\n' "$c"
-          echo "components to validate: $c"
+          echo "test legs: $c"
         name: emit
         displayName: Emit matrix
 
-  - job: component
-    displayName: Validate
+  - job: ci
+    displayName: Test leg
     dependsOn: matrix
     condition: and(succeeded(), ne(dependencies.matrix.outputs['emit.count'], '0'))
     pool:
@@ -54,105 +60,166 @@ jobs:
       matrix: $[ dependencies.matrix.outputs['emit.json'] ]
       maxParallel: ${{ parameters.maxParallel }}
     variables:                   # dependency caches keyed by lock files (Cache@2; a miss only costs time)
-      TF_PLUGIN_CACHE_DIR: $(Pipeline.Workspace)/.cache/terraform-plugins
+      CI_CACHE: $(Pipeline.Workspace)/.ci-cache
+      TF_MIRROR: $(Pipeline.Workspace)/.cache/terraform-mirror
       NUGET_PACKAGES: $(Pipeline.Workspace)/.cache/nuget
       npm_config_cache: $(Pipeline.Workspace)/.cache/npm
+      UV_CACHE_DIR: $(Pipeline.Workspace)/.cache/uv
       PIP_CACHE_DIR: $(Pipeline.Workspace)/.cache/pip
+      HELM_CACHE_HOME: $(Pipeline.Workspace)/.cache/helm
+      KUBECONFORM_CACHE: $(Pipeline.Workspace)/.cache/kubeconform
+      TFLINT_PLUGIN_DIR: $(Pipeline.Workspace)/.cache/tflint
     steps:
       - checkout: self
         fetchDepth: 1
+      - task: DownloadPipelineArtifact@2
+        displayName: Download CI plan
+        retryCountOnTaskFailure: 2
+        inputs:
+          artifact: selection
+          path: $(Pipeline.Workspace)/selection
+      - task: Cache@2
+        displayName: uv cache (requirement hashes)
+        continueOnError: true
+        inputs:
+          key: 'uv | "$(Agent.OS)" | pipelines/requirements-tools.txt | pipelines/requirements-ci-tools.txt | applications/**/requirements*.txt'
+          restoreKeys: |
+            uv | "$(Agent.OS)"
+          path: $(UV_CACHE_DIR)
       - template: steps-setup.yml
         parameters:
           tools: terraform
       - task: Cache@2
-        displayName: Terraform provider cache (.terraform.lock.hcl)
-        condition: and(succeeded(), eq(variables['kind'], 'terraform'))
+        displayName: Terraform provider mirror (all .terraform.lock.hcl)
+        condition: and(succeeded(), in(variables['CI_TOOLCHAIN'], 'terraform', 'helm'))
         continueOnError: true
         inputs:
-          key: 'tf-plugins | "$(Agent.OS)" | $(componentPath)/.terraform.lock.hcl'
+          key: 'tf-mirror | "$(Agent.OS)" | **/.terraform.lock.hcl, !**/.terraform/**'
           restoreKeys: |
-            tf-plugins | "$(Agent.OS)"
-          path: $(TF_PLUGIN_CACHE_DIR)
+            tf-mirror | "$(Agent.OS)"
+          path: $(TF_MIRROR)
+      - script: python3 -m tools.ci tf-mirror --mirror "$(TF_MIRROR)"
+        displayName: Read-only provider mirror (no shared plugin cache race)
+        condition: and(succeeded(), in(variables['CI_TOOLCHAIN'], 'terraform', 'helm'))
+        retryCountOnTaskFailure: 2
       - task: Cache@2
         displayName: NuGet cache (Directory.Packages.props / packages.lock.json)
-        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
+        condition: and(succeeded(), eq(variables['CI_TOOLCHAIN'], 'dotnet'))
         continueOnError: true
         inputs:
-          key: 'nuget | "$(Agent.OS)" | applications/**/Directory.Packages.props'
+          key: 'nuget | "$(Agent.OS)" | applications/**/Directory.Packages.props | applications/**/packages.lock.json'
           restoreKeys: |
             nuget | "$(Agent.OS)"
           path: $(NUGET_PACKAGES)
+      - task: UseDotNet@2
+        displayName: Use .NET 10 SDK
+        retryCountOnTaskFailure: 2
+        condition: and(succeeded(), eq(variables['CI_TOOLCHAIN'], 'dotnet'))
+        inputs:
+          useGlobalJson: true
+          workingDirectory: applications/dotnet
       - task: Cache@2
         displayName: npm cache (package-lock.json)
-        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
+        condition: and(succeeded(), eq(variables['CI_TOOLCHAIN'], 'node'))
         continueOnError: true
         inputs:
           key: 'npm | "$(Agent.OS)" | applications/**/package-lock.json'
           restoreKeys: |
             npm | "$(Agent.OS)"
           path: $(npm_config_cache)
-      - task: Cache@2
-        displayName: pip cache (requirements)
-        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
-        continueOnError: true
-        inputs:
-          key: 'pip | "$(Agent.OS)" | applications/**/requirements*.txt'
-          restoreKeys: |
-            pip | "$(Agent.OS)"
-          path: $(PIP_CACHE_DIR)
-      - task: UseDotNet@2
-        displayName: Use .NET 10 SDK
-        retryCountOnTaskFailure: 2
-        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
-        inputs:
-          packageType: sdk
-          version: 10.0.x
       - task: NodeTool@0
         displayName: Use Node.js 24
         retryCountOnTaskFailure: 2
-        condition: and(succeeded(), eq(variables['kind'], 'artifact'))
+        condition: and(succeeded(), eq(variables['CI_TOOLCHAIN'], 'node'))
         inputs:
           versionSpec: '24.x'
-      - script: python3 tools/validate/component.py --component "$(component)" --env "${{ parameters.environment }}"
-        displayName: Validate $(component)
-
-  - job: tooling
-    displayName: Pipeline tooling tests + static checks
-    strategy:
-      parallel: ${{ parameters.testShards }}      # deterministic test sharding (tools/pipeline/shard.py)
-    pool:
-      vmImage: ${{ parameters.hostedImage }}
-    timeoutInMinutes: 30
-    cancelTimeoutInMinutes: 5
-    steps:
-      - checkout: self
-        fetchDepth: 0
-      - template: steps-setup.yml
-        parameters:
-          tools: terraform
-      - script: python3 -m pip install --quiet --user pytest==9.1.1
-        displayName: Install pytest
+      - task: Cache@2
+        displayName: Helm + kubeconform schema cache
+        condition: and(succeeded(), eq(variables['CI_TOOLCHAIN'], 'helm'))
+        continueOnError: true
+        inputs:
+          key: 'helm | "$(Agent.OS)" | pipelines/variables/tools.yml | applications/charts/**/Chart.lock'
+          restoreKeys: |
+            helm | "$(Agent.OS)"
+          path: $(Pipeline.Workspace)/.cache/helm-kubeconform
+      - script: bash pipelines/scripts/install-tools.sh helm kubeconform
+        displayName: Helm + kubeconform
+        condition: and(succeeded(), eq(variables['CI_TOOLCHAIN'], 'helm'))
         retryCountOnTaskFailure: 2
+        env:
+          TOOL_CACHE_DIR: $(Pipeline.Workspace)/.cache/helm-kubeconform
       - script: |
           set -euo pipefail
-          python3 -m tools.changeset graph
-          python3 tools/config/resolve.py --env "${{ parameters.environment }}"
-          python3 tools/pipeline/generate.py --check
-          python3 tools/validate/pipeline_lint.py
-          python3 tools/validate/pipeline_templates.py
-          python3 tools/config/promotion.py list
-          python3 tools/validate/ownership.py
-          python3 tools/validate/versions.py
-          python3 tools/ado/codeowners.py --check
-          python3 tools/config/branching.py kind --ref "$(Build.SourceBranch)"
-        displayName: Registry, generated stages, pipeline lint, ownership, provider pins, CODEOWNERS
-        condition: and(succeeded(), eq(variables['System.JobPositionInPhase'], '1'))   # static checks: first shard only
-      - script: python3 -m pytest -q tests/changeset tests/pipeline tests/tools --junitxml="$(Build.ArtifactStagingDirectory)/tooling-tests.xml"
-        displayName: Tooling unit tests (shard $(System.JobPositionInPhase)/$(System.TotalJobsInPhase))
+          extra=()
+          [[ "$(CI_TOOLCHAIN)" == "docker" ]] && extra+=(--enable-env-suites)
+          python3 -m tools.ci run --plan "$(Pipeline.Workspace)/selection/ci-plan.json" --leg "$(CI_LEG)" \
+            --env "${{ parameters.environment }}" --no-cache --out "$(Build.ArtifactStagingDirectory)/ci" "${extra[@]}"
+        displayName: Run leg $(CI_LEG)
         env:
-          TEST_SHARD: $(System.JobPositionInPhase)/$(System.TotalJobsInPhase)   # tools/pipeline/shard.py
+          TF_PLUGIN_CACHE_DIR: ''           # the read-only mirror replaces the shared plugin cache
+      - script: python3 -m tools.ci failfast
+        displayName: Fail fast (cancel the run)
+        condition: and(failed(), eq(variables['CI_LEG'], 'gates'))
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
       - task: PublishTestResults@2
+        displayName: Publish test results
         condition: not(canceled())
         inputs:
           testResultsFormat: JUnit
-          testResultsFiles: $(Build.ArtifactStagingDirectory)/tooling-tests.xml
+          testResultsFiles: $(Build.ArtifactStagingDirectory)/ci/logs/*.junit.xml
+          testRunTitle: $(CI_LEG)
+      - task: PublishPipelineArtifact@1
+        displayName: Publish leg results
+        condition: not(canceled())
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/ci
+          artifact: ci-$(CI_LEG)-$(System.JobAttempt)
+
+  - job: ci_report
+    displayName: CI timing report + test result cache
+    dependsOn: ci
+    condition: and(not(canceled()), ne(dependencies.ci.result, 'Skipped'))
+    pool:
+      vmImage: ${{ parameters.hostedImage }}
+    timeoutInMinutes: 10
+    cancelTimeoutInMinutes: 5
+    steps:
+      - checkout: self
+        fetchDepth: 1
+      - task: DownloadPipelineArtifact@2
+        displayName: Download CI plan
+        inputs:
+          artifact: selection
+          path: $(Pipeline.Workspace)/selection
+      - task: DownloadPipelineArtifact@2
+        displayName: Download leg results
+        inputs:
+          itemPattern: 'ci-*/**'
+          path: $(Pipeline.Workspace)/ci-results
+      - task: Cache@2
+        displayName: Test result cache (restore, then save with this run's passes)
+        continueOnError: true
+        inputs:
+          key: 'ci-testcache | "$(Agent.OS)" | ${{ parameters.scope }} | report | "$(Build.BuildId)"'
+          restoreKeys: |
+            ci-testcache | "$(Agent.OS)" | ${{ parameters.scope }}
+          path: $(Pipeline.Workspace)/.ci-cache
+      - template: steps-setup.yml
+      - script: |
+          set -euo pipefail
+          mkdir -p "$(Build.ArtifactStagingDirectory)/ci-report"
+          python3 -m tools.ci report --plan "$(Pipeline.Workspace)/selection/ci-plan.json" \
+            --results "$(Pipeline.Workspace)/ci-results" --cache "$(Pipeline.Workspace)/.ci-cache/testcache" \
+            --timings-out "$(Pipeline.Workspace)/.ci-cache/timings.json" \
+            --out "$(Build.ArtifactStagingDirectory)/ci-report/timing.json" \
+            --markdown "$(Build.ArtifactStagingDirectory)/ci-report/timing.md"
+        displayName: Timing report (critical path, cache hit rate) + record passes
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)     # read-only: this run's timeline
+      - task: PublishPipelineArtifact@1
+        displayName: Publish CI timing evidence
+        condition: not(canceled())
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/ci-report
+          artifact: ci-report-$(System.JobAttempt)

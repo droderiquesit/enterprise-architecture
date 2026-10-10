@@ -13,6 +13,11 @@ steps:
       set -euo pipefail
       src='${{ parameters.componentPath }}'
       stage="${BUILD_OUT:?}/pkg"
+      if [[ -f "$src/build.sh" ]] && grep -q -- '--zip' "$src/build.sh"; then
+        # the component stages its own package (e.g. pr-reviewer: function app + review engine + pinned deps)
+        PYTHON=python bash "$src/build.sh" --out "$stage" --zip "$(realpath -m "$BUILD_OUT/package.zip")"
+        exit 0
+      fi
       python3 tools/deploy/artifacts.py stage --src "$src" --out "$stage"
       if [[ -f "$src/requirements.txt" ]]; then
         python -m pip install --quiet --requirement "$src/requirements.txt" --target "$stage/.python_packages/lib/site-packages"

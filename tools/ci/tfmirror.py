@@ -16,7 +16,7 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Iterable, List, Optional, Set, Tuple
 
 PROVIDER_RE = re.compile(r'provider\s+"(?P<addr>[^"]+)"\s*\{[^}]*?version\s*=\s*"(?P<ver>[^"]+)"', re.S)
 
@@ -43,10 +43,7 @@ def populate(mirror: Path, providers: Set[Tuple[str, str]], runner=subprocess.ru
     if not missing:
         return []
     mirror.mkdir(parents=True, exist_ok=True)
-    by_name: Dict[str, List[Tuple[str, str]]] = {}
-    for addr, ver in missing:          # one config per provider version (a config can require one version only)
-        by_name.setdefault(f"{addr}@{ver}", []).append((addr, ver))
-    for (addr, ver) in missing:
+    for addr, ver in missing:          # one config per provider version (a config pins one version per provider)
         with tempfile.TemporaryDirectory() as tmp:
             local = addr.split("/")[-1]
             Path(tmp, "main.tf").write_text(

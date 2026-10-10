@@ -43,4 +43,14 @@ self_healing:
   auto_rollback: true              # application deploy roots only; infrastructure never auto-rolls back
   notify: {work_item: false, datadog_event: true}
 # Per-component overrides of each root's `settings` defaults (see <root>/variables.tf).
-components: {}
+components:
+  # Automated PR reviewer (enabled by the enterprise/full profiles or custom_components; docs/guides/automated-pr-review.md).
+  # Placeholders: replace with the real Azure DevOps organization, project / repository ids and, after the reviewer's
+  # managed identity was added to the organization, its identity id (tools/review/ado_setup.py prints them).
+  foundation-pr-reviewer:
+    ado:
+      organization: example-org
+      project: enterprise-hello
+      project_id: "00000000-0000-0000-0000-000000000000"
+      repository_ids: ["00000000-0000-0000-0000-000000000000"]
+      reviewer_id: ""

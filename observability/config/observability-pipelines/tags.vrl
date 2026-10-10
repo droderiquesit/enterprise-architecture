@@ -1,0 +1,59 @@
+# Tag policy enforcement on every log (port of eh_static_tags / eh_finalize + the package tag policy).
+# Preceded by `cfg = {"defaults": {k: v}, "aliases": {primary: [alias...]}, "value_map": {key: {from: to}},
+#                     "pipeline_tag": "telemetry.pipeline:observability-pipelines"}`.
+# Never overwrites a value the source set; only fills missing keys, adds aliases and normalises mapped values.
+raw = .ddtags
+items = []
+if is_string(raw) {
+  items = split(string!(raw), ",")
+} else if is_array(raw) {
+  items = array!(raw)
+}
+present = {}
+out = []
+for_each(items) -> |_i, t| {
+  s = strip_whitespace(to_string(t) ?? "")
+  if s != "" {
+    kv = split(s, ":", limit: 2)
+    k = downcase(string!(kv[0]))
+    if length(kv) == 2 {
+      v = string!(kv[1])
+      mapped = get(cfg.value_map, [k, downcase(v)]) ?? null
+      if is_string(mapped) {
+        v = string!(mapped)
+      }
+      if (get(present, [k]) ?? null) == null {
+        out = push(out, k + ":" + v)
+        present = set!(present, [k], v)
+      }
+    } else {
+      out = push(out, s)
+    }
+  }
+}
+# reserved attributes the sources set outside ddtags
+if is_string(.env) && (get(present, ["env"]) ?? null) == null {
+  present = set!(present, ["env"], string!(.env))
+  out = push(out, "env:" + string!(.env))
+}
+for_each(object!(cfg.defaults)) -> |k, v| {
+  if (get(present, [k]) ?? null) == null {
+    present = set!(present, [k], v)
+    out = push(out, k + ":" + string!(v))
+  }
+}
+for_each(object!(cfg.aliases)) -> |k, alist| {
+  pv = get(present, [k]) ?? null
+  if pv != null {
+    for_each(array!(alist)) -> |_j, a| {
+      if (get(present, [a]) ?? null) == null {
+        present = set!(present, [a], pv)
+        out = push(out, string!(a) + ":" + string!(pv))
+      }
+    }
+  }
+}
+if !includes(out, cfg.pipeline_tag) {
+  out = push(out, string!(cfg.pipeline_tag))
+}
+.ddtags = join!(out, ",")

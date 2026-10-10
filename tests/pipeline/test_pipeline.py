@@ -80,7 +80,7 @@ def test_build_stage_per_scope(generated, reg):
         jobs = stage_map(generated[scope])["Build"]["jobs"]
         comps = [j["parameters"]["component"] for j in jobs if "component" in j["parameters"]]
         assert sorted(comps) == sorted(c.id for c in reg if c.is_artifact and c.scope == scope)
-    assert [j["parameters"]["component"] for j in stage_map(generated["platform"])["Build"]["jobs"]] == ["img-dsv-fetch"]
+    assert [j["parameters"]["component"] for j in stage_map(generated["platform"])["Build"]["jobs"]] == ["img-dsv-fetch", "svc-pr-reviewer"]
     assert any(j["template"].endswith("helm-charts.yml") for j in stage_map(generated["applications"])["Build"]["jobs"])
     assert not any(j["template"].endswith("helm-charts.yml") for j in stage_map(generated["platform"])["Build"]["jobs"])
     assert "Verify" in stage_map(generated["applications"]) and "Verify" not in stage_map(generated["platform"])

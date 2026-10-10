@@ -1,0 +1,17 @@
+    # Datadog Observability Pipelines Worker (fluent source, Fluent Bit forward protocol). Inserted by
+    # modules/fluent-bit in place of the datadog output when log_destination = observability_pipelines.
+    # No shared key (the Worker's fluent source has no Forward handshake); the endpoint is VNet-internal and
+    # optionally TLS. Acknowledged chunks + filesystem buffering: nothing is dropped while the Worker is down.
+    - name: forward
+      match_regex: '^(?!flb\.metrics$).*'
+      host: ${FLB_FORWARD_HOST}
+      port: ${FLB_FORWARD_PORT}
+      tls: ${FLB_FORWARD_TLS}
+      tls.verify: ${FLB_FORWARD_TLS_VERIFY}
+      # Fluentd-compatible event format ([time, record]): the Worker's fluent source does not parse the Fluent Bit
+      # 4+/5 [[time, metadata], record] form (verified with the Vector fluent source, tests/transport)
+      fluentd_compat: true
+      require_ack_response: true
+      retry_limit: no_limits
+      storage.total_limit_size: 512M
+      net.keepalive: on

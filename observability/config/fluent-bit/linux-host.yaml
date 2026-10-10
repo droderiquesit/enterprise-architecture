@@ -90,6 +90,7 @@ pipeline:
       call: eh_finalize
 
   outputs:
+    # >>> datadog-output (modules/fluent-bit replaces this block for log_destination = observability_pipelines)
     - name: datadog
       match: '*'
       host: ${FLB_DD_HOST}
@@ -104,6 +105,7 @@ pipeline:
       retry_limit: 8
       storage.total_limit_size: 512M
       net.keepalive: on
+    # <<< datadog-output
 
     - name: opentelemetry
       match: flb.metrics

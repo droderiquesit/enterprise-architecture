@@ -37,8 +37,8 @@ module "fleet" {
   env          = module.tags.unified.env
   overrides = merge(
     local.contract_fleet,
-    var.apm == null ? {} : { apm = var.apm },
-    var.profiling == null ? {} : { profiling = var.profiling },
+    { apm = merge(try(local.contract_fleet.apm, {}), var.apm == null ? {} : var.apm) },
+    { profiling = merge(try(local.contract_fleet.profiling, {}), var.profiling == null ? {} : var.profiling) },
   )
 }
 
@@ -321,7 +321,8 @@ locals {
       env           = [for k in sort(keys(local.env)) : { name = k, value = local.env[k], secret_name = null }]
       volume_mounts = local.uses_sidecar ? [{ name = "app-logs", path = local.log_dir, sub_path = null }] : []
     }
-    sidecars = concat(local.uses_sidecar ? [{
+    # for-expressions (tuples): the Fluent Bit and serverless-init sidecars have different shapes
+    sidecars = concat([for _ in(local.uses_sidecar ? [1] : []) : {
       name   = "fluent-bit"
       image  = var.telemetry.fluentbit.sidecar_image
       cpu    = var.sidecar_resources.cpu
@@ -338,7 +339,7 @@ locals {
         local.needs_fetch ? [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }] : [],
       )
       liveness_probe = { transport = "HTTP", port = 2020, path = "/api/v1/health" }
-    }] : [], local.serverless_init_sidecar)
+    }], local.serverless_init_sidecar)
   }
 
   # App Service / Functions / Logic Apps Standard: plain app settings. Secret settings carry the dsv://
@@ -405,7 +406,7 @@ locals {
   # not resolve ENC[] secret backends - verified locally), so the key must be an ACA secret the application owner
   # maintains (var.serverless_init.api_key_secret_name): a documented exception to the DSV-only rule. Logs stay on
   # the Fluent Bit sidecar (DD_LOGS_ENABLED=false) - no double collection.
-  serverless_init_sidecar = local.apm.method == "serverless_init" && var.runtime != "browser" ? [{
+  serverless_init_sidecar = [for _ in(local.apm.method == "serverless_init" && var.runtime != "browser" ? [1] : []) : {
     name   = "datadog"
     image  = var.serverless_init.image
     cpu    = var.serverless_init.cpu
@@ -425,8 +426,8 @@ locals {
       [{ name = "DD_API_KEY", value = null, secret_name = var.serverless_init.api_key_secret_name }],
     )
     volume_mounts  = []
-    liveness_probe = null
-  }] : []
+    liveness_probe = { transport = "TCP", port = 8126, path = null }
+  }]
   k8s_env = concat(
     var.architecture == "aks" ? [{ name = "DD_AGENT_HOST", valueFrom = { fieldRef = { fieldPath = "status.hostIP" } } }] : [],
     [for k in sort(keys(local.env)) : { name = k, value = local.env[k] }],

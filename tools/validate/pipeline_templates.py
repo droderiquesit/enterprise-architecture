@@ -457,14 +457,20 @@ def check_structure(repo: Path, report: Report) -> dict:
         metrics[scope] = {"stages": len(names), "max_jobs_per_stage": max_jobs}
         max_jobs_all = max(max_jobs_all, max_jobs)
     max_jobs = max_jobs_all
-    # validate matrix legs: one per selected component (+ changed modules) - bounded by the registry size
-    from tools.changeset.registry import load_registry
-    from tools.changeset.trees import WorkTree
+    # validate matrix legs: tools/ci packs suites into at most `ciMaxLegs` legs (pipelines/variables/<env>.yml)
+    legs = 0
+    for vf in sorted((repo / "pipelines/variables").glob("*.yml")):
+        v = (load_yaml(vf) or {}).get("variables") or {}
+        if isinstance(v, dict) and str(v.get("ciMaxLegs", "")).isdigit():
+            legs = max(legs, int(v["ciMaxLegs"]) + 2)          # + matrix relay + report job
+    if not legs:
+        from tools.changeset.registry import load_registry
+        from tools.changeset.trees import WorkTree
 
-    try:
-        legs = sum(1 for c in load_registry(WorkTree(repo)) if c.pipeline != "manual")
-    except Exception:  # noqa: BLE001 - registry problems are reported by other linters
-        legs = 0
+        try:
+            legs = sum(1 for c in load_registry(WorkTree(repo)) if c.pipeline != "manual")
+        except Exception:  # noqa: BLE001 - registry problems are reported by other linters
+            legs = 0
     if max(max_jobs, legs) > LIMITS["jobs_per_stage"]:
         report.add("LIM004", "expanded pipeline", f"{max(max_jobs, legs)} jobs in one stage (ADO limit 256, budget "
                    f"{LIMITS['jobs_per_stage']}): split the Build stage / shard the validate matrix")

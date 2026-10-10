@@ -26,10 +26,12 @@ public sealed class HelloJsonLogWriter
         "error.stack", "event_id", "event_name",
     };
 
-    // Scope keys that duplicate the correlation fields written explicitly.
+    // Scope keys that duplicate the correlation fields written explicitly (incl. the Datadog tracer's ILogger log
+    // injection scope, DD_LOGS_INJECTION: dd_service/dd_env/dd_version/dd_trace_id/dd_span_id).
     private static readonly HashSet<string> SkippedScopeKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "TraceId", "SpanId", "ParentId", "TraceFlags", "TraceState", OriginalFormatKey,
+        "dd_service", "dd_env", "dd_version", "dd_trace_id", "dd_span_id",
     };
 
     private static readonly JsonWriterOptions WriterOptions = new()
@@ -91,13 +93,13 @@ public sealed class HelloJsonLogWriter
         json.WriteString("env", _info.Environment);
         json.WriteString("version", _info.Version);
 
-        var activity = Activity.Current;
-        if (activity is not null && activity.IdFormat == ActivityIdFormat.W3C)
+        // Active Datadog span (TELEMETRY_SDK=datadog, CLR profiler attached) first, then Activity.Current; none ⇒ omitted.
+        if (DatadogCorrelation.TryGetCurrent(out var ids))
         {
-            json.WriteString("trace_id", activity.TraceId.ToHexString());
-            json.WriteString("span_id", activity.SpanId.ToHexString());
-            json.WriteString("dd.trace_id", TraceIdConverter.ToDatadogTraceId(activity.TraceId));
-            json.WriteString("dd.span_id", TraceIdConverter.ToDatadogSpanId(activity.SpanId));
+            json.WriteString("trace_id", ids.TraceId);
+            json.WriteString("span_id", ids.SpanId);
+            json.WriteString("dd.trace_id", ids.DatadogTraceId);
+            json.WriteString("dd.span_id", ids.DatadogSpanId);
         }
 
         json.WriteString("dd.service", _info.Service);

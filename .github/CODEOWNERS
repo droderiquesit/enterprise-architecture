@@ -2,6 +2,7 @@
 # (owners_by_layer, global_owners). Regenerate: python3 tools/ado/codeowners.py
 # Enforced in Azure Repos by tools/ado/branch_policies.py (path-filtered required reviewers).
 
+/.review/                                    @lab/platform-team @lab/security-team  # foundation-pr-reviewer
 /azure-pipelines.applications.yml            @lab/platform-team  # global
 /azure-pipelines.yml                         @lab/platform-team  # global
 /bootstrap/                                  @lab/platform-team  # bootstrap
@@ -17,11 +18,14 @@
 /foundation/governance/                      @lab/platform-team  # foundation-governance
 /foundation/identity/                        @lab/platform-team @lab/security-team  # foundation-identity
 /foundation/network/                         @lab/platform-team  # foundation-network
+/foundation/pr-reviewer/                     @lab/platform-team @lab/security-team  # foundation-pr-reviewer
 /foundation/secrets/                         @lab/platform-team @lab/security-team  # foundation-secrets
 /observability/archetypes/                   @lab/observability-team  # obs-monitoring
 /observability/onboarding/                   @lab/observability-team  # obs-monitoring
 /platform/messaging/                         @lab/platform-team  # platform-messaging
 /platform/shared/                            @lab/platform-team  # platform-shared
+/tools/changeset/                            @lab/platform-team @lab/security-team  # svc-pr-reviewer
+/tools/review/                               @lab/platform-team @lab/security-team  # foundation-pr-reviewer,svc-pr-reviewer
 /applications/charts/hello-service/          @lab/app-team  # deploy-core-aks,deploy-specialized
 /applications/deployments/appservice/        @lab/app-team  # deploy-appservice
 /applications/deployments/core-aca/          @lab/app-team  # deploy-core-aca
@@ -46,10 +50,11 @@
 /applications/services/logicapps/            @lab/app-team  # svc-logicapps
 /applications/services/orders-api/           @lab/app-team  # svc-orders-api
 /applications/services/partner-sim/          @lab/app-team  # svc-partner-sim
+/applications/services/pr-reviewer/          @lab/platform-team @lab/security-team  # svc-pr-reviewer
 /applications/services/traffic/              @lab/app-team  # svc-traffic
 /applications/services/worker/               @lab/app-team  # svc-worker
 /applications/shared/dotnet/                 @lab/app-team  # svc-bff,svc-orders-api,svc-inventory-api,svc-durable
-/applications/shared/python/                 @lab/app-team  # svc-catalog-api,svc-dbadapter,svc-worker,svc-partner-sim,svc-functions,svc-jobs
+/applications/shared/python/                 @lab/app-team @lab/platform-team @lab/security-team  # svc-catalog-api,svc-dbadapter,svc-worker,svc-partner-sim,svc-functions,svc-jobs,svc-pr-reviewer
 /foundation/identity/secrets.yaml            @lab/platform-team @lab/security-team  # foundation-secrets
 /observability/images/dsv-fetch/             @lab/observability-team  # obs-telemetry-transport,obs-hosts,obs-kubernetes,img-dsv-fetch
 /observability/lab/azure-integration/        @lab/observability-team  # obs-azure-integration

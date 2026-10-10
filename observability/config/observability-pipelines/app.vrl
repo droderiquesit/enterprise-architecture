@@ -1,0 +1,24 @@
+# Application logs (Datadog Agent / Fluent Bit / OTLP sources) - port of the Fluent Bit eh_normalize filter.
+# Preceded by `cfg = {...}` (modules/observability-pipeline); uses no cfg keys today.
+# JSON lines -> top-level attributes (the inner "message" wins), log -> message, trace-id aliases.
+if is_string(.message) {
+  m = string!(.message)
+  if starts_with(m, "{") {
+    parsed, err = parse_json(m)
+    if err == null && is_object(parsed) {
+      . = merge(., object!(parsed))
+    }
+  }
+}
+if !exists(.message) && exists(.log) {
+  .message = del(.log)
+}
+if !exists(.trace_id) && exists(.traceId) {
+  .trace_id = del(.traceId)
+}
+if !exists(.span_id) && exists(.spanId) {
+  .span_id = del(.spanId)
+}
+if is_string(.level) {
+  .level = downcase(string!(.level))
+}

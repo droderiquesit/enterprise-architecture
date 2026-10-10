@@ -1,5 +1,7 @@
 # Plan-only tests of the pure instrumentation hook (no providers involved).
+# The file-level default is apm.mode = otel (the 2.x OTLP path); the datadog-mode runs override it.
 variables {
+  apm = { mode = "otel" }
   service = {
     service     = "hello-orders-api"
     env         = "dev"
@@ -304,5 +306,121 @@ run "aks_labels_and_tag_annotation" {
   assert {
     condition     = jsondecode(output.k8s_patch_object.spec.template.metadata.annotations["ad.datadoghq.com/tags"])["owner"] == "orders-team_example.com"
     error_message = "pod annotation ad.datadoghq.com/tags carries every non-unified tag (owner is not label-safe before normalisation)"
+  }
+}
+
+run "datadog_mode_aks_ssi" {
+  command = plan
+  variables {
+    apm = null
+  }
+  assert {
+    condition     = output.apm.mode == "datadog" && output.apm.method == "ssi_kubernetes" && output.log_collector == "datadog-agent"
+    error_message = "default fleet policy on AKS: SSI tracer + Agent log collection (-> Observability Pipelines)"
+  }
+  assert {
+    condition     = output.env["TELEMETRY_SDK"] == "datadog" && output.env["OTEL_SDK_DISABLED"] == "true" && !contains(keys(output.env), "OTEL_EXPORTER_OTLP_ENDPOINT")
+    error_message = "datadog mode: no OTLP exporter env, OTel SDK disabled (never two tracers)"
+  }
+  assert {
+    condition     = output.env["DD_PROFILING_ENABLED"] == "auto" && output.env["DD_PROFILING_EXCEPTION_ENABLED"] == "true" && output.profiling.enabled
+    error_message = ".NET profiler on under SSI (auto)"
+  }
+  assert {
+    condition     = output.k8s_patch_object.spec.template.metadata.labels["admission.datadoghq.com/enabled"] == "true" && jsondecode(output.k8s_patch_object.spec.template.metadata.annotations["ad.datadoghq.com/hello-orders-api.logs"])[0].source == "csharp"
+    error_message = "admission controller label + Agent log source annotation"
+  }
+  assert {
+    condition     = output.env["DD_DATA_STREAMS_ENABLED"] == "true" && output.env["DD_DBM_PROPAGATION_MODE"] == "full" && output.env["DD_LOGS_INJECTION"] == "true"
+    error_message = "DSM (.NET Service Bus), DBM propagation, log injection"
+  }
+}
+
+run "datadog_mode_aca_dotnet_agent_gateway" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "aca"
+    telemetry = {
+      datadog_site = "datadoghq.eu"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+      otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
+      fluentbit    = { forward_host = "opw.internal", forward_port = 24224, sidecar_mode = "forward", sidecar_forward_config = "service: {}\n", sidecar_parsers = "p", sidecar_lua = "l" }
+      env          = { apm_gateway = { DD_TRACE_AGENT_URL = "http://eh-obs-dev-apm:8126" } }
+    }
+  }
+  assert {
+    condition     = output.apm.method == "agent_gateway" && output.apm.ready && output.env["DD_TRACE_AGENT_URL"] == "http://eh-obs-dev-apm:8126"
+    error_message = "managed runtime: tracer -> APM gateway from the contract"
+  }
+  assert {
+    condition     = output.env["CORECLR_ENABLE_PROFILING"] == "1" && output.env["CORECLR_PROFILER_PATH"] == "/opt/datadog/linux-x64/Datadog.Trace.ClrProfiler.Native.so" && output.env["DD_PROFILING_ENABLED"] == "true"
+    error_message = ".NET CLR profiler env for the image-installed tracer; profiler enabled"
+  }
+  assert {
+    condition     = length([for c in output.container_app_patch.sidecars : c if c.name == "datadog"]) == 0 && length(output.app_requirements) > 0
+    error_message = "no serverless-init sidecar by default; app requirements reported"
+  }
+}
+
+run "datadog_mode_aca_serverless_init_opt_in" {
+  command = plan
+  variables {
+    apm             = { managed_runtime_path = "serverless_init" }
+    architecture    = "aca"
+    serverless_init = { subscription_id = "00000000-0000-0000-0000-000000000000", resource_group = "rg-app" }
+  }
+  assert {
+    condition     = one([for c in output.container_app_patch.sidecars : c.image if c.name == "datadog"]) == "datadog/serverless-init:1.10.4"
+    error_message = "serverless-init sidecar pinned"
+  }
+  assert {
+    condition     = one(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e.secret_name if e.name == "DD_API_KEY"] if c.name == "datadog"])) == "dd-api-key" && one(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e.value if e.name == "DD_LOGS_ENABLED"] if c.name == "datadog"])) == "false"
+    error_message = "API key from an ACA secret reference; serverless-init logs off (Fluent Bit sidecar collects)"
+  }
+}
+
+run "datadog_mode_functions_no_profiler" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "functions"
+  }
+  assert {
+    condition     = output.apm.method == "agent_gateway" && !output.apm.ready && !output.profiling.enabled && !contains(keys(output.env), "DD_PROFILING_ENABLED") && output.env["DD_DOTNET_TRACER_HOME"] == "/home/site/wwwroot/datadog"
+    error_message = "Functions: tracer via Datadog.Trace.Bundle -> gateway (not ready without contract URL); .NET profiler unsupported"
+  }
+}
+
+run "datadog_mode_windows_vm_otel_fallback" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "vm"
+    os_type      = "windows"
+  }
+  assert {
+    condition     = output.apm.mode == "otel" && output.env["TELEMETRY_SDK"] == "otel" && strcontains(output.apm.fallback_reason, "Windows")
+    error_message = "Windows VMs stay on OpenTelemetry (documented fallback)"
+  }
+}
+
+run "contract_fleet_switch" {
+  command = plan
+  variables {
+    apm = null
+    telemetry = {
+      datadog_site = "datadoghq.eu"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1" }
+      otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
+      fluentbit    = { forward_host = "x", forward_port = 24224 }
+      env          = { fleet = { EH_APM_MODE = "otel", EH_LOG_PIPELINE = "fluent_bit_direct" } }
+    }
+  }
+  assert {
+    condition     = output.apm.mode == "otel" && output.log_pipeline == "fluent_bit_direct" && output.log_collector == "fluent-bit"
+    error_message = "lab-wide switches from the transport contract env.fleet"
   }
 }

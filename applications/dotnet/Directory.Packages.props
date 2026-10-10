@@ -16,6 +16,12 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.19.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
   </ItemGroup>
+  <ItemGroup Label="Datadog">
+    <!-- DogStatsD client for hello.* custom metrics in TELEMETRY_SDK=datadog mode (published 2026-07-27). The Datadog .NET
+         tracer itself is NOT a package reference: the CLR profiler comes from SSI / serverless-init / the App Service
+         site extension (or a tracer home baked into a test image, see tests/integration). -->
+    <PackageVersion Include="DogStatsD-CSharp-Client" Version="9.2.1" />
+  </ItemGroup>
   <ItemGroup Label="ASP.NET Core / Extensions">
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />

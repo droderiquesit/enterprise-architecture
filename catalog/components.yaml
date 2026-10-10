@@ -77,6 +77,17 @@ components:
       TF_VAR_tls_certificate_pfx: appgw-tls-pfx?
       TF_VAR_tls_certificate_password: appgw-tls-pfx#password?
     produces: [foundation-edge]
+  - id: foundation-pr-reviewer
+    layer: foundation
+    kind: terraform
+    path: foundation/pr-reviewer
+    owners: [platform-team, security-team]   # the reviewer approves PRs: changes to it always need humans
+    consumes: [foundation-identity]
+    optional_consumes: [foundation-network]
+    produces: [foundation-pr-reviewer]
+    artifacts: [svc-pr-reviewer]               # code deployed by the apply stage on main only (never PR builds)
+    inputs: [tools/review/**, .review/**]
+    dsv_state_output: dsv_desired_state        # webhook secret / API key paths converged by tools/secrets/dsv_apply.py
 
   # ----------------------------------------------------------------- platform
   - id: platform-shared
@@ -462,6 +473,14 @@ components:
     kind: artifact
     path: applications/services/logicapps
     artifact: {type: zip-package, name: hello-logicapps}
+  - id: svc-pr-reviewer
+    layer: applications
+    kind: artifact
+    path: applications/services/pr-reviewer
+    scope: platform             # built and deployed with its foundation root (foundation-pr-reviewer)
+    owners: [platform-team, security-team]
+    inputs: [tools/review/**, tools/changeset/**, applications/shared/python/**]
+    artifact: {type: zip-package, name: eh-pr-reviewer}
 
   # --------------------------------------------------- application deployments
   - id: deploy-core-aks

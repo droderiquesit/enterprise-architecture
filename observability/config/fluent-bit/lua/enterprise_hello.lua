@@ -9,7 +9,8 @@ Loaded by every config in observability/config/fluent-bit/ through
 Functions (all are pure record transforms; no I/O, no globals mutated per call):
   eh_redact(tag, ts, record)       -> masks secrets in keys and free-text values
   eh_normalize(tag, ts, record)    -> message/trace-id normalisation (log->message, traceId->trace_id, dd.* flatten)
-  eh_k8s(tag, ts, record)          -> service/env/version/ddsource/ddtags from Kubernetes labels (DaemonSet)
+  eh_k8s(tag, ts, record)          -> service/env/version/ddsource/ddtags from Kubernetes labels and the
+                                       ad.datadoghq.com/tags annotations (DaemonSet; tag policy key map)
   eh_static_tags(tag, ts, record)  -> ddsource/ddtags from FLB_DD_SOURCE / FLB_DD_TAGS env (host + sidecar)
   eh_azure_split(tag, ts, record)  -> explodes an Azure diagnostic-settings batch {"records":[...]} read from
                                        Event Hubs (Kafka input) into one record per log entry (aggregator) and
@@ -191,6 +192,31 @@ end
 
 local STATIC_TAGS = env_or("FLB_DD_TAGS", "")
 
+-- keys of a "k:v,k:v" list
+local function tag_keys(list)
+  local keys = {}
+  for t in string.gmatch(list or "", "[^,]+") do
+    local k = t:match("^([^:]+):")
+    if k ~= nil then
+      keys[k] = true
+    end
+  end
+  return keys
+end
+
+-- static tags whose key is not already set by the record (record values always win)
+local function static_tags_except(keys)
+  local out = {}
+  for t in string.gmatch(STATIC_TAGS, "[^,]+") do
+    local k = t:match("^([^:]+):")
+    if k == nil or not keys[k] then
+      table.insert(out, t)
+    end
+  end
+  return table.concat(out, ",")
+end
+
+
 function eh_static_tags(tag, ts, record)
   if record["ddsource"] == nil then
     record["ddsource"] = env_or("FLB_DD_SOURCE", "enterprise-hello")
@@ -202,11 +228,14 @@ function eh_static_tags(tag, ts, record)
     end
   end
   local tags = {}
-  if STATIC_TAGS ~= "" then
-    table.insert(tags, STATIC_TAGS)
+  local own = record["ddtags"]
+  if own ~= nil and own ~= "" then
+    table.insert(tags, own)
   end
-  if record["ddtags"] ~= nil and record["ddtags"] ~= "" then
-    table.insert(tags, record["ddtags"])
+  -- static tags fill only the keys the record (e.g. a forwarded sidecar record) does not carry
+  local static = own ~= nil and own ~= "" and static_tags_except(tag_keys(own)) or STATIC_TAGS
+  if static ~= "" then
+    table.insert(tags, static)
   end
   if #tags > 0 then
     record["ddtags"] = table.concat(tags, ",")
@@ -214,15 +243,42 @@ function eh_static_tags(tag, ts, record)
   return 2, ts, record
 end
 
-local K8S_LABEL_TAGS = {
-  { "tags.datadoghq.com/env", "env" },
-  { "tags.datadoghq.com/version", "version" },
-  { "team", "team" },
-  { "domain", "domain" },
-  { "tier", "tier" },
-  { "application", "application" },
-  { "app.kubernetes.io/part-of", "application" },
-}
+-- Pod label -> Datadog tag key. FLB_K8S_LABEL_TAGS ("label=tag,label2=tag2", rendered from the package tag policy
+-- by modules/kubernetes, the same mapping as the Agent's podLabelsAsTags) replaces the built-in default.
+local K8S_LABEL_TAGS = {}
+for pair in string.gmatch(env_or("FLB_K8S_LABEL_TAGS", ""), "[^,]+") do
+  local l, t = pair:match("^%s*([^=]+)=([^=]+)%s*$")
+  if l ~= nil then
+    table.insert(K8S_LABEL_TAGS, { l, t })
+  end
+end
+if #K8S_LABEL_TAGS == 0 then
+  K8S_LABEL_TAGS = {
+    { "tags.datadoghq.com/env", "env" },
+    { "tags.datadoghq.com/version", "version" },
+    { "team", "team" },
+    { "domain", "domain" },
+    { "tier", "tier" },
+    { "application", "application" },
+    { "app.kubernetes.io/part-of", "application" },
+  }
+else
+  table.insert(K8S_LABEL_TAGS, 1, { "tags.datadoghq.com/env", "env" })
+  table.insert(K8S_LABEL_TAGS, 2, { "tags.datadoghq.com/version", "version" })
+end
+
+-- flat JSON object of string values ('{"team":"orders","owner":"x"}'), as written by modules/tagging into the
+-- ad.datadoghq.com/tags pod annotation (Datadog Agent tag autodiscovery format)
+local function annotation_tags(json)
+  local out = {}
+  if type(json) ~= "string" then
+    return out
+  end
+  for k, v in json:gmatch('"([^"]+)"%s*:%s*"([^"]*)"') do
+    table.insert(out, { k, v })
+  end
+  return out
+end
 
 function eh_k8s(tag, ts, record)
   local k8s = record["kubernetes"]
@@ -230,6 +286,7 @@ function eh_k8s(tag, ts, record)
     return eh_static_tags(tag, ts, record)
   end
   local labels = k8s["labels"] or {}
+  local annotations = k8s["annotations"] or {}
   if record["service"] == nil then
     record["service"] = labels["tags.datadoghq.com/service"] or labels["app.kubernetes.io/name"] or labels["app"] or k8s["container_name"]
   end
@@ -243,23 +300,36 @@ function eh_k8s(tag, ts, record)
     record["ddsource"] = labels["logs.datadoghq.com/source"] or env_or("FLB_DD_SOURCE", "kubernetes")
   end
   local tags = {}
-  append_tag(tags, "kube_namespace", k8s["namespace_name"])
-  append_tag(tags, "pod_name", k8s["pod_name"])
-  append_tag(tags, "kube_container_name", k8s["container_name"])
-  append_tag(tags, "kube_node", k8s["host"])
   local seen = {}
-  for _, m in ipairs(K8S_LABEL_TAGS) do
-    local v = labels[m[1]]
-    if v ~= nil and not seen[m[2]] then
-      append_tag(tags, m[2], v)
-      seen[m[2]] = true
+  local function add(k, v)
+    if v ~= nil and v ~= "" and not seen[k] then
+      table.insert(tags, k .. ":" .. tostring(v))
+      seen[k] = true
     end
   end
-  if STATIC_TAGS ~= "" then
-    table.insert(tags, STATIC_TAGS)
+  add("kube_namespace", k8s["namespace_name"])
+  add("pod_name", k8s["pod_name"])
+  add("kube_container_name", k8s["container_name"])
+  add("kube_node", k8s["host"])
+  -- container-specific annotation first, then the pod-wide one, then labels (same precedence as the Agent)
+  local cname = k8s["container_name"]
+  if cname ~= nil then
+    for _, kv in ipairs(annotation_tags(annotations["ad.datadoghq.com/" .. cname .. ".tags"])) do
+      add(kv[1], kv[2])
+    end
+  end
+  for _, kv in ipairs(annotation_tags(annotations["ad.datadoghq.com/tags"])) do
+    add(kv[1], kv[2])
+  end
+  for _, m in ipairs(K8S_LABEL_TAGS) do
+    add(m[2], labels[m[1]])
+  end
+  local static = static_tags_except(seen)
+  if static ~= "" then
+    table.insert(tags, static)
   end
   record["ddtags"] = table.concat(tags, ",")
-  -- drop bulky metadata Datadog does not need (labels already mapped to tags)
+  -- drop bulky metadata Datadog does not need (labels / annotations already mapped to tags)
   k8s["annotations"] = nil
   k8s["docker_id"] = nil
   k8s["container_hash"] = nil
@@ -304,6 +374,55 @@ local DEDUP_SIZE = tonumber(env_or("FLB_AZURE_DEDUP_CACHE", "20000")) or 20000
 
 -- FLB_AZURE_ENV_BY_SUBSCRIPTION="<subscription-guid>=<env>,..." maps subscriptions to an env tag when the record
 -- itself carries no env (diagnostic records do not include resource tags).
+-- FLB_AZURE_TAG_MAP="<lowercase azure tag key>=<datadog key>[|<alias>],..." (modules/tagging azure_tag_key_map):
+-- records that carry Azure resource tags get them under the policy's Datadog keys.
+local AZURE_TAG_MAP = {}
+for pair in string.gmatch(env_or("FLB_AZURE_TAG_MAP", ""), "[^,]+") do
+  local az, dks = pair:match("^%s*([^=]+)=(.+)$")
+  if az ~= nil then
+    local list = {}
+    for dk in string.gmatch(dks, "[^|]+") do
+      table.insert(list, dk)
+    end
+    AZURE_TAG_MAP[az:lower()] = list
+  end
+end
+
+-- FLB_AZURE_SCOPE_TAGS="<lowercase resource id prefix>=k:v;k:v|<prefix>=k:v": tags per subscription / resource
+-- group / resource (manifests + environment). The longest matching prefix wins per key.
+local SCOPE_TAGS = {}
+for entry in string.gmatch(env_or("FLB_AZURE_SCOPE_TAGS", ""), "[^|]+") do
+  local scope, list = entry:match("^%s*([^=]+)=(.*)$")
+  if scope ~= nil then
+    local t = {}
+    for kv in string.gmatch(list, "[^;]+") do
+      local k, v = kv:match("^([^:]+):(.+)$")
+      if k ~= nil then
+        t[k] = v
+      end
+    end
+    table.insert(SCOPE_TAGS, { scope:lower():gsub("/+$", ""), t })
+  end
+end
+
+local function scope_tags_for(rid_lower)
+  local best, best_len = {}, {}
+  if rid_lower == nil or rid_lower == "" then
+    return best
+  end
+  for _, st in ipairs(SCOPE_TAGS) do
+    local scope = st[1]
+    if rid_lower == scope or rid_lower:sub(1, #scope + 1) == scope .. "/" then
+      for k, v in pairs(st[2]) do
+        if (best_len[k] or 0) < #scope then
+          best[k], best_len[k] = v, #scope
+        end
+      end
+    end
+  end
+  return best
+end
+
 local ENV_BY_SUB = {}
 for pair in string.gmatch(env_or("FLB_AZURE_ENV_BY_SUBSCRIPTION", ""), "[^,%s]+") do
   local sub, env = pair:match("^([^=]+)=(.+)$")
@@ -521,16 +640,6 @@ local function env_of(e, sub)
   return nil
 end
 
-local function static_tags_without_env()
-  local out = {}
-  for t in string.gmatch(STATIC_TAGS, "[^,]+") do
-    if t:sub(1, 4) ~= "env:" then
-      table.insert(out, t)
-    end
-  end
-  return table.concat(out, ",")
-end
-
 local function azure_entry(entry, topic)
   local out = {}
   for k, v in pairs(entry) do
@@ -606,11 +715,35 @@ local function azure_entry(entry, topic)
   end
   append_tag(tags, "category", cat)
   append_tag(tags, "azure_log_type", log_type)
-  local env = env_of(entry, md.sub)
-  append_tag(tags, "env", env)
   append_tag(tags, "eventhub", topic)
   append_tag(tags, "forwarder", "fluent-bit-aggregator")
-  local static = env ~= nil and static_tags_without_env() or STATIC_TAGS
+  -- policy tags, precedence: record Azure resource tags (FLB_AZURE_TAG_MAP) > resource scope tags > env fallback
+  local keyed, order = {}, {}
+  local function put(k, v)
+    if v ~= nil and v ~= "" and keyed[k] == nil then
+      keyed[k] = v
+      table.insert(order, k)
+    end
+  end
+  local rtags = entry["tags"]
+  if type(rtags) == "table" then
+    for k, v in pairs(rtags) do
+      local dks = AZURE_TAG_MAP[tostring(k):lower()]
+      if dks ~= nil and type(v) == "string" then
+        for _, dk in ipairs(dks) do
+          put(dk, v:lower())
+        end
+      end
+    end
+  end
+  for k, v in pairs(scope_tags_for(rid and rid:lower() or nil)) do
+    put(k, v)
+  end
+  put("env", env_of(entry, md.sub))
+  for _, k in ipairs(order) do
+    table.insert(tags, k .. ":" .. keyed[k])
+  end
+  local static = static_tags_except(keyed)
   if static ~= "" then
     table.insert(tags, static)
   end
@@ -726,6 +859,14 @@ function eh_finalize(tag, ts, record)
       t = t .. ",env:unknown"
     end
   end
-  record["ddtags"] = t
+  -- drop exact duplicate k:v entries (the same tag from a label and the ad.datadoghq.com/tags annotation)
+  local out, dup = {}, {}
+  for item in string.gmatch(t, "[^,]+") do
+    if not dup[item] then
+      dup[item] = true
+      table.insert(out, item)
+    end
+  end
+  record["ddtags"] = table.concat(out, ",")
   return 2, ts, record
 end

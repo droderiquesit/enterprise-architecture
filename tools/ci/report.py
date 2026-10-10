@@ -109,10 +109,12 @@ def markdown(doc: dict) -> str:
 
 
 def load_leg_results(results_dir: Path) -> List[dict]:
-    out = []
-    for f in sorted(Path(results_dir).glob("**/ci-results.json")):
+    """One result document per leg; a retried leg (ci-<leg>-<attempt>) counts with its latest attempt."""
+    by_leg = {}
+    for f in sorted(Path(results_dir).glob("**/ci-results.json"), key=lambda p: (len(str(p)), str(p))):
         try:
-            out.append(json.loads(f.read_text()))
+            doc = json.loads(f.read_text())
         except ValueError:
             continue
-    return out
+        by_leg[doc.get("leg") or str(f)] = doc
+    return [by_leg[k] for k in sorted(by_leg)]

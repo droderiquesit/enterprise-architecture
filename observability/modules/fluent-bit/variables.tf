@@ -13,7 +13,7 @@ variable "datadog_site" {
 }
 
 variable "static_tags" {
-  description = "Tags added to every record (FLB_DD_TAGS), e.g. { env = \"dev\", team = \"platform\" }."
+  description = "Tags added to every record (FLB_DD_TAGS) - pass modules/tagging `tags` (record values win per key)."
   type        = map(string)
   default     = {}
 }
@@ -90,4 +90,46 @@ variable "aca_console_allow" {
   description = "aggregator: Container Apps/Jobs whose ContainerAppConsoleLogs (Event Hub route) are kept: exact names or prefixes ending in '*'. Empty = keep all."
   type        = list(string)
   default     = []
+}
+
+variable "log_destination" {
+  description = "datadog (Datadog logs intake, 2.x) | observability_pipelines (forward to the Observability Pipelines Worker fluent source; no API key on the edge)."
+  type        = string
+  default     = "datadog"
+  validation {
+    condition     = contains(["datadog", "observability_pipelines"], var.log_destination)
+    error_message = "log_destination must be datadog or observability_pipelines."
+  }
+}
+
+variable "op_endpoint" {
+  description = "Observability Pipelines Worker fluent source endpoint (log_destination = observability_pipelines)."
+  type = object({
+    host = string
+    port = optional(number, 24224)
+    tls  = optional(bool, false)
+  })
+  default = null
+}
+
+variable "k8s_label_tags" {
+  description = "k8s-daemonset: pod label -> Datadog tag key (modules/tagging pod_labels_as_tags; FLB_K8S_LABEL_TAGS). Empty = built-in default."
+  type        = map(string)
+  default     = {}
+}
+
+variable "azure_tag_key_map" {
+  description = "aggregator: lowercase Azure tag key -> Datadog tag keys (modules/tagging azure_tag_key_map; FLB_AZURE_TAG_MAP)."
+  type        = map(list(string))
+  default     = {}
+}
+
+variable "azure_scope_tags" {
+  description = "aggregator: resource id prefix (subscription / resource group / resource) -> Datadog tags (FLB_AZURE_SCOPE_TAGS; longest prefix wins per key)."
+  type        = map(map(string))
+  default     = {}
+  validation {
+    condition     = alltrue(flatten([for sc, t in var.azure_scope_tags : [for k, v in t : !can(regex("[|;=,:]", "${k}${v}"))]]))
+    error_message = "azure_scope_tags keys/values must not contain | ; = , : (normalised Datadog tag values)."
+  }
 }
