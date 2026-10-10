@@ -87,10 +87,24 @@ for ((i = 0; i < n; i++)); do
     vmss-flex-rollout)
       [[ -n "$ROOT" ]] || die "vmss-flex-rollout needs --root <terraform root> for the vmss_rollout_script output"
       terraform -chdir="$ROOT" output -raw vmss_rollout_script > "$WORK/rollout.sh"
+      # `az vm run-command invoke` succeeds whatever the script's exit code is: wrap the script so the instance
+      # reports it in stdout, and fail the step when an instance did not finish with 0.
+      {
+        cat <<'WRAP'
+f=$(mktemp); cat > "$f" <<'EH_ROLLOUT_EOF'
+WRAP
+        cat "$WORK/rollout.sh"; echo
+        cat <<'WRAP'
+EH_ROLLOUT_EOF
+bash "$f"; rc=$?; rm -f "$f"; echo "eh-rollout-exit=$rc"
+WRAP
+      } > "$WORK/rollout-wrapped.sh"
       for vm in $(az vmss list-instances -g "$rg" -n "$name" --query "[].name" -o tsv); do
         log INFO "run-command on $vm"
-        az vm run-command invoke -g "$rg" -n "$vm" --command-id RunShellScript --scripts @"$WORK/rollout.sh" \
-          --query "value[0].message" -o tsv | tail -5
+        msg=$(az vm run-command invoke -g "$rg" -n "$vm" --command-id RunShellScript --scripts @"$WORK/rollout-wrapped.sh" \
+          --query "value[0].message" -o tsv)
+        tail -5 <<<"$msg"
+        grep -qx 'eh-rollout-exit=0' <<<"$msg" || die "rollout failed on $vm"
       done
       ;;
     batch-job)

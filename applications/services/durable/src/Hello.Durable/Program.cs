@@ -34,7 +34,7 @@ services.AddSingleton(info);
 services.TryAddSingleton(TimeProvider.System);
 services.AddSingleton(sp => DurableSettings.From(sp.GetRequiredService<IConfiguration>()));
 
-// Worker logs flow to the Functions host (→ FunctionAppLogs → diagnostic settings → Event Hubs → Fluent Bit).
+// Worker logs flow to the Functions host (→ FunctionAppLogs → diagnostic settings → Event Hubs → Observability Pipelines).
 // No console provider here: the host already captures stdout, which would duplicate lines.
 builder.Logging.SetMinimumLevel(LoggingExtensions.ParseLevel(builder.Configuration["LOG_LEVEL"]) ?? LogLevel.Information);
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);

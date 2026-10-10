@@ -185,8 +185,8 @@ resource "azurerm_kubernetes_cluster" "this" {
     }
   }
 
-  # Observability (obs-kubernetes) installs the Datadog Agent / Fluent Bit via Helm; nothing on
-  # this resource is touched by it. Node count is owned by the cluster autoscaler.
+  # Observability (obs-kubernetes) installs the Datadog Helm chart; nothing on this resource is
+  # touched by it. Node count is owned by the cluster autoscaler.
   lifecycle {
     ignore_changes = [default_node_pool[0].node_count]
   }

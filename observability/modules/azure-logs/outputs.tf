@@ -4,7 +4,8 @@ output "activity_log_settings" {
 }
 
 output "activity_log_categories" {
-  value = var.activity_log.enabled ? sort(var.activity_log.categories) : []
+  description = "Activity Log categories exported (sorted; empty when activity_log.enabled = false)."
+  value       = var.activity_log.enabled ? sort(var.activity_log.categories) : []
 }
 
 output "entra_setting_id" {

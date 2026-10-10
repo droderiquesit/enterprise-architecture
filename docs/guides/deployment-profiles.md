@@ -37,7 +37,8 @@ built-in profile; enable them with profile `custom` (`resolve.py` rejects them i
 
 Smallest end-to-end slice: Static Web Apps frontend -> BFF / orders / catalog on Container Apps -> Azure SQL + PostgreSQL,
 Service Bus Standard, Durable Functions on Flex Consumption, partner-sim on ACI, ACA jobs (seed, reconcile, traffic,
-batch-items), telemetry transport, diagnostics, DBM and monitoring.
+batch-items), telemetry transport (Observability Pipelines Worker, APM gateway, OTel gateway), diagnostics and DBM.
+Monitoring content (monitors, SLOs, dashboards) is optional and not in the profile.
 
 ```yaml
 # environments/dev/environment.yaml
@@ -79,15 +80,17 @@ pricing calculator - nothing here has been billed):
 | platform-db-sql | ~35-50 | S0 + Basic + serverless (auto-pause 60 min) + private endpoint |
 | platform-db-postgresql | ~17 | B1ms + 32 GB |
 | deploy-core-aca | ~15-20 | scale to zero, 10 % duty assumption |
-| deploy-partner-sim | ~35 | ACI 0.75 vCPU / 1.5 GB always on |
+| deploy-partner-sim | ~46 | ACI 0.75 vCPU / 1.5 GB always on (~35) + Datadog Agent sidecar 0.25 vCPU / 0.5 GB (~11) |
 | deploy-jobs | ~15 | traffic job 1 vCPU x 7 min x 48/day |
 | deploy-frontend | 0 | SWA Free |
-| obs-telemetry-transport | ~110 | Event Hubs Standard 1 TU (~22) + two always-on 0.5 vCPU / 1 GiB Container Apps (~80) + private endpoint |
+| obs-telemetry-transport | ~305 | Event Hubs Standard 1 TU (~22) + private endpoint (~7.5) + always-on Container Apps at module defaults: Observability Pipelines Worker 2 x 1 vCPU / 2 GiB (~158), APM gateway 1 vCPU / 2 GiB (~79), OTel gateway 0.5 vCPU / 1 GiB (~40) |
 | obs-dbm | ~45 | Datadog Agent on ACI, 1 vCPU / 2 GB always on |
 | Datadog | billed by Datadog | RUM sessions, synthetic runs (tests created **paused**), APM/infra hosts, logs, DBM |
 
-Order of magnitude: roughly USD 400-450/month before Datadog charges. `environments/dev/environment.yaml` therefore sets
-`budget.monthly_amount: 500` (estimate + ~10 % headroom); foundation-governance reads that global (`var.budget`) unless
+Order of magnitude: roughly USD 600-650/month before Datadog charges (observability 4.0.0 defaults; the Worker
+dominates the transport - `op_worker` sizing in the fleet policy). `environments/dev/environment.yaml` sets
+`budget.monthly_amount: 500`, which was sized for the 3.x transport (~110) and is now below the estimate; raise it
+when deploying `minimal` with the default transport. foundation-governance reads that global (`var.budget`) unless
 `components.foundation-governance.budget.amount` overrides it (root fallback 300). The minimal profile creates only
 the `fulfillment` Service Bus subscription (the only `order-events` consumer in the profile).
 
@@ -136,7 +139,7 @@ roots create nothing (or only report `status = blocked`).
 ## observability-only
 
 Applies Datadog collection configuration to existing resources: `obs-prereqs` (RUM application),
-`obs-azure-integration`. Monitors, SLOs and dashboards are not part of the observability package since 3.0.0; the
+`obs-azure-integration`. Monitors, SLOs and dashboards are not part of the observability package (since 3.0.0); the
 optional `obs-monitoring` content root is enabled only with profile `custom`. For a separate organisation-level adoption
 outside this lab, use the package release directly: [observability-production-adoption.md](observability-production-adoption.md).
 

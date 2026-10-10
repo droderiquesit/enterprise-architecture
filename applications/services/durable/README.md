@@ -78,7 +78,7 @@ Verified locally (Core Tools 4.15.2 + Azurite + OTLP/HTTP sink):
 3. With only `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` set, the host exports nothing
    (no orchestration/activity spans); the worker exports its own spans/metrics; logs reach the host stream only.
 
-Recommendation (ADR-0001 §10 — logs only via FunctionAppLogs → Event Hubs → Fluent Bit): set
+Recommendation (ADR-0001 §10/§13 — logs only via FunctionAppLogs → Event Hubs → Observability Pipelines Worker): set
 `OTEL_EXPORTER_OTLP_ENDPOINT` (full Durable trace) **and** make the observability OTel gateway drop OTLP logs for this
 service (no `logs` pipeline, or a filter on `service.name=hello-durable`). Alternative: per-signal endpoints only (no
 duplicate logs, no host/orchestration spans).

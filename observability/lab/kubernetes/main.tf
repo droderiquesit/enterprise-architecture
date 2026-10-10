@@ -32,7 +32,6 @@ locals {
     } })
   })
   op_logs_url = try(var.obs_telemetry_transport.aggregator.agent_logs_url, null)
-  op_host     = try(var.obs_telemetry_transport.aggregator.kind, "") == "observability_pipelines" ? try(var.obs_telemetry_transport.aggregator.fqdn, null) : null
 }
 
 resource "azurerm_federated_identity_credential" "collector" {

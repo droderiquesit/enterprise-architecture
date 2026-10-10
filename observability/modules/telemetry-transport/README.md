@@ -87,3 +87,6 @@ way to omit them) - protect the state account accordingly.
 - https://learn.microsoft.com/azure/container-apps/ingress-overview#additional-tcp-ports ; https://learn.microsoft.com/azure/templates/microsoft.app/2025-07-01/containerapps
 - https://learn.microsoft.com/azure/container-apps/managed-identity#control-managed-identity-availability (init containers + managed identity)
 - https://docs.datadoghq.com/opentelemetry/setup/collector_exporter/
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/transport.tftest.hcl`. Container-level behaviour (Worker bootstrap, APM gateway, OTel gateway) is in `observability/tests/transport/` (docker).

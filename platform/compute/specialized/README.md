@@ -4,7 +4,7 @@
 |---|---|
 | Component id | `platform-specialized-compute` |
 | Owner | platform team (compute) |
-| Consumes | `foundation-network` (`subnets.compute`), `foundation-identity` (`hello-worker`, `hello-jobs`) |
+| Consumes | `foundation-network` (`subnets.compute`), `foundation-identity` (`hello-worker`, `hello-jobs`, `obs-host-agent`) |
 | Produces | `platform-specialized-compute` v1 (per-capability status) |
 | Status | every capability **`disabled`** by default; AVS **`blocked`** (cataloged only) |
 
@@ -18,7 +18,9 @@
 | Azure VMware Solution | — | nothing (cataloged, **blocked**) | AVS needs a private cloud of ≥ 3 dedicated bare-metal hosts (quota request via support, ExpressRoute/Global Reach connectivity, /22 management block); far outside lab scope/cost |
 
 All VMs: no public IPs, cloud-init OS baseline, auto-shutdown 19:00 UTC, Entra-only identities; break-glass
-password in state only unless `admin_ssh_public_key` is set.
+password in state only unless `admin_ssh_public_key` is set. Datadog Agent enrolment as in `platform-vm`
+(`datadog{enabled,tag_name,identity_key}`): tag `datadog:enabled = "true"`, the `obs-host-agent` identity kept in
+`identity_ids`, `gallery_application` ignored (the obs-hosts Azure Policy adds the Agent VM Application).
 
 ## Cost at defaults
 

@@ -1,17 +1,21 @@
 output "id" {
-  value = local.app_id
+  description = "Web app resource id."
+  value       = local.app_id
 }
 
 output "name" {
-  value = var.name
+  description = "Web app name."
+  value       = var.name
 }
 
 output "hostname" {
-  value = local.hostname
+  description = "Default hostname (<name>.azurewebsites.net)."
+  value       = local.hostname
 }
 
 output "url" {
-  value = "https://${local.hostname}"
+  description = "https://<default hostname>."
+  value       = "https://${local.hostname}"
 }
 
 output "staging_slot" {
@@ -20,9 +24,11 @@ output "staging_slot" {
 }
 
 output "private" {
-  value = local.private
+  description = "True when the app is reachable only through its private endpoint."
+  value       = local.private
 }
 
 output "app_settings" {
-  value = local.settings
+  description = "Effective app settings (plain values and dsv:// references)."
+  value       = local.settings
 }

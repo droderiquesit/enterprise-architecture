@@ -36,7 +36,7 @@ func TestPyQuote(t *testing.T) {
 
 func TestPyFloatRepr(t *testing.T) {
 	cases := map[float64]string{1: "1.0", 2.5: "2.5", 1e-05: "1e-05", 0.0001: "0.0001", 1e16: "1e+16",
-		1234567890123456: "1234567890123456.0", 0.1: "0.1", -0.0: "0.0", 1.5e300: "1.5e+300"}
+		1234567890123456: "1234567890123456.0", 0.1: "0.1", 0: "0.0", 1.5e300: "1.5e+300"}
 	for in, want := range cases {
 		if got := pyFloatRepr(in); got != want {
 			t.Errorf("pyFloatRepr(%v) = %s, want %s", in, got, want)

@@ -1,5 +1,6 @@
 output "index_name" {
-  value = var.index.enabled ? datadog_logs_index.azure[0].name : null
+  description = "Name of the Azure logs index (null when index.enabled = false)."
+  value       = var.index.enabled ? datadog_logs_index.azure[0].name : null
 }
 
 output "metric_names" {
@@ -8,15 +9,18 @@ output "metric_names" {
 }
 
 output "dashboard_url" {
-  value = var.dashboard.enabled ? datadog_dashboard_json.azure_logs[0].url : null
+  description = "URL of the Azure logs dashboard (null when dashboard.enabled = false)."
+  value       = var.dashboard.enabled ? datadog_dashboard_json.azure_logs[0].url : null
 }
 
 output "pipeline_id" {
-  value = var.pipeline.enabled ? datadog_logs_custom_pipeline.activity[0].id : null
+  description = "Id of the Activity Log processing pipeline (null when pipeline.enabled = false)."
+  value       = var.pipeline.enabled ? datadog_logs_custom_pipeline.activity[0].id : null
 }
 
 output "archive_id" {
-  value = var.archive.enabled ? datadog_logs_archive.azure[0].id : null
+  description = "Id of the Azure Storage log archive (null when archive.enabled = false)."
+  value       = var.archive.enabled ? datadog_logs_archive.azure[0].id : null
 }
 
 output "log_metric_queries" {

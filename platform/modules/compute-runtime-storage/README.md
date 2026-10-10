@@ -20,3 +20,6 @@ delete, SAS expiry policy (1 day, logged), optional private endpoints (`blob`, `
 | `containers`, `private_endpoints`, `private_dns_zone_ids`, `role_assignments` | see `main.tf` |
 
 Outputs: `id`, `name`, `endpoints`, `containers` (name + URL), `private_endpoint_ids`.
+
+Validation: `tools/validate/terraform.sh platform/modules/compute-runtime-storage` (fmt + validate); behaviour is
+asserted by the `platform-functions`, `platform-batch` and `platform-specialized-compute` tests.

@@ -1,9 +1,11 @@
 output "id" {
-  value = azurerm_container_app.this.id
+  description = "Container app resource id."
+  value       = azurerm_container_app.this.id
 }
 
 output "name" {
-  value = azurerm_container_app.this.name
+  description = "Container app name."
+  value       = azurerm_container_app.this.name
 }
 
 output "fqdn" {
@@ -12,11 +14,13 @@ output "fqdn" {
 }
 
 output "url" {
-  value = try("https://${azurerm_container_app.this.ingress[0].fqdn}", null)
+  description = "https://<ingress fqdn> (null without ingress)."
+  value       = try("https://${azurerm_container_app.this.ingress[0].fqdn}", null)
 }
 
 output "latest_revision_name" {
-  value = azurerm_container_app.this.latest_revision_name
+  description = "Name of the latest revision."
+  value       = azurerm_container_app.this.latest_revision_name
 }
 
 output "revision_suffix" {
@@ -25,11 +29,13 @@ output "revision_suffix" {
 }
 
 output "has_sidecar" {
-  value = local.has_sidecar
+  description = "True when the observability sidecar patch added containers."
+  value       = local.has_sidecar
 }
 
 output "scale_to_zero" {
-  value = var.scale.min_replicas == 0
+  description = "True when min_replicas = 0 (idle behaviour for monitoring)."
+  value       = var.scale.min_replicas == 0
 }
 
 output "container_names" {

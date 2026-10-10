@@ -8,7 +8,8 @@ terraform {
 }
 
 variable "name" {
-  type = string
+  description = "Cosmos DB account name (3-44 lowercase alphanumerics or hyphens)."
+  type        = string
   validation {
     condition     = can(regex("^[a-z0-9][a-z0-9-]{1,42}[a-z0-9]$", var.name))
     error_message = "Cosmos DB account names are 3-44 lowercase alphanumerics or hyphens."
@@ -16,16 +17,19 @@ variable "name" {
 }
 
 variable "resource_group_name" {
-  type = string
+  description = "Resource group of the account and its private endpoint."
+  type        = string
 }
 
 variable "location" {
-  type = string
+  description = "Azure region (single write region)."
+  type        = string
 }
 
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Tags (module.tags.tags of the calling root)."
+  type        = map(string)
+  default     = {}
 }
 
 variable "api" {
@@ -48,8 +52,9 @@ variable "capacity_mode" {
 }
 
 variable "free_tier_enabled" {
-  type    = bool
-  default = false
+  description = "Use the subscription free tier (provisioned capacity only; ignored for serverless)."
+  type        = bool
+  default     = false
 }
 
 variable "local_authentication_enabled" {
@@ -69,16 +74,19 @@ variable "backup_type" {
 }
 
 variable "mongo_server_version" {
-  type    = string
-  default = null
+  description = "MongoDB server version (api = mongo only)."
+  type        = string
+  default     = null
 }
 
 variable "consistency_level" {
-  type    = string
-  default = "Session"
+  description = "Default consistency level."
+  type        = string
+  default     = "Session"
 }
 
 variable "private_endpoint" {
+  description = "Private endpoint: enabled, subnet_id, private_dns_zone_id (foundation-network contract), optional name."
   type = object({
     enabled             = bool
     subnet_id           = optional(string)
@@ -177,19 +185,23 @@ module "private_endpoint" {
 }
 
 output "id" {
-  value = azurerm_cosmosdb_account.this.id
+  description = "Cosmos DB account id."
+  value       = azurerm_cosmosdb_account.this.id
 }
 
 output "name" {
-  value = azurerm_cosmosdb_account.this.name
+  description = "Cosmos DB account name."
+  value       = azurerm_cosmosdb_account.this.name
 }
 
 output "kind" {
-  value = local.kind
+  description = "Account kind (MongoDB or GlobalDocumentDB)."
+  value       = local.kind
 }
 
 output "capabilities" {
-  value = local.capabilities
+  description = "Enabled capabilities (API + serverless)."
+  value       = local.capabilities
 }
 
 output "document_endpoint" {
@@ -198,25 +210,31 @@ output "document_endpoint" {
 }
 
 output "api_endpoint" {
-  value = local.endpoints.endpoint
+  description = "API-specific endpoint (URL or host:port) for clients."
+  value       = local.endpoints.endpoint
 }
 
 output "api_host" {
-  value = local.endpoints.host
+  description = "API-specific host name."
+  value       = local.endpoints.host
 }
 
 output "api_port" {
-  value = local.endpoints.port
+  description = "API-specific port."
+  value       = local.endpoints.port
 }
 
 output "private_endpoint_group_id" {
-  value = local.pe_group_id
+  description = "Private Link group id of the API (Sql, MongoDB, Cassandra, Gremlin, Table)."
+  value       = local.pe_group_id
 }
 
 output "private_endpoint_id" {
-  value = try(module.private_endpoint[0].id, null)
+  description = "Private endpoint id (null when disabled)."
+  value       = try(module.private_endpoint[0].id, null)
 }
 
 output "private_ip_address" {
-  value = try(module.private_endpoint[0].private_ip_address, null)
+  description = "Private endpoint IP (null when disabled or unknown)."
+  value       = try(module.private_endpoint[0].private_ip_address, null)
 }

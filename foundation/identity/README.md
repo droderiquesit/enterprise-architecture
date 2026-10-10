@@ -28,13 +28,12 @@ References are not secrets (ADR-0001 section 14) and may appear in contracts, st
 
 | Key | DSV secrets it reads (foundation-secrets grants `read` on exactly these paths) |
 |---|---|
-| hello-bff, hello-orders-api, hello-catalog-api, hello-functions | `fault-token`, `datadog-api-key` (Fluent Bit sidecar on Container Apps, `sidecar_mode = datadog`) |
-| hello-inventory-api, hello-dbadapter | `fault-token`, `datadog-api-key` (ACA sidecar and the VM/VMSS Fluent Bit installer of obs-hosts, which reads the key with the host identity); hello-dbadapter also the adapter secrets |
+| hello-bff, hello-orders-api, hello-catalog-api, hello-functions | `fault-token`, `datadog-api-key` (dsv-fetch for Datadog serverless-init on Container Apps; the Fluent Bit sidecar only with `log_pipeline = fluent_bit_direct`) |
+| hello-inventory-api, hello-dbadapter | `fault-token`, `datadog-api-key` (Container Apps serverless-init as above; on VMs / VMSS the policy-enrolled Agent uses `obs-host-agent`, the workload identity is needed there only for the `fluent_bit_direct` fallback); hello-dbadapter also the adapter secrets |
 | hello-durable, hello-traffic | `fault-token` |
-| hello-partner-sim | `fault-token`, `datadog-api-key` (the ACI Fluent Bit sidecar's `dsv-fetch` init container reads it with this identity) |
-| hello-worker | `datadog-api-key` (VM/VMSS Fluent Bit installer, obs-hosts) |
+| hello-partner-sim | `fault-token`, `datadog-api-key` (the `dsv-fetch` init container of the ACI Datadog Agent sidecar reads it with this identity) |
+| hello-worker | `datadog-api-key` (only the `fluent_bit_direct` fallback host service; policy-enrolled VM/VMSS Agents use `obs-host-agent`) |
 | hello-jobs | `datadog-api-key` (Batch job preparation task installs Fluent Bit with the pool identity, ADR-0001 §13) |
-| hello-frontend | — |
 | obs-collector (Fluent Bit aggregator / OTel gateway) | `datadog-api-key`, `fluentbit-shared-key` (aggregator forward input), `eventhub-fluentbit-listen` (kafka input) |
 | obs-dbm (Datadog Agent DBM) | `datadog-api-key`, `dbm-<engine>-password` |
 | obs-host-agent (Datadog Agent on VMs / VMSS, attached by the obs-hosts Azure Policy to every host tagged `datadog:enabled`) | `datadog-api-key` only (the Agent's dsv-fetch secret backend; any process on an enrolled host can use the identity - accepted risk, ingest-only key) |

@@ -88,9 +88,9 @@ locals {
       sessionReplaySampleRate = 0
       trackUserInteractions   = local.rum.track_user_interactions
       defaultPrivacyLevel     = "mask-user-input"
-      allowedTracingUrls      = local.tracing_urls
-      # APM <-> RUM header injection for the first-party API origins (Datadog + W3C tracecontext)
-      propagatorTypes = ["datadog", "tracecontext"]
+      # First-party API origins only; the SPA injects W3C tracecontext headers there (ADR-0001 §10; config.ts
+      # tracingMatchers - it has no propagator setting, so none is rendered here)
+      allowedTracingUrls = local.tracing_urls
       # tag policy keys besides env/service/version: datadogRum.setGlobalContextProperty(k, v) for each entry
       globalContext = module.rum_tags.rum_global_context
     }

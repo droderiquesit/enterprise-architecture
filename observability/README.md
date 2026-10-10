@@ -92,8 +92,9 @@ Adopt it in this order:
 * `log_pipeline`: `observability_pipelines` (default) or `fluent_bit_direct` (2.x).
 * `logs.collector` per architecture (4.0.0): `agent` (AKS, VM, VMSS), `agent_sidecar` (ACI), `serverless_init`
   (Container Apps), `azure` (App Service, Functions, Logic Apps: diagnostic settings), `fluent_bit` (Batch).
-  `fluent_bit_direct` replaces every Agent-side collector by Fluent Bit. The 3.x key `logs.node_collector`
-  (`agent` | `fluent_bit`) is still honoured on aks / vm / vmss.
+  `fluent_bit_direct` replaces the Agent-side collectors on AKS, Container Apps and ACI by Fluent Bit; VM / VMSS
+  hosts keep the Agent (shipping to the Datadog intake), because 4.0.0 installs no Fluent Bit on hosts. The 3.x key
+  `logs.node_collector` (`agent` | `fluent_bit`) is still honoured on aks.
 * `logs.hosts`: files the host Agent tails (Linux, Windows) and Windows Event Log channels.
 * `apm.mode`: `datadog` (default), `otel` or `none`. Exceptions: Azure Functions and Durable Functions stay on
   OpenTelemetry, and Windows services fall back to OpenTelemetry.

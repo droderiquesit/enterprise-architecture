@@ -18,16 +18,10 @@ variable "foundation_network" {
   description = "foundation-network contract v1 (fields used here)."
   type = object({
     topology            = optional(string, "single-spoke")
-    hub_vnet_id         = optional(string)
     spoke_vnet_id       = string
     spoke_address_space = optional(list(string), ["10.41.0.0/16"])
     subnets = map(object({
-      id      = string
-      vnet_id = optional(string)
-    }))
-    egress = optional(object({
-      type                = string
-      firewall_private_ip = optional(string)
+      id = string
     }))
   })
 }

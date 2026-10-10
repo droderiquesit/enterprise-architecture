@@ -41,3 +41,6 @@ References:
 - https://docs.datadoghq.com/opentelemetry/setup/collector_exporter/
 - https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/ (direct OTLP intake: HTTP only, `dd-api-key` header on every client, so it is not used by default; it would put the API key in every app)
 - https://opentelemetry.io/docs/collector/configuration/
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/render.tftest.hcl`. The rendered configuration runs in `observability/tests/transport/test_otel_gateway.py` (docker).

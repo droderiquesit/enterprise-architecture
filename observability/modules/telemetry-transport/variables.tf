@@ -32,12 +32,14 @@ variable "resource_group" {
 }
 
 variable "location" {
-  type = string
+  description = "Azure region of the resources this module creates."
+  type        = string
 }
 
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Azure tags of the resources this module creates."
+  type        = map(string)
+  default     = {}
 }
 
 variable "datadog" {
@@ -370,7 +372,7 @@ variable "apm_gateway" {
     Datadog Agent APM gateway for managed runtimes (fleet policy apm.mode = datadog, managed_runtime_path =
     agent_gateway): Container Apps / ACI / App Service / Functions tracers send to http://<fqdn>:8126 (VNet-internal);
     the Agent resolves its API key from Delinea DSV (ENC[dsv://...] + dsv-fetch secret backend), so no workload holds
-    a key. hosting = none: give external_url (an Agent you run).
+    a key. hosting = none: give external_url (an Agent you run), or leave it null when no workload uses the gateway.
   EOT
   type = object({
     hosting      = optional(string, "container_app")
@@ -383,7 +385,7 @@ variable "apm_gateway" {
   })
   default = {}
   validation {
-    condition     = contains(["container_app", "none"], var.apm_gateway.hosting) && (var.apm_gateway.hosting != "none" || var.apm_gateway.external_url != null || true)
+    condition     = contains(["container_app", "none"], var.apm_gateway.hosting)
     error_message = "apm_gateway.hosting must be container_app or none."
   }
 }

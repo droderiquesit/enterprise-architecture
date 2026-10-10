@@ -19,11 +19,13 @@ output "app_settings" {
 }
 
 output "log_route" {
-  value = module.instrumentation.log_route
+  description = "Application-log route of this architecture from the instrumentation hook: daemonset | host | sidecar | eventhub."
+  value       = module.instrumentation.log_route
 }
 
 output "otlp_target" {
-  value = module.instrumentation.otlp_target
+  description = "OTLP target: agent (node/host Datadog Agent OTLP receiver) or gateway (OTel gateway)."
+  value       = module.instrumentation.otlp_target
 }
 
 output "container_app_patch" {
@@ -37,11 +39,13 @@ output "aci_sidecar" {
 }
 
 output "k8s_patch_object" {
-  value = module.instrumentation.k8s_patch_object
+  description = "Kubernetes pod-template patch (labels, annotations, env) from the instrumentation hook; core-aks reads its labels."
+  value       = module.instrumentation.k8s_patch_object
 }
 
 output "datadog_tags" {
-  value = module.instrumentation.datadog_tags
+  description = "Comma separated k:v list of every policy tag (Fluent Bit ddtags format)."
+  value       = module.instrumentation.datadog_tags
 }
 
 output "tags" {

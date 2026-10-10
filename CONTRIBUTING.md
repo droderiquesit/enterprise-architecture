@@ -25,7 +25,8 @@ dev, test/prod receive the same build by promotion.
 
 ## Pull requests
 
-* Link a work item; resolve every comment.
+* Link a work item; resolve every comment, including GitHub Copilot code review threads (requested automatically,
+  advisory; [automated PR review](docs/guides/automated-pr-review.md)).
 * One approval plus the automated reviewer's required status `eh-review/policy`. Low-risk allowlisted changes can
   complete with the bot's approval; everything else needs a human, and protected areas (reviewer policy,
   pipelines/registry, identity/secrets, network, prod config) need their owner group
@@ -38,7 +39,9 @@ dev, test/prod receive the same build by promotion.
 * Provider pins exactly as [versions.yaml](versions.yaml) (`tools/validate/versions.py`); `terraform fmt`.
 * Generated files are regenerated, never hand-edited or hand-merged: `pipelines/generated/*`
   (`python3 tools/pipeline/generate.py`), `.github/CODEOWNERS` (`python3 tools/ado/codeowners.py`), hashed
-  requirement files (`uv pip compile`, see each file's header).
+  requirement files (`uv pip compile`, see each file's header), generated docs (`python3 tools/docs/generate.py`,
+  `python3 tools/catalog/render_coverage.py`) and diagram SVGs (`tools/docs/render_diagrams.sh`).
+* Documentation: start from the [docs index](docs/README.md); links are checked by `python3 tools/docs/check_links.py`.
 * No secrets anywhere: keys live in Delinea DSV (`dsv://` references only).
 * New test suites: register them in [tools/ci/suites.yaml](tools/ci/suites.yaml) (`inputs` decide when they run);
   registry components get a suite automatically.

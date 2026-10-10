@@ -35,7 +35,7 @@ variable "foundation_network" {
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract v1 (only the fields this root uses)."
+  description = "foundation-identity contract v2 (only the fields this root uses)."
   type = object({
     identities = map(object({
       id           = string
@@ -110,7 +110,7 @@ variable "settings" {
       enabled            = optional(bool, true)
       default_controller = optional(string, "Internal") # AnnotationControlled | External | Internal | None
       dns_zone_ids       = optional(list(string), [])
-    }), {}) # Secrets Store CSI driver with rotation
+    }), {})
     # Workload identity federation: identity key => Kubernetes namespace/service account.
     workload_identities = optional(map(object({
       namespace       = string

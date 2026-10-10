@@ -1,18 +1,22 @@
 # obs-diagnostics publishes no contract (no consumers); outputs are evidence for the deployment record.
 output "app_log_settings" {
-  value = module.diagnostics.app_log_settings
+  description = "Application-log diagnostic settings by resource."
+  value       = module.diagnostics.app_log_settings
 }
 
 output "platform_log_settings" {
-  value = module.diagnostics.platform_log_settings
+  description = "Platform-log diagnostic settings by resource."
+  value       = module.diagnostics.platform_log_settings
 }
 
 output "excluded_app_log_resources" {
-  value = module.diagnostics.excluded_app_log_resources
+  description = "Resources whose application logs are collected by another path (no diagnostic setting, no double shipping)."
+  value       = module.diagnostics.excluded_app_log_resources
 }
 
 output "unsupported_resources" {
-  value = module.diagnostics.unsupported_resources
+  description = "Discovered resources of types without supported diagnostic categories."
+  value       = module.diagnostics.unsupported_resources
 }
 
 output "discovered_targets" {
@@ -36,7 +40,8 @@ output "activity_log_settings" {
 }
 
 output "entra_setting_id" {
-  value = module.azure_logs.entra_setting_id
+  description = "Id of the Entra ID diagnostic setting (null when settings.entra is off)."
+  value       = module.azure_logs.entra_setting_id
 }
 
 output "control_plane_log_forwarding" {

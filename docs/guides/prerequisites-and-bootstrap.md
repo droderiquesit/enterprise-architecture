@@ -1,6 +1,6 @@
 # Prerequisites and bootstrap
 
-What must exist before the universal pipeline can run, and how the lab gets from "empty subscription" to "pipeline
+What must exist before the two pipelines (`lab-platform`, `lab-applications`) can run, and how the lab gets from "empty subscription" to "pipeline
 on private agents". The authoritative procedure is [`bootstrap/README.md`](../../bootstrap/README.md); this page
 collects the prerequisites from every layer. None of these steps has been executed from this repository.
 
@@ -104,8 +104,9 @@ All keys and secrets live in DSV (ADR-0001 section 14); Azure Key Vault is not u
    `azure-eh`, external id = the `deploy-agent` identity's resource id) with DSV administration rights. From then on the
    pipeline's `foundation-secrets` stage (`tools/secrets/dsv_apply.py`) creates every other user and permission.
 4. Seed the operator-owned values (`foundation/identity/secrets.yaml`, `source: operator`), then
-   `python3 tools/secrets/check.py --env <env>` (names only). Generated values (`eventhub-fluentbit-listen`) are
-   written by the pipeline after `obs-telemetry-transport` applies.
+   `python3 tools/secrets/check.py --env <env>` (names only). Generated values (`eventhub-fluentbit-listen`, the Event
+   Hubs listen connection string read by the Observability Pipelines Worker or, in `fluent_bit_direct` mode, the Fluent
+   Bit aggregator) are written by the pipeline after `obs-telemetry-transport` applies.
 5. Egress to `<tenant>.secretsvaultcloud.<tld>:443` from every subnet with readers (Azure Firewall default allow-list
    includes `*.secretsvaultcloud.*`).
 

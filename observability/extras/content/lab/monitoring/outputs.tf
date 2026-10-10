@@ -5,9 +5,11 @@ output "summary" {
 }
 
 output "dashboard_urls" {
-  value = module.onboarding.dashboard_urls
+  description = "URLs of the service and overview dashboards."
+  value       = module.onboarding.dashboard_urls
 }
 
 output "synthetics_skipped" {
-  value = module.onboarding.synthetics_skipped
+  description = "Synthetic tests skipped (with the reason) instead of created."
+  value       = module.onboarding.synthetics_skipped
 }

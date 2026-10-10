@@ -32,7 +32,8 @@ Shared code modules (not components): `modules/compute-runtime-storage` (hardene
 ## Conventions
 
 - Layout per ADR §12: `versions.tf`, `backend.tf` (partial `azurerm` backend), `providers.tf`
-  (`storage_use_azuread = true`), `variables.tf` (`environment`, upstream contracts with only used fields,
+  (`storage_use_azuread = true`, `resource_provider_registrations = "none"` / azapi `skip_provider_registration = true`:
+  the Reader-only plan identity cannot register providers; `bootstrap/scripts/bootstrap.sh` does), `variables.tf` (`environment`, upstream contracts with only used fields,
   typed `settings` with `optional()` defaults and validations), `locals.tf` (naming + tags), `main.tf`,
   `outputs.tf` (`contract`), `tests/*.tftest.hcl` (mock providers, `command = plan`).
 - Upstream contracts arrive as `foundation_network`, `foundation_identity`, `platform_shared` variables.
@@ -51,9 +52,8 @@ Shared code modules (not components): `modules/compute-runtime-storage` (hardene
 ## Validation
 
 ```bash
-for r in shared messaging compute/{aks,containerapps,appservice,functions,vm,vmss,batch,servicefabric,aro,specialized}; do
-  (cd platform/$r && terraform fmt -check -recursive && terraform init -backend=false && terraform validate && terraform test)
-done
+python3 tools/validate/all_terraform.py --workers 4 --only platform-shared,platform-messaging,platform-aks,platform-containerapps,platform-appservice,platform-functions,platform-vm,platform-vmss,platform-batch,platform-servicefabric,platform-aro,platform-specialized-compute
+# or one root: tools/validate/terraform.sh platform/compute/aks
 checkov -d platform/shared -d platform/messaging -d platform/compute --framework terraform
 ```
 

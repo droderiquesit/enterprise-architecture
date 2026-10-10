@@ -28,8 +28,8 @@ component's apply job; do not edit them by hand.
 | Consumer mechanism | When the new value is used |
 |---|---|
 | Application code (`hello_common` / `Hello.Common` resolve `dsv://` env vars at start-up, cache `DSV_CACHE_TTL_SECONDS`, default 900 s) | next refresh, or restart the revision / pod / app (`az containerapp revision restart`, `kubectl rollout restart`, `az webapp restart`) |
-| Containers without our code (Fluent Bit, OTel gateway): `dsv-fetch init` init container writes in-memory files | only on container restart (new ACA revision / pod restart / ACI restart) |
-| Datadog Agent `secret_backend_command` (`dsv-fetch agent-backend`, `ENC[dsv://...]`) on VM/VMSS/AKS | Agent restart (or the Agent's secret refresh interval when configured) |
+| Containers without our code that take a dotenv / file (Observability Pipelines Worker, serverless-init sidecar, OTel gateway, Fluent Bit in `fluent_bit_direct` mode incl. Batch nodes): `dsv-fetch init` writes in-memory files at start | on container restart (new ACA revision / pod restart / ACI restart); refresher containers (`init --refresh-seconds 3600`) pick it up within the hour, the process still needs a restart if it reads the file only at start |
+| Datadog Agent `secret_backend_command` (`dsv-fetch agent-backend`, `ENC[dsv://...]`): AKS node Agent, Cluster Agent, cluster-checks runners, VM/VMSS host Agents (Linux and Windows), ACI Agent sidecar and DBM Agent, APM gateway | Agent restart (or the Agent's secret refresh interval when configured) |
 | Pipelines (`tools/secrets/fetch.py` per step) | next run |
 | Terraform inputs that land in state (SQL VM, DocumentDB, Cassandra MI, App Gateway PFX, ARO pull secret) | next apply of the owning root (the plan shows the sensitive change) |
 
@@ -37,12 +37,12 @@ component's apply job; do not edit them by hand.
 
 | Secret | Source | Rotation steps |
 |---|---|---|
-| `datadog-api-key` | Datadog org settings | create a new key in Datadog -> `dsv secret update` -> restart agents/collectors (obs-kubernetes pods, VM agents, Fluent Bit sidecars, aggregator, OTel gateway, ACI partner-sim) -> confirm the telemetry canary and `pipeline.*` monitors are green -> revoke the old key in Datadog |
+| `datadog-api-key` | Datadog org settings | create a new key in Datadog -> `dsv secret update` -> restart agents/collectors (obs-kubernetes pods, VM / VMSS host Agents, Container Apps revisions with the serverless-init sidecar, ACI container groups with the Agent sidecar (partner-sim, DBM Agent), Observability Pipelines Worker, APM gateway, OTel gateway; Fluent Bit only with `fluent_bit_direct`, incl. Batch nodes) -> confirm logs and traces still arrive (Worker status in Datadog Observability Pipelines; the canary and `pipeline.*` monitors when used) -> revoke the old key in Datadog |
 | `datadog-app-key` | Datadog org settings | pipeline-only (Datadog provider, telemetry verifier, DORA events): update, run a `drift`-mode pipeline to confirm, revoke the old key |
 | `datadog-client-token` | Datadog RUM application | browser-facing by design; update, redeploy the frontend (`deploy-frontend` re-renders `config.json`) |
 | `fault-token` | generated | `dsv secret update` with a random value, then restart consumers (all HTTP services + hello-traffic) |
-| `fluentbit-shared-key` | generated | update, then restart aggregator and forwarders together (a mismatch drops forwarded logs) |
-| `eventhub-fluentbit-listen` | **generated** by `obs-telemetry-transport` | `az eventhubs namespace authorization-rule keys renew` for the listen rule, re-run `obs-telemetry-transport` (its apply job runs `publish.py`, which updates the DSV value), restart the aggregator revision |
+| `fluentbit-shared-key` | generated | `fluent_bit_direct` with `sidecar_mode = forward` only: update, then restart aggregator and forwarders together (a mismatch drops forwarded logs) |
+| `eventhub-fluentbit-listen` | **generated** by `obs-telemetry-transport` | `az eventhubs namespace authorization-rule keys renew` for the listen rule, re-run `obs-telemetry-transport` (its apply job runs `publish.py`, which updates the DSV value), restart the consumer revision (Observability Pipelines Worker; Fluent Bit aggregator with `fluent_bit_direct`) |
 | `dbm-mysql-password` | generated | update in DSV, `ALTER USER 'datadog'@'%' IDENTIFIED BY '<new>'` (grant script `platform/data/mysql/scripts/grant-db-users.sql`), restart the DBM agent |
 | `dbm-sqlvm-password` | generated | update in DSV, `ALTER LOGIN datadog WITH PASSWORD = '<new>'` on the SQL VM, restart the agent |
 | `sqlvm-dbadapter-password` | generated (platform-db-sqlvm input) | update in DSV, re-run `platform-db-sqlvm` (the run command re-applies the login password), restart the adapter |

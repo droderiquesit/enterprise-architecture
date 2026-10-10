@@ -46,3 +46,6 @@ Destroy removes the container group and its resource group. Database users and g
 * Databases are reached through VNet injection or private endpoints. That needs private DNS resolution from
   the `aci` subnet (spoke VNet, linked private DNS zones).
 * Egress is required to the Datadog intake and to the DSV tenant.
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-dbm` (fmt, validate, test).

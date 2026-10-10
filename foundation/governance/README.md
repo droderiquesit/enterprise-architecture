@@ -26,7 +26,7 @@
 
 | Assignment | Definition | Default mode |
 |---|---|---|
-| `eh-<env>-rg-tag-{env,owner,expires_on}` | Require a tag on resource groups `96670d01-0a4d-4649-9c89-2d3abc0a5025` | **audit** (`enforce = false` → DoNotEnforce) |
+| `eh-<env>-rg-tag-{env,owner,expires-on}` (`_` → `-`) | Require a tag on resource groups `96670d01-0a4d-4649-9c89-2d3abc0a5025` | **audit** (`enforce = false` → DoNotEnforce) |
 | `eh-<env>-allowed-locations` | Allowed locations `e56962a6-4747-49cd-b67b-bf8b01975c4c` (excludes RGs and `global`) | **enforced**, `[environment.location]` |
 | `eh-<env>-nic-no-public-ip` | Network interfaces should not have public IPs `83a86a26-fd1f-447c-b59d-e51f44264114` | **audit**; `nic_public_ip_allowlisted_rg_ids` added to `not_scopes` |
 

@@ -169,6 +169,10 @@ run "everything_on" {
     error_message = "GPU VM size."
   }
   assert {
+    condition     = alltrue([for v in azurerm_linux_virtual_machine.this : v.tags["datadog:enabled"] == "true"])
+    error_message = "Datadog enrolment (obs-hosts policy): specialized VMs carry the datadog:enabled tag."
+  }
+  assert {
     condition     = alltrue([for n in azurerm_network_interface.this : n.ip_configuration[0].public_ip_address_id == null])
     error_message = "no public IPs on specialized VMs."
   }

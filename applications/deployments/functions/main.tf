@@ -173,7 +173,7 @@ locals {
   aca_enabled = contains(keys(module.env), "aca")
   aca_env     = local.aca_enabled ? module.env["aca"] : null
   aca_patch   = local.aca_enabled ? local.aca_env.container_app_patch : null
-  # ACA secrets: only the (non-secret) Fluent Bit config files; secret settings are dsv:// env values (ADR-0001 §14)
+  # ACA secrets: only non-secret sidecar config files (Fluent Bit fallback); secret settings are dsv:// env values (ADR-0001 §14)
   aca_secrets = local.aca_enabled ? [for s in local.aca_patch.secrets : { name = s.name, value = s.value }] : []
   aca_init = local.aca_enabled ? [for c in local.aca_patch.init_containers : {
     name         = c.name
@@ -198,7 +198,7 @@ resource "azapi_resource" "quote" {
   name      = "${local.prefix}-ca-func-quote-${local.env_name}"
   parent_id = azurerm_resource_group.aca[0].id
   location  = local.location
-  tags      = merge(local.tags, { service = local.svc, version = local.artifact_version[local.artifact] })
+  tags      = merge(local.tags, { service = local.svc, version = local.artifact_version[local.artifact] }, local.aca_env.azure_tags)
 
   identity {
     type         = "UserAssigned"
@@ -222,7 +222,8 @@ resource "azapi_resource" "quote" {
         secrets    = local.aca_secrets
       }
       template = {
-        # dsv-fetch writes the Fluent Bit sidecar's key (Consumption profile: init containers have managed identity)
+        # dsv-fetch-install copies the binary for the serverless-init sidecar; with fluent_bit_direct (fallback) a second
+        # init container writes the Fluent Bit key (Consumption profile: init containers have managed identity)
         initContainers = local.aca_init
         containers = concat(
           [{

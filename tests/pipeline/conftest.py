@@ -1,3 +1,5 @@
+"""Pipeline tests: repository root + changeset fixture helpers on sys.path, CI sharding hook."""
+
 import sys
 from pathlib import Path
 

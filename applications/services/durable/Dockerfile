@@ -6,7 +6,7 @@
 #     --build-arg VERSION=$VERSION --build-arg GIT_COMMIT=$GIT_COMMIT --build-arg BUILD_TIME=$BUILD_TIME applications
 # Behind a TLS-intercepting proxy add: --secret id=ca_bundle,src=/path/to/ca-bundle.crt
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 AS build
 ARG VERSION=0.1.0-local
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown
@@ -29,8 +29,8 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     dotnet publish ../services/durable/src/Hello.Durable/Hello.Durable.csproj -c Release -o /home/site/wwwroot \
       -p:Version=$VERSION -p:GIT_COMMIT=$GIT_COMMIT -p:BUILD_TIME=$BUILD_TIME
 
-# Tag verified on mcr.microsoft.com (v2/azure-functions/dotnet-isolated/tags/list) on 2026-10-09.
-FROM mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated10.0 AS runtime
+# Tag verified on mcr.microsoft.com (v2/azure-functions/dotnet-isolated/tags/list) on 2026-10-09; digest pinned 2026-10-10.
+FROM mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated10.0@sha256:6fc6608c7a882e89d973478adfff2b133f470be0effea41f691c4ebd87932f14 AS runtime
 ARG VERSION=0.1.0-local
 ARG GIT_COMMIT=unknown
 LABEL org.opencontainers.image.title="hello-durable" \

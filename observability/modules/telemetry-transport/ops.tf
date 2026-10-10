@@ -1,4 +1,4 @@
-# Fleet collection tier of the transport (package 3.0.0):
+# Fleet collection tier of the transport (package 3.0.0; dsv-fetch static binary since 4.0.0):
 #  * Datadog Observability Pipelines (log_pipeline = observability_pipelines, default): pipeline definition
 #    (modules/observability-pipeline) + the Worker as a Container App with INTERNAL ingress (24224 fluent source for
 #    Fluent Bit edge collectors, 8282 Datadog Agent source, 8686 API/health). Event Hubs are read by the Worker's
@@ -64,8 +64,9 @@ locals {
   # ------------------------------------------------------------------ APM gateway (Datadog Agent)
   apm_hosted = var.apm_gateway.hosting == "container_app"
   apm_name   = coalesce(var.names.apm_gateway, substr("${var.name_prefix}-apm", 0, 32))
-  apm_image  = coalesce(var.apm_gateway.image, "gcr.io/datadoghq/agent:${try(module.fleet.agent.version, "7.84.2")}")
-  apm_url    = local.apm_hosted ? (try(azapi_resource.apm_gateway[0].output.fqdn, null) == null ? null : "http://${azapi_resource.apm_gateway[0].output.fqdn}:8126") : var.apm_gateway.external_url
+  # single Agent pin of the fleet policy (agent.image:agent.version); no built-in fallback (precondition below)
+  apm_image = try(coalesce(var.apm_gateway.image, module.fleet.agent_image), null)
+  apm_url   = local.apm_hosted ? (try(azapi_resource.apm_gateway[0].output.fqdn, null) == null ? null : "http://${azapi_resource.apm_gateway[0].output.fqdn}:8126") : var.apm_gateway.external_url
   apm_dsv_config = jsonencode(merge(
     var.secrets.tenant == null ? {} : { DSV_TENANT = var.secrets.tenant },
     var.secrets.tld == null ? {} : { DSV_TLD = var.secrets.tld },
@@ -269,6 +270,8 @@ resource "azapi_resource" "apm_gateway" {
           exposedPort = 8126
           traffic     = [{ latestRevision = true, weight = 100 }]
         }
+        # the dsv-fetch-install init container pulls the img-dsv-fetch image from the private registry
+        registries = local.registries
         # non-secret files mounted as a Secret volume (ACA has no config-file volume type)
         secrets = [
           { name = "agent-config", value = local.apm_datadog_yaml },
@@ -321,6 +324,10 @@ resource "azapi_resource" "apm_gateway" {
     precondition {
       condition     = var.secrets.fetch_image != null
       error_message = "The APM gateway Agent's secret backend is the dsv-fetch binary from its image: set secrets.fetch_image."
+    }
+    precondition {
+      condition     = local.apm_image != null
+      error_message = "The fleet policy has no Datadog Agent pin: set agent.image + agent.version (or apm_gateway.image)."
     }
   }
 }

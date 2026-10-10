@@ -25,29 +25,36 @@ output "resources" {
 }
 
 output "monitor_ids" {
-  value = module.monitors.ids
+  description = "Monitor ids by monitor key."
+  value       = module.monitors.ids
 }
 
 output "slo_ids" {
-  value = module.slos.ids
+  description = "SLO ids by SLO key."
+  value       = module.slos.ids
 }
 
 output "burn_rate_monitor_ids" {
-  value = module.slos.burn_rate_monitor_ids
+  description = "Burn-rate monitor ids by SLO key."
+  value       = module.slos.burn_rate_monitor_ids
 }
 
 output "synthetic_test_ids" {
-  value = merge(module.synthetics.api_test_ids, module.synthetics.browser_test_ids)
+  description = "API and browser synthetic test ids by test key."
+  value       = merge(module.synthetics.api_test_ids, module.synthetics.browser_test_ids)
 }
 
 output "synthetics_skipped" {
-  value = module.synthetics.skipped
+  description = "Synthetic tests skipped (with the reason) instead of created."
+  value       = module.synthetics.skipped
 }
 
 output "dashboard_urls" {
-  value = merge(module.dashboards.service_dashboard_urls, { overview = module.dashboards.overview_url })
+  description = "Service dashboard URLs by service, plus the overview dashboard (key overview)."
+  value       = merge(module.dashboards.service_dashboard_urls, { overview = module.dashboards.overview_url })
 }
 
 output "catalog_entity_ids" {
-  value = module.catalog.entity_ids
+  description = "Software Catalog entity ids by service."
+  value       = module.catalog.entity_ids
 }

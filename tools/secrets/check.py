@@ -27,15 +27,17 @@ from tools.secrets.dsvlib import DsvClient, DsvError, base_url_from, load_env_se
 
 def check(client: DsvClient, base_path: str, names, catalogue, strict: bool = False):
     rows, errors, warnings = [], 0, 0
-    listed = None
+    listed, searched = None, False   # listed stays None when the search itself failed (=> unverifiable)
     for name in names:
         path = f"{base_path}/{name}"
         present, status = client.exists(path)
         if present is None and status == 403:
-            if listed is None:
+            if not searched:
+                searched = True
                 st, resp = client.request("GET", "secrets", query={"searchTerm": base_path})
-                listed = {d.get("path", "").strip("/") for d in (resp.get("data") or [])} if st == 200 else set()
-            present = path in listed if listed else None
+                if st == 200:
+                    listed = {d.get("path", "").strip("/") for d in (resp.get("data") or [])}
+            present = (path in listed) if listed is not None else None
         meta = catalogue.get(name, {})
         generated = meta.get("source") == "generated"
         if present:

@@ -60,7 +60,7 @@ resource "azurerm_network_interface" "this" {
 
 resource "azurerm_windows_virtual_machine" "this" {
   #checkov:skip=CKV_AZURE_151:encryption at host needs the EncryptionAtHost subscription feature; disks use platform-managed SSE (README)
-  #checkov:skip=CKV_AZURE_50:VM extensions (Datadog Agent, Fluent Bit) are owned by observability (ADR-0001 §3 rule 3)
+  #checkov:skip=CKV_AZURE_50:the SQL IaaS extension and the Datadog Agent VM Application (obs-hosts policy) are installed by the VM agent
   name                       = local.vm_name
   computer_name              = local.computer_name
   resource_group_name        = azurerm_resource_group.this.name
@@ -74,7 +74,7 @@ resource "azurerm_windows_virtual_machine" "this" {
   secure_boot_enabled        = true
   vtpm_enabled               = true
   encryption_at_host_enabled = false
-  allow_extension_operations = true # observability installs the Datadog Agent / Fluent Bit extensions
+  allow_extension_operations = true # SQL IaaS extension + Datadog Agent VM Application (obs-hosts policy)
   provision_vm_agent         = true
   tags                       = merge(module.tags.tags, { service = "hello-dbadapter" }, local.dd_tags)
 
@@ -90,8 +90,9 @@ resource "azurerm_windows_virtual_machine" "this" {
     version   = var.settings.image.version
   }
 
-  # System identity for the SQL IaaS extension; the user-assigned obs-dbm identity lets the host's Datadog Agent and
-  # Fluent Bit read their secrets from Delinea DSV (DSV maps users by user-assigned identity resource id, ADR §14).
+  # System identity for the SQL IaaS extension; user-assigned: the obs-dbm identity (host DBM check secret
+  # dbm-sqlvm-password) and the obs-host-agent identity (Agent API key), both read from Delinea DSV (DSV maps users by
+  # user-assigned identity resource id, ADR §14).
   identity {
     type         = length(local.user_identity_ids) == 0 ? "SystemAssigned" : "SystemAssigned, UserAssigned"
     identity_ids = length(local.user_identity_ids) == 0 ? null : local.user_identity_ids

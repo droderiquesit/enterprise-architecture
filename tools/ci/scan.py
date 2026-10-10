@@ -1,11 +1,11 @@
 """Security scanners in parallel (open source), on the changed scope for PRs and everything on full runs.
 
-    python3 -m tools.ci scan --out DIR [--selection sel.json] [--full] [--fail-on-findings]
+    python3 -m tools.ci scan --out DIR [--selection sel.json] [--full] [--soft-fail]
 
   gitleaks   secrets: PR = commits of the PR range (git log base..head); full = working tree
   trivy      fs scan (vulnerable lock-file dependencies, Dockerfile/IaC misconfiguration, secrets): PR = the changed
-             top-level component directories; full = repository
-  checkov    Terraform static analysis: PR = changed Terraform directories; full = repository (.checkov.yaml)
+             top-level component directories (more than MAX_TRIVY_TARGETS => the whole repository); full = repository
+  checkov    Terraform static analysis: PR = changed Terraform directories; full = repository (.checkov.yaml when present)
   hadolint   Dockerfiles (error threshold): PR = changed Dockerfiles; full = all
   shellcheck shell scripts (errors): PR = changed *.sh; full = pipeline + deployment scripts
 Each scanner is an independent background process (SARIF/JSON into DIR); exit codes are aggregated, a missing tool
@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 SKIP = ("node_modules", ".terraform", ".artifacts", ".ci-cache", ".git")
+MAX_TRIVY_TARGETS = 20   # one trivy process per target; a wider change scans the repository once instead
 
 
 def _changed(selection: Optional[dict]) -> Optional[List[str]]:
@@ -51,12 +52,14 @@ def plan(repo: Path, out: Path, selection: Optional[dict], full: bool, fail: boo
     else:
         targets = sorted({"/".join(p.split("/")[:3]) if p.count("/") >= 2 else p for p in changed
                           if (repo / p).exists() and not any(s in p.split("/") for s in SKIP)})
+        if len(targets) > MAX_TRIVY_TARGETS:
+            targets = ["."]
     trivy_base = ["trivy", "fs", "--quiet", "--scanners", "vuln,misconfig,secret", "--severity", "HIGH,CRITICAL",
                   "--ignore-unfixed", "--skip-dirs", "**/node_modules", "--skip-dirs", "**/.terraform", "--exit-code", ex]
     if not shutil.which("trivy"):
         cmds.append(("trivy", None))
     elif targets:
-        for i, t in enumerate(targets[:20]):
+        for i, t in enumerate(targets):
             cmds.append((f"trivy:{t}", trivy_base + ["--format", "sarif", "--output", str(out / f"trivy-{i}.sarif"), t]))
     tf_dirs = None if changed is None else sorted({posixpath.dirname(p) or "." for p in changed if p.endswith(".tf")})
     if not shutil.which("checkov"):

@@ -26,12 +26,11 @@ variable "foundation_network" {
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract v1 (fields used here)."
+  description = "foundation-identity contract v2 (fields used here): identities[\"deploy-agent\"]."
   type = object({
     identities = map(object({
-      id           = string
-      client_id    = string
-      principal_id = string
+      id        = string
+      client_id = string
     }))
   })
 }

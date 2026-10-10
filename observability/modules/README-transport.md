@@ -97,9 +97,8 @@ The Worker (`datadog/observability-pipelines-worker:2.22.0`, pinned by the fleet
 **On AKS** (`modules/kubernetes` `op_worker`, chart `observability-pipelines-worker` 2.22.0):
 
 * A StatefulSet with one PVC per replica, an HPA and a PDB.
-* The API key from a dsv-k8s-synced Secret.
-* Kafka SASL from `op_worker.secret_env`. The chart renders `valueFrom.secretKeyRef`; checked with `helm template`
-  of chart 2.22.0.
+* The API key and Kafka SASL password (`op_worker.secret_env`, DSV references) from a dsv-fetch init container that
+  writes an in-memory dotenv file; the start command exports it (no Kubernetes Secret holds a value).
 
 [kubernetes.tftest `op_worker_on_aks`]
 
@@ -126,7 +125,7 @@ without their DSV-resolved values. No hop falls back to a key in env or config.
 
 | Rule | Where enforced |
 |---|---|
-| One application-log collector per line (fleet policy `logs.collector` per architecture): when the Agent / sidecar / serverless-init collects, no Fluent Bit runs (DaemonSet release count 0; no Fluent Bit sidecar or host service - hosts never get Fluent Bit in 4.0.0); with `fluent_bit_direct` the Agent-side log collection is off | `modules/kubernetes` [`fleet_default_agent_logs_to_op_ssi_profiling`, `op_with_fluent_bit_node_collector`], `modules/host-agent-package` [package.tftest `fluent_bit_direct_skips_worker`], `modules/instrumentation` [instrumentation.tftest] |
+| One application-log collector per line (fleet policy `logs.collector` per architecture): when the Agent / sidecar / serverless-init collects, no Fluent Bit runs (DaemonSet release count 0; no Fluent Bit sidecar or host service - hosts never get Fluent Bit in 4.0.0); with `fluent_bit_direct` the Agent-side log collection is off on AKS / ACA / ACI (hosts keep the Agent, shipping to the intake) | `modules/kubernetes` [`fleet_default_agent_logs_to_op_ssi_profiling`, `op_with_fluent_bit_node_collector`], `modules/host-agent-package` [package.tftest `fluent_bit_direct_skips_worker`], `modules/instrumentation` [instrumentation.tftest] |
 | Apps never export OTLP logs (`OTEL_LOGS_EXPORTER=none` in otel mode; no OTel variables at all in datadog mode) | `modules/instrumentation` [`datadog_mode_aks_ssi`] |
 | One tracer per process: datadog mode emits `TELEMETRY_SDK=datadog` and `DD_TRACE_OTEL_ENABLED=true` (manual OTel-API / Activity spans go into the Datadog tracer); never `OTEL_EXPORTER_OTLP_*`, `OTEL_SDK_DISABLED` or `OTEL_RESOURCE_ATTRIBUTES` (Datadog maps that to `DD_TAGS`, which would duplicate tags) | `modules/fleet-policy`, `modules/instrumentation` |
 | Diagnostic settings export app-log categories only for the `eventhub` route; platform categories are an allow list per type | `modules/diagnostic-settings` [diagnostics.tftest] |

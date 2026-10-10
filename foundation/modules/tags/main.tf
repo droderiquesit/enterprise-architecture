@@ -4,6 +4,7 @@ terraform {
 }
 
 variable "environment" {
+  description = "Environment globals (subset of ADR-0001 section 6 var.environment); extra attributes are ignored."
   type = object({
     name        = string
     location    = string
@@ -16,11 +17,13 @@ variable "environment" {
 }
 
 variable "component" {
-  type = string
+  description = "Registry component id (catalog/components.yaml), e.g. \"foundation-network\"."
+  type        = string
 }
 
 variable "layer" {
-  type = string
+  description = "Owning layer: bootstrap, foundation, platform, applications or observability."
+  type        = string
   validation {
     condition     = contains(["bootstrap", "foundation", "platform", "applications", "observability"], var.layer)
     error_message = "layer must be one of bootstrap, foundation, platform, applications, observability."
@@ -28,28 +31,33 @@ variable "layer" {
 }
 
 variable "service" {
-  type    = string
-  default = "platform"
+  description = "Datadog service tag; \"platform\" for infrastructure."
+  type        = string
+  default     = "platform"
 }
 
 variable "version_tag" {
-  type    = string
-  default = "n/a"
+  description = "Datadog version tag; \"n/a\" for infrastructure."
+  type        = string
+  default     = "n/a"
 }
 
 variable "domain" {
-  type    = string
-  default = "shared"
+  description = "Business/technical domain tag, e.g. network, identity, data."
+  type        = string
+  default     = "shared"
 }
 
 variable "tier" {
-  type    = string
-  default = "infrastructure"
+  description = "Tier tag, e.g. infrastructure, frontend, backend, data."
+  type        = string
+  default     = "infrastructure"
 }
 
 variable "extra" {
-  type    = map(string)
-  default = {}
+  description = "Additional tags merged last (override the required set)."
+  type        = map(string)
+  default     = {}
 }
 
 locals {
@@ -74,5 +82,6 @@ locals {
 }
 
 output "tags" {
-  value = local.tags
+  description = "Required ADR-0001 section 7 tag set merged with environment.tags and extra."
+  value       = local.tags
 }

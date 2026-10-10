@@ -1,7 +1,9 @@
-%% Telemetry paths (ADR-0001 section 10): one collector per signal, no double shipping.
-%% Sources: observability/config/fluent-bit/*.yaml, observability/config/otel/gateway.yaml,
-%% observability/modules/{telemetry-transport,diagnostic-settings,kubernetes,host-agents,dbm,azure-integration,rum},
-%% catalog/telemetry-capabilities.yaml.
+%% Telemetry paths (ADR-0001 sections 10 and 13, observability package 4.0.0): one application-log collector per
+%% architecture, the Observability Pipelines Worker as the central log hop, every Datadog component reads the API key
+%% from Delinea DSV with the static dsv-fetch binary. Fluent Bit only on Batch nodes and in the fluent_bit_direct fallback.
+%% Sources: observability/config/fleet-policy.yaml, observability/modules/{telemetry-transport,observability-pipeline,
+%% kubernetes,host-agent-policy,host-agent-package,instrumentation,diagnostic-settings,dbm,azure-integration,rum},
+%% docs/guides/datadog-fleet-collection.md, catalog/telemetry-capabilities.yaml.
 flowchart LR
   subgraph LEGEND["Legend"]
     direction LR
@@ -10,82 +12,95 @@ flowchart LR
     lg5["A"] lc@==> lg6["B: deployment / control"]
   end
 
-  DD[("Datadog<br/>logs intake http-intake.logs.&lt;site&gt; (TLS)<br/>APM / metrics / RUM / DBM")]
+  DD[("Datadog<br/>Logs, APM, profiles, metrics,<br/>RUM, DBM")]
+  DSV[("Delinea DSV: datadog-api-key<br/>read by dsv-fetch with each workload's identity<br/>(Agent secret backend; dotenv for serverless-init / Worker)")]
 
   subgraph BROWSER_G["browser"]
-    SPA["hello-frontend<br/>Browser RUM SDK 7.x<br/>allowedTracingUrls = first-party API origin only<br/>(tracecontext propagator)"]
+    SPA["hello-frontend<br/>Browser RUM SDK 7.x<br/>allowedTracingUrls = first-party API origin only"]
   end
 
-  subgraph AKS_G["AKS (obs-kubernetes: Helm)"]
-    PODS["hello-* pods<br/>JSON logs to stdout<br/>OTel SDK OTLP gRPC to $(DD_AGENT_HOST):4317"]
-    FBDS["Fluent Bit DaemonSet<br/>tails /var/log/containers"]
-    AGENT_K["Datadog Agent DaemonSet<br/>OTLP receiver (hostPort 4317)<br/>container log collection OFF"]
+  subgraph AKS_G["AKS (obs-kubernetes: Datadog Helm chart, layered values + dsv-fetch post-renderer)"]
+    PODS["hello-* pods<br/>JSON logs to stdout<br/>tracer via Single Step Instrumentation"]
+    AGENT_K["node Agent DaemonSet + Cluster Agent<br/>+ cluster-checks runners (DBM)<br/>container logs, APM :8126, DogStatsD :8125"]
   end
 
-  subgraph ACA_G["Container Apps / ACI (app + sidecar)"]
-    APPC["app container<br/>LOG_FILE_PATH=/var/log/app/app.log<br/>OTLP http/protobuf"]
-    FBSC["Fluent Bit sidecar<br/>tails the shared EmptyDir file"]
+  subgraph ACA_G["Container Apps (instrumentation hook: container_app_patch)"]
+    APPC["app container<br/>LOG_FILE_PATH on a shared EmptyDir<br/>Datadog tracer -> localhost:8126"]
+    SINIT["serverless-init sidecar<br/>tails DD_SERVERLESS_LOG_PATH<br/>traces + DogStatsD on localhost"]
   end
 
-  subgraph HOST_G["VM / VMSS (obs-hosts: VM extensions)"]
-    APPH["hello-worker / inventory service<br/>LOG_FILE_PATH file<br/>OTLP gRPC localhost:4317"]
-    FBH["Fluent Bit service<br/>(run command / extension)"]
-    AGENT_H["Datadog Agent VM extension<br/>OTLP receiver, logs_enabled=false"]
+  subgraph ACI_G["Container Instances (instrumentation hook: aci_sidecar)"]
+    APPI["app container (e.g. partner-sim)<br/>LOG_FILE_PATH on a shared emptyDir<br/>Datadog tracer -> localhost:8126"]
+    AGENT_S["Datadog Agent sidecar<br/>file log source, APM, DogStatsD<br/>(localhost only)"]
   end
 
-  subgraph PAAS_G["App Service / Functions / Logic Apps Standard / ACA jobs"]
-    APPP["app (no sidecar)<br/>logs to platform log stream<br/>OTLP http/protobuf"]
+  subgraph HOST_G["VM / VMSS (obs-hosts: Azure Policy DeployIfNotExists + Azure VM Application)"]
+    APPH["hello-worker / inventory service<br/>log files (Linux) / files + Event Log (Windows)<br/>host SSI (Linux) or OTLP (Windows)"]
+    AGENT_H["Datadog Agent + dsv-fetch<br/>installed on hosts tagged datadog:enabled<br/>(obs-host-agent identity)"]
+  end
+
+  subgraph PAAS_G["App Service / Functions / Logic Apps / Container Apps jobs"]
+    APPP["app (no collector next to it)<br/>logs to the platform log stream<br/>App Service + Functions: OpenTelemetry<br/>ACA jobs: Datadog tracer"]
+  end
+
+  subgraph BATCH_G["Azure Batch nodes"]
+    FBB["Fluent Bit service<br/>(job preparation task of deploy-jobs)<br/>tails task stdout"]
   end
 
   subgraph TRANSPORT["obs-telemetry-transport (internal ingress only)"]
-    EH["Event Hubs namespace (Standard, Kafka endpoint)<br/>hubs app-logs / platform-logs<br/>consumer group for Fluent Bit"]
-    AGG["Fluent Bit aggregator (Container App)<br/>kafka input (SASL_SSL :9093) + forward input :24224<br/>+ canary dummy input (service:telemetry-canary)"]
-    GW["OTel gateway (Container App)<br/>otel-collector-contrib 0.162.0 (or DDOT)<br/>OTLP :4317/:4318, probabilistic sampling,<br/>OTLP logs accepted and dropped (nop)"]
+    EH["Event Hubs namespace (Standard, Kafka endpoint)<br/>hubs app-logs / platform-logs / activity-logs"]
+    OPW["Observability Pipelines Worker (Container App)<br/>sources: Datadog Agent :8282, fluent :24224, Kafka<br/>tag policy, parsing, dedupe, quotas, redaction"]
+    APMGW["APM gateway (Datadog Agent Container App)<br/>tracer payloads + profiles :8126 (TCP only)"]
+    GW["OTel gateway (Container App)<br/>OTLP :4317 / :4318 -> datadog exporter"]
   end
 
   subgraph DIAG["obs-diagnostics"]
-    DS["diagnostic settings<br/>app categories (AppServiceConsoleLogs, FunctionAppLogs,<br/>WorkflowRuntime, ContainerAppConsoleLogs) -> app-logs hub<br/>platform categories (e.g. ContainerAppSystemLogs, SQL audit) -> platform-logs hub"]
+    DS["diagnostic settings<br/>app categories (AppServiceConsoleLogs, FunctionAppLogs,<br/>WorkflowRuntime, ContainerAppConsoleLogs) -> app-logs<br/>platform categories, Activity Log, Entra -> platform / activity hubs"]
   end
 
   subgraph AZI["obs-azure-integration"]
-    INTEG["Datadog Azure integration<br/>(app registration + Secretless Auth, or Datadog native resource)<br/>Monitoring Reader on the subscription"]
-    AZMON["Azure Monitor platform metrics<br/>(azure.* namespaces)"]
+    INTEG["Datadog Azure integration<br/>(app registration + Secretless Auth, or native resource)<br/>Azure Monitor metrics + resource tags"]
   end
 
-  subgraph DBM_G["obs-dbm (observability subnet)"]
-    DBMAG["Datadog Agent (ACI) with DBM checks<br/>postgres / sqlserver / mysql, dbm: true"]
+  subgraph DBM_G["obs-dbm"]
+    DBMAG["DBM checks: cluster checks on AKS when a cluster exists,<br/>else a Datadog Agent on ACI"]
     DBS[("Azure SQL, PostgreSQL Flexible,<br/>MySQL Flexible, SQL MI, SQL VM")]
   end
 
-  subgraph MON["obs-prereqs + obs-monitoring (Datadog API only)"]
+  subgraph FALLBACK["log_pipeline = fluent_bit_direct (fallback, off by default)"]
+    FBFB["Fluent Bit sidecars (ACA / ACI), DaemonSet (AKS),<br/>aggregator (Event Hubs) ship logs straight to the<br/>Datadog intake; host Agents ship directly; no Worker"]
+  end
+
+  subgraph CONTENT["obs-prereqs (+ optional obs-monitoring content)"]
     RUMAPP["RUM application (client token in config.json)"]
-    MONS["monitors, SLOs + burn-rate alerts, synthetics,<br/>dashboards, Software Catalog, downtimes"]
+    MONS["optional: monitors, SLOs, dashboards, synthetics<br/>(observability/extras/content, in no built-in profile)"]
   end
 
   %% telemetry
-  SPA t1@-.->|"RUM events + sessions"| DD
-  PODS t2@-.->|"stdout -> /var/log/containers"| FBDS
-  FBDS t3@-.->|"logs (HTTP, TLS)"| DD
-  PODS t4@-.->|"traces + metrics (OTLP)"| AGENT_K
-  AGENT_K t5@-.-> DD
-  APPC t6@-.->|"log file"| FBSC
-  FBSC t7@-.->|"logs direct (sidecar.yaml)"| DD
-  FBSC t8@-.->|"or forward :24224 (sidecar-forward.yaml)"| AGG
-  APPC t9@-.->|"traces + metrics (OTLP)"| GW
-  APPH t10@-.->|"log file"| FBH
-  FBH t11@-.-> DD
-  APPH t12@-.->|"OTLP"| AGENT_H
-  AGENT_H t13@-.-> DD
+  SPA t1@-.->|"RUM events"| DD
+  PODS t2@-.->|"stdout, traces, DogStatsD"| AGENT_K
+  AGENT_K t3@-.->|"logs"| OPW
+  AGENT_K t4@-.->|"traces, metrics, profiles"| DD
+  APPC t5@-.->|"log file, traces, DogStatsD"| SINIT
+  SINIT t6@-.->|"logs"| OPW
+  SINIT t7@-.->|"traces, metrics"| DD
+  APPI t8@-.->|"log file, traces, DogStatsD"| AGENT_S
+  AGENT_S t9@-.->|"logs"| OPW
+  AGENT_S t10@-.->|"traces, metrics"| DD
+  APPH t11@-.->|"log files, traces, DogStatsD / OTLP"| AGENT_H
+  AGENT_H t12@-.->|"logs"| OPW
+  AGENT_H t13@-.->|"traces, metrics"| DD
   APPP t14@-.->|"platform log stream"| DS
   DS t15@-.-> EH
-  EH t16@-.->|"Kafka"| AGG
-  AGG t17@-.->|"logs + canary"| DD
-  APPP t18@-.->|"traces + metrics (OTLP over VNet integration)"| GW
-  GW t19@-.->|"datadog exporter"| DD
-  AZMON t20@-.-> INTEG
-  INTEG t21@-.-> DD
-  DBMAG t22@-.->|"query metrics, samples, explain plans"| DD
-  GW t23@-.->|"scrapes Fluent Bit metrics :2020"| AGG
+  EH t16@-.->|"Kafka (SASL_SSL :9093)"| OPW
+  APPP t17@-.->|"OTLP (App Service, Functions)"| GW
+  APPP t18@-.->|"Datadog tracer (ACA jobs)"| APMGW
+  FBB t19@-.->|"forward :24224"| OPW
+  OPW t20@-.->|"logs"| DD
+  APMGW t21@-.-> DD
+  GW t22@-.-> DD
+  INTEG t23@-.-> DD
+  DBMAG t24@-.->|"query metrics, samples, explain plans"| DD
 
   %% application traffic (for correlation)
   SPA a1@-->|"fetch /api/* with traceparent"| PODS
@@ -93,13 +108,20 @@ flowchart LR
   DBMAG a3@-->|"private endpoint / VNet"| DBS
 
   %% control
-  MONS c1@==>|"Datadog provider (DD_API_KEY / DD_APP_KEY)"| DD
-  RUMAPP c2@==>|"application id + client token -> deploy-frontend config.json"| SPA
-  DS c3@==>|"owned by obs-diagnostics only"| APPP
+  DSV c1@==> TRANSPORT
+  DSV c2@==> AGENT_K
+  DSV c3@==> AGENT_H
+  DSV c4@==> AGENT_S
+  DSV c5@==> SINIT
+  RUMAPP c6@==>|"application id + client token -> deploy-frontend"| SPA
+  MONS c7@==>|"Datadog provider"| DD
+  DS c8@==>|"owned by obs-diagnostics only"| APPP
 
   classDef app stroke:#1f6feb,stroke-width:2px
   classDef tel stroke:#8250df,stroke-width:2px,stroke-dasharray:6 4
   classDef ctl stroke:#bc4c00,stroke-width:3.5px
+  classDef off fill:#f6f8fa,stroke-dasharray:4 3
   class la,a1,a2,a3 app
-  class lt,t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13,t14,t15,t16,t17,t18,t19,t20,t21,t22,t23 tel
-  class lc,c1,c2,c3 ctl
+  class lt,t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13,t14,t15,t16,t17,t18,t19,t20,t21,t22,t23,t24 tel
+  class lc,c1,c2,c3,c4,c5,c6,c7,c8 ctl
+  class FALLBACK,FBFB,MONS off

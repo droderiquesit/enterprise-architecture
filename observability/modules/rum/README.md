@@ -25,3 +25,6 @@ Outputs:
 
 Create the application before the frontend deploys (the lab: `obs-prereqs`, settings
 `rum_applications.<key>.{mode, application_id, client_token}`).
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/rum.tftest.hcl`.

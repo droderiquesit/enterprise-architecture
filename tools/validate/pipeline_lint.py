@@ -41,7 +41,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from tools.pipeline.conditions import ExpressionError, functions_used, parse, top_level_conjuncts  # noqa: E402
+from tools.pipeline.conditions import ExpressionError, functions_used, top_level_conjuncts  # noqa: E402
 
 RETRY_OK_TASKS = ("DownloadPipelineArtifact@", "UseDotNet@", "NodeTool@", "UsePythonVersion@")
 RETRY_OK_NAMES = {"init", "resolve"}

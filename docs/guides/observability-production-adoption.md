@@ -1,7 +1,7 @@
 # Adopting the observability package against existing infrastructure
 
 The [`observability/`](../../observability/README.md) directory is a **portable, versioned package** (version in
-[`observability/VERSION`](../../observability/VERSION), currently `3.0.0`). It configures existing Azure resources and
+[`observability/VERSION`](../../observability/VERSION), currently `4.0.0`). It configures existing Azure resources and
 workloads to send telemetry to Datadog, through the most mature Datadog path each type supports, with one tag policy.
 
 It never creates networks, compute platforms, databases or applications. It references nothing outside
@@ -14,8 +14,9 @@ Per-resource collection paths: [datadog-fleet-collection.md](datadog-fleet-colle
 [datadog-tagging.md](datadog-tagging.md).
 
 Status: implemented and tested offline. That covers mock providers, unit tests with recorded API responses, and
-local docker tests of Fluent Bit -> Worker, the VRL, the Worker bootstrap, the APM gateway Agent and the OTel
-gateway. It has not been applied to a live Datadog organisation or Azure subscription.
+local docker tests of the ACI Agent sidecar and serverless-init (key from a mock DSV through `dsv-fetch`), Fluent Bit ->
+Worker, the VRL, the Worker bootstrap, the APM gateway Agent and the OTel gateway, `helm template` of the Datadog chart
+through the post-renderer, and the Linux VM Application installer. It has not been applied to a live Datadog organisation or Azure subscription.
 
 ## 1. Install
 
@@ -64,9 +65,11 @@ Prerequisites:
 | `diagnostic-settings`, `azure-logs` | platform / control-plane logs to Event Hubs | `resources` (from `fleet-inventory` `diagnostic_targets`), `destination` |
 | `observability-pipeline` | the `datadog_observability_pipeline` | `name`, `env`, `secret_refs` (DSV), `sources`, `eventhub_bootstrap`, `azure.scope_tags` |
 | `telemetry-transport` | Event Hubs, Worker on Container Apps, APM gateway, OTel gateway (otel mode) | `name_prefix`, `resource_group`, `location`, `datadog {site, api_key_ref, env}`, `secrets`, `collector_identity`, `event_hub`, `container_apps` |
-| `kubernetes` | Datadog Agent + Cluster Agent (logs to the Worker, SSI, profiling), optional Worker | `cluster_name`, `datadog`, `api_key`, `dsv`, `op_logs_url` or `op_worker`, `identity` |
-| `host-agents` | Agent (+ Fluent Bit on Windows) on VMs / scale sets | `hosts`, `datadog`, `secrets`, `op_endpoint` |
-| `dbm` | DBM checks (ACI or AKS cluster checks) | `databases`, `hosting`, `identity` |
+| `kubernetes` | Datadog Helm chart: node Agent, Cluster Agent, cluster-checks runners (logs to the Worker, SSI, profiling, DBM cluster checks; layered values + dsv-fetch post-renderer), optional Worker | `cluster_name`, `datadog`, `dsv`, `op_logs_url` or `op_worker`, `identity` |
+| `host-agent-package` | Azure Compute Gallery + VM Applications (`datadog-agent-linux` / `-windows`: Agent installer + dsv-fetch release) | [README](../../observability/modules/host-agent-package/README.md) |
+| `host-agent-policy` | Azure Policy DeployIfNotExists initiative enrolling hosts tagged `datadog:enabled` (VM Application + DSV-reader identity, least-privilege remediation role) | [README](../../observability/modules/host-agent-policy/README.md) |
+| `host-agents` | wrapper over the two above (`mode = policy` default, `direct` = one gallery application assignment per VM) | `env`, `package`, `datadog`, `dsv`, `agent_identity` |
+| `dbm` | DBM checks (AKS cluster checks by default, or an ACI Agent) | `databases`, `datadog`, `hosting`, `identity` |
 | `instrumentation` | **integration hook** for application owners (no resources) | `service`, `runtime`, `architecture`, `telemetry` (the transport contract) |
 | `rum` | RUM application (create or existing) + SDK config | `applications` |
 | `fleet-automation` | optional Agent upgrade window | `name`, `host_query` |
@@ -96,8 +99,10 @@ Exactly one collector per signal (ADR-0001 section 10). The rules are in
 ## 5. Upgrade
 
 1. Read `UPGRADING.md` and `CHANGELOG.md` of the target version. For **2.x -> 3.0.0**, decide first where your
-   existing monitors and SLOs go (keep them with `extras/content` or hand them over) - the upgrade notes walk
-   through it.
+   existing monitors and SLOs go (keep them with `extras/content` or hand them over). For **3.x -> 4.0.0**, plan the
+   move to one collector per architecture (VM / VMSS hosts from run command to Azure Policy + VM Applications, Fluent
+   Bit sidecars to serverless-init / the ACI Agent sidecar, the Go `dsv-fetch` 2.0.0 image and release zip) - the
+   upgrade notes walk through both.
 2. Bump `package.lock.json` (or the `?ref=` tag) **and** the pipeline templates' repository ref to the same version.
 3. `./vendor.sh --update-sources`, then re-render every environment.
 4. `terraform plan -out tfplan`. The plan template prints `DESTROY: [...]`. It must list no monitored infrastructure.
@@ -106,7 +111,7 @@ Exactly one collector per signal (ADR-0001 section 10). The rules are in
 ## 6. Rollback
 
 Re-vendor the previous version, re-render, plan and apply. The collection modules roll back like any Terraform
-change: previous Helm values, extension settings, Container App revisions, pipeline definition. The Worker keeps its
+change: previous Helm values, VM Application version (`package_version`), Container App revisions, pipeline definition. The Worker keeps its
 disk buffers across revisions only with `buffer_storage = azure_files` or on AKS (PVCs).
 
 ## 7. Removal (infrastructure and data preserved)
@@ -115,7 +120,8 @@ disk buffers across revisions only with `buffer_storage = azure_files` or on AKS
   * diagnostic settings (export stops; the resource and its data are untouched);
   * the `datadog_integration_azure` object;
   * the pipeline definition and the RUM application;
-  * Helm releases and VM extensions;
+  * Helm releases, the host Agent policy assignment and gallery (Agents already installed stay until the VM
+    Application is removed from the host model);
   * transport Container Apps;
   * the Event Hubs namespace, only with `event_hub.mode = create`. Unconsumed events in it are lost.
 * Owners must revert the application instrumentation in their deployments.

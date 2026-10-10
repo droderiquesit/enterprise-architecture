@@ -30,12 +30,10 @@ stages:
           - template: steps-setup.yml
             parameters:
               tools: terraform
-          - script: python3 -m pip install --quiet --user pytest==9.1.1
-            displayName: Install pytest
-            retryCountOnTaskFailure: 2
+          # pytest comes hash-pinned with the tool requirements (steps-setup.yml -> setup-agent.sh, job virtualenv)
           - script: |
               set -euo pipefail
-              version="$(python3 tools/report/release_notes.py --tag "$(Build.SourceBranch)" --version-file observability/VERSION)"
+              version="$(python3 tools/report/release_notes.py --tag "$BUILD_SOURCEBRANCH" --version-file observability/VERSION)"
               echo "##vso[task.setvariable variable=PACKAGE_VERSION;isOutput=true]$version"
               echo "release version $version"
             name: version

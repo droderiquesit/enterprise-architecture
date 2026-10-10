@@ -35,9 +35,9 @@ has been deployed.
 | Managed Redis | Balanced_B0, HA off, no persistence | - |
 | Service Bus | Standard (minimal); Premium 1 MU in enterprise/full/specialized (~680) | `premium_capacity` |
 | ACR | Standard; Premium only with private endpoint | - |
-| Telemetry transport | Event Hubs Standard, 2 partitions, 1-day retention; aggregator 1-2 replicas, gateway 1-3 replicas on Consumption | aggregator max <= 10; tail sampling requires a single gateway replica |
+| Telemetry transport | Event Hubs Standard, 2 partitions, 1-day retention; on Consumption: Observability Pipelines Worker min 2 replicas (1 vCPU / 2 GiB, fleet policy `op_worker`), APM gateway 1 replica (1 vCPU / 2 GiB), OTel gateway 1-3 replicas (0.5 vCPU / 1 GiB); Fluent Bit aggregator only with `log_pipeline = fluent_bit_direct` | `*_max_replicas` <= 5 in the lab; tail sampling requires a single gateway replica |
 | Traffic generator | ACA scheduled job, `rps` 0.2, `duration_seconds` 300 | `TRAFFIC_DURATION_SECONDS` <= 600; replica timeout = duration + 120 s |
-| Partner simulator | ACI 0.75 vCPU / 1.5 GB always on (~35) | - |
+| Partner simulator | ACI 0.75 vCPU / 1.5 GB always on (~35) + Datadog Agent sidecar 0.25 vCPU / 0.5 GB (~11) | - |
 | Expensive optional services | Service Fabric, SQL MI, Cassandra MI, ARO, CVM/GPU/dedicated host, AML, Synapse, ADX, Search, Hyperscale, elastic pool, App Gateway, Front Door, APIM, Firewall | all `enabled = false` by default; ARO and HorizonDB blocked |
 
 ## 3. Schedules and auto-stop
@@ -49,7 +49,7 @@ has been deployed.
 | SQL MI weekday stop/start 07:00-19:00 UTC | `platform-db-sqlmi` `stop_schedule_enabled` (true) | cuts compute to ~35 % of hours; storage still billed |
 | Azure SQL serverless auto-pause | `platform-db-sql` `auto_pause_delay_in_minutes` 60 | the `fulfillment` database is excluded from DBM because DBM connections would keep it awake |
 | ADX auto-stop | `platform-data-analytics` `auto_stop_enabled` (true) | ADX disabled by default |
-| Scale to zero | ACA apps and jobs, Flex Consumption, Batch pool, deploy-agent VMSS | `apm.no_traffic` monitors are not created for scale-to-zero services |
+| Scale to zero | ACA apps and jobs, Flex Consumption, Batch pool, deploy-agent VMSS | the optional monitoring content creates no `apm.no_traffic` monitors for scale-to-zero services |
 | AKS stop/start | manual `az aks stop` / `az aks start` (README) | not automated |
 | VMSS | manual `az vmss deallocate` or `min_instances = 0` | no schedule |
 
@@ -58,11 +58,11 @@ has been deployed.
 | Data | Retention / sampling | Owner |
 |---|---|---|
 | Log Analytics (platform features only) | 30 days, 1 GB/day cap, shared-key auth off | `platform-shared` |
-| Application logs | not stored in Azure; Fluent Bit -> Datadog (Datadog index retention applies) | ADR section 10 |
+| Application logs | not stored in Azure (except the Event Hubs buffer for PaaS logs); collector -> Observability Pipelines Worker -> Datadog, Datadog index retention applies; optional Worker archive to Azure Storage | ADR sections 10 and 13 |
 | Event Hubs buffer | 1 day (`message_retention_days`, max 7) | `obs-telemetry-transport` |
-| Traces | SDK `parentbased_traceidratio`, `trace_sample_ratio` 1.0 in every deployment root; gateway probabilistic sampling 100 % by default (`gateway.sampling_percentage`) | deploy roots / transport |
+| Traces | Datadog tracers (default): the Agent decides (adaptive / remote configuration) unless the fleet policy sets `apm.sample_rate` (`DD_TRACE_SAMPLE_RATE`); OpenTelemetry workloads (Functions, App Service, `apm.mode = otel`): SDK `parentbased_traceidratio` with `trace_sample_ratio` (1.0 in every deployment root), gateway probabilistic sampling 100 % by default (`gateway.sampling_percentage`) | fleet policy / deploy roots / transport |
 | RUM | `session_sample_rate` 100, session replay 0 (`obs-prereqs`; the frontend forces replay to 0) | `obs-prereqs` |
-| Synthetics | created **paused** (`synthetics_paused = true`) | `obs-monitoring` |
+| Synthetics (optional content) | created **paused** (`synthetics_paused = true`) | `obs-monitoring` |
 | Durable history | `PurgeHistory` timer purges completed instances older than `DURABLE_HISTORY_RETENTION_DAYS` (7) | hello-durable |
 | SQL PITR | 7 days (1-35) | `platform-db-sql` |
 | PostgreSQL backups | 7 days | `platform-db-postgresql` |
@@ -71,7 +71,7 @@ has been deployed.
 | State storage | versioning + 30-day blob/container soft delete + 90-day change feed | `bootstrap` |
 | Delinea DSV secrets | DSV keeps secret versions; nothing is deleted by teardown | operators (dsv CLI) |
 
-The profile `features.trace_sample_rate` (-> `trace_sample_ratio` of every deploy root), `rum_session_sample_rate` and
+The profile `features.trace_sample_rate` (-> `trace_sample_ratio` of every deploy root; OpenTelemetry workloads only), `rum_session_sample_rate` and
 `session_replay` (-> `obs-prereqs` RUM sample rates) set these defaults per profile (`minimal` 1.0 / 100, `enterprise`,
 `full`, `specialized` 0.5 / 50); environment `components.<id>` settings still win
 ([profiles README](../../environments/profiles/README.md#feature-mapping)).
@@ -88,7 +88,7 @@ the pipeline retire mode or per-root `terraform destroy`: [runbooks/teardown.md]
 | 3 | `obs-telemetry-transport` | Event Hubs buffer (<= 1 day) lost |
 | 4 | `platform-aks`, `platform-containerapps`, `platform-batch` | no persistent data in clusters/environments |
 | 5 | `platform-db-*`, `platform-data-analytics`, `platform-messaging`, `platform-functions`, `platform-shared`, other platform roots | **databases deleted** (synthetic data; SQL deleted databases restorable from backup until server deletion); Service Bus in-flight/dead-lettered messages lost; ACR images deleted (rebuildable); Log Analytics workspace soft-deleted 14 days; Functions packages and Durable task hub deleted |
-| 6 | `foundation-edge`, `foundation-deploy-agents` | switch network egress back to NAT **before** destroying the firewall; remove the Azure DevOps agent pool first; APIM v2 soft-deleted 48 h |
+| 6 | `foundation-edge`, `foundation-deploy-agents`, `foundation-pr-reviewer` | switch network egress back to NAT **before** destroying the firewall; remove the Azure DevOps agent pool first; APIM v2 soft-deleted 48 h |
 | 7 | `foundation-secrets`, `foundation-identity` | identities deleted immediately; DSV users/permissions/secrets remain until removed with the dsv CLI |
 | 8 | `foundation-network` | no data; subnets with service association links (ACA, SQL MI, MDP, Flexible Servers) release slowly |
 | 9 | `foundation-governance` | last, so budget alerts cover the teardown |

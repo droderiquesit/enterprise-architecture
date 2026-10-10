@@ -7,7 +7,7 @@
 # What it does (each step is safe to repeat):
 #   1. checks tools + `az login` + that the active subscription is environment.subscription_id
 #   2. registers the resource providers the lab needs (pipeline identities have no rights to do this)
-#   3. renders bootstrap/terraform.tfvars.json (tools/config/render.py if present, else a built-in fallback)
+#   3. renders bootstrap/terraform.tfvars.json (tools/config/render.py)
 #   4. if the state blob <env>/bootstrap.tfstate does not exist yet:
 #        terraform init with a temporary LOCAL backend override -> apply -> migrate state into the new account
 #      otherwise: terraform init against the azurerm backend -> plan -> (confirm) apply
@@ -20,14 +20,16 @@ set -euo pipefail
 ENV_NAME=""; PLAN_ONLY=false; SKIP_PROVIDERS=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --env) ENV_NAME="$2"; shift 2 ;;
+    --env) [[ $# -ge 2 ]] || { echo "--env needs a value" >&2; exit 2; }; ENV_NAME="$2"; shift 2 ;;
     --plan-only) PLAN_ONLY=true; shift ;;
     --skip-providers) SKIP_PROVIDERS=true; shift ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 [[ -n "$ENV_NAME" ]] || { echo "--env is required" >&2; exit 2; }
+# The name is used in paths and in an az JMESPath query below: allow only environment-directory characters.
+[[ "$ENV_NAME" =~ ^[a-z0-9][a-z0-9-]{0,15}$ ]] || { echo "invalid --env '$ENV_NAME' (expected lowercase letters, digits and dashes, e.g. dev)" >&2; exit 2; }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BOOT_DIR="$ROOT_DIR/bootstrap"
@@ -59,10 +61,10 @@ for t in az terraform python3 jq; do command -v "$t" >/dev/null || die "$t not f
 [[ -f "$ENV_FILE" ]] || die "missing $ENV_FILE"
 az account show >/dev/null 2>&1 || die "not logged in: run 'az login --tenant <tenant-id>'"
 
-read -r SUB_ID TENANT_ID LOCATION PREFIX < <(python3 - "$ENV_FILE" <<'PY'
+read -r SUB_ID TENANT_ID LOCATION < <(python3 - "$ENV_FILE" <<'PY'
 import sys, yaml
 e = yaml.safe_load(open(sys.argv[1]))["environment"]
-print(e["subscription_id"], e["tenant_id"], e["location"], e.get("name_prefix", "eh"))
+print(e["subscription_id"], e["tenant_id"], e["location"])
 PY
 )
 [[ "$SUB_ID" =~ ^0{8}-0{4}-0{4}-0{4}-0{12}$ ]] && die "environment.subscription_id is still the placeholder in $ENV_FILE"
@@ -92,19 +94,9 @@ fi
 
 # ---------------------------------------------------------------- 3. render tfvars
 log "rendering $TFVARS"
-if [[ -x "$ROOT_DIR/tools/config/render.py" || -f "$ROOT_DIR/tools/config/render.py" ]]; then
-  python3 "$ROOT_DIR/tools/config/render.py" --env "$ENV_NAME" --component bootstrap
-else
-  python3 - "$ENV_FILE" "$TFVARS" <<'PY'
-import json, sys, yaml
-doc = yaml.safe_load(open(sys.argv[1]))
-e = doc["environment"]
-keys = ["name", "location", "subscription_id", "tenant_id", "name_prefix", "owner", "team", "cost_center", "expires_on", "tags"]
-env = {k: e.get(k, {} if k == "tags" else "") for k in keys}
-settings = (doc.get("components") or {}).get("bootstrap") or {}
-json.dump({"environment": env, "settings": settings}, open(sys.argv[2], "w"), indent=2)
-PY
-fi
+# --repo: render.py resolves paths against it (default "."), and this script may be started from any directory.
+python3 "$ROOT_DIR/tools/config/render.py" --repo "$ROOT_DIR" --env "$ENV_NAME" --component bootstrap
+[[ -f "$TFVARS" ]] || die "render.py did not write $TFVARS"
 
 cd "$BOOT_DIR"
 STATE_KEY="$ENV_NAME/bootstrap.tfstate"
@@ -195,4 +187,9 @@ terraform init -input=false -migrate-state -force-copy "${BACKEND_ARGS[@]}"
 state_exists || die "migration did not produce $STATE_KEY; local copy kept in bootstrap.local.tfstate"
 mv bootstrap.local.tfstate "bootstrap.local.tfstate.migrated-$(date -u +%Y%m%dT%H%M%SZ)"
 echo "migrated. Keep the .migrated-* file until you have verified 'terraform plan' shows no changes, then delete it (it contains state)."
-terraform plan -input=false -var-file="$TFVARS" -detailed-exitcode && echo "no drift after migration"
+rc=0; terraform plan -input=false -var-file="$TFVARS" -detailed-exitcode || rc=$?
+case "$rc" in
+  0) echo "no drift after migration" ;;
+  2) echo "WARN: the post-migration plan shows changes; review them before deleting the .migrated-* file" >&2; exit 2 ;;
+  *) die "post-migration plan failed (exit $rc)" ;;
+esac

@@ -115,7 +115,7 @@ runs exactly the same engine on a local checkout (policy/registry from `--base`)
    Lockfiles are refined into `dependency-patch` / `dependency-change` (requirements pins, package-lock v2/3,
    `.terraform.lock.hcl`, `Directory.Packages.props`, NuGet `packages.lock.json`); onboarding manifests into
    `observability-thresholds` (only numeric values at guarded paths, inside the guardrail range; with the v2
-   manifests of observability 3.0.0 these are the trace sample rates `spec.telemetry.{apm,traces}.sample_rate`),
+   manifests (observability 3.0.0 and later) these are the trace sample rates `spec.telemetry.{apm,traces}.sample_rate`),
    `onboarding-manifest` (new, non-prod, schema-valid against `observability/schemas/onboarding-manifest.v2.schema.json`)
    or `observability-config`. The optional v1 monitoring content under `observability/extras/content/**` is not
    refined (class `code`, human review).
@@ -223,7 +223,8 @@ size and instructions). The bot itself adds ≈ $0-2/month (Flex Consumption) - 
 3. `python3 -m tools.review.ado_setup plan --org <org> --project-id <guid> --repository-id <guid> --function-url <webhook_url> --reviewer-object-id <principal id>`
    prints the exact REST requests; `apply` (with `ADO_TOKEN` of a Project Collection Administrator and `WEBHOOK_SECRET`)
    creates the service hooks, the Basic-access entitlement and the repository ACE idempotently.
-4. Set `components.foundation-pr-reviewer.settings.ado.reviewer_id` to the identity's Azure DevOps id; re-apply.
+4. Set `components.foundation-pr-reviewer.ado.reviewer_id` in `environments/<env>/environment.yaml` to the identity's
+   Azure DevOps id; re-apply.
 5. Hand the branch-policy fragment to `tools/ado/branch_policies.py`.
 
 ## 6. Not verified (needs a real organization)

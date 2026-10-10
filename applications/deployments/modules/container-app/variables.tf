@@ -8,7 +8,8 @@ variable "name" {
 }
 
 variable "resource_group_name" {
-  type = string
+  description = "Resource group of the container app."
+  type        = string
 }
 
 variable "environment_id" {
@@ -23,7 +24,8 @@ variable "workload_profile_name" {
 }
 
 variable "tags" {
-  type = map(string)
+  description = "Azure tags of the container app (required tags + workload azure_tags)."
+  type        = map(string)
 }
 
 variable "identity" {
@@ -40,6 +42,7 @@ variable "registry_server" {
 }
 
 variable "container" {
+  description = "App container: name, digest-pinned image, cpu/memory and optional command/args."
   type = object({
     name    = string
     image   = string
@@ -77,6 +80,7 @@ variable "ingress" {
 }
 
 variable "probes" {
+  description = "HTTP probe port and paths (startup/liveness on health_path, readiness on ready_path)."
   type = object({
     port         = optional(number, 8080)
     health_path  = optional(string, "/healthz")
@@ -87,6 +91,7 @@ variable "probes" {
 }
 
 variable "scale" {
+  description = "Replica bounds and HTTP concurrency of the scale rule (min_replicas 0 = scale to zero)."
   type = object({
     min_replicas     = optional(number, 0)
     max_replicas     = optional(number, 3)

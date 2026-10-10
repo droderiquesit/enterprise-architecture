@@ -19,8 +19,9 @@ variable "sampling" {
 }
 
 variable "sampling_percentage" {
-  type    = number
-  default = 100
+  description = "Percentage of traces kept by the sampling mode (0-100; ignored with sampling = none)."
+  type        = number
+  default     = 100
   validation {
     condition     = var.sampling_percentage >= 0 && var.sampling_percentage <= 100
     error_message = "sampling_percentage must be 0-100."
@@ -40,8 +41,9 @@ variable "fluentbit_metrics_target" {
 }
 
 variable "datadog_site" {
-  type    = string
-  default = "datadoghq.com"
+  description = "Datadog site of the datadog exporter."
+  type        = string
+  default     = "datadoghq.com"
 }
 
 variable "env" {
@@ -62,6 +64,7 @@ variable "hostname" {
 }
 
 variable "images" {
+  description = "Pinned collector images: upstream contrib and Datadog DDOT."
   type = object({
     upstream = optional(string, "otel/opentelemetry-collector-contrib:0.162.0")
     ddot     = optional(string, "datadog/ddot-collector:7.84.2")

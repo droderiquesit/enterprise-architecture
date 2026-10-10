@@ -28,8 +28,8 @@ Platforms, databases, RBAC data-plane grants, diagnostic settings and telemetry 
 
 | Module | Kind | Purpose |
 |---|---|---|
-| `app-env` | pure | Wraps `observability/modules/instrumentation` (instrumentation contract) and adds identity (`AZURE_CLIENT_ID`, `AZURE_CREDENTIAL_MODE`), `FAULTS_ENABLED` (default false), `FAULT_TOKEN` as a Delinea DSV reference (`dsv://...`, resolved by the app), the DSV runtime env (`DSV_TENANT/TLD/BASE_URL/AUTH`), `PORT`, `LOG_LEVEL`, `GIT_COMMIT`. Outputs env (incl. `dsv://` values), secret env (name → `dsv://` reference), App Service settings (same map, no Key Vault references), Container Apps sidecar patch (dsv-fetch init/refresher container), ACI sidecar, Kubernetes labels. |
-| `container-app` | azurerm | One Container App: user-assigned identity (ACR pull; the app and dsv-fetch read DSV with it), no Container Apps secrets except the sidecar config files, digest-pinned image, `/healthz` liveness/startup + `/readyz` readiness, HTTP scale rule, Fluent Bit sidecar on a shared EmptyDir with a dsv-fetch init container (Consumption profile) or refresher container (Dedicated profiles) writing its key, multiple-revision traffic weights. |
+| `app-env` | pure | Wraps `observability/modules/instrumentation` (instrumentation contract) and adds identity (`AZURE_CLIENT_ID`, `AZURE_CREDENTIAL_MODE`), `FAULTS_ENABLED` (default false), `FAULT_TOKEN` as a Delinea DSV reference (`dsv://...`, resolved by the app), the DSV runtime env (`DSV_TENANT/TLD/BASE_URL/AUTH`), `PORT`, `LOG_LEVEL`, `GIT_COMMIT`. Outputs env (incl. `dsv://` values), secret env (name → `dsv://` reference), App Service settings (same map, no Key Vault references), Container Apps sidecar patch (serverless-init sidecar + dsv-fetch-install init container; Fluent Bit + dsv-fetch init/refresher with `fluent_bit_direct`), ACI sidecar (Datadog Agent), Kubernetes labels/annotations, the effective log collector and APM decision. |
+| `container-app` | azurerm | One Container App: user-assigned identity (ACR pull; the app and dsv-fetch read DSV with it), no Container Apps secrets except non-secret sidecar config files, digest-pinned image, `/healthz` liveness/startup + `/readyz` readiness, HTTP scale rule, the observability sidecar on a shared EmptyDir (Datadog serverless-init by default, its key read by the dsv-fetch binary an identity-free init container installs; Fluent Bit with `fluent_bit_direct`, its key written by a dsv-fetch init container on the Consumption profile or a refresher container on Dedicated profiles), multiple-revision traffic weights. |
 | `web-app` | azurerm | Linux/Windows web app (code or container), user-assigned identity (no Key Vault reference identity; `@Microsoft.KeyVault(` values are rejected), VNet integration, health check, private endpoint or deny-by-default access restrictions, `staging` slot when the SKU supports slots. |
 | `vm-script` | pure | Renders the Linux install script for run commands / CustomScript: package read with the host's managed identity (IMDS token, no SAS), sha256 check, env file (secret settings as `dsv://` references the service resolves at start-up), health check + rollback. |
 | `service-meta` | pure | Team/domain/tier/owner/runtime/artifact per service (mirrors observability onboarding metadata). |
@@ -62,18 +62,21 @@ and pushes the chart (`helm package` → `helm push oci://<acr>/helm`); see the 
   `version` → `tag` → digest prefix.
 - **Telemetry** (ADR-0001 §10): OTel env from the instrumentation contract; OTLP → node agent on AKS
   (`status.hostIP` downward API) / localhost agent on VMs / OTel gateway elsewhere (HTTP for Functions).
-  Logs: ACA + ACI → Fluent Bit sidecar tailing `LOG_FILE_PATH=/var/log/app/app.log` on a shared EmptyDir;
-  AKS → Fluent Bit DaemonSet; App Service / Functions / Logic Apps → diagnostic settings (no sidecar);
-  VM/VMSS → host Fluent Bit service; ACA **jobs** → stdout + ContainerAppConsoleLogs (a sidecar would never exit).
+  Logs (observability 4.0.0, one collector per architecture, ADR-0001 §13): ACA → Datadog serverless-init sidecar
+  tailing `LOG_FILE_PATH=/var/log/app/app.log` on a shared EmptyDir; ACI → Datadog Agent sidecar tailing the same file;
+  AKS → node Datadog Agent (stdout); VM/VMSS → host Datadog Agent (app log file); App Service / Functions / Logic Apps →
+  diagnostic settings (no sidecar); ACA **jobs** → stdout + ContainerAppConsoleLogs (a sidecar would never exit).
+  With `log_pipeline = fluent_bit_direct` (fallback) the 2.x Fluent Bit sidecars / DaemonSet / host service collect instead.
 - **Secrets** (ADR-0001 §14, Delinea DSV, no Azure Key Vault): every secret setting is a plain env var / app setting
   whose VALUE is a `dsv://<path>#<element>` reference (from `foundation_identity.secrets.refs` or a platform contract's
   `*_secret_id` field), plus `DSV_TENANT/TLD/BASE_URL/AUTH` and `AZURE_CLIENT_ID`; `hello_common` / `Hello.Common`
   resolve them at start-up with the workload's managed identity (ACA/App Service/Functions: `IDENTITY_ENDPOINT`;
   ACI/VM/VMSS: IMDS; AKS: workload identity - **unverified with DSV**, fallback chart `secretsMode=synced` with the
-  Delinea dsv-k8s syncer). Third-party sidecars (Fluent Bit) get their key from the `dsv-fetch` helper (registry
-  artifact `img-dsv-fetch`, `artifacts["img-dsv-fetch"]` in core-aca/dbadapters/jobs/partner-sim): ACA init container
-  on the Consumption profile, refresher container on Dedicated profiles and on ACI (ACI init containers have no
-  managed identity). No secret value is in any plan or state of these roots, with one documented exception:
+  Delinea dsv-k8s syncer). Third-party sidecars get their key from the static `dsv-fetch` binary (registry
+  artifact `img-dsv-fetch`, `artifacts["img-dsv-fetch"]` in core-aca/dbadapters/jobs/partner-sim): an identity-free
+  init container installs it; serverless-init (ACA) runs it before start and the ACI Agent uses it as its
+  `secret_backend_command`. Fluent Bit fallback: dsv-fetch init container on the ACA Consumption profile, refresher
+  container on Dedicated profiles and on ACI (ACI init containers have no managed identity). No secret value is in any plan or state of these roots, with one documented exception:
   logicapps' Standard host storage access key (runtime-read setting, key access required outside ASE v3).
   Host-read settings (`AzureWebJobsStorage`, trigger connections) stay identity-based - they cannot be `dsv://`.
 - **Contract** (`output "contract"`, schema `catalog/contracts/deploy-<id>.v1.schema.json`): `apps.<key>` =

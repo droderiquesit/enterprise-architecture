@@ -51,7 +51,7 @@ stages:
               python3 -m tools.changeset graph
               python3 tools/config/resolve.py --env "${{ parameters.environment }}"
               python3 tools/config/promotion.py check --env "${{ parameters.environment }}" --mode "${{ parameters.mode }}" --dry-run "${{ lower(parameters.dryRun) }}"
-              python3 tools/config/branching.py check --ref "$(Build.SourceBranch)" --reason "$(Build.Reason)" \
+              python3 tools/config/branching.py check --ref "$BUILD_SOURCEBRANCH" --reason "$(Build.Reason)" \
                 --env "${{ parameters.environment }}" --mode "${{ parameters.mode }}" --dry-run "${{ lower(parameters.dryRun) }}"
               echo "##vso[build.addbuildtag]env-${{ parameters.environment }}"
               echo "##vso[build.addbuildtag]scope-${{ parameters.scope }}"
@@ -79,15 +79,19 @@ stages:
                   blob="https://${{ variables.stateStorageAccount }}.blob.core.windows.net"
                   extra=()
                   if [[ "${{ parameters.mode }}" == "promote" || "${{ parameters.mode }}" == "hotfix" ]]; then
-                    extra+=(--source-env "${{ parameters.sourceEnvironment }}"
+                    extra+=(--source-env "$SOURCE_ENVIRONMENT"
                             --source-records-url "https://${{ variables.promoteFromStateStorageAccount }}.blob.core.windows.net/deployments")
                   fi
                   mkdir -p "$(Build.ArtifactStagingDirectory)/selection"
                   python3 -m tools.changeset select --mode "${{ parameters.mode }}" --scope "${{ parameters.scope }}" \
-                    --env "${{ parameters.environment }}" --components "${{ parameters.components }}" \
+                    --env "${{ parameters.environment }}" --components "$COMPONENTS" \
                     ${{ iif(parameters.withConsumers, '--with-consumers', '') }} \
                     --records-url "$blob/deployments" --contracts-url "$blob/contracts" --build-reason "$(Build.Reason)" \
                     "${extra[@]}" --out "$(Build.ArtifactStagingDirectory)/selection/selection.json" --ado
+              # free-text run parameters reach the script as data (environment), never as script text
+              env:
+                COMPONENTS: ${{ parameters.components }}
+                SOURCE_ENVIRONMENT: ${{ parameters.sourceEnvironment }}
           - task: Cache@2
             displayName: Test result cache + timings (restore)
             continueOnError: true
@@ -100,7 +104,7 @@ stages:
               set -euo pipefail
               full=()
               # full runs (every suite, cache hits ignored: bounds cache poisoning): nightly schedules and release/*
-              if [[ "$(Build.Reason)" == "Schedule" || "$(Build.SourceBranch)" == refs/heads/release/* ]]; then full=(--full); fi
+              if [[ "$(Build.Reason)" == "Schedule" || "$BUILD_SOURCEBRANCH" == refs/heads/release/* ]]; then full=(--full); fi
               python3 -m tools.ci plan --selection "$(Build.ArtifactStagingDirectory)/selection/selection.json" \
                 --scope "${{ parameters.scope }}" --env "${{ parameters.environment }}" \
                 --cache "$(Pipeline.Workspace)/.ci-cache/testcache" --timings "$(Pipeline.Workspace)/.ci-cache/timings.json" \

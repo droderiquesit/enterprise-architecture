@@ -10,7 +10,7 @@ flowchart TB
   end
 
   subgraph ADO["Azure DevOps (outside Azure VNet)"]
-    PIPE["Universal pipeline<br/>azure-pipelines.yml"]
+    PIPE["lab-platform + lab-applications pipelines<br/>azure-pipelines.yml, azure-pipelines.applications.yml<br/>(one governed template)"]
     MSH["Microsoft-hosted agents<br/>(Validate, Security, PR Select)<br/>no service connection"]
   end
 
@@ -63,7 +63,7 @@ flowchart TB
   end
 
   subgraph IDENT["foundation-identity + foundation-secrets"]
-    UAI["Workload user-assigned identities<br/>hello-*, obs-collector, obs-dbm,<br/>aks-control-plane, aks-kubelet, deploy-agent<br/>+ per-identity DSV secret names"]
+    UAI["Workload user-assigned identities<br/>hello-*, obs-collector, obs-dbm, obs-host-agent,<br/>aks-control-plane, aks-kubelet, deploy-agent<br/>+ per-identity DSV secret names"]
     SECR["foundation-secrets: desired DSV state<br/>(auth provider, 1 user per identity,<br/>least-privilege read permissions)"]
   end
   DSV[("Delinea DSV (SaaS)<br/>&lt;tenant&gt;.secretsvaultcloud.&lt;tld&gt;<br/>all keys and secrets, values set out-of-band")]

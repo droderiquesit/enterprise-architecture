@@ -4,7 +4,8 @@ output "integration_id" {
 }
 
 output "mode" {
-  value = var.mode
+  description = "Integration mode in effect (the mode input)."
+  value       = var.mode
 }
 
 output "metric_host_filters" {

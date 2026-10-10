@@ -1,5 +1,6 @@
 output "image" {
-  value = local.image
+  description = "Collector image of the selected distribution (upstream contrib or DDOT, pinned)."
+  value       = local.image
 }
 
 output "args" {
@@ -13,7 +14,8 @@ output "config_env" {
 }
 
 output "config_env_order" {
-  value = local.order
+  description = "Env variables holding the configuration documents, in --config=env: order (OTELCOL_CONFIG_BASE first, later ones override)."
+  value       = local.order
 }
 
 output "env" {
@@ -32,5 +34,6 @@ output "secrets_dir" {
 }
 
 output "ports" {
-  value = { otlp_grpc = 4317, otlp_http = 4318, health = 13133, self_metrics = 8888 }
+  description = "Container ports: OTLP gRPC / HTTP, health check, self metrics."
+  value       = { otlp_grpc = 4317, otlp_http = 4318, health = 13133, self_metrics = 8888 }
 }

@@ -31,5 +31,6 @@ output "configured" {
 }
 
 output "agent_container_group_id" {
-  value = var.hosting == "aci" ? azurerm_container_group.dbm[0].id : null
+  description = "Id of the ACI DBM Agent container group (null unless hosting = aci)."
+  value       = var.hosting == "aci" ? azurerm_container_group.dbm[0].id : null
 }

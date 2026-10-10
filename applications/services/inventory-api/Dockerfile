@@ -5,7 +5,7 @@
 #     --build-arg VERSION=$VERSION --build-arg GIT_COMMIT=$GIT_COMMIT --build-arg BUILD_TIME=$BUILD_TIME applications
 # Behind a TLS-intercepting proxy add: --secret id=ca_bundle,src=/path/to/ca-bundle.crt
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 AS build
 ARG VERSION=0.1.0-local
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown
@@ -28,7 +28,7 @@ RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
       -p:Version=$VERSION -p:GIT_COMMIT=$GIT_COMMIT -p:BUILD_TIME=$BUILD_TIME -p:UseAppHost=false
 
 # chiseled = distroless Ubuntu 24.04, no shell, non-root (uid 1654); "-extra" adds ICU + tzdata.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble-chiseled-extra AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble-chiseled-extra@sha256:00e0ad6a7ef8c0c1391b87f05c7ac757a15740455688f2bfcd146a3f4b987efd AS runtime
 ARG VERSION=0.1.0-local
 ARG GIT_COMMIT=unknown
 LABEL org.opencontainers.image.title="hello-inventory-api" \

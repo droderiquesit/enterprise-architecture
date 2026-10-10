@@ -23,5 +23,6 @@ locals {
 }
 
 output "services" {
-  value = local.services
+  description = "Service id -> {team, domain, tier, owner, runtime, artifact, identity}."
+  value       = local.services
 }

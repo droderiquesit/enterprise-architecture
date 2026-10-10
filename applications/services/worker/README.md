@@ -33,7 +33,8 @@ install.sh: ensures Python 3.13 (deadsnakes when `INSTALL_PYTHON=1` and missing)
 `hello-worker`, unpacks to `/opt/hello-worker/releases/<ver>-<ts>` with its own venv (`pip --no-index`), writes
 `/etc/hello-worker/hello-worker.env` (0640), installs the hardened systemd unit, swaps `/opt/hello-worker/current`
 atomically, restarts, probes `/healthz` and **rolls back automatically** on failure; keeps 3 releases.
-Logs: journald + `/var/log/hello-worker/worker.log` (`LOG_FILE_PATH`, tailed by Fluent Bit); OTLP to the local
+Logs: journald + `/var/log/hello-worker/worker.log` (`LOG_FILE_PATH`, tailed by the host Datadog Agent; Fluent Bit with
+`log_pipeline = fluent_bit_direct`); OTLP to the local
 Datadog Agent (`localhost:4317`).
 
 ## Tests

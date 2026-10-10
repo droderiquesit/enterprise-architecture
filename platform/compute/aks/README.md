@@ -32,12 +32,13 @@
   and obs-kubernetes manage Kubernetes objects through the Entra-authenticated API (local accounts are disabled).
 - **Federated identity credentials** binding foundation identities to this cluster's issuer:
   `hello/hello-bff`, `hello/hello-orders-api`, `hello/hello-catalog-api`, `hello/hello-worker`.
-  The observability service accounts (`datadog/datadog`, `datadog/datadog-cluster-checks`, `fluent-bit/fluent-bit`
-  on the obs-collector identity) are federated by `observability/lab/kubernetes`, which owns those workloads. They live here because the issuer belongs to this cluster:
-  recreating the cluster changes the issuer and must replace the credentials in the same apply.
+  These credentials live here because the issuer belongs to this cluster: recreating the cluster changes the issuer
+  and must replace them in the same apply. The observability service accounts (`datadog/datadog`,
+  `datadog/datadog-cluster-agent`, `datadog/datadog-cluster-checks`, and `fluent-bit/fluent-bit` for the fallback
+  collector) are federated by `observability/lab/kubernetes`, which owns those workloads.
 
-Not here: namespaces, service accounts, Deployments (deploy-core-aks), Datadog Agent/Fluent Bit Helm releases
-(obs-kubernetes), diagnostic settings (obs-diagnostics).
+Not here: namespaces, service accounts, Deployments (deploy-core-aks), the Datadog Helm release (+ Fluent Bit only
+for `log_pipeline = fluent_bit_direct`; obs-kubernetes), diagnostic settings (obs-diagnostics).
 
 ## Private API server (secure default)
 
@@ -72,6 +73,12 @@ databases (other roots); nothing persistent is kept in the cluster.
 
 - Ephemeral OS disks are not possible on Dsv5 (no temp disk) — justified for checkov.
 - `userAssignedNATGateway` requires the NAT gateway association to exist before cluster creation (foundation).
+
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/aks   # fmt, init -backend=false, validate, terraform test (mock providers)
+```
 
 ## Docs
 

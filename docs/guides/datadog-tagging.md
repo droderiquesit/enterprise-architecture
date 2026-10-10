@@ -1,6 +1,6 @@
 # Datadog tagging with the observability package
 
-The observability package (3.0.0) does not create monitors, SLOs or dashboards. Its job is to connect Azure resources
+The observability package (4.0.0; since 3.0.0) does not create monitors, SLOs or dashboards. Its job is to connect Azure resources
 and workloads to Datadog and to put **the same tags on every signal**, so that the monitors, SLOs and dashboards that
 already exist in your organisation match:
 
@@ -88,8 +88,8 @@ reads (`ReadOnlyViolation`). Offline, `--fixtures <dir>` replays recorded respon
 | Datadog libraries (APM, profiles, logs injection) | `DD_ENV`, `DD_SERVICE`, `DD_VERSION`, `DD_TAGS` (other policy keys) | `instrumentation` |
 | OpenTelemetry SDKs (`apm.mode = otel`) | `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`; never set in datadog mode (Datadog maps it to `DD_TAGS` - duplicates) | `instrumentation` |
 | Kubernetes pods | UST labels `tags.datadoghq.com/{env,service,version}`, `ad.datadoghq.com/tags` annotation, policy labels + Agent `podLabelsAsTags` | `instrumentation`, chart `hello-service`, `kubernetes` |
-| Datadog Agents (AKS, VMs, APM gateway, DBM) | `DD_TAGS` / `datadog.tags` / check `tags` | `kubernetes`, `host-agents`, `telemetry-transport`, `dbm` |
-| Fluent Bit edge collectors | Lua `eh_finalize` static tags (never override record keys), Kubernetes label map, Azure tag map and scope tags | `fluent-bit` |
+| Datadog Agents (AKS, VM / VMSS, ACI sidecar, APM gateway, DBM) and serverless-init | `DD_TAGS` / `datadog.tags` / check `tags` | `kubernetes`, `host-agent-package`, `instrumentation`, `telemetry-transport`, `dbm` |
+| Fluent Bit (Batch nodes; `fluent_bit_direct` fallback) | Lua `eh_finalize` static tags (never override record keys), Kubernetes label map, Azure tag map and scope tags | `fluent-bit` |
 | Observability Pipelines | VRL tag processor: environment defaults, value maps, normalisation, resource-scope tags of platform logs; fills missing tags, never overwrites | `observability-pipeline` |
 | OTel gateway (otel mode) | `transform/eh_tag_policy`: per `service.name`, inserts missing attributes, never overwrites | `otel-collector`, `telemetry-transport` |
 | Azure resources | `azure_tags` (deploy roots merge them into the resource tags); the Datadog Azure integration imports them onto metrics | `instrumentation` / app-env |
@@ -97,7 +97,7 @@ reads (`ReadOnlyViolation`). Offline, `--fixtures <dir>` replays recorded respon
 | RUM | `service`, `env`, `version` + `globalContext` (`setGlobalContextProperty`) | `rum` |
 
 Tests per path: `modules/tagging/tests`, `modules/instrumentation/tests`, `modules/kubernetes/tests`,
-`modules/host-agents/tests`, `modules/dbm/tests`, `modules/fluent-bit/tests`, `modules/otel-collector/tests`,
+`modules/host-agents/tests`, `modules/host-agent-package/tests`, `modules/dbm/tests`, `modules/fluent-bit/tests`, `modules/otel-collector/tests`,
 `modules/rum/tests`, `observability/tests/tags`, `observability/tests/transport` (Lua, VRL and OTel overlays executed
 with the real binaries), `tests/charts/test_datadog_tags.py`.
 

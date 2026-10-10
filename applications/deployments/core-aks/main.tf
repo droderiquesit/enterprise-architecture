@@ -1,8 +1,9 @@
 # Enterprise Hello core services on AKS (namespace `hello`): hello-bff, hello-orders-api, hello-catalog-api,
 # hello-worker - one Helm release per workload from the repository chart applications/charts/hello-service
 # (Deployment, workload identity ServiceAccount, Service, PDB, HPA, optional Ingress / NetworkPolicy). Values are rendered here from the upstream contracts (yamlencode of a typed object).
-# Logs: stdout -> Fluent Bit DaemonSet (obs-kubernetes). Traces: OTLP to the node-local Datadog Agent
-# (status.hostIP via the downward API). Secrets (ADR-0001 §14): secret settings are env values holding Delinea DSV
+# Logs: stdout, collected by the node collector of the fleet policy (observability 4.0.0: the node Datadog Agent ->
+# Observability Pipelines; Fluent Bit DaemonSet only with log_pipeline = fluent_bit_direct). Traces: OTLP to the
+# node-local Datadog Agent (status.hostIP via the downward API) or Single Step Instrumentation. Secrets (ADR-0001 §14): secret settings are env values holding Delinea DSV
 # references (chart secretEnv); the app resolves them at start-up with its AKS workload identity. Fallback
 # settings.secrets_mode = synced: the chart reads a Secret maintained by the Delinea dsv-k8s syncer. No Key Vault.
 module "meta" {
@@ -10,7 +11,6 @@ module "meta" {
 }
 
 locals {
-  ids   = var.foundation_identity.identities
   meta  = module.meta.services
   ns    = var.settings.namespace
   apps  = { for k, a in var.settings.apps : k => a if a.enabled }
@@ -171,7 +171,7 @@ locals {
         agentLogSource            = module.env[k].log_collector == "datadog-agent" ? module.env[k].k8s_patch_object.metadata.labels["logs.datadoghq.com/source"] : ""
         singleStepInstrumentation = module.env[k].apm.method == "ssi_kubernetes"
       }
-      logFile = { enabled = false } # stdout -> Fluent Bit DaemonSet
+      logFile = { enabled = false } # stdout -> node log collector (Datadog Agent, or Fluent Bit DaemonSet fallback)
       # Faults need FAULT_TOKEN (dsv:// reference); without it FAULTS_ENABLED stays false (chart schema rule).
       faults = { enabled = var.settings.faults_enabled && contains(keys(local.secret_env[k]), "FAULT_TOKEN") }
       resources = {

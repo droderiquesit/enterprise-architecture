@@ -17,7 +17,6 @@ from tools.pipeline.conditions import EvalContext, ExpressionError, evaluate, pa
 from tools.pipeline.generate import (
     OUTPUTS,
     apply_condition,
-    build,
     direct_upstream,
     main as generate_main,
     plan_condition,

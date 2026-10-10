@@ -1,5 +1,4 @@
 """Content tests: archetype merge precedence, rendering, validation, references, committed output freshness."""
-import copy
 import json
 import re
 import subprocess

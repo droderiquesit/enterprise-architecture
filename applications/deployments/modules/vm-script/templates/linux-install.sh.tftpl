@@ -55,7 +55,8 @@ VERSION=$(tr -d '[:space:]' < "$WORK/pkg/VERSION")
 id -u "$APP" >/dev/null 2>&1 || useradd --system --home-dir "$BASE" --no-create-home --shell /usr/sbin/nologin "$APP"
 install -d -m 0755 "$BASE/releases"
 install -d -m 0750 -o "$APP" -g "$APP" "/var/log/$APP"
-# Shared host log directory tailed by the Fluent Bit host service (observability): sticky + writable.
+# Shared host log directory tailed by the observability host log collector (Datadog Agent, or Fluent Bit with
+# fluent_bit_direct): sticky + writable.
 install -d -m 1777 /var/log/hello
 REL="$BASE/releases/$VERSION-$(date -u +%Y%m%dT%H%M%SZ)"
 "$PY" -m venv "$REL/venv"

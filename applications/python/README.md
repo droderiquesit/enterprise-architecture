@@ -4,7 +4,7 @@
 |---|---|---|
 | (library) | `shared/python/hello_common` | tests only (installed into every service) |
 | svc-catalog-api | `services/catalog-api` | image `hello-catalog-api`, App Service code zip |
-| svc-dbadapter | `services/dbadapter` | image `hello-dbadapter`, App Service code zip |
+| svc-dbadapter | `services/dbadapter` | image `hello-dbadapter`, zip with an offline wheelhouse (`wheels/`, `requirements.txt`, `VERSION`) for App Service Linux (startup command) and VMSS |
 | svc-worker | `services/worker` | image `hello-worker`, VM zip (`*-vm.zip`, offline wheelhouse + systemd unit + install.sh) |
 | svc-partner-sim | `services/partner-sim` | image `hello-partner-sim` (+ code zip) |
 | svc-jobs | `services/jobs` | image `hello-jobs`, Azure Batch zip (`*-batch.zip`, wheelhouse + run.sh) |

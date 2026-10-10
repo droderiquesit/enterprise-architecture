@@ -25,7 +25,7 @@ if [[ -n "${LAB_ENV:-}" && -f "environments/${LAB_ENV}/environment.yaml" ]]; the
   dsv="$(python3 - "environments/${LAB_ENV}/environment.yaml" <<'PY' 2>/dev/null
 import sys, urllib.parse, yaml
 s = (yaml.safe_load(open(sys.argv[1])) or {}).get("secrets") or {}
-url = s.get("base_url") or f"https://{s.get('tenant')}.secretsvaultcloud.{s.get('tld', 'com')}/v1"
+url = s.get("base_url") or (f"https://{s['tenant']}.secretsvaultcloud.{s.get('tld') or 'com'}/v1" if s.get("tenant") else "")
 print(urllib.parse.urlparse(url).hostname or "")
 PY
 )"

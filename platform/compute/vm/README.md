@@ -4,8 +4,8 @@
 |---|---|
 | Component id | `platform-vm` |
 | Owner | platform team (compute) |
-| Consumes | `foundation-network` (`subnets.compute`), `foundation-identity` (`hello-worker`, `hello-inventory-api`) |
-| Produces | `platform-vm` v1 — consumed by `deploy-vm-workloads` (run command install) and `obs-hosts` (agent extensions) |
+| Consumes | `foundation-network` (`subnets.compute`), `foundation-identity` (`hello-worker`, `hello-inventory-api`, `obs-host-agent`) |
+| Produces | `platform-vm` v1 — consumed by `deploy-vm-workloads` (run command install) and `obs-hosts` (Datadog Agent Azure Policy scope) |
 | Status | `implemented` |
 
 ## What it creates
@@ -21,8 +21,11 @@
   *Virtual Machine Administrator/User Login*. Break-glass local credentials: SSH key if
   `admin_ssh_public_key` is set, otherwise `random_password` kept **only in state** (never output).
 - `patch_mode = AutomaticByPlatform`, boot diagnostics (managed storage), `allow_extension_operations = true`
-  (observability installs Datadog Agent / Fluent Bit as separate extension resources; nothing here ignores or
-  overwrites them).
+  (the Entra login extension and VM Applications need the VM agent).
+- **Datadog Agent enrolment** (observability 4.0.0, ADR-0001 §3 rule 3 amendment): hosts carry the tag
+  `datadog:enabled = "true"` and keep the DSV-reader identity `obs-host-agent` in `identity_ids`; the `obs-hosts`
+  Azure Policy (DeployIfNotExists) adds the pinned Datadog Agent VM Application, which this root ignores
+  (`lifecycle.ignore_changes = [gallery_application]`). `datadog.enabled = false` opts the hosts out.
 - **Auto-shutdown** (`azurerm_dev_test_global_vm_shutdown_schedule`) daily **19:00 UTC** (no auto-start).
 
 Bsv2 is used because B-series v1 retires 2028-11-15 (Learn retirement list); switch to `Standard_D2s_v5` via
@@ -32,7 +35,8 @@ Bsv2 is used because B-series v1 retires 2028-11-15 (Learn retirement list); swi
 
 `linux_vm{enabled,size,identity,admin_username,admin_ssh_public_key,os_disk_type,zone,image{}}`,
 `windows_vm{…,hotpatching,image{}}`, `auto_shutdown{enabled,time,timezone}`, `entra_login_enabled`,
-`admin_login_principal_ids`, `user_login_principal_ids`, `encryption_at_host_enabled`.
+`admin_login_principal_ids`, `user_login_principal_ids`, `encryption_at_host_enabled`,
+`datadog{enabled,tag_name,identity_key}`.
 
 ## Cost at defaults (approx., USD/month)
 

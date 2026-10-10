@@ -26,21 +26,23 @@ reported `retire-pending`.
    contract envelopes and writes record status `retired`. It stops at the first failure.
 4. Repeat in waves until only foundation remains (each wave can only retire components nobody enabled still consumes).
 
-Reverse dependency order (from `python3 -m tools.changeset graph`, layer 9 -> 0):
+Reverse dependency order (from `python3 -m tools.changeset graph`, layer 8 -> 0; artifact components `img-*` /
+`svc-*` and `docs` have no Azure resources and are not retired):
 
 ```
-obs-diagnostics, obs-monitoring
-deploy-jobs
-deploy-frontend
-deploy-core-aks, deploy-durable
-deploy-appservice, deploy-core-aca, deploy-dbadapters, deploy-functions, deploy-logicapps, deploy-partner-sim,
-  deploy-specialized, deploy-vm-workloads, obs-dbm, obs-hosts, obs-kubernetes
-obs-telemetry-transport
-platform-aks, platform-batch, platform-containerapps
-platform-* (data, messaging, functions, appservice, vm, vmss, shared, ...), foundation-deploy-agents, foundation-edge
-foundation-identity
-foundation-network, foundation-governance (last), obs-prereqs, obs-azure-integration
-bootstrap (manual only)
+8  obs-diagnostics, obs-monitoring
+7  deploy-jobs
+6  deploy-durable, deploy-frontend
+5  deploy-core-aks
+4  deploy-appservice, deploy-core-aca, deploy-dbadapters, deploy-functions, deploy-logicapps, deploy-partner-sim,
+   deploy-specialized, deploy-vm-workloads, obs-dbm, obs-hosts, obs-kubernetes
+3  obs-telemetry-transport
+2  foundation-edge, platform-aks, platform-aro, platform-batch, platform-containerapps, platform-db-cassandra-mi,
+   platform-db-documentdb, platform-db-sqlvm
+1  foundation-deploy-agents, foundation-pr-reviewer, foundation-secrets, platform-* (data, messaging, functions,
+   appservice, vm, vmss, shared, ...)
+0  foundation-identity, foundation-network, foundation-governance (last), obs-prereqs, obs-azure-integration
+   bootstrap (manual only)
 ```
 
 Notes before specific waves:

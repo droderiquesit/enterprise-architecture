@@ -167,7 +167,7 @@ metadata:
   {{- if or .Values.telemetry.disableAgentLogCollection .Values.telemetry.agentLogSource .Values.podAnnotations .Values.service.tags }}
   annotations:
     {{- if .Values.telemetry.disableAgentLogCollection }}
-    # Logs are collected by the Fluent Bit DaemonSet only; the Datadog Agent must not ship them too.
+    # The Fluent Bit DaemonSet collects these logs (fluent_bit_direct); the Datadog Agent must not ship them too.
     ad.datadoghq.com/{{ $name }}.logs: "[]"
     {{- else if .Values.telemetry.agentLogSource }}
     # The node Datadog Agent collects this container's stdout (-> Observability Pipelines Worker) with this source.

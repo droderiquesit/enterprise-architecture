@@ -158,13 +158,19 @@ package_svc() {
   rm -rf "$stage" && mkdir -p "$stage" "$out"
   rm -f "$out"/*.zip
   case "$svc" in
-    catalog-api|dbadapter|partner-sim)
+    catalog-api|partner-sim)
       # App Service (Linux, code) / generic zip: packages at the root, Oryx installs requirements.txt;
       # startup command: python -m <package>
       cp -r "$dir/src/${PKG[$svc]}" "$APPS/shared/python/hello_common/src/hello_common" "$stage/"
       cp "$dir/requirements.txt" "$stage/"
       echo "python -m ${PKG[$svc]}" > "$stage/startup.txt"
       zipf="$out/hello-$svc-$VERSION.zip" ;;
+    dbadapter)
+      # Offline wheelhouse (wheels/, requirements.txt, VERSION): deploy-dbadapters installs it into a venv - App Service
+      # Linux startup command (no Oryx build) and the VMSS vm-script python-service mode.
+      wheelhouse dbadapter "$stage/wheels" || return 1
+      cp "$dir/requirements.txt" "$dir/README.md" "$stage/"
+      zipf="$out/hello-dbadapter-$VERSION.zip" ;;
     worker)
       wheelhouse worker "$stage/wheels" || return 1
       mkdir -p "$stage/deploy"

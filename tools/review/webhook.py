@@ -135,6 +135,8 @@ def validate(
     skew_seconds: int = 120,
     now: dt.datetime | None = None,
 ) -> ReviewJob:
+    """Validate one delivery and return the job it selects; raises WebhookRejected. Only checks the replay cache:
+    the caller adds the event id once the job was accepted (enqueued), so a failed enqueue can be redelivered."""
     if len(body) > MAX_BODY:
         raise WebhookRejected(413, "payload too large")
     check_auth(auth_header, username, secrets)

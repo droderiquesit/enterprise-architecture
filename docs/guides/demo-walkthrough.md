@@ -24,8 +24,8 @@ telemetry diagram: [04-telemetry](../diagrams/svg/04-telemetry.svg).
 
 | Key | Value source |
 |---|---|
-| `env`, `service`, `version` | `DD_ENV`, `DD_SERVICE`, `DD_VERSION` (+ `OTEL_SERVICE_NAME`) from `observability/modules/instrumentation` |
-| `team`, `domain`, `tier`, `application`, `owner`, `region` | `OTEL_RESOURCE_ATTRIBUTES` on spans/metrics; `FLB_DD_TAGS` (`env, service, version, team, domain, tier, application, region`) on Fluent Bit logs |
+| `env`, `service`, `version` | `DD_ENV`, `DD_SERVICE`, `DD_VERSION` from `observability/modules/instrumentation` (`OTEL_SERVICE_NAME` only for OpenTelemetry workloads such as hello-durable) |
+| `team`, `domain`, `tier`, `application`, `owner`, `region` | `DD_TAGS` (Datadog tracer, serverless-init, Agent sidecar); `OTEL_RESOURCE_ATTRIBUTES` for OpenTelemetry workloads; the Observability Pipelines tag processor fills missing keys on logs |
 | `service.namespace` | `enterprise-hello` (resource attribute) |
 | `cloud.provider` / `cloud.platform` | `azure` / `azure_container_apps`, `azure_app_service`, `azure_functions`, `azure_vm`, ... |
 
@@ -58,15 +58,23 @@ logs to traces in Datadog.
 
 ## Where each signal arrives
 
+Observability package 4.0.0 defaults (`log_pipeline = observability_pipelines`, `apm.mode = datadog`; Functions stay on
+OpenTelemetry). Per-platform reference: [datadog-fleet-collection.md](datadog-fleet-collection.md).
+
 | Signal | Path (minimal / ACA) | AKS variant |
 |---|---|---|
-| BFF / orders / catalog logs | app writes `LOG_FILE_PATH=/var/log/app/app.log` on a shared EmptyDir -> Fluent Bit sidecar -> Datadog logs intake (`http-intake.logs.<site>`) | stdout -> Fluent Bit DaemonSet (`/var/log/containers`); Agent container logs disabled |
-| partner-sim logs | ACI Fluent Bit sidecar (same as ACA) | - |
-| durable logs | FunctionAppLogs diagnostic setting -> Event Hubs `app-logs` -> Fluent Bit aggregator (Kafka) -> Datadog | - |
-| traces + app metrics | OTLP http/protobuf -> OTel gateway (ACA internal ingress) -> Datadog exporter; the gateway accepts OTLP logs and drops them (so durable host logs are not duplicated) | OTLP gRPC -> Datadog Agent DaemonSet on `$(DD_AGENT_HOST):4317` |
+| BFF / orders / catalog logs | app writes `LOG_FILE_PATH=/var/log/app/app.log` on a shared EmptyDir -> Datadog **serverless-init sidecar** (`DD_SERVERLESS_LOG_PATH`) -> Observability Pipelines Worker -> Datadog Logs | stdout -> Datadog node Agent (container logs) -> Worker -> Datadog Logs |
+| partner-sim logs | ACI **Datadog Agent sidecar** tails the shared emptyDir file -> Worker | - |
+| durable logs | FunctionAppLogs diagnostic setting -> Event Hubs `app-logs` -> Worker (Kafka source) -> Datadog Logs | - |
+| BFF / orders / catalog traces + metrics | Datadog tracer in the image -> serverless-init on `localhost:8126`, DogStatsD `udp://localhost:8125` (`hello.*` custom and runtime metrics) -> Datadog | Single Step Instrumentation -> node Agent (`DD_AGENT_HOST` = node IP) |
+| partner-sim traces + metrics | tracer -> ACI Agent sidecar (`localhost:8126` / `:8125`) -> Datadog | - |
+| durable traces + metrics | OTLP http/protobuf -> OTel gateway (ACA internal ingress) -> Datadog exporter; the gateway accepts OTLP logs and drops them (so durable host logs are not duplicated) | same |
 | platform metrics | Datadog Azure integration (`azure.app_containerapps.*`, `azure.sql_servers_databases.*`, `azure.servicebus_namespaces.*`, ...) | same |
-| DB query samples | `obs-dbm` Agent DBM checks (SQL: `deployment_type sql_database`, one instance per database; PostgreSQL managed identity) | same |
-| canary | Fluent Bit aggregator `dummy` input, `service:telemetry-canary` - silence here means the pipeline, not the app, is broken | same |
+| DB query samples | `obs-dbm` DBM checks: ACI Datadog Agent in `minimal` (no cluster); cluster checks on AKS when a cluster exists (`settings.hosting = auto`) | cluster checks |
+| pipeline health | Observability Pipelines Worker status in Datadog (throughput, errors, buffers). The Fluent Bit canary (`service:telemetry-canary`) exists only with `log_pipeline = fluent_bit_direct` | same |
+
+The tag values on these signals come from `DD_ENV` / `DD_SERVICE` / `DD_VERSION` / `DD_TAGS` set by
+`modules/instrumentation`; the Worker's tag processor fills missing policy tags and never overwrites them.
 
 ## Checking it in Datadog
 
@@ -75,8 +83,8 @@ logs to traces in Datadog.
 3. Open the linked trace from the producer span: `process order-events` (hello-durable) -> orchestration / activity
    spans -> partner-sim `POST /payments` -> orders-api `PATCH`.
 4. **Logs** -> `service:hello-orders-api @order_id:<id>`; pivot to the trace via `dd.trace_id`.
-5. **Metrics** -> `hello.workflow.completed{workflow:OrderProcessing}` by `outcome`; the `workflow.failure_rate` monitor of
-   hello-durable uses it.
+5. **Metrics** -> `hello.workflow.completed{workflow:OrderProcessing}` by `outcome` (the optional monitoring content's
+   `workflow.failure_rate` monitor of hello-durable uses it).
 
 Automated version of these checks: `observability/tools/verify/telemetry_verify.py` (checks `rum_resource_trace`,
 `apm_journey`, `logs_pipeline`, `logs_trace_corr`, `logs_no_duplicates`, `required_tags`, `infra_metrics`), run by the
@@ -85,5 +93,5 @@ pipeline's Verify stage.
 ## Making it fail on purpose
 
 See [fault-injection runbook](../runbooks/fault-injection.md): e.g. `dependency_timeout` on hello-bff produces 504s and
-the `apm.error_rate` / `apm.http_5xx` monitors; `PARTNER_FAILURE_RATE` on partner-sim drives the durable retry and
+the `apm.error_rate` / `apm.http_5xx` monitors (optional monitoring content); `PARTNER_FAILURE_RATE` on partner-sim drives the durable retry and
 compensation path (`outcome:compensated`).

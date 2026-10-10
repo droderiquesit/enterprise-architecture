@@ -136,7 +136,7 @@ Rotation and break-glass: [docs/runbooks/secret-rotation.md](../docs/runbooks/se
 
 ## First run (local state → migrate)
 
-Prerequisites: `az` ≥ 2.60, terraform ≥ 1.14, python3 + pyyaml, jq; **Owner** (or Contributor + RBAC Administrator +
+Prerequisites: `az` ≥ 2.60, terraform ≥ 1.14, python3 + pyyaml, jq, curl; **Owner** (or Contributor + RBAC Administrator +
 Resource Policy Contributor) on the subscription; Entra rights to create app registrations if Datadog is enabled.
 
 1. In `environments/<env>/environment.yaml` set real `subscription_id`/`tenant_id` and add:

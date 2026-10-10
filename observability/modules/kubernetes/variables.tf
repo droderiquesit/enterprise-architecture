@@ -8,6 +8,7 @@ variable "cluster_name" {
 }
 
 variable "datadog" {
+  description = "Datadog site (e.g. datadoghq.eu), environment name (env tag, fleet policy environments.<env>) and extra cluster tags."
   type = object({
     site       = string
     env        = string
@@ -58,6 +59,7 @@ variable "dsv" {
 }
 
 variable "namespaces" {
+  description = "Namespaces of the Datadog Agent release and the Fluent Bit fallback; create = false when the caller manages them."
   type = object({
     datadog    = optional(string, "datadog")
     fluent_bit = optional(string, "fluent-bit")
@@ -84,6 +86,7 @@ variable "charts" {
 }
 
 variable "features" {
+  description = "Agent feature flags: APM ports, process collection, cluster-checks runners (required by cluster_checks), Operator sub-chart, service discovery, kubelet TLS mode, AKS provider settings."
   type = object({
     apm                   = optional(bool, true)
     process_collection    = optional(bool, false)

@@ -24,8 +24,9 @@ variable "routing" {
 }
 
 variable "create_webhooks" {
-  type    = bool
-  default = false
+  description = "Create the notification webhooks of the routing file (false = they already exist in the organisation)."
+  type        = bool
+  default     = false
 }
 
 variable "synthetics" {
@@ -40,6 +41,7 @@ variable "synthetics" {
 }
 
 variable "dashboards" {
+  description = "Dashboards to create: per-service dashboards, the overview (title, journey services, pipeline scope)."
   type = object({
     service_dashboards = optional(bool, true)
     overview           = optional(bool, true)
@@ -51,6 +53,7 @@ variable "dashboards" {
 }
 
 variable "service_catalog" {
+  description = "Software Catalog entities of the onboarded services and an optional system entity grouping them."
   type = object({
     enabled = optional(bool, true)
     system  = optional(string) # optional v3 system entity grouping all onboarded services
@@ -59,8 +62,9 @@ variable "service_catalog" {
 }
 
 variable "slos_enabled" {
-  type    = bool
-  default = true
+  description = "Create the SLOs (and their burn-rate monitors) of the rendered services."
+  type        = bool
+  default     = true
 }
 
 variable "extra_tags" {

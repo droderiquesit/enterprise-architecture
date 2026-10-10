@@ -55,7 +55,7 @@ resource "azurerm_orchestrated_virtual_machine_scale_set" "flexible" {
   platform_fault_domain_count  = 1
   zones                        = length(local.flex.zones) > 0 ? local.flex.zones : null
   encryption_at_host_enabled   = var.settings.encryption_at_host_enabled
-  extension_operations_enabled = true # observability adds Datadog Agent + Fluent Bit extensions
+  extension_operations_enabled = true # VM agent installs the Datadog Agent VM Application (obs-hosts policy)
   user_data_base64             = null
   tags                         = merge(local.tags, local.dd_tags)
 
@@ -110,7 +110,7 @@ resource "azurerm_orchestrated_virtual_machine_scale_set" "flexible" {
   boot_diagnostics {}
 
   lifecycle {
-    # instance count is owned by autoscale; extensions are owned by observability.
+    # instance count is owned by autoscale; extensions are never managed here (legacy owner: observability).
     ignore_changes = [instances, extension, os_profile[0].custom_data]
   }
 }

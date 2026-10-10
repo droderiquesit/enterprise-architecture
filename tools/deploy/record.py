@@ -4,12 +4,16 @@
     python3 tools/deploy/record.py write --env dev --component foundation-network --status succeeded \
         --selection selection.json --store https://<acct>.blob.core.windows.net/deployments [--manifest m.json]
     python3 tools/deploy/record.py show --env dev --component foundation-network --store <store>
+    python3 tools/deploy/record.py verify --env dev --component '*' --store <store> --smoke-results smoke.json
+                                          [--telemetry-results t.json | --verification passed|failed]
 
 Record: {component, env, kind, path, status, deploy_fp, fp_parts, commit, run_id, finished_at,
-artifact_digests, contract_versions, contracts_sha, scope, upstream, produces, plan_sha256, note, last_succeeded?}
-status: succeeded | failed | partial | canceled | retired.
+artifact_digests, artifacts, contract_versions, contracts_sha, scope, mode, upstream, produces, plan_sha256, note,
+consecutive_failures, history, verification?, quarantine?, last_status?, last_succeeded?}
+status: succeeded | failed | partial | canceled | retired | rolled_back | quarantined (circuit breaker, make_record).
 A non-succeeded record keeps the previous succeeded record under `last_succeeded`; the change
-detector re-selects any component whose status is not `succeeded`, which makes re-runs resumable.
+detector re-selects any component whose status is not `succeeded` (except the HELD statuses for the same
+fingerprint), which makes re-runs resumable.
 """
 
 from __future__ import annotations

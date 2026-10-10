@@ -83,3 +83,6 @@ retention, lost) and the apps. The DSV secret `eventhub-fluentbit-listen` is not
 ## Docs
 - `observability/modules/README-transport.md`
 - `observability/modules/telemetry-transport/README.md`
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-telemetry-transport` (fmt, validate, test).

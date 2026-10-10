@@ -1,7 +1,7 @@
 #cloud-config
 # OS preparation only (platform). The application (systemd unit, package, config) is installed
-# later by applications/deployments/vm-workloads via VM Run Command; the Datadog Agent and
-# Fluent Bit are VM extensions owned by observability (ADR-0001 §3).
+# later by applications/deployments/vm-workloads via VM Run Command; the Datadog Agent is a VM
+# Application added by the observability obs-hosts Azure Policy (ADR-0001 §3 rule 3, §13).
 package_update: true
 package_upgrade: false
 packages:
@@ -26,7 +26,7 @@ write_files:
       Prepared by platform (${component}). Application layout:
         /opt/${app_dir}/releases/<version>   unpacked packages (owned by ${app_user})
         /opt/${app_dir}/current              symlink to the active release
-        /var/log/${app_dir}/<service>.log    JSON log file tailed by Fluent Bit (LOG_FILE_PATH)
+        /var/log/${app_dir}/<service>.log    JSON log file tailed by the Datadog Agent (LOG_FILE_PATH)
       Python ${python_version} is installed from the deadsnakes PPA (Ubuntu 24.04 ships 3.12).
 runcmd:
   - [mkdir, -p, /opt/${app_dir}/releases, /var/log/${app_dir}, /etc/${app_dir}]

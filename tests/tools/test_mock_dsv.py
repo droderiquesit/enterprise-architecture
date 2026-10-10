@@ -1,3 +1,5 @@
+"""Mock DSV server (tools/secrets/mock_dsv.py): azure grant identity mapping, policy-scoped reads, chunked bodies."""
+
 import json
 import urllib.error
 import urllib.request

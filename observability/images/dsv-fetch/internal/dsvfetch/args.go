@@ -137,7 +137,7 @@ func (c cmdSpec) parse(prog string, args []string) (parsed, error) {
 				spec = &c.opts[j]
 			}
 		}
-		if "help" != name && strings.HasPrefix("help", name) && spec == nil {
+		if name != "help" && strings.HasPrefix("help", name) && spec == nil {
 			return p, &helpRequested{c.helpText(prog)}
 		}
 		if len(matches) > 1 {

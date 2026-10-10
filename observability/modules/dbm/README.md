@@ -84,3 +84,6 @@ References:
 - https://docs.datadoghq.com/database_monitoring/guide/managed_authentication/
 - https://docs.datadoghq.com/agent/configuration/secrets-management/
 - https://docs.datadoghq.com/containers/cluster_agent/clusterchecks/
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/dbm.tftest.hcl`. The rendered checks run against local databases in `observability/tests/transport/test_dbm_local.py` (docker).

@@ -78,3 +78,6 @@ References:
 - https://docs.datadoghq.com/agent/configuration/secrets-management/
 - https://docs.datadoghq.com/containers/cluster_agent/clusterchecks/
 - https://learn.microsoft.com/azure/aks/workload-identity-overview
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/kubernetes.tftest.hcl`. The chart render with the post-renderer is checked by `observability/tests/kubernetes/test_datadog_chart.py` (helm).

@@ -90,9 +90,10 @@ SPEC=$(mktemp); trap 'rm -f "$SPEC"' EXIT
 python3 - "$SPEC" "$TASK" "$PKG" "$SHA" "$IDENTITY" "$DATE" <<'PY'
 import json, sys
 spec, task, pkg, sha, identity, date = sys.argv[1:7]
-cmd = ("/bin/bash -c 'set -euo pipefail; echo \"%s  pkg.zip\" | sha256sum -c --status && "
-       "python3 -m zipfile -e pkg.zip app && chmod +x app/deploy/batch/run.sh 2>/dev/null || true; "
-       "bash app/run.sh daily-aggregate 2>/dev/null || bash app/deploy/batch/run.sh daily-aggregate'") % sha
+# Separate commands (not an && chain): under `set -e` a failing sha256 check must stop the task. The batch zip
+# (applications/python/build.sh) carries run.sh at its root.
+cmd = ("/bin/bash -c 'set -euo pipefail; echo \"%s  pkg.zip\" | sha256sum -c --status; "
+       "python3 -m zipfile -e pkg.zip app; exec bash app/run.sh daily-aggregate'") % sha
 json.dump({
     "id": task,
     "commandLine": cmd,

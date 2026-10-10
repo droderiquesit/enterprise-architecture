@@ -44,8 +44,10 @@ published to ACR: `settings.helm = { chart_repository = "oci://<acr login server
 
 ## App settings
 Same service env as deploy-core-aca plus: `DD_AGENT_HOST` from `status.hostIP` (first env var) and
-`OTEL_EXPORTER_OTLP_ENDPOINT=http://$(DD_AGENT_HOST):4317` (gRPC), no `LOG_FILE_PATH` (stdout → Fluent Bit
-DaemonSet), unified service labels `tags.datadoghq.com/*`, pod annotation `ad.datadoghq.com/<c>.logs=[]` (Agent must
+`OTEL_EXPORTER_OTLP_ENDPOINT=http://$(DD_AGENT_HOST):4317` (gRPC), no `LOG_FILE_PATH` (stdout → the node log
+collector of the fleet policy), unified service labels `tags.datadoghq.com/*`, pod annotation
+`ad.datadoghq.com/<c>.logs` = `[{"source": ..., "service": ...}]` when the node Datadog Agent collects the logs
+(observability 4.0.0 default) or `[]` with `log_pipeline = fluent_bit_direct` (Fluent Bit DaemonSet; the Agent must
 not ship the same logs). Worker: `SB_TOPIC`, `SB_SUBSCRIPTION=notifications`, `HEALTH_PORT=8081`, `TABLE_MODE=memory`
 (this root does not consume platform-db-table-storage). Python services get `AZURE_CREDENTIAL_MODE=workload_identity`.
 

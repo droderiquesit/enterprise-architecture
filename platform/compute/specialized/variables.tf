@@ -33,7 +33,7 @@ variable "foundation_network" {
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract v1 (only the fields this root uses)."
+  description = "foundation-identity contract v2 (only the fields this root uses)."
   type = object({
     identities = map(object({
       id           = string
@@ -87,6 +87,13 @@ variable "settings" {
       cluster_priority = optional(string, "LowPriority")
     }), {})
     auto_shutdown_time = optional(string, "1900")
+    # Datadog Agent via the obs-hosts Azure Policy (observability 4.0.0), as in platform-vm: enrolment tag (= obs-hosts
+    # settings.policy.enrollment_tag) and the foundation-identity key of the DSV-reader identity the policy attaches.
+    datadog = optional(object({
+      enabled      = optional(bool, true)
+      tag_name     = optional(string, "datadog:enabled")
+      identity_key = optional(string, "obs-host-agent")
+    }), {})
   })
   default = {}
 

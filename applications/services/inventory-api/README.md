@@ -51,8 +51,9 @@ Cosmos client: 5 s request timeout, max 3 throttling retries / 5 s wait, distrib
 - Metrics: `hello.inventory.reservations{result=reserved|replayed|insufficient|unknownsku|released|alreadyreleased|notfound}`,
   `hello.faults.injected`, ASP.NET Core/runtime.
 - Logs: JSON with `order_id`, `sku`, `quantity`, `reservation_outcome`. On App Service Windows stdout is captured as
-  `AppServiceConsoleLogs` (diagnostic settings → Event Hubs → Fluent Bit). On a Windows VM set `LOG_FILE_PATH`
-  (e.g. `C:\ProgramData\hello\logs\inventory.log`) for the Fluent Bit service to tail.
+  `AppServiceConsoleLogs` (diagnostic settings → Event Hubs → Observability Pipelines Worker). On a Windows VM set
+  `LOG_FILE_PATH` (e.g. `C:\ProgramData\hello\logs\inventory.log`) for the host Datadog Agent to tail (Fluent Bit
+  service with `log_pipeline = fluent_bit_direct`).
 
 ## Packages and hosting
 

@@ -19,7 +19,7 @@ separate data (F:) and log (G:) disks, daily auto-shutdown, and database `adapte
 
 ## Produced contract
 `platform-db-sqlvm` v1 — schema `catalog/contracts/platform-db-sqlvm.v1.schema.json` (output `contract`, no secrets).
-VM (id, private IP, principal ID), server (port, auth `sql-login`, admin password secret ID), database `adapter` (login `dbadapter`, `password_secret_id`), and `dbm` (`deployment_type = self_hosted_azure_vm`: the Agent runs on the VM and connects to localhost with SQL login `datadog`; password secret `dbm-sqlvm-password` from `foundation_identity.secret_ids`, convention fallback).
+VM (id, private IP, principal ID), server (port, auth `sql-login`, admin password secret ID), database `adapter` (login `dbadapter`, `password_secret_id`), and `dbm` (`deployment_type = self_hosted_azure_vm`: the Agent runs on the VM and connects to localhost with SQL login `datadog`; password secret `dbm-sqlvm-password` from `foundation_identity.secrets.refs`, convention fallback).
 
 ## Settings (`components.platform-db-sqlvm` in `environments/<env>/environment.yaml`)
 | Key | Default |
@@ -57,7 +57,8 @@ synthetic data in it.
 ## Known limitations / exceptions
 - Entra auth not implemented (see above). Encryption at host requires the `EncryptionAtHost` subscription feature (checkov skip annotated).
 - Auto-shutdown does not auto-start; the deploy-vm-workloads pipeline or an operator must start the VM.
-- VM extensions (Datadog Agent, Fluent Bit) are observability-owned.
+- The Datadog Agent is observability-owned: the `obs-hosts` Azure Policy adds it as a VM Application to the VM tagged
+  `datadog:enabled` (this root ignores `gallery_application`).
 
 ## Validation
 ```bash

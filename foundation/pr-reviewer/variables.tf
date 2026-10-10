@@ -48,7 +48,7 @@ variable "settings" {
   description = "foundation-pr-reviewer settings (environment.yaml components.foundation-pr-reviewer). See README."
   type = object({
     # public: Flex app without VNet integration; its runtime storage is reachable publicly but Entra-only (no keys).
-    # vnet:   Flex VNet integration (flex-integration subnet) + storage private endpoints (blob, queue); the app's
+    # vnet:   Flex VNet integration (flex-integration subnet) + storage private endpoints (blob, queue, table); the app's
     #         INBOUND endpoint stays public (Azure DevOps service hooks need a public HTTPS URL).
     network_mode = optional(string, "public")
     # Inbound restriction of the function endpoint to the AzureDevOps service tag (+ allowed_ip_ranges, e.g. deploy

@@ -1,4 +1,4 @@
-# Service onboarding tutorial (one manifest per service, package 3.0.0)
+# Service onboarding tutorial (one manifest per service, package 4.0.0)
 
 This tutorial connects a service to Datadog with the observability package. You write one YAML manifest
 ([`onboarding-manifest.v2`](../../observability/schemas/onboarding-manifest.v2.schema.json)) that holds the identity,
@@ -32,7 +32,7 @@ spec:
   architecture: aca                # aks | aca | aci | appservice | functions | vm | vmss | logicapp | batch | swa
   runtime: dotnet
   telemetry:
-    logs: {route: sidecar}         # optional; default from the fleet policy per architecture
+    logs: {route: sidecar}         # optional; default from the fleet policy per architecture (aca: the serverless-init sidecar)
     dbm: {enabled: true, engine: sqlserver}
     # apm: {mode: otel}            # optional per-service override of the fleet policy (datadog | otel | none)
     # profiling: {enabled: false}  # optional per-service override
@@ -101,12 +101,16 @@ With the default `apm.mode = datadog` the hook sets these variables:
 * `DD_ENV`, `DD_SERVICE`, `DD_VERSION`, and `DD_TAGS` with the extra policy keys;
 * `DD_LOGS_INJECTION=true` and `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED=true`;
 * the profiler settings;
-* `DD_TRACE_AGENT_URL`, which points at the in-VNet APM gateway on Container Apps and App Service;
-* on AKS, the DogStatsD target (`DD_AGENT_HOST` = node IP).
+* the trace / DogStatsD target: on AKS `DD_AGENT_HOST` = node IP; on Container Apps and ACI the local sidecar
+  (`localhost:8126` / `udp://localhost:8125`, no `DD_TRACE_AGENT_URL`); `DD_TRACE_AGENT_URL` = the in-VNet APM gateway
+  only on the `agent_gateway` path (Container Apps jobs, App Service workloads that opt into `apm.mode = datadog`).
 
-It sets **no** `OTEL_*` variable. With `apm.mode = otel` the hook sets the OpenTelemetry variables of 2.x instead.
-For the sidecar route it adds the Fluent Bit sidecar, which forwards to the Observability Pipelines Worker with no API
-key. In this lab the deployment roots apply the hook through `applications/deployments/modules/app-env`.
+It sets **no** `OTEL_*` variable. With `apm.mode = otel` (the App Service and Functions default) the hook sets the
+OpenTelemetry variables instead. The log collector follows the fleet policy: on Container Apps `container_app_patch`
+adds the Datadog **serverless-init** sidecar and on ACI `aci_sidecar` the **Datadog Agent** sidecar, both tailing
+`LOG_FILE_PATH` and shipping to the Observability Pipelines Worker; each reads the Datadog API key from DSV with the
+`dsv-fetch` binary. A Fluent Bit sidecar is added only with `log_pipeline = fluent_bit_direct`. In this lab the
+deployment roots apply the hook through `applications/deployments/modules/app-env`.
 
 ## 6. Verify
 

@@ -20,8 +20,9 @@ variable "services" {
 }
 
 variable "create_service_dashboards" {
-  type    = bool
-  default = true
+  description = "Create one dashboard per onboarded service (the overview dashboard is separate)."
+  type        = bool
+  default     = true
 }
 
 variable "overview" {

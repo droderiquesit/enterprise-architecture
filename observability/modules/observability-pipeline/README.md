@@ -21,8 +21,12 @@ destinations.
 Where the Worker runs:
 
 * Container Apps: `modules/telemetry-transport` (`log_pipeline = observability_pipelines`).
-* AKS: `modules/kubernetes` `op_worker`, with `env = worker_env` and `secret_env` from dsv-k8s-synced Secrets.
+* AKS: `modules/kubernetes` `op_worker`, with `env = worker_env` and `secret_env = worker_secret_refs` (DSV references
+  resolved by the Worker's dsv-fetch init container; no Kubernetes Secret).
 
 The Worker needs a live Datadog organisation at start-up: it validates the API key and pulls the pipeline by
 `DD_OP_PIPELINE_ID` through Remote Configuration. The VRL programs and the Fluent Bit forward path are tested locally
 with the Vector CLI and Vector's `fluent` source (`tests/transport/test_observability_pipelines.py`).
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/pipeline.tftest.hcl`. The VRL programs and the forward path run in `observability/tests/transport/test_observability_pipelines.py` (docker).

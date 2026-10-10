@@ -10,7 +10,8 @@ terraform {
 }
 
 variable "name" {
-  type = string
+  description = "Storage account name (3-24 lowercase alphanumerics; callers use foundation/modules/naming unique.storage)."
+  type        = string
   validation {
     condition     = can(regex("^[a-z0-9]{3,24}$", var.name))
     error_message = "storage account names are 3-24 lowercase alphanumerics."
@@ -18,21 +19,25 @@ variable "name" {
 }
 
 variable "resource_group_name" {
-  type = string
+  description = "Resource group of the account and its private endpoints."
+  type        = string
 }
 
 variable "location" {
-  type = string
+  description = "Azure region."
+  type        = string
 }
 
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Tags (module.tags.tags of the calling root)."
+  type        = map(string)
+  default     = {}
 }
 
 variable "replication" {
-  type    = string
-  default = "LRS"
+  description = "Account replication type (LRS, ZRS, ...)."
+  type        = string
+  default     = "LRS"
 }
 
 variable "shared_access_key_enabled" {
@@ -42,18 +47,21 @@ variable "shared_access_key_enabled" {
 }
 
 variable "public_network_access_enabled" {
-  type    = bool
-  default = false
+  description = "Enable the public endpoint; only where the consumer cannot use Private Link (documented per caller)."
+  type        = bool
+  default     = false
 }
 
 variable "network_bypass" {
-  type    = list(string)
-  default = ["AzureServices"]
+  description = "Trusted-service bypass list of the account firewall."
+  type        = list(string)
+  default     = ["AzureServices"]
 }
 
 variable "containers" {
-  type    = list(string)
-  default = []
+  description = "Blob containers to create (private)."
+  type        = list(string)
+  default     = []
 }
 
 variable "private_endpoints" {
@@ -63,13 +71,15 @@ variable "private_endpoints" {
 }
 
 variable "private_endpoint_subnet_id" {
-  type    = string
-  default = null
+  description = "Subnet for the private endpoints (required when private_endpoints is set)."
+  type        = string
+  default     = null
 }
 
 variable "private_endpoint_name_prefix" {
-  type    = string
-  default = "pep"
+  description = "Name prefix of private endpoints and their NICs."
+  type        = string
+  default     = "pep"
 }
 
 variable "private_dns_zone_ids" {
@@ -89,8 +99,9 @@ variable "role_assignments" {
 }
 
 variable "blob_retention_days" {
-  type    = number
-  default = 7
+  description = "Blob and container soft-delete retention (days)."
+  type        = number
+  default     = 7
 }
 
 resource "azurerm_storage_account" "this" {
@@ -192,14 +203,17 @@ resource "azurerm_role_assignment" "this" {
 }
 
 output "id" {
-  value = azurerm_storage_account.this.id
+  description = "Storage account id."
+  value       = azurerm_storage_account.this.id
 }
 
 output "name" {
-  value = azurerm_storage_account.this.name
+  description = "Storage account name."
+  value       = azurerm_storage_account.this.name
 }
 
 output "endpoints" {
+  description = "Primary blob/queue/table/file endpoints."
   value = {
     blob  = azurerm_storage_account.this.primary_blob_endpoint
     queue = azurerm_storage_account.this.primary_queue_endpoint
@@ -209,9 +223,11 @@ output "endpoints" {
 }
 
 output "containers" {
-  value = { for k, c in azurerm_storage_container.this : k => { name = c.name, url = "${azurerm_storage_account.this.primary_blob_endpoint}${c.name}" } }
+  description = "Container key => {name, url}."
+  value       = { for k, c in azurerm_storage_container.this : k => { name = c.name, url = "${azurerm_storage_account.this.primary_blob_endpoint}${c.name}" } }
 }
 
 output "private_endpoint_ids" {
-  value = { for k, p in azurerm_private_endpoint.this : k => p.id }
+  description = "Sub-resource => private endpoint id."
+  value       = { for k, p in azurerm_private_endpoint.this : k => p.id }
 }

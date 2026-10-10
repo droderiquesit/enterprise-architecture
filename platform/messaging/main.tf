@@ -20,7 +20,7 @@ locals {
   # Data-plane grants: key => {identity, scope kind, entity, role}
   grants = merge(
     { for k in var.settings.topic_sender_identities : "topic-send-${k}" => { identity = k, kind = "topic", entity = var.settings.topic_name, role = "Azure Service Bus Data Sender" } },
-    { for k in concat(var.settings.queue_sender_identities, var.settings.logic_app_identities) : "queue-send-${k}" => { identity = k, kind = "queue", entity = var.settings.queue_name, role = "Azure Service Bus Data Sender" } },
+    { for k in distinct(concat(var.settings.queue_sender_identities, var.settings.logic_app_identities)) : "queue-send-${k}" => { identity = k, kind = "queue", entity = var.settings.queue_name, role = "Azure Service Bus Data Sender" } },
     { for s, cfg in var.settings.subscriptions : "sub-recv-${s}-${cfg.consumer}" => { identity = cfg.consumer, kind = "subscription", entity = s, role = "Azure Service Bus Data Receiver" } },
     { "queue-recv-${var.settings.queue_consumer}" = { identity = var.settings.queue_consumer, kind = "queue", entity = var.settings.queue_name, role = "Azure Service Bus Data Receiver" } },
     var.settings.queue_scaler_owner_enabled ? { "queue-scaler-${var.settings.queue_consumer}" = { identity = var.settings.queue_consumer, kind = "queue", entity = var.settings.queue_name, role = "Azure Service Bus Data Owner" } } : {},

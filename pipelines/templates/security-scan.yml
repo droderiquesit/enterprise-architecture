@@ -1,9 +1,10 @@
 # Security scanning (job template). Runs on Microsoft-hosted agents with NO service connection, so
-# it is safe for untrusted PR code. Tools are installed in-job at pinned versions with checksum
-# verification (pipelines/scripts/install-tools.sh, versions in pipelines/variables/tools.yml):
+# it is safe for untrusted PR code. Tools are installed in-job at pinned versions with checksum / image-digest
+# verification (pipelines/scripts/install-tools.sh, versions in pipelines/variables/tools.yml; checkov is a
+# version-pinned pip install without hashes):
 #   gitleaks  secrets in the working tree (and git history of the PR range when available)
 #   trivy     filesystem scan: vulnerable dependencies (lock files) + misconfiguration (Dockerfiles)
-#   checkov   Terraform static analysis (soft-fail on findings already accepted in .checkov.yaml)
+#   checkov   Terraform static analysis (accepted findings: a root .checkov.yaml, used when present)
 #   hadolint  Dockerfiles; shellcheck  shell scripts
 # All scanners run in parallel (python3 -m tools.ci scan: background processes, aggregated exit codes), on the
 # changed scope for PRs and on everything for nightly / release runs. Results: SARIF/JSON pipeline artifacts.
@@ -38,7 +39,7 @@ jobs:
           set -euo pipefail
           args=(--out "$(Build.ArtifactStagingDirectory)/security" --selection "$(Pipeline.Workspace)/selection/selection.json")
           # PRs: changed scope only; nightly schedules and release/*: everything
-          if [[ "$(Build.Reason)" == "Schedule" || "$(Build.SourceBranch)" == refs/heads/release/* ]]; then args+=(--full); fi
+          if [[ "$(Build.Reason)" == "Schedule" || "$BUILD_SOURCEBRANCH" == refs/heads/release/* ]]; then args+=(--full); fi
           ${{ iif(parameters.failOnFindings, '', 'args+=(--soft-fail)') }}
           python3 -m tools.ci scan "${args[@]}"
         displayName: Scanners in parallel (gitleaks, trivy, checkov, hadolint, shellcheck)

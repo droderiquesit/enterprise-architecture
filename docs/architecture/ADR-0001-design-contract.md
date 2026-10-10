@@ -210,6 +210,10 @@ Common service contract (all HTTP services):
 
 ## 10. Telemetry paths (authoritative)
 
+> This section is the original 1.x/2.x text. It is amended by section 13 (2026-10-10: observability 3.0.0 and
+> **4.0.0**); where they differ the amendments win. The current per-platform paths are in
+> [datadog-fleet-collection.md](../guides/datadog-fleet-collection.md) and the [telemetry diagram](../diagrams/README.md).
+
 - **Application logs → Fluent Bit → Datadog** (HTTP output, TLS, `DD_SITE`). No other collector may ship the same
   application logs. Container stdout collection by the Datadog Agent is **disabled** where Fluent Bit collects.
   - AKS: Fluent Bit DaemonSet tails `/var/log/containers`.

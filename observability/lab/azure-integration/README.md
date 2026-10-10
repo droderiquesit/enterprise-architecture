@@ -4,8 +4,7 @@
 `modules/azure-integration`.
 
 * **Consumes:** nothing for secrets. `app_auth = secret` takes the client secret from the pipeline input `TF_VAR_datadog_azure_client_secret` (read from Delinea DSV just in time).
-* **Produces:** no contract. Outputs: `integration_id`, `mode`, `azure_logs_dashboard_url`, `azure_log_metrics`,
-  `native_log_forwarding`.
+* **Produces:** no contract. Outputs: `integration_id`, `mode`, `native_log_forwarding`.
 
 ## Settings
 * `datadog_site`
@@ -44,3 +43,6 @@ Destroy removes the Datadog integration and the role assignments. The Entra app 
 * Native log forwarding (subscription, resource and Entra logs) is off. It is mutually exclusive with the Event Hubs
   path (validation).
 * Datadog automated log forwarding is not used. See `modules/azure-integration/README.md`.
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-azure-integration` (fmt, validate, test).

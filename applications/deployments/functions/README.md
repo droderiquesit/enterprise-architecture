@@ -24,7 +24,9 @@ premium runtime account), `content_share_force_disabled` + `WEBSITE_RUN_FROM_PAC
 `WEBSITE_RUN_FROM_PACKAGE_BLOB_MI_RESOURCE_ID` (no Azure Files, no SAS), `ServiceBusConnection__*` (identity),
 `AUDIT_SINK` (`ledger`|`table`|`log`, read by `hello_functions.handlers.audit_sink_from_env`), `LEDGER_ENDPOINT/LEDGER_COLLECTION=order-audit` or `TABLES_ENDPOINT/AUDIT_TABLE`, `CACHE_WARM_SCHEDULE`,
 `CATALOG_API_URL`, `FUNCTIONS_HOST`, OTel (HTTP to gateway), `FAULT_TOKEN` as `dsv://` reference (resolved by the app). ACA host: same
-env, Fluent Bit sidecar with a dsv-fetch init container (ACA log route); ACA secrets hold only the sidecar config files.
+env plus the Datadog serverless-init sidecar (logs from the shared app log file; traces stay on OpenTelemetry) whose
+Datadog key is read from DSV by the dsv-fetch binary an init container installs; with `log_pipeline = fluent_bit_direct`
+(fallback) a Fluent Bit sidecar with a dsv-fetch init container instead. ACA secrets hold only sidecar config files.
 
 ## Rollback
 Premium/Dedicated run from the package URL: re-apply with the previous svc-functions artifact. ACA: previous digest.

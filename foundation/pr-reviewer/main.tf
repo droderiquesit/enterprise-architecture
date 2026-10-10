@@ -12,20 +12,12 @@ module "naming" {
 }
 
 module "tags" {
-  source    = "../modules/tags"
-  component = "foundation-pr-reviewer"
-  layer     = "foundation"
-  domain    = "governance"
-  service   = "eh-pr-reviewer"
-  environment = {
-    name        = var.environment.name
-    location    = var.environment.location
-    owner       = var.environment.owner
-    team        = var.environment.team
-    cost_center = var.environment.cost_center
-    expires_on  = var.environment.expires_on
-    tags        = var.environment.tags
-  }
+  source      = "../modules/tags"
+  environment = var.environment
+  component   = "foundation-pr-reviewer"
+  layer       = "foundation"
+  domain      = "governance"
+  service     = "eh-pr-reviewer"
 }
 
 locals {
@@ -77,7 +69,7 @@ resource "azurerm_storage_account" "this" {
   #checkov:skip=CKV2_AZURE_33:Private endpoints are created in vnet mode.
   #checkov:skip=CKV_AZURE_33:Queue service logging is a diagnostic setting owned by observability (ADR-0001 section 3 rule 4).
   #checkov:skip=CKV2_AZURE_21:Blob service logging is a diagnostic setting owned by observability (ADR-0001 section 3 rule 4).
-  name                             = substr("${module.naming.unique.storage}", 0, 24)
+  name                             = module.naming.unique.storage
   resource_group_name              = azurerm_resource_group.this.name
   location                         = local.location
   account_tier                     = "Standard"

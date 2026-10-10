@@ -87,7 +87,7 @@ locals {
 
 # ---------------------------------------------------------------- Linux
 resource "azurerm_linux_virtual_machine" "this" {
-  #checkov:skip=CKV_AZURE_50:Extension operations must stay enabled: observability installs the Datadog Agent/Fluent Bit extensions and Entra ID login is an extension.
+  #checkov:skip=CKV_AZURE_50:Extension operations must stay enabled: the Entra ID login extension and the Datadog Agent VM Application (obs-hosts policy) are installed by the VM agent.
   count = local.linux.enabled ? 1 : 0
   #checkov:skip=CKV_AZURE_178:SSH key auth is used when admin_ssh_public_key is set; otherwise a random break-glass password (state only) - Entra ID SSH login is the access path.
   #checkov:skip=CKV_AZURE_149:See CKV_AZURE_178 justification (password only as break-glass fallback).
@@ -103,7 +103,7 @@ resource "azurerm_linux_virtual_machine" "this" {
   admin_password             = local.ssh_key == null ? random_password.linux[0].result : null
   custom_data                = module.baseline.custom_data
   provision_vm_agent         = true
-  allow_extension_operations = true # observability installs Datadog Agent + Fluent Bit extensions
+  allow_extension_operations = true # Entra login extension + Datadog Agent VM Application (obs-hosts policy)
   secure_boot_enabled        = true
   vtpm_enabled               = true
   encryption_at_host_enabled = var.settings.encryption_at_host_enabled
@@ -150,7 +150,7 @@ resource "azurerm_linux_virtual_machine" "this" {
 # ---------------------------------------------------------------- Windows
 resource "azurerm_windows_virtual_machine" "this" {
   #checkov:skip=CKV_AZURE_151:encryption_at_host_enabled is a setting (needs the EncryptionAtHost feature registration); managed disks are encrypted at rest with platform keys.
-  #checkov:skip=CKV_AZURE_50:Extension operations must stay enabled: observability installs the Datadog Agent/Fluent Bit extensions and Entra ID login is an extension.
+  #checkov:skip=CKV_AZURE_50:Extension operations must stay enabled: the Entra ID login extension and the Datadog Agent VM Application (obs-hosts policy) are installed by the VM agent.
   count = local.windows.enabled ? 1 : 0
 
   name                       = "${local.names.virtual_machine}-win"

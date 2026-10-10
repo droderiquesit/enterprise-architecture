@@ -4,7 +4,7 @@
 |---|---|
 | Component id | `platform-containerapps` |
 | Owner | platform team (compute) |
-| Consumes | `foundation-network` (`subnets.aca-infra` — delegated `Microsoft.App/environments`, /23+, `spoke_vnet_id`, `hub_vnet_id`), `platform-shared` (`log_analytics_workspace_id` only when `logs_destination = "log-analytics"`) |
+| Consumes | `foundation-network` (`subnets.aca-infra` — delegated `Microsoft.App/environments`, /27 minimum, /23 by default, `spoke_vnet_id`, `hub_vnet_id`), `platform-shared` (`log_analytics_workspace_id` only when `logs_destination = "log-analytics"`) |
 | Produces | `platform-containerapps` v1 |
 | Status | `implemented` |
 
@@ -13,7 +13,8 @@
 - Workload-profiles environment injected into `aca-infra` with profiles **`Consumption`** and
   **`dedicated-d4`** (type `D4`, min 0 / max 1 by default).
 - `logs_destination = "azure-monitor"`: system/console logs flow only where diagnostic settings send them
-  (owned by obs-diagnostics → `ContainerAppSystemLogs`; application logs use the Fluent Bit sidecar, ADR §10).
+  (owned by obs-diagnostics → `ContainerAppSystemLogs`; application logs are tailed by Datadog serverless-init inside each app, ADR-0001 §13
+  observability 4.0.0; the Fluent Bit sidecar only with `log_pipeline = fluent_bit_direct`).
 - Internal mode: a private DNS zone named after the generated `default_domain` with `*` and `@` A records →
   environment static IP, linked to the spoke (and hub) VNets. The zone name only exists after the environment
   is created, so it is owned here (not by foundation-network) and dies with the environment.

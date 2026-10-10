@@ -257,6 +257,14 @@ def test_scanners_scope_follows_the_change(tmp_path, monkeypatch):
     assert any(k.startswith("trivy:foundation/network") for k in cmds)
     full = dict(scan.plan(ROOT, tmp_path, sel, full=True, fail=False))
     assert "--soft-fail" in full["checkov"] and "dir" in full["gitleaks"] and "trivy:." in full
+    # a change wider than MAX_TRIVY_TARGETS directories scans the repository once instead of silently truncating
+    tf = {}
+    for f in sorted(ROOT.glob("*/*/*/*.tf")):
+        rel = f.relative_to(ROOT).as_posix()
+        tf.setdefault("/".join(rel.split("/")[:3]), rel)
+    assert len(tf) > scan.MAX_TRIVY_TARGETS
+    wide = {"base": "abc", "changed_files": [{"path": p, "status": "M"} for p in tf.values()]}
+    assert [k for k in dict(scan.plan(ROOT, tmp_path, wide, full=False, fail=True)) if k.startswith("trivy")] == ["trivy:."]
 
 
 def test_failfast_cancels_only_inside_azure_devops(monkeypatch):

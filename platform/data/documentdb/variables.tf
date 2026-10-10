@@ -14,8 +14,8 @@ variable "environment" {
   })
 }
 
-# Upstream contract: catalog/contracts/foundation-network.v1.schema.json (only the fields used here).
 variable "foundation_network" {
+  description = "foundation-network contract v1 (catalog/contracts/foundation-network.v1.schema.json), only the fields used here."
   type = object({
     resource_group_name = string
     location            = string
@@ -32,8 +32,8 @@ variable "foundation_network" {
   })
 }
 
-# Upstream contract: catalog/contracts/foundation-identity.v2.schema.json (only the fields used here).
 variable "foundation_identity" {
+  description = "foundation-identity contract v2 (catalog/contracts/foundation-identity.v2.schema.json), only the fields used here."
   type = object({
     identities = map(object({
       id           = string

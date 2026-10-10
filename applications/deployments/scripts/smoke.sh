@@ -4,7 +4,7 @@
 #   smoke.sh --contract <contract json | envelope | root dir> [--attempts 30] [--interval 10] [--jobs]
 #
 # For every apps.<key> with a url: GET url+health_path, url+readiness_path and url+version_path (each optional)
-# until HTTP 200 (version must be JSON). AKS in-cluster URLs (*.svc.cluster.local) are probed through
+# until HTTP 200. AKS in-cluster URLs (*.svc.cluster.local) are probed through
 # `az aks command invoke` (no kubeconfig). --jobs also starts the manual `seed` Container Apps job and waits for
 # Succeeded. Exit 1 when any probe fails. Writes a JSON summary to stdout.
 set -euo pipefail

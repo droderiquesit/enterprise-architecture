@@ -292,3 +292,16 @@ run "custom_policy_without_collectors_uses_defaults" {
     error_message = "custom policies without architectures get the default collector table; no image without agent.image/version"
   }
 }
+
+run "hosts_keep_the_agent_with_fluent_bit_direct" {
+  command = plan
+  variables {
+    architecture = "vmss"
+    runtime      = "python"
+    overrides    = { log_pipeline = "fluent_bit_direct", logs = { node_collector = "fluent_bit" } }
+  }
+  assert {
+    condition     = output.log_collector == "agent" && output.node_collector == "agent" && output.log_collector_reason == null && output.log_pipeline == "fluent_bit_direct"
+    error_message = "VM / VMSS: no Fluent Bit on hosts in 4.0.0 - the Agent collects (and ships to the intake with fluent_bit_direct)"
+  }
+}

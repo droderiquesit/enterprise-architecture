@@ -1,3 +1,5 @@
+"""Changeset tests: repository root + fixture_repo helpers on sys.path, CI sharding hook."""
+
 import sys
 from pathlib import Path
 

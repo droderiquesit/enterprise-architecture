@@ -25,7 +25,7 @@ user-assigned identity (IMDS) - `DSV_*` env is set. The Agent sidecar's `api_key
 re-read hourly (`secret_refresh_interval`). ACI init containers cannot use managed identities (Microsoft Learn), so the
 init container only copies the binary into the `dsv-bin` emptyDir; the Agent's start command installs it root-owned
 0500 (Agent secret-backend permission check) and execs the image entrypoint. Fallback: the Fluent Bit sidecar's key is
-written by a dsv-fetch refresher container (`init --refresh 3600`) into `/dsv-secrets/fluentbit-env.yaml` (ACI emptyDir
+written by a dsv-fetch refresher container (`init --refresh-seconds 3600`) into `/dsv-secrets/fluentbit-env.yaml` (ACI emptyDir
 is disk-backed, file 0400, lives as long as the group). `settings.agent_sidecar = {image, cpu, memory_gb}` overrides
 the Agent image (e.g. an ACR mirror) and sizing (default 0.25 vCPU / 0.5 GB); the Agent hostname is the group name.
 

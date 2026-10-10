@@ -13,8 +13,6 @@
 # (see README "Why DeployIfNotExists").
 locals {
   mg_scope  = var.scope.type == "management_group"
-  mg_name   = local.mg_scope ? element(split("/", var.scope.id), 4) : null
-  sub_id    = local.mg_scope ? null : element(split("/", var.scope.id), 2)
   gallery_s = element(split("/", var.gallery_id), 2)
 
   kinds = {

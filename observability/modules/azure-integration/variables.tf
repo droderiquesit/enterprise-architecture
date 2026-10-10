@@ -9,7 +9,8 @@ variable "mode" {
 }
 
 variable "tenant_id" {
-  type = string
+  description = "Entra ID tenant id of the monitored subscriptions."
+  type        = string
   validation {
     condition     = can(regex("^[0-9a-fA-F-]{36}$", var.tenant_id))
     error_message = "tenant_id must be a GUID."
@@ -124,8 +125,9 @@ variable "native_org_keys" {
 }
 
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Azure tags of the resources this module creates."
+  type        = map(string)
+  default     = {}
 }
 
 variable "eventhub_log_forwarding" {

@@ -9,7 +9,7 @@ Status (ADR-0001 §11): **implemented** and **locally-verified**. That covers:
 Nothing here has been **deployed** or **verified** against a live Azure subscription or Datadog organisation. The
 Worker's Kafka source against Event Hubs in particular is unverified.
 
-Package 3.0.0: the default consumer of the hubs is the **Datadog Observability Pipelines Worker**
+Since package 3.0.0 (current: 4.0.0) the default consumer of the hubs is the **Datadog Observability Pipelines Worker**
 (`log_pipeline = observability_pipelines`). The Fluent Bit aggregator described in parts of this guide is the
 `fluent_bit_direct` alternative. Both apply the same shaping. Exactly one of them reads the hubs.
 
@@ -215,7 +215,7 @@ matches. An index created through the API may land behind a catch-all `main` ind
 (`azurerm_datadog_monitor_tag_rule` log block: `subscription_log_enabled`, `resource_log_enabled`,
 `aad_log_enabled`, tag filters `native.log_tag_filters`).
 
-| | Event Hubs + Fluent Bit (default) | Azure Native tag rule |
+| | Event Hubs + Observability Pipelines Worker (default) | Azure Native tag rule |
 |---|---|---|
 | Infrastructure | Event Hubs namespace + Observability Pipelines Worker (or the Fluent Bit aggregator) | none (Microsoft-managed diagnostic settings) |
 | Category control | per resource type / tier / resource | all categories of matching resources (tag include/exclude only) |

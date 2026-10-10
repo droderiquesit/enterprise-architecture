@@ -9,8 +9,9 @@ variable "env" {
 }
 
 variable "datadog_site" {
-  type    = string
-  default = "datadoghq.com"
+  description = "Datadog site of the organisation that hosts the pipeline."
+  type        = string
+  default     = "datadoghq.com"
 }
 
 variable "tag_policy" {

@@ -24,7 +24,7 @@ service:
   team: ""
   domain: ""
   tier: ""
-  # Fluent Bit / Datadog log source (logs.datadoghq.com/source label): csharp | python | nodejs | java
+  # Log source (logs.datadoghq.com/source label, Datadog Agent / Fluent Bit): csharp | python | nodejs | java
   logsSource: ""
   # Every other Datadog tag of the tag policy (owner, application, region, managed_by, cost_center, ...), rendered
   # as the pod annotation ad.datadoghq.com/tags (Agent tag autodiscovery; values need not be label-safe).
@@ -98,8 +98,9 @@ existingSecretEnv: {}
 telemetry:
   # DD_AGENT_HOST from the downward API (status.hostIP): node-local Datadog Agent DaemonSet (OTLP hostPort).
   agentHostFromHostIP: true
-  # Pod annotation ad.datadoghq.com/<container>.logs: '[]' - logs are collected by the Fluent Bit
-  # DaemonSet only; the Datadog Agent must not ship the same stdout lines.
+  # Pod annotation ad.datadoghq.com/<container>.logs: '[]' - for the Fluent Bit DaemonSet (log_pipeline =
+  # fluent_bit_direct): the Datadog Agent must not ship the same stdout lines. core-aks sets false under
+  # observability 4.0.0 (the node Agent is the collector) together with agentLogSource.
   disableAgentLogCollection: true
   # When the node Datadog Agent is the log collector (fleet policy logs.node_collector = agent):
   # disableAgentLogCollection=false + agentLogSource=<ddsource> -> ad.datadoghq.com/<container>.logs source/service.
@@ -107,7 +108,7 @@ telemetry:
   # Label admission.datadoghq.com/enabled=true for Datadog Single Step Instrumentation (apm.mode = datadog).
   singleStepInstrumentation: false
 
-# -- Optional file logging (LOG_FILE_PATH) on an emptyDir. Off on AKS/ARO: stdout -> Fluent Bit DaemonSet.
+# -- Optional file logging (LOG_FILE_PATH) on an emptyDir. Off on AKS/ARO: stdout -> the node log collector.
 logFile:
   enabled: false
   path: /var/log/app/app.log

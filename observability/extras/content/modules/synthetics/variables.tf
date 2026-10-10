@@ -47,18 +47,21 @@ variable "response_time_ms" {
 }
 
 variable "min_failure_duration" {
-  type    = number
-  default = 120
+  description = "Seconds a test must fail before it alerts (options.min_failure_duration)."
+  type        = number
+  default     = 120
 }
 
 variable "min_location_failed" {
-  type    = number
-  default = 1
+  description = "Number of failing locations that triggers an alert (options.min_location_failed)."
+  type        = number
+  default     = 1
 }
 
 variable "retry" {
-  type    = object({ count = number, interval = number })
-  default = { count = 1, interval = 300 }
+  description = "Retries of a failed test run: count and interval in milliseconds (options.retry)."
+  type        = object({ count = number, interval = number })
+  default     = { count = 1, interval = 300 }
 }
 
 variable "browser_device_ids" {

@@ -10,18 +10,20 @@ It never owns compute platforms, databases or application settings (those are `p
 | Component (catalog id) | Root | Produces contract | Consumes | Default profile |
 |---|---|---|---|---|
 | `foundation-network` | [`network/`](network/README.md) | `foundation-network` v1 | — | all |
-| `foundation-identity` | [`identity/`](identity/README.md) | `foundation-identity` v1 | `foundation-network` | all |
+| `foundation-identity` | [`identity/`](identity/README.md) | `foundation-identity` v2 | — | all |
+| `foundation-secrets` | [`secrets/`](secrets/README.md) | — (output `dsv_desired_state`, converged by `tools/secrets/dsv_apply.py`) | identity | all |
 | `foundation-governance` | [`governance/`](governance/README.md) | `foundation-governance` v1 | — | all |
 | `foundation-deploy-agents` | [`deploy-agents/`](deploy-agents/README.md) | `foundation-deploy-agents` v1 | network, identity | enterprise, full, specialized |
-| `foundation-edge` | [`edge/`](edge/README.md) | `foundation-edge` v1 | network, identity | enterprise (all edge parts off unless enabled) |
+| `foundation-edge` | [`edge/`](edge/README.md) | `foundation-edge` v1 | network (after `foundation-secrets`) | enterprise, full (all edge parts off unless enabled) |
+| `foundation-pr-reviewer` | [`pr-reviewer/`](pr-reviewer/README.md) | `foundation-pr-reviewer` v1 | identity (+ network, optional) | enterprise, full |
 
 Shared modules (code reuse, not ownership — ADR §3 rule 5):
 
 | Module | Purpose | Interface |
 |---|---|---|
-| [`modules/naming`](modules/naming/main.tf) | CAF names `<prefix>-<type>-<workload>-<env>-<region>` + deterministic 5-char suffix for global names | frozen |
-| [`modules/tags`](modules/tags/main.tf) | ADR §7 required tag set | frozen |
-| [`modules/private-endpoint`](modules/private-endpoint/main.tf) | private endpoint + DNS zone group (zones come from `foundation-network`) | frozen |
+| [`modules/naming`](modules/naming/README.md) | CAF names `<prefix>-<type>-<workload>-<env>-<region>` + deterministic 5-char suffix for global names | frozen |
+| [`modules/tags`](modules/tags/README.md) | ADR §7 required tag set | frozen |
+| [`modules/private-endpoint`](modules/private-endpoint/README.md) | private endpoint + DNS zone group (zones come from `foundation-network`) | frozen |
 
 ## Apply order
 
@@ -32,12 +34,13 @@ bootstrap (manual, once)            -> state storage, pipeline identities
       foundation-secrets            -> DSV users + least-privilege permissions (dsv_apply.py, needs identity)
     foundation-governance           -> budget, action group, policy assignments          (independent)
     foundation-deploy-agents        -> VMSS agents or Managed DevOps Pool                 (needs network + identity)
-    foundation-edge                 -> App Gateway / Front Door / APIM / Firewall / Bastion (needs network)
+    foundation-edge                 -> App Gateway / Front Door / APIM / Firewall / Bastion (needs network; after secrets)
+    foundation-pr-reviewer          -> automated PR reviewer Function (needs identity; network optional)
 platform-* -> applications -> observability lab roots
 ```
 
-`network -> identity -> {governance, deploy-agents, edge}`. Governance has no inputs and may run in parallel with
-network. Switching egress to Azure Firewall is a two-pass change (see [network README](network/README.md#switching-egress-to-azure-firewall)).
+`foundation-identity` and `foundation-governance` have no contract inputs and may run in parallel with network;
+`foundation-secrets` follows identity, `foundation-deploy-agents` needs network + identity, `foundation-edge` needs network. Switching egress to Azure Firewall is a two-pass change (see [network README](network/README.md#switching-egress-to-azure-firewall)).
 
 ## Conventions every foundation root follows
 
@@ -57,9 +60,8 @@ network. Switching egress to Azure Firewall is a two-pass change (see [network R
 ## Validation (what was actually run)
 
 ```bash
-for r in bootstrap foundation/network foundation/identity foundation/governance foundation/deploy-agents foundation/edge; do
-  (cd $r && terraform fmt -check -recursive && terraform init -backend=false && terraform validate && terraform test)
-done
+python3 tools/validate/all_terraform.py --workers 4 \
+  --only bootstrap,foundation-network,foundation-identity,foundation-secrets,foundation-governance,foundation-deploy-agents,foundation-edge,foundation-pr-reviewer
 python3 -m pytest foundation/identity/tests -q
 checkov -d bootstrap --framework terraform --quiet --compact
 checkov -d foundation --framework terraform --quiet --compact

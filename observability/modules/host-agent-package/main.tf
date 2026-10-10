@@ -105,7 +105,7 @@ locals {
       static_tags          = local.static_tags
       default_service      = var.default_service
       default_source       = a.os == "linux" ? var.default_source.linux : var.default_source.windows
-      logs_enabled         = tostring(local.fleet.log_collector != "none") # fluent_bit(_direct) on hosts: the Agent still collects (no Fluent Bit on VMs in 4.0)
+      logs_enabled         = tostring(local.fleet.log_collector != "none") # also with fluent_bit_direct: no Fluent Bit on VMs in 4.0
       op_logs_url          = local.op_mode ? coalesce(var.op_agent_logs_url, "unset") : ""
       log_files            = a.os == "linux" ? local.host_logs.linux_files : local.host_logs.windows_files
       event_channels       = local.host_logs.event_channels

@@ -8,23 +8,28 @@ terraform {
 }
 
 variable "name" {
-  type = string
+  description = "Private endpoint name; the NIC is <name>-nic and the connection <name>-psc."
+  type        = string
 }
 
 variable "resource_group_name" {
-  type = string
+  description = "Resource group of the private endpoint (normally the target resource group)."
+  type        = string
 }
 
 variable "location" {
-  type = string
+  description = "Azure region (must match the subnet VNet)."
+  type        = string
 }
 
 variable "subnet_id" {
-  type = string
+  description = "Subnet id, normally foundation-network subnets[\"private-endpoints\"].id."
+  type        = string
 }
 
 variable "target_resource_id" {
-  type = string
+  description = "Resource id of the Private Link target."
+  type        = string
 }
 
 variable "subresource_names" {
@@ -33,13 +38,15 @@ variable "subresource_names" {
 }
 
 variable "private_dns_zone_ids" {
-  type    = list(string)
-  default = []
+  description = "Private DNS zone ids (foundation-network private_dns_zones[*].id) for the zone group; empty = no zone group."
+  type        = list(string)
+  default     = []
 }
 
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Tags (module.tags.tags of the calling root)."
+  type        = map(string)
+  default     = {}
 }
 
 resource "azurerm_private_endpoint" "this" {
@@ -67,9 +74,11 @@ resource "azurerm_private_endpoint" "this" {
 }
 
 output "id" {
-  value = azurerm_private_endpoint.this.id
+  description = "Private endpoint resource id."
+  value       = azurerm_private_endpoint.this.id
 }
 
 output "private_ip_address" {
-  value = try(azurerm_private_endpoint.this.private_service_connection[0].private_ip_address, null)
+  description = "Private IP of the first service connection (null until known)."
+  value       = try(azurerm_private_endpoint.this.private_service_connection[0].private_ip_address, null)
 }

@@ -14,12 +14,12 @@ variables {
 run "one_collector_per_signal" {
   command = plan
   assert {
-    condition     = output.plan["orders-app"].app_logs == "fluent_bit_sidecar" && output.plan["orders-app"].apm == "agent_gateway" && output.plan["orders-app"].log_destination == "observability_pipelines"
-    error_message = "Container App: Fluent Bit sidecar -> OP, Datadog tracer -> APM gateway"
+    condition     = output.plan["orders-app"].app_logs == "serverless_init" && output.plan["orders-app"].apm == "serverless_init" && output.plan["orders-app"].agent == "serverless_init" && output.plan["orders-app"].log_destination == "observability_pipelines"
+    error_message = "Container App: serverless-init sidecar (logs + traces) -> OP"
   }
   assert {
-    condition     = output.plan["inventory"].app_logs == "eventhub" && output.plan["inventory"].platform_logs == "diagnostic_settings" && output.diagnostic_targets["inventory"].app_log_route == "eventhub"
-    error_message = "App Service: diagnostic settings (app + platform categories) -> Event Hubs"
+    condition     = output.plan["inventory"].app_logs == "eventhub" && output.plan["inventory"].platform_logs == "diagnostic_settings" && output.diagnostic_targets["inventory"].app_log_route == "eventhub" && output.plan["inventory"].apm == "otel"
+    error_message = "App Service: diagnostic settings (app + platform categories) -> Event Hubs; OpenTelemetry by policy"
   }
   assert {
     condition     = output.plan["orders-db"].dbm && contains(keys(output.dbm_candidates), "orders-db") && output.plan["orders-db"].metrics == "azure_integration"
@@ -30,8 +30,8 @@ run "one_collector_per_signal" {
     error_message = "AKS: Agent (Helm) collects logs, SSI for APM"
   }
   assert {
-    condition     = output.plan["worker-vm"].apm == "ssi_host" && output.plan["worker-vm"].app_logs == "datadog_agent" && output.plan["inv-win"].apm == "otel" && output.plan["inv-win"].app_logs == "fluent_bit_host"
-    error_message = "Linux VM: Agent + host SSI; Windows VM: Fluent Bit + OTel"
+    condition     = output.plan["worker-vm"].apm == "ssi_host" && output.plan["worker-vm"].app_logs == "datadog_agent" && output.plan["worker-vm"].agent == "datadog_agent_vm_application" && output.plan["inv-win"].apm == "otel" && output.plan["inv-win"].app_logs == "datadog_agent"
+    error_message = "Linux VM: Agent (VM Application) + host SSI; Windows VM: Agent logs + OTel"
   }
   assert {
     condition     = output.plan["frontend"].apm == "rum" && !contains(keys(output.diagnostic_targets), "frontend")
@@ -49,7 +49,25 @@ run "fluent_bit_direct_policy" {
     fleet_policy = { apiVersion = "observability/fleet-policy/v1", kind = "FleetPolicy", log_pipeline = "fluent_bit_direct", apm = { mode = "otel" } }
   }
   assert {
-    condition     = output.plan["aks"].app_logs == "fluent_bit_daemonset" && output.plan["aks"].apm == "otel" && output.plan["worker-vm"].log_destination == "datadog_intake"
-    error_message = "2.x path"
+    condition     = output.plan["aks"].app_logs == "fluent_bit_daemonset" && output.plan["aks"].apm == "otel" && output.plan["worker-vm"].log_destination == "datadog_intake" && output.plan["worker-vm"].app_logs == "datadog_agent" && output.plan["orders-app"].app_logs == "fluent_bit_sidecar"
+    error_message = "fallback: Fluent Bit DaemonSet / sidecars; hosts keep the Agent (no Fluent Bit on VMs), straight to the intake"
+  }
+}
+
+run "aci_agent_sidecar_and_functions" {
+  command = plan
+  variables {
+    resources = {
+      partner = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.ContainerInstance/containerGroups/ci", type = "Microsoft.ContainerInstance/containerGroups" }
+      fn      = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Web/sites/fn", type = "Microsoft.Web/sites", architecture = "functions" }
+    }
+  }
+  assert {
+    condition     = output.plan["partner"].app_logs == "datadog_agent_sidecar" && output.plan["partner"].apm == "agent_sidecar" && output.plan["partner"].agent == "datadog_agent_sidecar"
+    error_message = "ACI: Datadog Agent sidecar (logs + traces)"
+  }
+  assert {
+    condition     = output.plan["fn"].app_logs == "eventhub" && output.plan["fn"].apm == "otel"
+    error_message = "Functions: diagnostic settings, OpenTelemetry"
   }
 }

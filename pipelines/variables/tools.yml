@@ -1,6 +1,6 @@
 # Pinned versions of pipeline-installed scanners (checked against upstream tags on 2026-10-09).
 # Terraform's version comes from versions.yaml. Update deliberately; install-tools.sh verifies the
-# published SHA-256 checksums of every download.
+# published SHA-256 checksums of every release download (images: registry digest; checkov: version pin only).
 variables:
   GITLEAKS_VERSION: "8.30.1"
   TRIVY_VERSION: "0.75.0"

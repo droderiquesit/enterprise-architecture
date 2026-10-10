@@ -213,7 +213,8 @@ Module path `enterprise-hello/dsv-fetch` (neutral: no hosting-specific prefix, s
 
 ## Limitations
 
-* Values are fetched once per run; rotation = restart the replica / Agent (`secret_refresh_interval` re-runs the backend).
+* `init` fetches once per run (refresher containers: every `--refresh-seconds`); otherwise rotation = restart the
+  replica / Agent (`secret_refresh_interval` re-runs the backend).
 * Windows: built and vetted, not executed in CI here; no Azure Arc managed identity.
 * Workload-identity tokens with DSV: not verified (see above).
 * Nothing here has run against real DSV or Azure (status: implemented / locally-verified).

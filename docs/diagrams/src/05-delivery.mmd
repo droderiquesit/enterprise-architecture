@@ -23,7 +23,7 @@ flowchart TB
     SEC["gitleaks, trivy fs, checkov<br/>(pinned, checksum-verified)"]
   end
 
-  BUILD["Build (applications pipeline, build identity)<br/>dev: reuse image/package tagged with source fingerprint or build + push by digest, SBOM, provenance<br/>test/prod: promote the same digests; Helm charts: lint, package, OCI push"]
+  BUILD["Build (build identity; platform: img-dsv-fetch, applications: svc-* + charts)<br/>dev: reuse image/package tagged with source fingerprint or build + push by digest, SBOM, provenance<br/>test/prod: promote the same digests; Helm charts: lint, package, OCI push"]
 
   subgraph WAVES["P_&lt;component&gt; plan + C_&lt;component&gt; apply stages in dependency order (generated per pipeline), parallel where independent"]
     direction LR

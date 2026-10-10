@@ -14,8 +14,8 @@ variable "environment" {
   })
 }
 
-# Upstream contract: catalog/contracts/foundation-identity.v2.schema.json (only the fields used here).
 variable "foundation_identity" {
+  description = "foundation-identity contract v2 (catalog/contracts/foundation-identity.v2.schema.json), only the fields used here: identities (resource id, name, secret names) and the DSV settings."
   type = object({
     identities = map(object({
       id      = string
@@ -23,8 +23,6 @@ variable "foundation_identity" {
       secrets = list(string)
     }))
     secrets = object({
-      tenant        = string
-      tld           = string
       base_url      = string
       base_path     = string
       auth_provider = string

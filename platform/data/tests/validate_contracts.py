@@ -35,7 +35,7 @@ ROOT_CONTRACT = {
     "horizondb": "platform-db-horizondb", "analytics": "platform-data-analytics",
 }
 PLACEHOLDER = "/subscriptions/00000000-0000-0000-0000-000000000000/unknown-at-plan"
-SECRET_KEY = re.compile(r"(password|secret|connection_string|access_key|primary_key|token)$", re.I)
+SECRET_KEY = re.compile(r"(password|secret|connection_string|access_key|primary_key|token)$", re.IGNORECASE)
 
 
 def fill_unknown(after, unknown):
@@ -90,7 +90,8 @@ def run_root(name):
     if not (root / ".terraform").exists():
         subprocess.run(["terraform", "init", "-backend=false", "-input=false"], cwd=root, check=True,
                        stdout=subprocess.DEVNULL)
-    proc = subprocess.run(["terraform", "test", "-verbose", "-json"], cwd=root, capture_output=True, text=True)
+    proc = subprocess.run(["terraform", "test", "-verbose", "-json"], cwd=root, capture_output=True, text=True,
+                          check=False)  # failures are reported below with the per-run details
     schema = json.loads((SCHEMAS / f"{ROOT_CONTRACT[name]}.v1.schema.json").read_text())
     validator = jsonschema.Draft202012Validator(schema)
     checked, errors = 0, []
@@ -119,6 +120,10 @@ def run_root(name):
 
 def main(argv):
     names = argv or sorted(ROOT_CONTRACT)
+    unknown = sorted(set(names) - set(ROOT_CONTRACT))
+    if unknown:
+        print(f"unknown root(s): {', '.join(unknown)}; expected one of: {', '.join(sorted(ROOT_CONTRACT))}", file=sys.stderr)
+        return 2
     all_errors = static_checks()
     for name in names:
         checked, errors = run_root(name)

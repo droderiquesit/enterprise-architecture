@@ -210,6 +210,29 @@ def test_check_reports_missing_without_values(desired, dsv, imds, monkeypatch, c
                                                      "eh/dev/eventhub-fluentbit-listen") for c in calls)
 
 
+def test_check_list_fallback_distinguishes_missing_from_unverifiable():
+    """describe forbidden (403): a successful search that does not list the path means MISSING, a failed search
+    means UNVERIFIABLE."""
+
+    class Client:
+        def __init__(self, search_status, listed):
+            self.search_status, self.listed = search_status, listed
+
+        def exists(self, path):
+            return None, 403
+
+        def request(self, method, path, query=None):
+            return self.search_status, {"data": [{"path": p} for p in self.listed]}
+
+    cat = {"a": {}, "b": {}}
+    rows, errors, _ = check.check(Client(200, ["eh/dev/a"]), "eh/dev", ["a", "b"], cat)
+    assert [r[2] for r in rows] == ["present", "MISSING"] and errors == 1
+    rows, errors, _ = check.check(Client(200, []), "eh/dev", ["a"], cat)
+    assert rows[0][2] == "MISSING"
+    rows, errors, _ = check.check(Client(403, []), "eh/dev", ["a"], cat)
+    assert rows[0][2].startswith("UNVERIFIABLE") and errors == 1
+
+
 def test_check_required_set_follows_enabled_components():
     from tools.secrets.catalog import required
 

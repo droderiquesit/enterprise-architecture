@@ -19,7 +19,8 @@ output "unsupported_resources" {
 }
 
 output "resource_types" {
-  value = local.resource_types
+  description = "Resource type of each input resource (provider namespace + child types, lower case), by key."
+  value       = local.resource_types
 }
 
 output "platform_log_tiers" {

@@ -71,24 +71,29 @@ variable "foundation_identity" {
 # Optional database contracts (obs-kubernetes optional_consumes): only their `dbm` block is read
 # (platform-db-*.v1 $defs/dbm) - same mapping as obs-dbm (modules/dbm/contracts).
 variable "platform_db_postgresql" {
-  type    = any
-  default = null
+  description = "Optional platform-db-postgresql contract (null = no such database): servers and databases to monitor with DBM."
+  type        = any
+  default     = null
 }
 variable "platform_db_mysql" {
-  type    = any
-  default = null
+  description = "Optional platform-db-mysql contract (null = no such database): servers and databases to monitor with DBM."
+  type        = any
+  default     = null
 }
 variable "platform_db_sql" {
-  type    = any
-  default = null
+  description = "Optional platform-db-sql contract (null = no such database): servers and databases to monitor with DBM."
+  type        = any
+  default     = null
 }
 variable "platform_db_sqlmi" {
-  type    = any
-  default = null
+  description = "Optional platform-db-sqlmi contract (null = no such database): servers and databases to monitor with DBM."
+  type        = any
+  default     = null
 }
 variable "platform_db_sqlvm" {
-  type    = any
-  default = null
+  description = "Optional platform-db-sqlvm contract (null = no such database): servers and databases to monitor with DBM."
+  type        = any
+  default     = null
 }
 
 variable "platform_aks" {

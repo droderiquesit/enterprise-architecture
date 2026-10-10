@@ -8,3 +8,6 @@ It is off by default: Agent versions are pinned by the policy (`agent.version`).
 `agent.remote_updates = true` (precondition). Hosts must be installed with remote updates; `modules/host-agents` passes
 `DD_REMOTE_UPDATES` to the installer. The application key needs `agent_upgrade_write` and `hosts_read`.
 Remote Configuration (`agent.remote_configuration`, on by default) is set on every Agent the package configures.
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/fleet_automation.tftest.hcl`.

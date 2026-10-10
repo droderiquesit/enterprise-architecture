@@ -15,7 +15,7 @@ Flexible Server **MySQL 8.4** (GA since 2025-09), `B_Standard_B1ms`, 20 GB, 7-da
 
 ## Produced contract
 `platform-db-mysql` v1 — schema `catalog/contracts/platform-db-mysql.v1.schema.json` (output `contract`, no secrets).
-Server (fqdn, version, Entra admin, server UAMI), database `adapter` with grant (identity name + client ID), and `dbm` (`auth_mode = native-password`: user `datadog`, `password_secret_id` = `foundation_identity.secret_ids["dbm-mysql-password"]` or the `dbm-mysql-password` convention).
+Server (fqdn, version, Entra admin, server UAMI), database `adapter` with grant (identity name + client ID), and `dbm` (`auth_mode = native-password`: user `datadog`, `password_secret_id` = `foundation_identity.secrets.refs["dbm-mysql-password"]` or the `dbm-mysql-password` convention).
 
 ## Settings (`components.platform-db-mysql` in `environments/<env>/environment.yaml`)
 | Key | Default | Notes |

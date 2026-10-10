@@ -14,7 +14,8 @@ variable "prefix" {
 }
 
 variable "environment" {
-  type = string
+  description = "Environment name (2-8 lowercase alphanumerics), e.g. \"dev\"."
+  type        = string
   validation {
     condition     = can(regex("^[a-z][a-z0-9]{1,7}$", var.environment))
     error_message = "environment must be 2-8 lowercase alphanumerics."
@@ -22,11 +23,13 @@ variable "environment" {
 }
 
 variable "location" {
-  type = string
+  description = "Azure region name, e.g. \"swedencentral\"; mapped to a short code (unknown regions: first 4 consonants)."
+  type        = string
 }
 
 variable "subscription_id" {
-  type = string
+  description = "Subscription id; only hashed into the deterministic 5-char suffix of globally unique names."
+  type        = string
 }
 
 variable "workload" {
@@ -69,20 +72,24 @@ locals {
 }
 
 output "region_short" {
-  value = local.region_short
+  description = "Short region code used in names (e.g. \"sec\" for swedencentral)."
+  value       = local.region_short
 }
 
 output "suffix" {
-  value = local.suffix
+  description = "Deterministic 5-hex suffix: substr(sha1(\"<subscription_id>/<prefix>/<environment>\"), 0, 5)."
+  value       = local.suffix
 }
 
 # Standard dash-separated names (<= 63 chars for most types).
 output "names" {
-  value = { for k, v in local.abbreviations : k => substr(format(local.base, v), 0, 63) }
+  description = "Map of resource type key => <prefix>-<abbr>-<workload>-<env>-<region> (max 63 chars)."
+  value       = { for k, v in local.abbreviations : k => substr(format(local.base, v), 0, 63) }
 }
 
 # Globally unique, dash-free, lowercase names (storage <= 24, ACR <= 50, Key Vault <= 24).
 output "unique" {
+  description = "Globally unique, length-limited names: storage, container_registry, key_vault, cosmos, globally_unique."
   value = {
     storage            = substr(format(local.compact, "st"), 0, 24)
     container_registry = substr(format(local.compact, "cr"), 0, 50)

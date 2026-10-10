@@ -52,7 +52,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import posixpath
 import re
 import sys
 from dataclasses import dataclass, field
@@ -234,7 +233,6 @@ class Walker:
         files = set()
         max_depth = 0
         size = 0
-        stack: List[Tuple[Path, int]] = []
 
         def visit(path: Path, depth: int) -> int:
             nonlocal max_depth

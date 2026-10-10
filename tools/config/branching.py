@@ -24,7 +24,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import yaml
 
@@ -103,7 +103,7 @@ def check(repo: Path, ref: str, reason: str, env: str, mode: str, dry_run: bool)
 
     try:
         first = [n for n, s in load_promotion(Path(repo)).items() if not s.promote_from]
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - a broken promotion.yaml fails `promotion.py check` in the same Select step
         first = ["dev"]
     if not dry_run:
         errors.append(f"branch '{branch}' ({k}) can never apply: open a PR into '{model.trunk}', or queue dryRun: true")

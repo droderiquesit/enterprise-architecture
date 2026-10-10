@@ -6,7 +6,7 @@
 #                                                          observability roots that read app contracts;
 #                                                          triggered by its own CI and by successful platform runs
 # Promotion (dev -> test -> prod) is `mode: promote` of either pipeline (environments/promotion.yaml).
-# Protected resources (service connections, environments, deploy agent pool, variable groups) carry a
+# Protected resources (service connections, environments, deploy agent pool; no variable groups are used) carry a
 # "Required template" check pointing at THIS file, so only pipelines that extend it can use them
 # (pipelines/README.md, "One-time Azure DevOps setup").
 #

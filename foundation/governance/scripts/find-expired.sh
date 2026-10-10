@@ -12,13 +12,18 @@ set -euo pipefail
 SUB=""; ENV_FILTER=""; AS_OF="$(date -u +%Y-%m-%d)"; PRINT_DELETE=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --subscription) SUB="$2"; shift 2 ;;
-    --env) ENV_FILTER="$2"; shift 2 ;;
-    --as-of) AS_OF="$2"; shift 2 ;;
+    --subscription) SUB="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+    --env) ENV_FILTER="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+    --as-of) AS_OF="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
     --print-delete-commands) PRINT_DELETE=true; shift ;;
     *) sed -n '2,10p' "$0"; exit 2 ;;
   esac
 done
+
+# Values below are interpolated into Resource Graph (KQL) queries: accept only their expected shapes.
+[[ -z "$SUB" || "$SUB" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "invalid --subscription '$SUB' (expected a subscription id)" >&2; exit 2; }
+[[ -z "$ENV_FILTER" || "$ENV_FILTER" =~ ^[a-z0-9-]{1,32}$ ]] || { echo "invalid --env '$ENV_FILTER'" >&2; exit 2; }
+[[ "$AS_OF" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "invalid --as-of '$AS_OF' (expected YYYY-MM-DD)" >&2; exit 2; }
 
 env_clause=""
 [[ -n "$ENV_FILTER" ]] && env_clause="| where tostring(tags['env']) == '${ENV_FILTER}'"

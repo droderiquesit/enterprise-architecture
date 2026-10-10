@@ -4,9 +4,9 @@ output "log_pipeline" {
 }
 
 output "node_collector" {
-  description = "Where the Datadog Agent runs (AKS nodes, VMs): agent (Agent collects logs -> OP Worker) | fluent_bit. fluent_bit_direct implies fluent_bit. (3.x output; log_collector is the per-architecture decision.)"
-  value = local.fb_direct ? "fluent_bit" : (
-    local.node_arch ? (local.log_collector == "agent" ? "agent" : "fluent_bit") : (local.legacy_node == "fluent_bit" ? "fluent_bit" : "agent")
+  description = "Where the Datadog Agent runs (AKS nodes, VMs): agent (Agent collects logs -> OP Worker / intake) | fluent_bit (AKS: the Fluent Bit DaemonSet; fluent_bit_direct or logs.node_collector = fluent_bit). VM / VMSS hosts are always agent. (3.x output; log_collector is the per-architecture decision.)"
+  value = local.host_arch ? "agent" : local.fb_direct ? "fluent_bit" : (
+    local.arch == "aks" ? (local.log_collector == "agent" ? "agent" : "fluent_bit") : (local.legacy_node == "fluent_bit" ? "fluent_bit" : "agent")
   )
 }
 

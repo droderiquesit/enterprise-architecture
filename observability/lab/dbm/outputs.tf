@@ -1,6 +1,7 @@
 # obs-dbm publishes no contract; outputs are evidence + the cluster-check snippet for obs-kubernetes.
 output "configured" {
-  value = module.dbm.configured
+  description = "Databases configured for Database Monitoring (modules/dbm configured)."
+  value       = module.dbm.configured
 }
 
 output "cluster_check_confd" {
@@ -14,5 +15,6 @@ output "hosting" {
 }
 
 output "agent_container_group_id" {
-  value = module.dbm.agent_container_group_id
+  description = "Id of the ACI DBM Agent container group (null with cluster checks or hosting = none)."
+  value       = module.dbm.agent_container_group_id
 }

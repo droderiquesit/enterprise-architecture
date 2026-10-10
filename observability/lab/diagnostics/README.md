@@ -62,3 +62,6 @@ which a precondition enforces when locations are known.
 * Resource types missing from the allow-lists are skipped (`unsupported_resources`).
 * Managed Redis (`Microsoft.Cache/redisEnterprise`) and DocumentDB (Mongo clusters) categories are not
   allow-listed yet.
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/control_plane.tftest.hcl`, `tests/discovery.tftest.hcl`, `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-diagnostics` (fmt, validate, test).

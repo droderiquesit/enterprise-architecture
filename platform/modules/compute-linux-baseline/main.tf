@@ -4,32 +4,38 @@ terraform {
 }
 
 variable "component" {
-  type = string
+  description = "Calling component id (written into the host README)."
+  type        = string
 }
 
 variable "app_user" {
-  type    = string
-  default = "hello"
+  description = "System user that owns the application files."
+  type        = string
+  default     = "hello"
 }
 
 variable "app_group" {
-  type    = string
-  default = "hello"
+  description = "Primary group of app_user."
+  type        = string
+  default     = "hello"
 }
 
 variable "app_dir" {
-  type    = string
-  default = "hello"
+  description = "Directory name under /opt, /etc and /var/log."
+  type        = string
+  default     = "hello"
 }
 
 variable "install_python" {
-  type    = bool
-  default = true
+  description = "Install Python from the deadsnakes PPA (needs outbound HTTPS)."
+  type        = bool
+  default     = true
 }
 
 variable "python_version" {
-  type    = string
-  default = "3.13"
+  description = "Python version to install (ADR-0001 section 2: 3.13)."
+  type        = string
+  default     = "3.13"
 }
 
 locals {
@@ -44,7 +50,8 @@ locals {
 }
 
 output "cloud_init" {
-  value = local.rendered
+  description = "Rendered cloud-init YAML."
+  value       = local.rendered
 }
 
 output "custom_data" {

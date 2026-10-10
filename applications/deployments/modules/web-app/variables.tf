@@ -1,17 +1,21 @@
 variable "name" {
-  type = string
+  description = "Web app name (globally unique)."
+  type        = string
 }
 
 variable "resource_group_name" {
-  type = string
+  description = "Resource group of the web app (the plan's resource group)."
+  type        = string
 }
 
 variable "location" {
-  type = string
+  description = "Azure region of the web app."
+  type        = string
 }
 
 variable "tags" {
-  type = map(string)
+  description = "Azure tags of the web app (required tags + workload azure_tags)."
+  type        = map(string)
 }
 
 variable "service_plan" {
@@ -23,7 +27,8 @@ variable "service_plan" {
 }
 
 variable "os_type" {
-  type = string
+  description = "Linux or Windows (must match the plan)."
+  type        = string
   validation {
     condition     = contains(["Linux", "Windows"], var.os_type)
     error_message = "os_type must be Linux or Windows."
@@ -59,6 +64,7 @@ variable "image" {
 }
 
 variable "identity" {
+  description = "User-assigned identity of the workload (ACR pull; the app reads Delinea DSV with it)."
   type = object({
     id        = string
     client_id = string
@@ -79,18 +85,21 @@ variable "app_settings" {
 }
 
 variable "startup_command" {
-  type    = string
-  default = null
+  description = "Linux only: app_command_line (null = stack default / image entrypoint)."
+  type        = string
+  default     = null
 }
 
 variable "integration_subnet_id" {
-  type    = string
-  default = null
+  description = "Regional VNet integration subnet (null = no VNet integration; vnet_route_all follows it)."
+  type        = string
+  default     = null
 }
 
 variable "health_check_path" {
-  type    = string
-  default = "/healthz"
+  description = "App Service health check path (instances failing it are evicted after 5 minutes)."
+  type        = string
+  default     = "/healthz"
 }
 
 variable "private_endpoint" {
@@ -103,8 +112,9 @@ variable "private_endpoint" {
 }
 
 variable "allowed_ip_ranges" {
-  type    = list(string)
-  default = []
+  description = "Without a private endpoint: CIDRs allowed by the deny-by-default access restrictions."
+  type        = list(string)
+  default     = []
 }
 
 variable "staging_slot" {
@@ -114,6 +124,7 @@ variable "staging_slot" {
 }
 
 variable "always_on" {
-  type    = bool
-  default = true
+  description = "site_config.always_on of the production app (the staging slot is always off)."
+  type        = bool
+  default     = true
 }

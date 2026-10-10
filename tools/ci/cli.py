@@ -34,7 +34,7 @@ from tools.changeset.registry import load_registry  # noqa: E402
 from tools.changeset.trees import WorkTree  # noqa: E402
 
 from . import balance, catalog, impact  # noqa: E402
-from .cache import ResultCache, part_id  # noqa: E402
+from .cache import ResultCache  # noqa: E402
 
 LOCAL_CACHE = ".ci-cache"
 

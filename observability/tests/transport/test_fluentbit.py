@@ -31,7 +31,6 @@ from dockerutil import (
     fluent_bit_env,
     fluent_bit_secrets,
     TEST_SECRETS,
-    http_json,
     http_status,
     received,
     start_mock_intake,

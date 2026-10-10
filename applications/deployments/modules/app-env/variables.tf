@@ -105,13 +105,15 @@ variable "port" {
 }
 
 variable "log_level" {
-  type    = string
-  default = "info"
+  description = "LOG_LEVEL of the service (debug | info | warning | error)."
+  type        = string
+  default     = "info"
 }
 
 variable "trace_sample_ratio" {
-  type    = number
-  default = 1
+  description = "Trace sampling ratio 0..1 (OTEL_TRACES_SAMPLER_ARG via the instrumentation hook)."
+  type        = number
+  default     = 1
 }
 
 variable "otlp_protocol" {
@@ -141,8 +143,9 @@ variable "secret_env" {
 }
 
 variable "extra_resource_attributes" {
-  type    = map(string)
-  default = {}
+  description = "Additional OTEL_RESOURCE_ATTRIBUTES entries (name -> value) of this workload."
+  type        = map(string)
+  default     = {}
 }
 
 variable "tag_policy" {

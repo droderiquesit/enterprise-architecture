@@ -29,8 +29,9 @@ variable "pip_packages" {
 }
 
 variable "health_url" {
-  type    = string
-  default = "http://127.0.0.1:8080/healthz"
+  description = "Local health endpoint polled after (re)start; failure rolls back to the previous release."
+  type        = string
+  default     = "http://127.0.0.1:8080/healthz"
 }
 
 variable "client_id" {

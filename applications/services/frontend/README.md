@@ -41,7 +41,7 @@ contract with hello-traffic.
 
 ## Build & test
 ```bash
-npm ci && npm run typecheck && npm test      # vitest: 18 tests (config parsing, allowedTracingUrls, API client, polling, RUM init)
+npm ci && npm run typecheck && npm test      # vitest: 20 tests (config parsing, allowedTracingUrls, API client, polling, RUM init)
 npm run build                                # dist/
 npx playwright test                          # 2 e2e tests against `vite preview` with route-intercepted API + RUM intake
 ```

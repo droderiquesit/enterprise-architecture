@@ -156,7 +156,8 @@ output "contract" {
 }
 
 output "event_hub_namespace_id" {
-  value = local.eh_namespace_id
+  description = "Id of the Event Hubs namespace (created or existing)."
+  value       = local.eh_namespace_id
 }
 
 output "diagnostics_authorization_rule_id" {
@@ -165,23 +166,28 @@ output "diagnostics_authorization_rule_id" {
 }
 
 output "aggregator_id" {
-  value = local.agg_enabled ? azapi_resource.aggregator[0].id : null
+  description = "Id of the Fluent Bit aggregator Container App (null in Observability Pipelines mode or when not hosted here)."
+  value       = local.agg_enabled ? azapi_resource.aggregator[0].id : null
 }
 
 output "op_worker_id" {
-  value = local.op_hosted ? azapi_resource.op_worker[0].id : null
+  description = "Id of the Observability Pipelines Worker Container App (null when not hosted here)."
+  value       = local.op_hosted ? azapi_resource.op_worker[0].id : null
 }
 
 output "op_pipeline_id" {
-  value = local.pipeline_id
+  description = "Id of the Observability Pipelines pipeline the Worker runs."
+  value       = local.pipeline_id
 }
 
 output "apm_gateway_id" {
-  value = local.apm_hosted ? azapi_resource.apm_gateway[0].id : null
+  description = "Id of the Datadog Agent APM gateway Container App (null when not hosted here)."
+  value       = local.apm_hosted ? azapi_resource.apm_gateway[0].id : null
 }
 
 output "gateway_id" {
-  value = local.gw_enabled ? azapi_resource.gateway[0].id : null
+  description = "Id of the OTel gateway Container App (null when not hosted here)."
+  value       = local.gw_enabled ? azapi_resource.gateway[0].id : null
 }
 
 output "gateway_args" {

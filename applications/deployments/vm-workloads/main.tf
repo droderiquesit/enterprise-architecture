@@ -1,5 +1,6 @@
-# Host workloads (ADR-0001 §10: logs -> Fluent Bit host service tailing the app log file; traces -> local
-# Datadog Agent OTLP on localhost:4317; both installed by observability as VM extensions):
+# Host workloads (ADR-0001 §13, observability 4.0.0: the host Datadog Agent - enrolled by the observability Azure
+# Policy + VM Application, not by this root - tails the app log file and receives OTLP on localhost:4317; Fluent Bit
+# host service only with log_pipeline = fluent_bit_direct):
 #   platform-vm linux    hello-worker          managed run command (worker package deploy/install.sh)
 #   platform-vm windows  hello-inventory-api   managed run command (scripts/install-windows-service.ps1.tftpl)
 #   platform-vmss flex   hello-worker          CustomScript extension on the scale-set model
@@ -73,7 +74,7 @@ module "env" {
 }
 
 locals {
-  # Host log files tailed by the observability Fluent Bit service. The worker unit (package) restricts writes
+  # Host log files tailed by the observability host log collector (Datadog Agent; Fluent Bit with fluent_bit_direct). The worker unit (package) restricts writes
   # to /var/log/hello-worker, so its LOG_FILE_PATH is that directory; Windows uses the platform log_dir.
   log_file = {
     "worker-vm"    = "/var/log/hello-worker/worker.log"

@@ -69,3 +69,6 @@ recycled.
 ## Limitations
 The Fluent Bit kubernetes filter is not exercised locally because it needs an API server; only the dry-run is
 done.
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-kubernetes` (fmt, validate, test).

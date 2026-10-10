@@ -21,7 +21,7 @@
 | Subnet | Prefix | Delegation | NSG | Explicit egress | Why this size (Microsoft Learn, verified 2026-10-09) |
 |---|---|---|---|---|---|
 | `aks-nodes` | 10.41.0.0/22 | — | yes | yes | Azure CNI Overlay: only nodes use VNet IPs (1019 nodes) |
-| `aca-infra` | 10.41.4.0/23 | `Microsoft.App/environments` | yes | yes | workload-profiles env min **/27** (12 IPs reserved); /23 = 498 IPs ≈ 249 dedicated nodes / ~2490 consumption replicas; cannot be resized later. (ADR §8 says "/23 min" — that is the *consumption-only* minimum; workload profiles need /27. /23 kept for headroom.) |
+| `aca-infra` | 10.41.4.0/23 | `Microsoft.App/environments` | yes | yes | workload-profiles env min **/27** (12 IPs reserved); /23 = 498 IPs ≈ 249 dedicated nodes / ~2490 consumption replicas; cannot be resized later. (ADR §8: /27 minimum, /23 for headroom.) |
 | `aro-master` | 10.41.6.0/23 | — | no (ARO RP owns NSG) | no (ARO LB) | ARO min /27; PLS network policies disabled (required) |
 | `aro-worker` | 10.41.8.0/23 | — | no | no | as above |
 | `compute` | 10.41.10.0/24 | — | yes | yes | VMs / VMSS |
@@ -37,7 +37,7 @@
 | `observability` | 10.41.13.192/26 | — | yes | yes | collectors, private synthetics, DBM agent |
 | `batch` | 10.41.14.0/24 | — | yes | yes | Batch pool nodes |
 | `sfmc` | 10.41.15.0/24 | — | yes | yes | Service Fabric managed cluster |
-| `apim` (optional, `apim_subnet`) | 10.41.16.0/26 | `Microsoft.Web/serverFarms` | yes (+ KeyVault 443 outbound) | yes | API Management v2 outbound VNet integration (min /27) — **not in ADR §8; amendment requested** |
+| `apim` (optional, `apim_subnet`) | 10.41.16.0/26 | `Microsoft.Web/serverFarms` | yes (+ KeyVault 443 outbound) | yes | API Management v2 outbound VNet integration (min /27) |
 | `AzureBastionSubnet` (`bastion_subnet`) | hub 10.40.1.0/26 · single-spoke 10.41.17.0/26 | — | yes (Bastion required rules) | no | Basic/Standard Bastion (Developer SKU needs none) |
 | `appgw` (`appgw_subnet`) | hub 10.40.2.0/24 · single-spoke 10.41.18.0/24 | — | yes (GatewayManager 65200-65535, listeners) | no | App Gateway v2 |
 | `AzureFirewallSubnet` (`firewall_subnet`, hub only) | 10.40.0.0/26 | — | not allowed | — | Azure Firewall |
@@ -118,7 +118,6 @@ take hours to release after the instance is deleted. Do not put a Delete lock on
 - SQL MI with `egress = firewall`: MI keeps its service-managed route table; validate MI management connectivity before
   relying on firewall-only egress (default outbound is disabled).
 - ARO subnets get no NSG unless `aro_preconfigured_nsg` (ARO "bring your own NSG"); ARO needs outbound via its LB.
-- The `apim` subnet key is an addition to the ADR §8 catalogue (requested amendment).
 - Bastion/App Gateway subnets live in the hub only for hub-spoke; single-spoke places them in the spoke.
 
 ## References

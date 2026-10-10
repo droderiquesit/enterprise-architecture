@@ -48,7 +48,7 @@ variable "settings" {
     # New connections use the Entra issuer: https://login.microsoftonline.com/<tenant-id>/v2.0 with subject
     # "<entra-prefix>/sc/<organization-id>/<service-connection-id>".
     federated_credentials = optional(list(object({
-      identity  = string # plan | apply | validate
+      identity  = string # plan | apply | build | validate
       name      = string
       issuer    = string
       subject   = string

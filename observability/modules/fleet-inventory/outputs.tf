@@ -7,7 +7,7 @@ output "diagnostic_targets" {
   description = "Input for modules/diagnostic-settings `resources` (resources with policy categories; app-log export only for the eventhub route)."
   value = { for k, p in local.plan : k => {
     id            = p.id
-    app_log_route = p.app_logs == "eventhub" ? "eventhub" : (contains(["fluent_bit_sidecar"], p.app_logs) ? "sidecar" : "none")
+    app_log_route = p.app_logs == "eventhub" ? "eventhub" : (contains(["serverless_init", "datadog_agent_sidecar", "fluent_bit_sidecar"], p.app_logs) ? "sidecar" : "none")
     platform_logs = true
     tier          = var.resources[k].tier
   } if p.platform_logs == "diagnostic_settings" }

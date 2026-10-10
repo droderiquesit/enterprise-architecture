@@ -25,22 +25,26 @@ manifests. An umbrella chart (`enterprise-hello` with aliased `hello-service` de
 
 | `kind` | Objects |
 |---|---|
-| `deployment` (HTTP service) | Deployment, ServiceAccount, Service (ClusterIP or internal LoadBalancer), PDB, HPA, optional SecretProviderClass, Ingress (app routing), Route (OpenShift), NetworkPolicy |
-| `worker` (background consumer) | Deployment with a `health` port (probes), ServiceAccount, PDB, HPA, optional SecretProviderClass / NetworkPolicy — no Service/Ingress |
-| `cronjob` (scheduled job) | CronJob (`restartPolicy: Never`, bounded runtime/history), ServiceAccount, optional SecretProviderClass — no probes/Service/PDB/HPA |
+| `deployment` (HTTP service) | Deployment, ServiceAccount, Service (ClusterIP or internal LoadBalancer), PDB, HPA, optional Ingress (app routing), Route (OpenShift), NetworkPolicy |
+| `worker` (background consumer) | Deployment with a `health` port (probes), ServiceAccount, PDB, HPA, optional NetworkPolicy — no Service/Ingress |
+| `cronjob` (scheduled job) | CronJob (`restartPolicy: Never`, bounded runtime/history), ServiceAccount — no probes/Service/PDB/HPA |
 
 Built in (not configurable): `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`,
 `runAsNonRoot`, `/tmp` emptyDir, `enableServiceLinks: false`, RollingUpdate `maxSurge 1 / maxUnavailable 0`,
 selector `app.kubernetes.io/name` only (immutable; identical to the pre-Helm objects so they can be adopted).
 
 **Env order**: `DD_AGENT_HOST` (downward API `status.hostIP`, node-local Datadog Agent) first, then the chart-owned
-`DD_ENV`/`DD_SERVICE`/`DD_VERSION` (= the `tags.datadoghq.com/*` labels), `AZURE_CLIENT_ID`, `FAULTS_ENABLED`, `PORT`,
+`DD_ENV`/`DD_SERVICE`/`DD_VERSION` (= the `tags.datadoghq.com/*` labels), `AZURE_CLIENT_ID`, `FAULTS_ENABLED`, `DSV_*`, `PORT`,
 `LOG_FILE_PATH` (only with `logFile.enabled`), then `env` sorted (may reference `$(DD_AGENT_HOST)`), then secret refs.
 
 **Labels on every object and pod**: `app.kubernetes.io/{name,instance,version,component,part-of,managed-by}`,
 `helm.sh/chart`, Datadog unified service tagging `tags.datadoghq.com/{env,service,version}`, `team`, `domain`, `tier`,
-`logs.datadoghq.com/source`; pods add `azure.workload.identity/use: "true"` (when `identity.workloadIdentity`) and the
-annotation `ad.datadoghq.com/<container>.logs: "[]"` (logs come from the Fluent Bit DaemonSet only).
+`logs.datadoghq.com/source`; pods add `azure.workload.identity/use: "true"` (when `identity.workloadIdentity`),
+`admission.datadoghq.com/enabled: "true"` (with `telemetry.singleStepInstrumentation`), the annotation
+`ad.datadoghq.com/tags` (from `service.tags`) and the log annotation `ad.datadoghq.com/<container>.logs`:
+`[{"source": <agentLogSource>, "service": <service.name>}]` when the node Datadog Agent collects the logs
+(`disableAgentLogCollection: false` + `agentLogSource`, what core-aks renders under observability 4.0.0) or `"[]"`
+(default, `disableAgentLogCollection: true`) when the Fluent Bit DaemonSet does (`log_pipeline = fluent_bit_direct`).
 
 **Secrets** (chart 2.0.0, Delinea DSV - no Key Vault, no Secrets Store CSI driver): the chart never creates a `Secret`.
 `secretEnv` maps names to **DSV references** (`dsv://<path>#<element>`). With `secretsMode: dsv` (default) each reference
@@ -63,7 +67,8 @@ Enforced by `values.schema.json` (draft-07; `additionalProperties: false` everyw
 | `kind` | `deployment` | `deployment` \| `worker` \| `cronjob` |
 | `fullnameOverride` | release name | keep release name = workload name (DNS `http://<svc>.<ns>.svc.cluster.local`) |
 | `service.name` / `.version` / `.env` | — **required** | DD_SERVICE / DD_VERSION / DD_ENV and UST labels; label-safe |
-| `service.team` / `.domain` / `.tier` / `.logsSource` / `.partOf` | `""` / `enterprise-hello` | ADR-0001 §7 tags, Fluent Bit source |
+| `service.team` / `.domain` / `.tier` / `.logsSource` / `.partOf` | `""` / `enterprise-hello` | ADR-0001 §7 tags, log source label |
+| `service.tags` | `{}` | other tag-policy tags → pod annotation `ad.datadoghq.com/tags` |
 | `image.repository` | — **required** | `<registry>/<repo>`, no tag |
 | `image.digest` | — **required** | `sha256:<64 hex>`; `image.tag` is **rejected** |
 | `image.pullPolicy` | `IfNotPresent` | digest-pinned, so this can never run another image |
@@ -79,7 +84,9 @@ Enforced by `values.schema.json` (draft-07; `additionalProperties: false` everyw
 | `secretsMode` / `secretsSync.secretName` | `dsv` / `<fullname>-dsv` | `synced` = dsv-k8s syncer Secret via `secretKeyRef` (fallback) |
 | `existingSecretEnv` | `{}` | name → `{secretName, key}` |
 | `telemetry.agentHostFromHostIP` | `true` | `DD_AGENT_HOST` from `status.hostIP` |
-| `telemetry.disableAgentLogCollection` | `true` | `ad.datadoghq.com/<c>.logs: "[]"` |
+| `telemetry.disableAgentLogCollection` | `true` | `ad.datadoghq.com/<c>.logs: "[]"` (Fluent Bit DaemonSet collects) |
+| `telemetry.agentLogSource` | `""` | with `disableAgentLogCollection: false`: Agent log source (`ad.datadoghq.com/<c>.logs`) |
+| `telemetry.singleStepInstrumentation` | `false` | pod label `admission.datadoghq.com/enabled: "true"` (Datadog SSI) |
 | `logFile.enabled` / `.path` / `.sizeLimit` | `false` | `LOG_FILE_PATH` on an emptyDir (sidecar/host tailers only; off on AKS) |
 | `faults.enabled` | **`false`** | `FAULTS_ENABLED`; `true` requires `FAULT_TOKEN` in `secretEnv` or `existingSecretEnv` |
 | `resources.requests.{cpu,memory}`, `resources.limits.memory` | 100m/192Mi, 512Mi (cpu 500m) | **required** (null-ing them fails) |
@@ -169,6 +176,6 @@ pipeline so the next `terraform plan` shows no drift. A failed upgrade rolls bac
 Docs: https://helm.sh/docs/topics/charts/ , https://helm.sh/docs/topics/registries/ ,
 https://learn.microsoft.com/azure/container-registry/container-registry-helm-repos ,
 https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster ,
-https://learn.microsoft.com/azure/aks/csi-secrets-store-identity-access , https://learn.microsoft.com/azure/aks/app-routing ,
+https://learn.microsoft.com/azure/aks/app-routing ,
 https://docs.datadoghq.com/getting_started/tagging/unified_service_tagging/ ,
 https://docs.openshift.com/container-platform/latest/authentication/managing-security-context-constraints.html

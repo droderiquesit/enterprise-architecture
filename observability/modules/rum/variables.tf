@@ -44,8 +44,9 @@ variable "applications" {
 }
 
 variable "datadog_site" {
-  type    = string
-  default = "datadoghq.com"
+  description = "Datadog site of the organisation (browser SDK site)."
+  type        = string
+  default     = "datadoghq.com"
 }
 
 variable "fleet_policy" {

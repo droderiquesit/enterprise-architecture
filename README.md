@@ -2,8 +2,9 @@
 
 A configurable Azure enterprise **test environment**, a working sample application (**Enterprise Hello**) that
 exercises it end to end, and a **portable, versioned Datadog fleet collection configuration package** (tags, Agent fleet,
-Observability Pipelines, tracers, RUM) that onboards services from one YAML manifest each. Everything is Terraform, Python and .NET in one repository, delivered by one universal
-Azure DevOps pipeline that deploys only the components that changed (plus what they need).
+Observability Pipelines, tracers, RUM) that onboards services from one YAML manifest each. Everything is Terraform, Python,
+.NET, TypeScript and Go in one repository, delivered by two Azure DevOps pipelines (platform and applications) on one
+governed template that deploy only the components that changed (plus what they need).
 
 > **Status.** Code is implemented and statically validated (Terraform `fmt`/`validate`/`terraform test` with mock
 > providers, unit tests, local docker integration tests for the services). **Nothing has been deployed to Azure or
@@ -21,7 +22,7 @@ Azure DevOps pipeline that deploys only the components that changed (plus what t
 | foundation | [`foundation/`](foundation/README.md) | hub/spoke or single-spoke network, subnet catalogue with delegations, NSGs, NAT/firewall egress, private DNS zones, workload identities + Delinea DSV secret access (users/policies as code; no Key Vault), budget + policy, private deployment agents, optional edge (App Gateway, Front Door, APIM, Firewall, Bastion) |
 | platform | [`platform/`](platform/README.md), [`platform/data/`](platform/data/README.md) | compute platforms (AKS, Container Apps, App Service, Functions, VM, VMSS, Batch, Service Fabric, ARO, specialized), ACR, Service Bus, 17 database/data-store roots |
 | applications | [`applications/`](applications/deployments/README.md) | Enterprise Hello services (React frontend, .NET BFF/orders/inventory/durable, Python catalog/adapters/worker/jobs/functions/partner-sim/traffic, Logic Apps) and one deployment root per hosting group |
-| observability | [`observability/`](observability/README.md) | portable package for fleet collection configuration (3.0.0): tag policy, fleet collection policy, Datadog Observability Pipelines (central log pipeline, OP Worker), Fluent Bit edge collectors, Datadog Agent fleet (hosts, AKS, DBM), APM via Datadog tracers / Single Step Instrumentation, profiling, RUM, Azure integration and diagnostic settings + lab roots under `observability/lab/`. Monitors, SLOs and dashboards are not in the package; the optional 2.x content is in [`observability/extras/content/`](observability/extras/content/README.md) |
+| observability | [`observability/`](observability/README.md) | portable package for fleet collection configuration ([4.0.0](observability/CHANGELOG.md)): tag policy, fleet collection policy, Datadog Observability Pipelines (central log pipeline, OP Worker), one log collector per architecture (Datadog Agent on AKS via Helm and on VM/VMSS via Azure Policy + VM Applications, Agent sidecar on ACI, serverless-init on Container Apps; Fluent Bit only on Batch and as the `fluent_bit_direct` fallback), DBM, APM via Datadog tracers / Single Step Instrumentation, profiling, RUM, Azure integration and diagnostic settings, static Go `dsv-fetch` for every Datadog API key read from Delinea DSV + lab roots under `observability/lab/`. Monitors, SLOs and dashboards are not in the package; the optional content is in [`observability/extras/content/`](observability/extras/content/README.md) |
 | delivery | [`azure-pipelines.yml`](azure-pipelines.yml) (platform), [`azure-pipelines.applications.yml`](azure-pipelines.applications.yml) (applications), [`pipelines/`](pipelines/README.md), [`tools/`](tools/README.md) | two pipelines on one governed template: change detection, generated plan/apply stages, promotion dev -> test -> prod, plan binding, contracts, smoke, telemetry verification, evidence, observability package release |
 | catalog | [`catalog/`](catalog/) | component registry, Azure service catalog (100 entries), architecture matrix, telemetry capabilities, contract schemas, provider gaps |
 
@@ -56,7 +57,7 @@ python3 tools/docs/generate.py --check && tools/docs/render_diagrams.sh --check 
 # 2. bootstrap (operator workstation, Owner on the subscription)
 bootstrap/scripts/bootstrap.sh --env dev              # local state -> migrated to the state account
 
-# 3. Azure DevOps: service connections, environments, variable group, branch policy (pipelines/README.md),
+# 3. Azure DevOps: service connections, environments, branch policy, no variable groups (pipelines/README.md),
 #    then run azure-pipelines.yml (platform, mode auto) - it triggers azure-pipelines.applications.yml on success.
 ```
 
@@ -98,12 +99,16 @@ files: [IMPLEMENTATION_CHECKLIST.md](docs/IMPLEMENTATION_CHECKLIST.md). Exact bl
 
 ## Documentation
 
+Full index: [docs/README.md](docs/README.md).
+
 | Topic | Document |
 |---|---|
 | Design contract (binding) | [ADR-0001](docs/architecture/ADR-0001-design-contract.md) |
 | Getting started | [quick start](docs/guides/quick-start.md), [prerequisites and bootstrap](docs/guides/prerequisites-and-bootstrap.md), [deployment profiles](docs/guides/deployment-profiles.md) |
 | Ownership | [component ownership](docs/guides/component-ownership.md) (generated), [architecture deployment matrix](docs/guides/architecture-deployment-matrix.md) (generated) |
-| Observability | [service onboarding tutorial](docs/guides/service-onboarding-tutorial.md), [production adoption of the package](docs/guides/observability-production-adoption.md), [demo walkthrough](docs/guides/demo-walkthrough.md) |
+| Observability | [fleet collection paths](docs/guides/datadog-fleet-collection.md), [tagging](docs/guides/datadog-tagging.md), [Azure platform logs](docs/guides/azure-logs-to-datadog.md), [service onboarding tutorial](docs/guides/service-onboarding-tutorial.md), [production adoption of the package](docs/guides/observability-production-adoption.md), [demo walkthrough](docs/guides/demo-walkthrough.md) |
+| Development | [branching and development](docs/guides/branching-and-development.md), [automated PR review (Copilot + policy bot)](docs/guides/automated-pr-review.md), [CONTRIBUTING.md](CONTRIBUTING.md), [pipelines](pipelines/README.md) |
 | Cost | [cost and lifecycle](docs/guides/cost-and-lifecycle.md) |
-| Operations | [runbooks](docs/runbooks/README.md): secret rotation, rollback, teardown, break-glass, alert response, fault injection |
+| Operations | [runbooks](docs/runbooks/README.md): secret rotation, rollback, teardown, break-glass, lock recovery, quarantine, CI speed, alert response, fault injection |
+| Limitations | [known limitations](docs/known-limitations.md), [implementation checklist](docs/IMPLEMENTATION_CHECKLIST.md) |
 | Evidence | [docs/evidence](docs/evidence/README.md) |

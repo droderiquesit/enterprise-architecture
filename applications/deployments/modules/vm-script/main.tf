@@ -1,11 +1,13 @@
 variable "component" {
-  type    = string
-  default = "applications"
+  description = "Deployment root (component id) named in the rendered script header."
+  type        = string
+  default     = "applications"
 }
 
 variable "version_label" {
-  type    = string
-  default = "unknown"
+  description = "Release version shown in the script header and logs."
+  type        = string
+  default     = "unknown"
 }
 
 locals {
@@ -36,5 +38,6 @@ output "script" {
 }
 
 output "env_file" {
-  value = local.env_lines
+  description = "Rendered EnvironmentFile content (plain values and dsv:// references; no secret values)."
+  value       = local.env_lines
 }

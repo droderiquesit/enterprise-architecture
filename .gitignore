@@ -29,7 +29,6 @@ coverage/
 !.env.example
 out/
 .artifacts/
-.artifacts/
 *.egg-info/
 .ci-cache/
 

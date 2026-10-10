@@ -7,13 +7,14 @@ on 2026-10-09. Each item names its source so it can be re-checked. Status words 
 ## Nothing is deployed or verified
 
 * No Azure or Datadog credentials existed while the repository was built. **No component is `deployed` or `verified`**;
-  `live_validation` is `not-run` for all 101 service-catalog entries; there is no evidence file
+  `live_validation` is `not-run` for all 103 service-catalog entries; there is no evidence file
   ([evidence/README.md](evidence/README.md)).
 * Static validation (Terraform `fmt`/`validate`/`terraform test` with **mock providers**, unit tests, checkov) cannot
   detect Azure-side errors: quota, region/SKU availability, preview gating, API behaviour, RBAC propagation timing,
   private DNS resolution, Datadog API acceptance (platform/data README).
-* The universal pipeline has not run in an Azure DevOps organisation (pipelines/README.md); its conditions are tested
-  with a simulator (`tests/pipeline`).
+* Neither pipeline (`lab-platform`, `lab-applications`) has run in an Azure DevOps organisation (pipelines/README.md);
+  their conditions are tested with a simulator (`tests/pipeline`).
+
 ## Blocked and disabled services
 
 | Item | Status | Exact prerequisite / reason | Source |
@@ -30,7 +31,7 @@ on 2026-10-09. Each item names its source so it can be re-checked. Status words 
 | SQL elastic pool, Hyperscale, PostgreSQL elastic cluster, Synapse SQL/Spark, ADX, AI Search | disabled | cost | platform/data READMEs, catalog |
 | Managed DevOps Pools (`foundation-deploy-agents` `mode = managed-devops-pool`) | disabled (VMSS agents by default) | organization URL, DevOpsInfrastructure principal, subnet delegation | foundation/deploy-agents/README.md |
 | Edge: App Gateway, Front Door, APIM, Firewall, Bastion | disabled | cost; enable per scenario | foundation/edge/README.md |
-| 30 catalog entries | cataloged only | retired/retiring (MariaDB, single servers, SQL Edge, Synapse Data Explorer, Neon, Spring Apps, Cloud Services ES, Azure Cache for Redis, Linux Consumption), not recommended (Cosmos DB for PostgreSQL), Fabric items (no ARM API), partner services needing other providers (MongoDB Atlas, Elastic, Confluent), not implemented (Databricks, HDInsight, Stream Analytics, Event Grid, App Configuration, Functions container on Premium, confidential containers, CycleCloud, Arc servers, Synapse serverless) | [coverage matrix](coverage/coverage-matrix.md) |
+| 31 catalog entries | cataloged only | retired/retiring (MariaDB, single servers, SQL Edge, Synapse Data Explorer, Neon, Spring Apps, Cloud Services ES, Azure Cache for Redis, Linux Consumption), not recommended (Cosmos DB for PostgreSQL), Fabric items (no ARM API), partner services needing other providers (MongoDB Atlas, Elastic, Confluent), not implemented (Databricks, HDInsight, Stream Analytics, Event Grid, App Configuration, Functions container on Premium, confidential containers, CycleCloud, Arc servers, Synapse serverless) | [coverage matrix](coverage/coverage-matrix.md) |
 
 ## Provider gaps (AzAPI)
 
@@ -70,7 +71,6 @@ state account; `plans` container readable only by the apply identity):
 | `aro-pull-secret` | `platform-aro` (when enabled) | `cluster_profile.pull_secret` has no write-only variant |
 | VM / VMSS / Service Fabric / specialized VM break-glass passwords | platform/compute | used when no SSH key is set (`random_password`) |
 | Event Hubs authorization rule keys | `obs-telemetry-transport` | the rule resource holds its keys; the listen connection string is published to DSV (`eventhub-fluentbit-listen`) by `tools/secrets/publish.py` from the sensitive output `generated_secrets` |
-
 | Logic Apps Standard runtime storage account key | `deploy-logicapps` | required by the WS1 plan content share outside ASE v3 (identity-based content share unsupported) |
 | `datadog-azure-client-secret` | `obs-azure-integration` | only when `settings.app_auth = secret` (default `secretless` needs none); `datadog_integration_azure.client_secret` has no write-only variant |
 | AKS `kube_config` computed fields | `obs-kubernetes` | read through `data.azurerm_kubernetes_cluster` to configure the helm/kubernetes providers (local accounts are disabled, so they hold no usable admin credential) |
@@ -90,12 +90,12 @@ key fallback) in their READMEs.
   tokens obtained through workload identity federation is **not verified**; fallback: Delinea's dsv-k8s syncer or
   host-level agents.
 * DSV is a public SaaS endpoint (no Private Link): every reader needs HTTPS egress to `<tenant>.secretsvaultcloud.<tld>`.
-* Windows hosts: the Datadog Agent API key is fetched from DSV by the installer; a rotated key reaches Windows Agents only
-  when the installer re-runs (Linux hosts resolve it through the Agent `secret_backend_command` on every Agent restart).
+* VM / VMSS hosts (Linux and Windows): the Agent resolves the API key through `dsv-fetch agent-backend` as its
+  `secret_backend_command` (the key is never written to `datadog.yaml`); a rotated key reaches an Agent on its next
+  restart or secret refresh.
 * Unverified on real Azure: Container Apps init containers authenticating with the app's managed identity (only the
   Fluent Bit fallback needs it now - the serverless-init sidecar and the ACI Agent sidecar read DSV from regular
-  containers), uid 65532 write access to ACA/ACI EmptyDir volumes, init containers on Functions-on-Container-Apps, ConfigMap file mode 0500 with
-  `fsGroup` on AKS, and which of two duplicate env vars wins on the Datadog Cluster Agent.
+  containers), uid 65532 write access to ACA/ACI EmptyDir volumes, and init containers on Functions-on-Container-Apps.
 * No secondary vault: a DSV outage blocks new starts and pipeline steps that need secrets (running processes keep cached
   values) - by design (no copies of DSV secrets elsewhere).
 * `foundation-secrets` never deletes DSV objects; managed users of removed identities are reported, not removed.
@@ -152,8 +152,8 @@ key fallback) in their READMEs.
 * Microsoft-hosted agents cannot reach private endpoints; first foundation runs need a temporary IP allowlist on the state
   account ([bootstrap guide](guides/prerequisites-and-bootstrap.md#5-before-private-agents-exist)).
 * Roots needing data-plane access to private resources require VNet-connected agents: Flex deployment container
-  uploads, SQL/PostgreSQL/MySQL grant scripts, Cassandra keyspace script, `kubernetes_manifest` (SecretProviderClass) on
-  the private AKS API at plan time, smoke tests of internal apps. Steps that need secrets run on the self-hosted deploy
+  uploads, SQL/PostgreSQL/MySQL grant scripts, Cassandra keyspace script, Kubernetes / Helm resources on the private
+  AKS API at plan time, smoke tests of internal apps. Steps that need secrets run on the self-hosted deploy
   pool (deploy agent managed identity -> Delinea DSV).
 * `userAssignedNATGateway` for AKS requires the NAT gateway association on `aks-nodes` before cluster creation.
 * Subnets with service association links (ACA, SQL MI, MDP, Flexible Servers) cannot be deleted while the service
@@ -162,9 +162,10 @@ key fallback) in their READMEs.
   needed and not automated; Datadog Query Activity / Wait Events are not supported on MySQL Flexible.
 * `obs-dbm` ACI hosting runs in foundation-network's delegated `aci` subnet (default `subnet_key = "aci"`, shared with
   partner-sim); database firewalls / NSGs must admit that range.
-* `obs-hosts`: destroy removes extensions but does not uninstall packages from hosts. The VM / VMSS identities
-  (`hello-worker`, `hello-inventory-api`, `hello-dbadapter`) and the Batch pool identity (`hello-jobs`) read
-  `datadog-api-key` from DSV (one read permission per identity, `foundation-secrets`).
+* `obs-hosts`: destroy removes the policy assignment, initiative, custom role and gallery; Agents already installed stay
+  on the hosts until the VM Application is removed from their model (observability/lab/hosts/README.md). Host Agents
+  read `datadog-api-key` with the one policy-attached `obs-host-agent` identity; the Batch pool identity (`hello-jobs`)
+  reads it only in `fluent_bit_direct` mode (one read permission per identity, `foundation-secrets`).
 * Batch log collection is set up per **job** (job preparation task): a job created before a change of the
   observability setup keeps the old preparation task until it is deleted and re-created (`submit-batch-job.sh` warns).
   The script travels in a job-preparation environment setting (size limits not verified on Azure).
@@ -184,7 +185,8 @@ key fallback) in their READMEs.
   Routing host) explicitly.
 * Two-pass settings: BFF `cors_allowed_origins` needs the SWA hostname (known after `deploy-frontend`); BFF
   `adapters` must be copied from `deploy-dbadapters` `adapters_json`; firewall egress switch is three applies.
-* Budgets alert only; they never cap spend. The dev budget (500) is based on the minimal-profile estimate.
+* Budgets alert only; they never cap spend. The dev budget (500) predates the observability 4.0.0 transport defaults
+  and is below the current minimal-profile estimate (~600-650, [deployment profiles](guides/deployment-profiles.md#minimal)).
 
 ## Application and telemetry limitations
 
@@ -202,7 +204,7 @@ key fallback) in their READMEs.
   submission script are syntax-checked only.
 * Observability assumptions to confirm (observability/README.md section 9): Service Bus entity tag `entityname`; Azure
   `name` tag of SQL databases = database name; Fluent Bit / OTel collector metric naming; worker operation name
-  `servicebus.process`; RUM monitor syntax not validated by the Datadog API; DBM per-node behaviour on PostgreSQL elastic
+  `servicebus.process`; optional monitoring content: RUM monitor syntax not validated by the Datadog API; DBM per-node behaviour on PostgreSQL elastic
   clusters unverified; synthetic browser steps limited to simple assertions.
 * `telemetry_verify.py` is tested only against recorded API responses.
 * DogStatsD on managed runtimes (Datadog mode, observability 4.0.0): Container Apps use the serverless-init sidecar and

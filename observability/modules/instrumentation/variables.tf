@@ -267,14 +267,13 @@ variable "agent_sidecar" {
 }
 
 variable "serverless_init" {
-  description = "Container Apps serverless-init sidecar (fleet policy default for aca: traces, DogStatsD, app log file): Azure context and optional image/sizing overrides (null = fleet policy agent.serverless_init). The Datadog API key is read from Delinea DSV (telemetry.api_key_ref) by the dsv-fetch binary in the sidecar's start command; api_key_secret_name is ignored (kept for compatibility)."
+  description = "Container Apps serverless-init sidecar (fleet policy default for aca: traces, DogStatsD, app log file): Azure context and optional image/sizing overrides (null = fleet policy agent.serverless_init). The Datadog API key is read from Delinea DSV (telemetry.api_key_ref) by the dsv-fetch binary in the sidecar's start command (no Container Apps secret)."
   type = object({
-    image               = optional(string)
-    cpu                 = optional(number)
-    memory              = optional(string)
-    api_key_secret_name = optional(string) # ignored: the key comes from DSV (no Container Apps secret)
-    subscription_id     = optional(string)
-    resource_group      = optional(string)
+    image           = optional(string)
+    cpu             = optional(number)
+    memory          = optional(string)
+    subscription_id = optional(string)
+    resource_group  = optional(string)
   })
   default = {}
 }

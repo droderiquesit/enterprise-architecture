@@ -4,7 +4,7 @@
 # Build context: applications/
 #   docker build -f applications/services/inventory-api/Dockerfile.windows -t hello-inventory-api:$VERSION-windows applications
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401-nanoserver-ltsc2025 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-nanoserver-ltsc2025@sha256:fb909bd5c26908d9e45bae873a279695867e0270ad0a86dc84ae0e3006e80ad6 AS build
 ARG VERSION=0.1.0-local
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown
@@ -16,7 +16,7 @@ COPY services/inventory-api/Directory.Build.props services/inventory-api/Directo
 COPY services/inventory-api/src/ ../services/inventory-api/src/
 RUN dotnet publish ..\services\inventory-api\src\Hello.InventoryApi\Hello.InventoryApi.csproj -c Release -r win-x64 --self-contained false -o C:\app -p:Version=%VERSION% -p:GIT_COMMIT=%GIT_COMMIT% -p:BUILD_TIME=%BUILD_TIME% -p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-nanoserver-ltsc2025 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-nanoserver-ltsc2025@sha256:763ff79841ca3a3a492ec9e59b5d00dac33a738cdee5f463b4ac195429bfbc2d AS runtime
 WORKDIR C:\app
 COPY --from=build C:\app .
 ENV PORT=8080

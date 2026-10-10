@@ -35,3 +35,6 @@ Normalisation (Datadog tag rules):
 
 `tools/tags/tag_policy.py` is the Python mirror (onboarding render, telemetry_verify, coverage tools). Parity with
 this module is tested (`tests/tags/test_tags.py`).
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/tagging.tftest.hcl`. `observability/tests/tags/test_tags.py` checks parity with the Python mirror `tools/tags/tag_policy.py`.

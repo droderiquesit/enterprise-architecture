@@ -4,7 +4,8 @@ output "files" {
 }
 
 output "main_config" {
-  value = local.files["fluent-bit.yaml"]
+  description = "Rendered main configuration (fluent-bit.yaml)."
+  value       = local.files["fluent-bit.yaml"]
 }
 
 output "env" {

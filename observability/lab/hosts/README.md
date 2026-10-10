@@ -125,3 +125,6 @@ The package storage needs no host access.
   Windows.
 * The remediation template's lambda functions and the partial-body PUT of VMSS models follow Microsoft Learn but were
   not exercised against Azure.
+
+## Test
+`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-hosts` (fmt, validate, test).

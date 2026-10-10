@@ -12,7 +12,7 @@ executed against a live Azure subscription or Datadog organisation yet.
 | [ci-speed.md](ci-speed.md) | a PR build is slow, a suite was skipped unexpectedly, or a cached pass is suspect |
 | [teardown.md](teardown.md) | removing components or a whole environment (pipeline retire mode, per-root destroy, what is retained, scoped cleanup) |
 | [break-glass.md](break-glass.md) | pipeline or agents unavailable; state recovery (links the bootstrap break-glass procedures) |
-| [alert-response.md](alert-response.md) | a Datadog monitor fired: one section per runbook anchor (generated from the archetypes) |
+| [alert-response.md](alert-response.md) | a Datadog monitor of the optional monitoring content (`observability/extras/content`, component `obs-monitoring`) fired: one section per runbook anchor (generated from the archetypes) |
 | [alerts/README.md](alerts/README.md) | per-service pages with the monitors behind each anchor (generated from the rendered onboarding files) |
 | [fault-injection.md](fault-injection.md) | exercising monitors safely: authenticated, limited, auto-expiring, disabled by default |
 

@@ -6,7 +6,8 @@ the pipeline). Nothing in phase 2 has been executed from this repository yet; th
 ## Phase 1 - local validation (no credentials)
 
 Toolchain (pinned in [`versions.yaml`](../../versions.yaml), ADR-0001 section 2): Terraform 1.16.5 (>= 1.14), Python 3.13
-with `pyyaml` + `jsonschema` (`pipelines/requirements-tools.txt`), .NET SDK 10.0, Node 22+ (24 LTS for builds), docker for
+with `pyyaml` + `jsonschema` (`pipelines/requirements-tools.txt`), .NET SDK 10.0, Node 22+ (24 LTS for builds), Go 1.24.13 (only
+to rebuild `dsv-fetch` locally; without it `build.sh` uses a digest-pinned golang container, see [`observability/images/dsv-fetch`](../../observability/images/dsv-fetch/README.md)), docker for
 integration tests, optional `checkov`.
 
 ```bash
@@ -14,7 +15,7 @@ git clone <repo> && cd enterprise-architecture
 python3 -m pip install -r pipelines/requirements-tools.txt pytest
 
 # registry, configuration and selection
-python3 -m tools.changeset graph                          # 69 components, acyclic, dependency layers
+python3 -m tools.changeset graph                          # 73 components, acyclic, dependency layers
 python3 tools/config/resolve.py --env dev                 # profile minimal -> enabled components
 python3 tools/config/render.py --env dev --component foundation-network --stdout   # one root's tfvars
 python3 -m tools.changeset select --mode pr --env dev --target main                 # what a PR would validate
@@ -35,7 +36,7 @@ python3 -m pytest -q tests
 # one component exactly as the pipeline Validate stage runs it
 python3 tools/validate/component.py --component deploy-core-aca --env dev
 
-# observability onboarding (package 3.0.0: identity, tags, resources, telemetry routing)
+# observability onboarding (package 4.0.0, v2 manifests: identity, tags, resources, telemetry routing)
 python3 observability/tools/onboarding/validate.py --manifests observability/onboarding/dev --env dev --strict
 python3 observability/tools/onboarding/render.py render --manifests observability/onboarding/dev --env dev \
   --out observability/onboarding/rendered/dev --check

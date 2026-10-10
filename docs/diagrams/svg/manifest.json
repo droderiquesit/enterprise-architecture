@@ -2,10 +2,10 @@
   "generator": "tools/docs/render_diagrams.sh",
   "mermaid_cli": "11.12.0",
   "diagrams": {
-    "01-foundation": {"source": "docs/diagrams/src/01-foundation.mmd", "source_sha256": "8723c653606c990b6434c8ccf17e06a254c0913b920b23cb2d33c96828627c6f", "svg_sha256": "b0f0bfbc73e007784c54c5329dbc0485e63247ffc6fa22b31998577a2d19f5cd"},
+    "01-foundation": {"source": "docs/diagrams/src/01-foundation.mmd", "source_sha256": "5c92eb794e093a61fccc667dfe5e12327d971352e7acf5f3cffa5aa831344401", "svg_sha256": "729e205ac27033acd378afac07f399f1d019e7426967905c23978b90b13233b3"},
     "02-platform": {"source": "docs/diagrams/src/02-platform.mmd", "source_sha256": "e09391a78530cfe82b53fdb422a9449fa9ecbca31b81f06fc35e66239e425859", "svg_sha256": "b6729dd308e155d1a1f3f711e26afb224de77cf8f46e8729a5e99dde935a8bf6"},
     "03-application": {"source": "docs/diagrams/src/03-application.mmd", "source_sha256": "6270f434bed7ed0a2a08433adcb26b905287cddd4b392706290bc7cc64c13955", "svg_sha256": "30eede07061f42c1773429d43b02835f7f51272169fcc1b8329c9a07e8fdc324"},
-    "04-telemetry": {"source": "docs/diagrams/src/04-telemetry.mmd", "source_sha256": "cc88e0111e5cef350eefebefb8a7eb2678bb7bcc2464046e21fb2fbb83e27df9", "svg_sha256": "808ef73aa05895edc3a3f20e0dc21b9f6833999f0e13d01b536c60d665b01e64"},
-    "05-delivery": {"source": "docs/diagrams/src/05-delivery.mmd", "source_sha256": "e2882ec97d9136f869ba4816e81f80ff85f406ce56a6710a50e0f56c6353cbf9", "svg_sha256": "751f748ea87941e99d696f1597142d9ad3dfc086c66218757d8d66724130e049"}
+    "04-telemetry": {"source": "docs/diagrams/src/04-telemetry.mmd", "source_sha256": "3f3cff2687866b4062095180c28fcd0e04ae1baabcb429e5c746dc32468eab4f", "svg_sha256": "5d8972b4b5e48014f691f38363252377d341a20c95f7e4e8e0be7e271bf926cb"},
+    "05-delivery": {"source": "docs/diagrams/src/05-delivery.mmd", "source_sha256": "a2f30afaeee03227a0f77d838675acf545b7c0d7738d36f2af1a26cf3ada1de4", "svg_sha256": "c04ebfb414f606628ebc24fec5a354403b0d3f8f9f41c3b112f333966c0567e1"}
   }
 }

@@ -33,7 +33,7 @@ variable "foundation_network" {
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract v1 (only the fields this root uses)."
+  description = "foundation-identity contract v2 (only the fields this root uses)."
   type = object({
     identities = map(object({
       id           = string
@@ -80,5 +80,10 @@ variable "settings" {
   validation {
     condition     = var.settings.pool.max_dedicated_nodes >= 1 && var.settings.pool.max_dedicated_nodes <= 10
     error_message = "pool.max_dedicated_nodes must be 1-10 (lab ceiling)."
+  }
+  validation {
+    # Interpolated into the start task's shell command line.
+    condition     = can(regex("^3\\.[0-9]{1,2}$", var.settings.pool.python_version))
+    error_message = "pool.python_version must look like 3.13."
   }
 }

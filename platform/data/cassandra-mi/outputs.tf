@@ -24,7 +24,7 @@ output "contract" {
         boundary            = "keyspace adapter"
         owner_identity_name = "hello-dbadapter"
         login               = "dbadapter"
-        password_secret_id  = lookup(var.foundation_identity.secrets.refs, "cassandra-mi-dbadapter-password", "dsv://${var.foundation_identity.secrets.base_path}/${"cassandra-mi-dbadapter-password"}#value")
+        password_secret_id  = lookup(var.foundation_identity.secrets.refs, "cassandra-mi-dbadapter-password", "dsv://${var.foundation_identity.secrets.base_path}/cassandra-mi-dbadapter-password#value")
         bootstrap_script    = "platform/data/cassandra-mi/scripts/create-keyspace.cql"
       }
     } : {}

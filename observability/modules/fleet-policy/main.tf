@@ -134,25 +134,26 @@ locals {
 
   # ------------------------------------------------------------------ application-log collector (4.0.0)
   # One Datadog collection path per platform. Defaults per architecture (config/fleet-policy.yaml architectures.*,
-  # repeated here for custom policies that omit them); Fluent Bit only with log_pipeline = fluent_bit_direct (and on
-  # Batch nodes, where no Agent runs).
+  # repeated here for custom policies that omit them); Fluent Bit only with log_pipeline = fluent_bit_direct on AKS /
+  # ACA / ACI (and on Batch nodes, where no Agent runs). VM / VMSS hosts always use the Agent: 4.0.0 installs no
+  # Fluent Bit on hosts (modules/host-agent-package), so fluent_bit_direct only makes their Agent ship to the intake.
   default_collector = lookup({
     aks        = "agent", vm = "agent", vmss = "agent", aci = "agent_sidecar", aca = "serverless_init",
     appservice = "azure", functions = "azure", logicapp = "azure", batch = "fluent_bit",
   }, local.arch, "none")
   allowed_collectors = {
-    aks        = ["agent", "fluent_bit"], vm = ["agent", "fluent_bit"], vmss = ["agent", "fluent_bit"],
+    aks        = ["agent", "fluent_bit"], vm = ["agent"], vmss = ["agent"],
     aci        = ["agent_sidecar"], aca = ["serverless_init", "azure"],
     appservice = ["azure"], functions = ["azure"], logicapp = ["azure"], batch = ["fluent_bit"],
   }
-  node_arch   = contains(["aks", "vm", "vmss"], local.arch)
+  host_arch   = contains(["vm", "vmss"], local.arch)
   legacy_node = try(local.section.logs.node_collector, null)
-  # 3.x key: logs.node_collector = fluent_bit on a node architecture still selects Fluent Bit there
-  requested_collector = local.node_arch && local.legacy_node == "fluent_bit" ? "fluent_bit" : coalesce(try(local.section.logs.collector, null), local.default_collector)
+  # 3.x key: logs.node_collector = fluent_bit still selects the Fluent Bit DaemonSet on AKS (hosts keep the Agent)
+  requested_collector = local.arch == "aks" && local.legacy_node == "fluent_bit" ? "fluent_bit" : coalesce(try(local.section.logs.collector, null), local.default_collector)
   collector_valid     = contains(lookup(local.allowed_collectors, local.arch, ["none"]), local.requested_collector)
   chosen_collector    = local.collector_valid ? local.requested_collector : local.default_collector
   fb_direct           = local.log_pipeline == "fluent_bit_direct"
-  log_collector = !local.fb_direct || contains(["azure", "none"], local.chosen_collector) ? local.chosen_collector : (
+  log_collector = !local.fb_direct || local.host_arch || contains(["azure", "none"], local.chosen_collector) ? local.chosen_collector : (
     contains(["aca", "aci"], local.arch) ? "fluent_bit_sidecar" : "fluent_bit"
   )
   log_collector_reason = !local.collector_valid ? "logs.collector '${local.requested_collector}' is not a collection path for '${local.arch}' (allowed: ${join(", ", lookup(local.allowed_collectors, local.arch, ["none"]))}); using ${local.default_collector}" : (

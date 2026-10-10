@@ -43,8 +43,9 @@ self_healing:
   auto_rollback: true              # application deploy roots only; infrastructure never auto-rolls back
   notify: {work_item: false, datadog_event: true}
 # Per-component overrides of each root's `settings` defaults (see <root>/variables.tf).
-# Observability 3.0.0 settings (obs-telemetry-transport fleet / op_* / apm_gateway_*, obs-kubernetes ssi_namespaces,
-# obs-prereqs rum_applications mode/application_id/client_token): environments/profiles/README.md. log_management is ignored.
+# Observability settings (3.0.0: obs-telemetry-transport fleet / op_* / apm_gateway_*, obs-kubernetes ssi_namespaces,
+# obs-prereqs rum_applications; 4.0.0: obs-kubernetes values_overrides / dbm, obs-hosts mode / package_version,
+# obs-dbm hosting): environments/profiles/README.md. The 2.x obs-azure-integration log_management is ignored.
 components:
   # Automated PR reviewer (enabled by the enterprise/full profiles or custom_components; docs/guides/automated-pr-review.md).
   # Placeholders: replace with the real Azure DevOps organization, project / repository ids and, after the reviewer's

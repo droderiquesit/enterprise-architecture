@@ -35,7 +35,8 @@ output "vmss_gallery_applications" {
 }
 
 output "otlp_endpoint" {
-  value = module.hosts.otlp_endpoint
+  description = "OTLP endpoint of the host Agents for otel-mode workloads on the hosts."
+  value       = module.hosts.otlp_endpoint
 }
 
 output "host_log_paths" {

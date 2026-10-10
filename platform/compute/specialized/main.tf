@@ -5,6 +5,11 @@ locals {
   any        = local.s.confidential_vm.enabled || local.s.dedicated_host.enabled || local.s.gpu_vm.enabled || local.s.automation.enabled || local.s.ml.enabled
   ssh_key    = local.s.admin_ssh_public_key
 
+  # Datadog Agent enrolment (observability 4.0.0, ADR-0001 §3 rule 3 amendment): see platform/compute/vm/main.tf.
+  dd_enabled     = local.s.datadog.enabled
+  dd_tags        = local.dd_enabled ? { (local.s.datadog.tag_name) = "true" } : {}
+  dd_identity_id = local.dd_enabled ? try(local.identities[local.s.datadog.identity_key].id, null) : null
+
   # Linux VMs this root may create (all optional).
   vms = merge(
     local.s.confidential_vm.enabled ? {
@@ -90,7 +95,7 @@ resource "azurerm_network_interface" "this" {
 }
 
 resource "azurerm_linux_virtual_machine" "this" {
-  #checkov:skip=CKV_AZURE_50:Extension operations stay enabled for observability agents (ADR-0001 §3).
+  #checkov:skip=CKV_AZURE_50:Extension operations stay enabled: the Datadog Agent VM Application (obs-hosts policy) is installed by the VM agent.
   for_each = local.vms
   #checkov:skip=CKV_AZURE_178:SSH key auth when admin_ssh_public_key is set; otherwise random break-glass password (state only).
   #checkov:skip=CKV_AZURE_149:See CKV_AZURE_178.
@@ -112,7 +117,7 @@ resource "azurerm_linux_virtual_machine" "this" {
   patch_assessment_mode           = "AutomaticByPlatform"
   allow_extension_operations      = true
   provision_vm_agent              = true
-  tags                            = local.tags
+  tags                            = merge(local.tags, local.dd_tags)
 
   dynamic "admin_ssh_key" {
     for_each = local.ssh_key == null ? [] : [local.ssh_key]
@@ -124,7 +129,7 @@ resource "azurerm_linux_virtual_machine" "this" {
 
   identity {
     type         = "UserAssigned"
-    identity_ids = [local.identities[each.value.identity].id]
+    identity_ids = compact([local.identities[each.value.identity].id, local.dd_identity_id])
   }
 
   os_disk {
@@ -143,7 +148,8 @@ resource "azurerm_linux_virtual_machine" "this" {
   boot_diagnostics {}
 
   lifecycle {
-    ignore_changes = [custom_data]
+    # cloud-init runs once; the Datadog Agent VM Application is owned by the obs-hosts policy
+    ignore_changes = [custom_data, gallery_application]
   }
 }
 

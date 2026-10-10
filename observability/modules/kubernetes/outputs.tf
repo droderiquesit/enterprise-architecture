@@ -17,7 +17,7 @@ locals {
       logs_destination      = local.agent_logs ? (local.op_mode ? local.op_logs_url : "datadog") : null
       ssi_enabled           = local.apm_datadog
       ssi_namespaces        = local.apm_datadog ? var.apm.namespaces : []
-      cluster_checks        = true
+      cluster_checks        = var.features.cluster_checks_runner
     }
     fluent_bit = {
       enabled             = local.fluent_bit_on
@@ -55,7 +55,8 @@ output "datadog_postrender_args" {
 }
 
 output "fluent_bit_values" {
-  value = yamlencode(local.fluent_bit_values)
+  description = "Rendered Fluent Bit fallback chart values (installed only when the fleet policy selects Fluent Bit on the nodes)."
+  value       = yamlencode(local.fluent_bit_values)
 }
 
 output "op_worker_values" {

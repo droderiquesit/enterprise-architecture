@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "platform-vm contract v1",
-  "description": "Virtual machine hosts (OS prepared, no application). Consumed by vm-workloads (run command) and obs-hosts (extensions).",
+  "description": "Virtual machine hosts (OS prepared, no application). Consumed by vm-workloads (run command) and obs-hosts (Datadog Agent VM Application: Azure Policy enrolment, or one assignment per VM in mode direct).",
   "type": "object",
   "required": [
     "resource_group_name",

@@ -8,8 +8,9 @@ variable "role" {
 }
 
 variable "datadog_site" {
-  type    = string
-  default = "datadoghq.com"
+  description = "Datadog site of the datadog output (log_destination = datadog)."
+  type        = string
+  default     = "datadoghq.com"
 }
 
 variable "static_tags" {

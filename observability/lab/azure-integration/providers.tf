@@ -12,7 +12,7 @@ provider "azapi" {
   tenant_id       = var.environment.tenant_id
 }
 
-# Datadog credentials from DD_API_KEY / DD_APP_KEY (pipeline: Key Vault -> environment). Never in tfvars.
+# Datadog credentials from DD_API_KEY / DD_APP_KEY (pipeline: Delinea DSV -> environment, tools/secrets/fetch.py). Never in tfvars.
 provider "datadog" {
   api_url = "https://api.${var.settings.datadog_site}/"
 }

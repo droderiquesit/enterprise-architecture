@@ -10,8 +10,8 @@
     "logs": {
       "type": "object", "additionalProperties": false,
       "properties": {
-        "collector": {"enum": ["agent", "agent_sidecar", "serverless_init", "azure", "fluent_bit"], "description": "application-log collector (observability 4.0.0): agent (aks / vm / vmss), agent_sidecar (aci), serverless_init (aca), azure (diagnostic settings -> Event Hubs: appservice / functions / logicapp / Container Apps jobs), fluent_bit (batch). log_pipeline = fluent_bit_direct replaces every collector except azure by Fluent Bit"},
-        "node_collector": {"enum": ["agent", "fluent_bit"], "description": "3.x key, still honoured on aks / vm / vmss"},
+        "collector": {"enum": ["agent", "agent_sidecar", "serverless_init", "azure", "fluent_bit"], "description": "application-log collector (observability 4.0.0): agent (aks / vm / vmss), agent_sidecar (aci), serverless_init (aca), azure (diagnostic settings -> Event Hubs: appservice / functions / logicapp / Container Apps jobs), fluent_bit (batch). log_pipeline = fluent_bit_direct replaces agent (aks), agent_sidecar and serverless_init by Fluent Bit; VM / VMSS hosts keep the Agent"},
+        "node_collector": {"enum": ["agent", "fluent_bit"], "description": "3.x key, still honoured on aks (VM / VMSS hosts always use the Agent)"},
         "hosts": {
           "type": "object", "additionalProperties": false,
           "description": "VM / VMSS host log collection by the Datadog Agent (modules/host-agent-package); a caller's host_logs input wins",

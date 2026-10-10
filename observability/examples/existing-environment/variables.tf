@@ -11,8 +11,9 @@ variable "region" {
 }
 
 variable "datadog_site" {
-  type    = string
-  default = "datadoghq.com"
+  description = "Datadog site of the organisation (e.g. datadoghq.com, datadoghq.eu)."
+  type        = string
+  default     = "datadoghq.com"
 }
 
 variable "telemetry" {

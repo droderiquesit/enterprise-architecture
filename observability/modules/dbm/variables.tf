@@ -107,6 +107,7 @@ variable "fleet_policy" {
 }
 
 variable "datadog" {
+  description = "Datadog site and environment name (env tag) of the checks."
   type = object({
     site = string
     env  = string
@@ -114,13 +115,15 @@ variable "datadog" {
 }
 
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Azure tags of the resources this module creates (ACI container group)."
+  type        = map(string)
+  default     = {}
 }
 
 variable "sqlserver_driver" {
-  type    = string
-  default = "ODBC Driver 18 for SQL Server"
+  description = "ODBC driver name the SQL Server check uses (installed in the Datadog Agent image)."
+  type        = string
+  default     = "ODBC Driver 18 for SQL Server"
 }
 
 variable "tag_policy" {

@@ -1,3 +1,5 @@
+"""Fixtures of the PR reviewer tests: throw-away git repositories seeded with the trusted policy/registry files."""
+
 import os
 import shutil
 import subprocess

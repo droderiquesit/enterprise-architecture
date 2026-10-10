@@ -18,7 +18,8 @@ metadata:
 #                            the Datadog Observability Pipelines Worker (parse, tag policy, redaction, dedupe, quotas)
 #                            and from there to Datadog Logs (+ optional Azure Storage archive).
 #   fluent_bit_direct:       fallback (2.x behaviour) - Fluent Bit collects and ships to the Datadog intake (aggregator
-#                            for Event Hubs, sidecars on ACA / ACI, DaemonSet / host service where the Agent runs).
+#                            for Event Hubs, sidecars on ACA / ACI, DaemonSet on AKS); VM / VMSS host Agents keep
+#                            collecting and ship to the intake (no Fluent Bit on hosts since 4.0.0).
 log_pipeline: observability_pipelines
 
 # Application-log collector. ONE Datadog collection path per platform (observability 4.0.0); the per-architecture
@@ -29,9 +30,9 @@ log_pipeline: observability_pipelines
 #   serverless_init Container Apps: the Datadog serverless-init sidecar tails the app's log file (DD_SERVERLESS_LOG_PATH)
 #   azure           App Service, Functions, Logic Apps (and Container Apps jobs): diagnostic settings -> Event Hubs
 #   fluent_bit      Batch nodes only (no Agent there); everywhere else Fluent Bit runs ONLY with
-#                   log_pipeline = fluent_bit_direct (fallback: Fluent Bit sidecar / DaemonSet / host service)
+#                   log_pipeline = fluent_bit_direct (fallback: Fluent Bit sidecar on ACA / ACI, DaemonSet on AKS)
 # In observability_pipelines mode every collector ships to the Observability Pipelines Worker.
-# `node_collector` (agent | fluent_bit) is the 3.x key; still honoured on aks / vm / vmss.
+# `node_collector` (agent | fluent_bit) is the 3.x key; still honoured on aks (hosts always use the Agent).
 logs:
   # VM / VMSS hosts (modules/host-agent-package, VM Application installer): what the Datadog Agent tails. Files per OS
   # (path, optional service / source; no service = the host's `service` tag) and Windows Event Log channels. A caller's
@@ -145,7 +146,7 @@ rum:
   track_resources: true
   track_long_tasks: true
 
-# Per hosting architecture (aks | aca | aci | appservice | functions | logicapp | vm | vmss | swa).
+# Per hosting architecture (aks | aca | aci | appservice | functions | logicapp | vm | vmss | swa | batch).
 architectures:
   aks:
     logs: {collector: agent}
