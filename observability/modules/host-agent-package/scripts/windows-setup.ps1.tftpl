@@ -170,6 +170,20 @@ $logs += "  - type: windows_event`n    channel_path: '${c.channel}'`n    source:
 %{ endfor ~}
 Set-Content-IfChanged $LogsConf (($logs -join "`n") + "`n")
 
+# ------------------------------------------------------------------ 3.x host installer leftovers (one collector per log)
+# The 3.x run command installed Fluent Bit (service fluent-bit-eh) and MACHINE environment variables (DD_LOGS_ENABLED,
+# DD_TAGS, DD_OTLP_*) that would override datadog.yaml; removing the old Terraform resources does not uninstall them.
+if (Get-Service fluent-bit-eh -ErrorAction SilentlyContinue) {
+  Stop-Service fluent-bit-eh -Force -ErrorAction SilentlyContinue
+  sc.exe delete fluent-bit-eh | Out-Null
+  $script:changed = $true
+  Log '3.x fluent-bit-eh service removed (the Agent collects the host logs now)'
+}
+foreach ($k in 'DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT', 'DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT', 'DD_OTLP_CONFIG_LOGS_ENABLED', 'DD_LOGS_ENABLED', 'DD_TAGS', 'DD_APM_IGNORE_RESOURCES') {
+  if ([Environment]::GetEnvironmentVariable($k, 'Machine') -ne $null) { [Environment]::SetEnvironmentVariable($k, $null, 'Machine'); $script:changed = $true }
+}
+Remove-Item -Recurse -Force 'C:\ProgramData\fluent-bit-eh' -ErrorAction SilentlyContinue
+
 # ------------------------------------------------------------------ Datadog Agent MSI (pinned version + SHA256)
 $current = if (Test-Path $AgentExe) { (& $AgentExe version 2>$null | Select-Object -First 1) } else { '' }
 if ($current -notmatch [regex]::Escape($AgentVersion)) {

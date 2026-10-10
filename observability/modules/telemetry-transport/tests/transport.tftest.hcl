@@ -473,7 +473,7 @@ run "op_contract_feeds_datadog_tracer" {
     error_message = "Datadog tracer + profiler of an ACA app -> APM gateway from the contract"
   }
   assert {
-    condition     = length(output.container_app_patch.init_containers) == 0 && one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "FLB_FORWARD_HOST"]) == "mock.internal.blue-sky-123.swedencentral.azurecontainerapps.io"
-    error_message = "Fluent Bit sidecar forwards to the Worker; no dsv-fetch needed on the edge"
+    condition     = jsonencode([for c in output.container_app_patch.sidecars : c.name]) == jsonencode(["datadog"]) && one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL"]) == "http://mock.internal.blue-sky-123.swedencentral.azurecontainerapps.io:8282"
+    error_message = "observability 4.0.0: serverless-init (logs.collector default for aca) ships the app log file to the Worker's Datadog Agent source from the contract (aggregator.agent_logs_url); no Fluent Bit sidecar"
   }
 }

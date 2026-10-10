@@ -46,7 +46,13 @@ APPDIR=/var/lib/waagent/Microsoft.CPlat.Core.VMApplicationManagerLinux/datadog-a
 mkdir -p "$APPDIR"
 cp /in/datadog-agent-setup.sh /in/dsv-fetch "$APPDIR/"
 cd "$APPDIR"
+# 3.x leftovers: Fluent Bit host service + Agent drop-in with DD_* overrides
+mkdir -p /etc/systemd/system/datadog-agent.service.d /etc/datadog-agent/conf.d/eh-applogs.d
+echo '[Service]' > /etc/systemd/system/fluent-bit-eh.service
+printf '[Service]\nEnvironment=DD_LOGS_ENABLED=false\n' > /etc/systemd/system/datadog-agent.service.d/eh-observability.conf
+echo 'logs: []' > /etc/datadog-agent/conf.d/eh-applogs.d/conf.yaml
 echo "=== RUN1"; bash ./datadog-agent-setup.sh install
+if [ ! -e /etc/systemd/system/fluent-bit-eh.service ] && [ ! -e /etc/systemd/system/datadog-agent.service.d/eh-observability.conf ] && [ ! -e /etc/datadog-agent/conf.d/eh-applogs.d ]; then echo LEGACY_REMOVED; fi
 echo "=== RUN2"; bash ./datadog-agent-setup.sh update
 echo "=== DATADOG_YAML"; cat /etc/datadog-agent/datadog.yaml
 echo "=== LOGS_CONF"; cat /etc/datadog-agent/conf.d/eh-host-logs.d/conf.yaml

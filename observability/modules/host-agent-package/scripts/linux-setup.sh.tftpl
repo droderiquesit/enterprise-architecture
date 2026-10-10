@@ -190,6 +190,19 @@ Restart=always
 RestartSec=30
 UNIT
 
+# ------------------------------------------------------------------ 3.x host installer leftovers (one collector per log)
+# The 3.x run command / CustomScript installed Fluent Bit (fluent-bit-eh) and systemd drop-ins whose DD_* variables
+# would override datadog.yaml; removing the old Terraform resources does not uninstall them.
+if [ -f /etc/systemd/system/fluent-bit-eh.service ]; then
+  systemctl disable --now fluent-bit-eh.service >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/fluent-bit-eh.service /etc/default/fluent-bit-eh
+  changed=1; log "3.x fluent-bit-eh service disabled (the Agent collects the host logs now)"
+fi
+for legacy in /etc/systemd/system/datadog-agent.service.d/eh-observability.conf /etc/systemd/system/datadog-agent-trace.service.d/eh-observability.conf "$DD_DIR/conf.d/eh-applogs.d"; do
+  if [ -e "$legacy" ]; then rm -rf "$legacy"; changed=1; fi
+done
+rm -rf /opt/eh-dsv-fetch /etc/eh-dsv
+
 # ------------------------------------------------------------------ Datadog Agent package (pinned)
 agent_installed() {
   local v=""

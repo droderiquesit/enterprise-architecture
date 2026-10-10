@@ -116,6 +116,7 @@ def test_linux_setup_in_ubuntu(installers, tmp_path):
     assert "dd-agent /etc/datadog-agent/datadog.yaml" in perms
     assert "StartLimitIntervalSec=0" in sections["UNIT"]
     assert "datadog-agent unchanged" in sections["RUN2"], "second run is a no-op"
+    assert "LEGACY_REMOVED" in sections["RUN1"] and "3.x fluent-bit-eh service disabled" in sections["RUN1"]
     assert "TAMPER_REJECTED" in sections["TAMPER"] and "checksum mismatch" in sections["TAMPER"]
     assert "REMOVED_OK" in sections["REMOVE"]
 
@@ -131,7 +132,8 @@ def test_windows_setup_parses_and_renders(installers, tmp_path):
         pytest.skip(f"{PWSH_IMAGE} not present (the test runs without network)")
     script = installers["windows"]
     (tmp_path / "datadog-agent-setup.ps1").write_text(script)
-    marker = "# ------------------------------------------------------------------ Datadog Agent MSI"
+    # Windows-only cmdlets (Get-Service, msiexec, icacls) start with the 3.x leftovers section
+    marker = "# ------------------------------------------------------------------ 3.x host installer leftovers"
     assert marker in script
     mock = (
         "function Invoke-RestMethod { param($Headers, [switch]$NoProxy, $TimeoutSec, $Uri) "
