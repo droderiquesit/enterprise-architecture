@@ -40,9 +40,11 @@ suites:
     scope: applications
     toolchain: docker
     paths: [tests/integration]
-    needs_env: {E2E: '1'}       # PRs: only when the vertical slice changed (inputs); always on full runs
-    inputs: [tests/integration/**, applications/services/**, applications/shared/**, applications/python/**,
-             applications/dotnet/**, observability/images/**]
+    needs_env: {E2E: '1'}
+    # PRs: only when the shared slice changed (shared libraries, the e2e harness, the telemetry images); a single
+    # service change is covered by its unit/component suites on the PR and by e2e on the main run (deploy runs
+    # select every suite) and nightly - keeps single-service PR feedback within 10 min
+    inputs: [tests/integration/**, applications/shared/**, observability/images/**]
     cache: false                 # end-to-end behaviour depends on pulled images: never served from the cache
     timeout_minutes: 45
   - id: gates

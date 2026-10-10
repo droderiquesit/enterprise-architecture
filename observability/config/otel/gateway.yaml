@@ -65,6 +65,25 @@ processors:
         action: delete
       - key: process.command_args
         action: delete
+  # Tag policy (package tagging): fills policy tags a client did not send - environment-wide defaults and, per
+  # service.name, the service's identity (team, owner, domain, ...) - and copies them onto metric data points so
+  # Datadog metrics carry them too (the exporter keeps resource_attributes_as_tags off: no high-cardinality host
+  # attributes). Never overwrites a client value. The statements come from modules/otel-collector
+  # (overlay OTELCOL_CONFIG_TAGS); this placeholder is a no-op.
+  transform/eh_tag_policy:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - delete_key(attributes, "eh.tag_policy.placeholder")
+    metric_statements:
+      - context: resource
+        statements:
+          - delete_key(attributes, "eh.tag_policy.placeholder")
+    log_statements:
+      - context: resource
+        statements:
+          - delete_key(attributes, "eh.tag_policy.placeholder")
   probabilistic_sampler:
     sampling_percentage: ${env:TRACE_SAMPLING_PERCENTAGE:-100}
   batch:
@@ -125,15 +144,15 @@ service:
     # the OTLP receiver fans out to both trace pipelines: stats see 100% of spans, export is sampled
     traces/stats:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, resource/unified_tags]
+      processors: [memory_limiter, resourcedetection, resource/unified_tags, transform/eh_tag_policy]
       exporters: [datadog/connector]
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, resourcedetection, resource/unified_tags, probabilistic_sampler, batch]
+      processors: [memory_limiter, resourcedetection, resource/unified_tags, transform/eh_tag_policy, probabilistic_sampler, batch]
       exporters: [datadog]
     metrics:
       receivers: [otlp, datadog/connector, prometheus/self]
-      processors: [memory_limiter, resourcedetection, resource/unified_tags, batch]
+      processors: [memory_limiter, resourcedetection, resource/unified_tags, transform/eh_tag_policy, batch]
       exporters: [datadog]
     # Logs: accept-and-drop (see exporters.nop). Application logs reach Datadog only through Fluent Bit
     # (ADR-0001 §10); clients also set OTEL_LOGS_EXPORTER=none (instrumentation module).

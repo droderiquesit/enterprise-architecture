@@ -61,12 +61,12 @@ def test_component_and_consumers_and_covering_suites(real):
     # the changeset selection validates the changed component AND its transitive consumers; tools/ci maps both
     sel = impact.select(cat, _sel(["applications/shared/python/hello_common/src/hello_common/app.py"],
                                   validate=["svc-catalog-api", "svc-worker"]), tree, reg)
-    assert {"component:svc-catalog-api", "component:svc-worker", "py-hello-common", "e2e"} <= _ids(sel)
+    assert {"component:svc-catalog-api", "component:svc-worker", "py-hello-common", "e2e"} <= _ids(sel)   # shared lib: e2e too
     assert "component:svc-bff" not in sel and "dotnet-hello-common" not in sel
     assert sel["py-hello-common"]["reasons"][0].startswith("input changed")
     # a service-only change does not run the shared library's suite; a suite that `covers` it does run
     svc = impact.select(cat, _sel(["applications/services/catalog-api/src/x.py"], validate=["svc-catalog-api"]), tree, reg)
-    assert "component:svc-catalog-api" in svc and "py-hello-common" not in svc
+    assert "component:svc-catalog-api" in svc and "py-hello-common" not in svc and "e2e" not in svc
     transport = impact.select(cat, _sel(["observability/lab/hosts/main.tf"], validate=["obs-hosts"]), tree, reg)
     assert "covers selected component(s): obs-hosts" in transport["obs-transport"]["reasons"]
 

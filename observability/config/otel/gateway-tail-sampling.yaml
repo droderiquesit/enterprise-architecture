@@ -22,4 +22,4 @@ processors:
 service:
   pipelines:
     traces:
-      processors: [memory_limiter, resourcedetection, resource/unified_tags, tail_sampling, batch]
+      processors: [memory_limiter, resourcedetection, resource/unified_tags, transform/eh_tag_policy, tail_sampling, batch]
