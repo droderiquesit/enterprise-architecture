@@ -30,8 +30,8 @@ status:
 # classes must also have a path-based required-reviewer group in branch policy (tools/review/ado_setup.py emits it).
 classes:
   - name: review-governance
-    description: The reviewer itself, its policy, infrastructure and tests (changes can never be bot-approved).
-    globs: [.review/**, tools/review/**, applications/services/pr-reviewer/**, foundation/pr-reviewer/**, tests/review/**,
+    description: The reviewer itself, its policy, Copilot review instructions, infrastructure and tests (never bot-approved).
+    globs: [.review/**, .azuredevops/**, tools/review/**, applications/services/pr-reviewer/**, foundation/pr-reviewer/**, tests/review/**,
             catalog/contracts/foundation-pr-reviewer.v1.schema.json]
     never_approve: true
     protected: true
@@ -153,8 +153,20 @@ observability:
 dependencies:
   allow_new_packages: false
 
+copilot:
+  # GitHub Copilot code review for Azure Repos (public preview) is the AI reviewer: enabled in Azure DevOps (org /
+  # project / repo toggles + branch policy "Automatically request Copilot code review"). It only comments. The bot
+  # reads its threads: active/pending Copilot threads hold auto-approval (status pending "resolve Copilot comments");
+  # they never cause wait-for-author or reject. Copilot does not re-review new commits automatically.
+  enabled: true
+  reviewer_names: ["GitHub Copilot"]   # matched against thread/reviewer displayName or uniqueName
+  reviewer_ids: []                     # add the Copilot reviewer's Azure DevOps identity id once observed (preferred)
+  required_before_auto_approve: true   # no auto-approval until Copilot commented on the current iteration
+
 ai:
-  # Optional Claude review (Anthropic API key from Delinea DSV: app setting ANTHROPIC_API_KEY=dsv://eh/<env>/anthropic-api-key).
+  # provider: copilot (default; see `copilot`) | claude (tools/review/ai.py, needs enabled: true and an Anthropic key
+  # from DSV: ANTHROPIC_API_KEY=dsv://eh/<env>/anthropic-api-key) | none
+  provider: copilot
   enabled: false
   model: claude-opus-5-5          # e.g. claude-sonnet-5-5 for lower cost
   api_key_env: ANTHROPIC_API_KEY

@@ -13,16 +13,22 @@ locals {
       otlp_endpoint_grpc    = "http://$(DD_AGENT_HOST):4317"
       otlp_endpoint_http    = "http://$(DD_AGENT_HOST):4318"
       cluster_agent_service = "${local.release}-cluster-agent.${local.dd_ns}.svc.cluster.local"
-      logs_enabled          = false
+      logs_enabled          = local.agent_logs
+      logs_destination      = local.agent_logs ? (local.op_mode ? local.op_logs_url : "datadog") : null
+      ssi_enabled           = local.apm_datadog
+      ssi_namespaces        = local.apm_datadog ? var.apm.namespaces : []
       cluster_checks        = true
     }
     fluent_bit = {
+      enabled             = local.fluent_bit_on
       namespace           = local.fb_ns
       daemonset           = "fluent-bit"
       excluded_namespaces = var.fluent_bit.exclude_namespaces
       opt_out_annotation  = "fluentbit.io/exclude"
     }
-    log_route = "daemonset"
+    log_route     = "daemonset"
+    log_pipeline  = module.fleet.log_pipeline
+    log_collector = local.agent_logs ? "datadog-agent" : "fluent-bit"
     charts = {
       datadog    = var.charts.datadog_version
       fluent_bit = var.charts.fluent_bit_version
@@ -45,4 +51,9 @@ output "datadog_values" {
 
 output "fluent_bit_values" {
   value = yamlencode(local.fluent_bit_values)
+}
+
+output "op_worker_values" {
+  description = "Rendered observability-pipelines-worker chart values (op_worker.enabled)."
+  value       = yamlencode(local.opw_values)
 }

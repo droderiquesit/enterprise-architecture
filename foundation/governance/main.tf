@@ -208,3 +208,56 @@ resource "azurerm_subscription_policy_assignment" "nic_no_public_ip" {
     content = "Lab NICs are private; use Bastion / private agents. Exceptions: allowlisted resource groups only."
   }
 }
+
+# ------------------------------------------------------------- Copilot code review spend (alert only)
+locals {
+  copilot_budget      = var.settings.copilot_review_budget
+  copilot_budget_subs = "/subscriptions/${coalesce(local.copilot_budget.subscription_id, var.environment.subscription_id)}"
+  copilot_notifications = concat(
+    [for t in local.copilot_budget.actual_thresholds : { threshold = t, type = "Actual" }],
+    [for t in local.copilot_budget.forecast_thresholds : { threshold = t, type = "Forecasted" }],
+  )
+}
+
+resource "azurerm_consumption_budget_subscription" "copilot_review" {
+  count = local.copilot_budget.enabled ? 1 : 0
+
+  name            = "${local.names.budget}-copilot-review"
+  subscription_id = local.copilot_budget_subs
+  amount          = local.copilot_budget.amount
+  time_grain      = "Monthly"
+
+  time_period {
+    start_date = local.budget_start
+    end_date   = local.budget_end
+  }
+
+  filter {
+    dimension {
+      name     = "MeterCategory"
+      operator = "In"
+      values   = ["GitHub"]
+    }
+    dimension {
+      name     = "MeterSubCategory"
+      operator = "In"
+      values   = ["GitHub Copilot for AzDO"]
+    }
+  }
+
+  dynamic "notification" {
+    for_each = local.copilot_notifications
+    content {
+      enabled        = true
+      threshold      = notification.value.threshold
+      threshold_type = notification.value.type
+      operator       = notification.value.type == "Forecasted" ? "GreaterThan" : "GreaterThanOrEqualTo"
+      contact_emails = local.contact_emails
+      contact_groups = [azurerm_monitor_action_group.budget.id]
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [time_period[0].start_date] # start date is fixed at creation
+  }
+}

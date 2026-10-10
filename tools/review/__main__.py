@@ -24,6 +24,7 @@ from tools.changeset.trees import GitTree, WorkTree  # noqa: E402
 
 from . import render  # noqa: E402
 from .analysis import TrustedBase  # noqa: E402
+from .copilot import not_evaluated  # noqa: E402
 from .engine import ai_from_policy, review  # noqa: E402
 from .local import git_changes  # noqa: E402
 from .model import BuildStatus, ReviewContext  # noqa: E402
@@ -71,7 +72,9 @@ def main(argv=None) -> int:
         return 2
     head_sha = rev_parse(repo, head) if head else "WORKTREE"
     changes = git_changes(repo, base_sha, head, int(policy["limits"]["max_file_bytes"]))
-    ctx = ReviewContext(author=args.author, target_branch=args.target, build=BuildStatus(args.build_status), head=head_sha, base=base_sha)
+    ctx = ReviewContext(
+        copilot=not_evaluated(), author=args.author, target_branch=args.target, build=BuildStatus(args.build_status), head=head_sha, base=base_sha
+    )
     result = review(changes, policy, TrustedBase(trusted_tree), ctx, ai_reviewer=ai_from_policy(policy) if args.ai else None)
     md = render.summary(result)
     if args.markdown:

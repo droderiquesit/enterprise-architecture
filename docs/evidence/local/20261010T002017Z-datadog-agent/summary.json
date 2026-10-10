@@ -1,0 +1,357 @@
+{
+  "meta": {
+    "started": "2026-10-10T00:19:30+00:00",
+    "agent_healthy": true,
+    "agent_version": "84.2 - Commit: 73e6b035 - Serialization version: v5.0.209 - Go version: go1.26.7",
+    "catalog_ready": true,
+    "orders_ready": true,
+    "images": {
+      "hello-catalog-api:0.1.0-e2e": "sha256:325963b223ad",
+      "hello-orders-api-ddtrace:0.1.0-e2e": "sha256:165e69002d85",
+      "datadog/agent:7.84.2": "sha256:779986aa446b"
+    },
+    "finished": "2026-10-10T00:20:17+00:00"
+  },
+  "passed": 10,
+  "total": 10,
+  "results": {
+    "dd-1": {
+      "check": "Datadog Agent 7.84.2 healthy; catalog-api and orders-api serving",
+      "result": "pass",
+      "detail": {
+        "agent_version": "84.2 - Commit: 73e6b035 - Serialization version: v5.0.209 - Go version: go1.26.7",
+        "agent_healthy": true,
+        "catalog_ready": true,
+        "orders_ready": true
+      }
+    },
+    "dd-2": {
+      "check": "traces from ddtrace (Python) and dd-trace-dotnet reached the intake through the Agent",
+      "result": "pass",
+      "detail": {
+        "trace_payloads": 2,
+        "python_spans": 15,
+        "dotnet_spans": 10,
+        "tracer_versions": [
+          ".NET 3.55.1.0",
+          "python 4.15.6"
+        ],
+        "env": [
+          "e2e-dd"
+        ],
+        "python_resources": [
+          "GET /products",
+          "GET /products/{sku}",
+          "fastapi.serialize_response"
+        ],
+        "dotnet_resources": [
+          "GET /healthz",
+          "GET /orders",
+          "GET /readyz",
+          "GET catalog-api:8080/products/SKU-0001",
+          "GET catalog-api:8080/products/SKU-0002",
+          "POST /orders",
+          "send order-events"
+        ]
+      }
+    },
+    "dd-3": {
+      "check": "distributed trace .NET -> Python with one 128-bit trace id and correct parenting",
+      "result": "pass",
+      "detail": {
+        "traces": [
+          {
+            "trace_id": "6ac984b000000000e5bfb2cb61e5e4c4",
+            "catalog_parented_by_orders_client": true,
+            "spans": [
+              [
+                "python",
+                "hello-catalog-api",
+                "server",
+                "GET /products/{sku}"
+              ],
+              [
+                "python",
+                "hello-catalog-api",
+                "fastapi.request",
+                "GET /products/{sku}"
+              ],
+              [
+                "python",
+                "hello-catalog-api",
+                "fastapi.serialize_response",
+                "fastapi.serialize_response"
+              ],
+              [
+                ".NET",
+                "hello-orders-api-http-client",
+                "http.request",
+                "GET catalog-api:8080/products/SKU-0001"
+              ],
+              [
+                ".NET",
+                "hello-orders-api",
+                "producer",
+                "send order-events"
+              ],
+              [
+                ".NET",
+                "hello-orders-api",
+                "aspnet_core.request",
+                "POST /orders"
+              ]
+            ]
+          },
+          {
+            "trace_id": "6ac984b100000000d1ce51983ecbf4e9",
+            "catalog_parented_by_orders_client": true,
+            "spans": [
+              [
+                ".NET",
+                "hello-orders-api-http-client",
+                "http.request",
+                "GET catalog-api:8080/products/SKU-0002"
+              ],
+              [
+                ".NET",
+                "hello-orders-api",
+                "producer",
+                "send order-events"
+              ],
+              [
+                ".NET",
+                "hello-orders-api",
+                "aspnet_core.request",
+                "POST /orders"
+              ],
+              [
+                "python",
+                "hello-catalog-api",
+                "server",
+                "GET /products/{sku}"
+              ],
+              [
+                "python",
+                "hello-catalog-api",
+                "fastapi.request",
+                "GET /products/{sku}"
+              ],
+              [
+                "python",
+                "hello-catalog-api",
+                "fastapi.serialize_response",
+                "fastapi.serialize_response"
+              ]
+            ]
+          }
+        ],
+        "count": 2
+      }
+    },
+    "dd-4": {
+      "check": "Activity-based custom span (Hello.App 'send order-events') recorded by the Datadog .NET tracer",
+      "result": "pass",
+      "detail": {
+        "activity_spans": 2,
+        "in_distributed_trace": 2,
+        "example": {
+          "name": "producer",
+          "resource": "send order-events",
+          "service": "hello-orders-api",
+          "meta": {
+            "span.kind": "producer",
+            "otel.trace_id": "6ac984b000000000e5bfb2cb61e5e4c4",
+            "otel.library.name": "Hello.App",
+            "otel.status_code": "STATUS_CODE_UNSET",
+            "messaging.system": "servicebus",
+            "messaging.operation.type": "send",
+            "messaging.operation.name": "send",
+            "messaging.destination.name": "order-events",
+            "messaging.message.id": "6430da72-7559-47bb-ae0c-3d6ebe0e6f8c"
+          }
+        }
+      }
+    },
+    "dd-5": {
+      "check": "health probes are not traced (Python probe filter)",
+      "result": "pass",
+      "detail": {
+        "python_probe_spans": 0,
+        "probe_requests_sent": 3
+      }
+    },
+    "dd-6": {
+      "check": "log correlation: Agent-collected logs carry the ids of received traces (both services)",
+      "result": "pass",
+      "detail": {
+        "correlated_lines": {
+          "hello-catalog-api": 5,
+          "hello-orders-api": 4
+        },
+        "lines_with_ids_not_matching_a_received_trace": 0,
+        "examples_unmatched": [],
+        "startup_lines_without_ids": true,
+        "agent_service_source": [
+          [
+            "None",
+            "container-stdout"
+          ],
+          [
+            "hello-catalog-api",
+            "python"
+          ],
+          [
+            "hello-orders-api",
+            "csharp"
+          ]
+        ]
+      }
+    },
+    "dd-7": {
+      "check": "hello.* custom metrics via DogStatsD -> Agent -> series intake (both services, bounded tags)",
+      "result": "pass",
+      "detail": {
+        "hello_metrics": [
+          "hello.catalog.cache.requests",
+          "hello.idempotency.replays",
+          "hello.orders.created"
+        ],
+        "env_tags": [
+          "env:e2e-dd"
+        ],
+        "forbidden_tags": [],
+        "series_payloads": 3
+      }
+    },
+    "dd-8": {
+      "check": "Continuous Profiler: Python and .NET profiles through the Agent profiling proxy",
+      "result": "pass",
+      "detail": {
+        "families": {
+          "python": {
+            "uploads": 1,
+            "parts": [
+              "code-provenance.json",
+              "event",
+              "profile.pprof"
+            ],
+            "service_tag": "service:hello-catalog-api",
+            "attachments": [
+              "code-provenance.json",
+              "profile.pprof"
+            ]
+          },
+          "dotnet": {
+            "uploads": 1,
+            "parts": [
+              "event",
+              "metrics.json",
+              "profile.pprof"
+            ],
+            "service_tag": "service:hello-orders-api",
+            "attachments": [
+              "metrics.json",
+              "profile.pprof"
+            ]
+          }
+        },
+        "profile_posts_at_mock_intake": 3
+      }
+    },
+    "dd-9": {
+      "check": "datadog mode runs no OpenTelemetry SDK / OTLP exporter",
+      "result": "pass",
+      "detail": {
+        "python": {
+          "message": "telemetry mode datadog (tracer=enabled, profiler=enabled)",
+          "apm.tracer": "enabled",
+          "apm.tracer_source": "manual",
+          "apm.profiler": "enabled"
+        },
+        "dotnet": {
+          "message": "telemetry mode datadog (datadog tracer attached=True, metrics=dogstatsd, otel sdk=False)",
+          "apm_tracer_attached": true,
+          "apm_metrics": "dogstatsd",
+          "otel_sdk": false
+        },
+        "otlp_export_attempts": []
+      }
+    },
+    "dd-10": {
+      "check": "API key on every Agent payload; nothing sent to a real Datadog endpoint",
+      "result": "pass",
+      "detail": {
+        "payloads": 18,
+        "without_api_key": [],
+        "sends_to_real_datadog": [],
+        "paths": [
+          "/api/beta/sketches",
+          "/api/v0.2/traces",
+          "/api/v1/check_run",
+          "/api/v1/metadata",
+          "/api/v1/series",
+          "/api/v2/logs",
+          "/api/v2/profile",
+          "/api/v2/series",
+          "/intake/"
+        ]
+      }
+    }
+  },
+  "journey": {
+    "requests": [
+      {
+        "name": "catalog GET /healthz",
+        "status": 200
+      },
+      {
+        "name": "catalog GET /readyz",
+        "status": 200
+      },
+      {
+        "name": "catalog GET /healthz",
+        "status": 200
+      },
+      {
+        "name": "catalog GET /products",
+        "status": 200
+      },
+      {
+        "name": "catalog GET /products/SKU-0003",
+        "status": 200,
+        "x_cache": "BYPASS"
+      },
+      {
+        "name": "catalog GET /products/SKU-0003",
+        "status": 200,
+        "x_cache": "BYPASS"
+      },
+      {
+        "name": "orders POST /orders",
+        "status": 202,
+        "traceparent": "00-8eba8468254609b7a27385509584ed32-9f83772d65ae12e1-00"
+      },
+      {
+        "name": "orders POST /orders (idempotent replay)",
+        "status": 202
+      },
+      {
+        "name": "orders POST /orders",
+        "status": 202,
+        "traceparent": "00-3104cfabf492dae67b96221216ea1c13-0a89fcfc9a897ef5-00"
+      },
+      {
+        "name": "orders GET /orders",
+        "status": 200
+      },
+      {
+        "name": "orders GET /healthz",
+        "status": 200
+      }
+    ],
+    "orders": [
+      "6430da72-7559-47bb-ae0c-3d6ebe0e6f8c",
+      "905bfddc-fb34-4537-81bd-d885cf250212"
+    ]
+  }
+}

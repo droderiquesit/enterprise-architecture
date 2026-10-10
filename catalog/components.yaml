@@ -379,7 +379,7 @@ components:
   - id: obs-monitoring
     layer: observability
     kind: terraform
-    path: observability/lab/monitoring
+    path: observability/extras/content/lab/monitoring   # optional monitoring-as-code content (observability extras)
     scope: applications         # needs application endpoints/contracts
     consumes: [obs-prereqs]
     secret_env:                 # Datadog Terraform provider keys (DSV, fetched with the deploy agent identity)
@@ -387,7 +387,7 @@ components:
       DD_APP_KEY: datadog-app-key
     optional_consumes: [deploy-core-aks, deploy-core-aca, deploy-frontend, deploy-durable, deploy-functions, deploy-partner-sim, deploy-dbadapters, deploy-appservice, deploy-jobs, deploy-vm-workloads, deploy-logicapps, deploy-specialized, obs-telemetry-transport]
     after_deployments: true     # runs after every selected applications deployment (needs endpoints)
-    inputs: [observability/onboarding/**, observability/archetypes/**]
+    inputs: [observability/extras/content/**]
 
   # ------------------------------------------------------ observability images (platform scope)
   - id: img-dsv-fetch

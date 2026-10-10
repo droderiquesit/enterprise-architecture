@@ -50,9 +50,18 @@ def test_preflight_and_cache_wiring():
     install = _read("pipelines/scripts/install-tools.sh")
     assert "TOOL_CACHE_FALLBACK" in install
     # every install function still verifies its checksum after fetch()
-    for tool in ("terraform", "gitleaks", "trivy", "syft", "helm", "kubeconform"):
+    for tool in ("terraform", "gitleaks", "trivy", "syft", "helm", "kubeconform", "tflint", "grype"):
         fn = install.split(f"install_{tool}() {{", 1)[1].split("\n}\n", 1)[0]
         assert "verify " in fn, tool
+    # tools without published checksum files run from images pinned by registry digest
+    tools_yml = _read("pipelines/variables/tools.yml")
+    for var in ("HADOLINT_IMAGE", "SHELLCHECK_IMAGE"):
+        assert f"{var}: " in tools_yml and "@sha256:" in tools_yml.split(f"{var}: ", 1)[1].split("\n", 1)[0], var
+    # python tooling: hash-pinned, installed by uv
+    assert "--require-hashes" in _read("pipelines/scripts/setup-agent.sh")
+    for req in ("pipelines/requirements-tools.txt", "pipelines/requirements-ci-tools.txt", "pipelines/requirements-uv.txt"):
+        body = [l for l in _read(req).splitlines() if l and not l.startswith(("#", " "))]
+        assert body and all("==" in l for l in body), req
 
 
 def test_heal_fanout_only_for_dev_schedules_and_records_in_templates():
@@ -64,6 +73,8 @@ def test_heal_fanout_only_for_dev_schedules_and_records_in_templates():
     apply = _read("pipelines/templates/terraform-apply.yml")
     assert "health-${{ parameters.component }}-$(System.JobAttempt)" in apply
     assert "record.py verify" in _read("pipelines/templates/smoke.yml")
+    tel = _read("pipelines/templates/telemetry-verify.yml")
+    assert "--telemetry-results" in tel and "tools/smoke/telemetry.py" in tel
     ev = _read("pipelines/templates/evidence.yml")
     assert "ci_metrics.py summarize" in ev and "ci_metrics.py send" in ev and "DD_API_KEY=datadog-api-key?" in ev
 

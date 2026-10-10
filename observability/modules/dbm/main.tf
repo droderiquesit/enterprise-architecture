@@ -1,6 +1,17 @@
 # Datadog Database Monitoring check configs for Azure databases + optional ACI Agent host.
 # Docs (2026-10): https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/ ,
 # .../setup_mysql/azure/ , .../setup_sql_server/azure/ , .../guide/managed_authentication/
+# instance tags from the tag policy (env / team / owner / region / ... + service of the owning application, so DBM
+# matches APM's database spans and the org's existing monitors); db_key + per-database tags as extras
+module "db_tags" {
+  source           = "../tagging"
+  for_each         = var.databases
+  policy           = var.tag_policy
+  identity         = merge(var.identity, { env = var.datadog.env }, each.value.service == null ? {} : { service = each.value.service })
+  extra_tags       = merge(each.value.tags, { db_key = each.key })
+  enforce_required = var.enforce_tag_policy
+}
+
 locals {
   default_port = { postgres = 5432, mysql = 3306, sqlserver = 1433 }
   check_dir    = { postgres = "postgres.d", mysql = "mysql.d", sqlserver = "sqlserver.d" }
@@ -20,7 +31,7 @@ locals {
         dbm      = true
         host     = d.engine == "sqlserver" ? "${d.host},${coalesce(d.port, 1433)}" : d.host
         username = d.username
-        tags     = [for t in sort(keys(merge({ env = var.datadog.env, db_key = k }, d.tags))) : "${t}:${merge({ env = var.datadog.env, db_key = k }, d.tags)[t]}"]
+        tags     = module.db_tags[k].dd_tags_list
         azure = merge(
           {
             deployment_type             = d.deployment_type

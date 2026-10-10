@@ -79,6 +79,23 @@ def summary(result: ReviewResult, iteration: int | None = None) -> str:
         lines.append("")
     else:
         lines += ["No findings.", ""]
+    cp = result.copilot or {}
+    if cp.get("evaluated"):
+        if cp.get("active_threads"):
+            files = ", ".join(f"`{_esc(f)}`" for f in cp.get("active_files", [])[:8])
+            lines.append(
+                f"**GitHub Copilot:** {cp['active_threads']} unresolved Copilot comment thread(s){' in ' + files if files else ''} - "
+                "resolve them (fix, or reply and resolve) before this PR can be auto-approved."
+            )
+        elif cp.get("threads"):
+            lines.append("**GitHub Copilot:** all Copilot comment threads are resolved.")
+        else:
+            lines.append("**GitHub Copilot:** no Copilot review comments yet" + (" (Copilot is listed as reviewer)." if cp.get("listed_as_reviewer") else "."))
+        if cp.get("stale"):
+            lines.append(
+                "> Commits were pushed after Copilot's last review. Copilot does not re-review automatically: **request a fresh Copilot review** on the PR."
+            )
+        lines.append("")
     if result.ai.get("enabled"):
         lines.append(
             f"_AI review ({_esc(result.ai.get('model'))}): {result.ai.get('findings', 0)} finding(s); AI findings can only add comments or "

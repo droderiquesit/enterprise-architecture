@@ -13,6 +13,8 @@ variable "names" {
     eventhub_namespace = optional(string)
     aggregator         = optional(string)
     gateway            = optional(string)
+    op_worker          = optional(string)
+    apm_gateway        = optional(string)
   })
   default = {}
 }
@@ -166,7 +168,7 @@ variable "container_apps" {
 }
 
 variable "aggregator" {
-  description = "Fluent Bit aggregator (forward + kafka inputs -> Datadog)."
+  description = "Fluent Bit aggregator (forward + kafka inputs -> Datadog). Deployed only with log_pipeline = fluent_bit_direct (the Observability Pipelines Worker replaces it otherwise)."
   type = object({
     hosting                = optional(string, "container_app")
     image                  = optional(string, "fluent/fluent-bit:5.1.3")
@@ -282,4 +284,112 @@ variable "aca_console_allow" {
   EOT
   type        = list(string)
   default     = []
+}
+
+variable "fleet_policy" {
+  description = "Decoded fleet policy (null = package default config/fleet-policy.yaml): log_pipeline, op_worker sizing, agent version for the APM gateway."
+  type        = any
+  default     = null
+}
+
+variable "tag_policy" {
+  description = "Decoded tag policy (null = package default) - enforced by the Observability Pipelines tag processors and the aggregator."
+  type        = any
+  default     = null
+}
+
+variable "log_pipeline" {
+  description = "Override the fleet policy log_pipeline: observability_pipelines | fluent_bit_direct. Null = policy."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.log_pipeline == null || contains(["observability_pipelines", "fluent_bit_direct"], coalesce(var.log_pipeline, "x"))
+    error_message = "log_pipeline must be observability_pipelines or fluent_bit_direct."
+  }
+}
+
+variable "default_tags" {
+  description = "Environment-level Datadog tags (modules/tagging `tags` of the environment identity: env, region, managed_by, application, static policy tags). Filled into logs that arrive without them."
+  type        = map(string)
+  default     = {}
+}
+
+variable "observability_pipelines" {
+  description = <<-EOT
+    Datadog Observability Pipelines (log_pipeline = observability_pipelines):
+      pipeline_id   : existing pipeline (created in the Datadog UI / elsewhere); null = this module creates it
+                      (datadog_observability_pipeline via modules/observability-pipeline)
+      hosting       : container_app (Worker on the Container Apps environment, internal ingress) | none (Worker
+                      elsewhere, e.g. modules/kubernetes on AKS: give external_endpoint)
+      workload_profile_name: profile of the Worker app (null = container_apps.workload_profile_name). On a Dedicated
+                      profile dsv-fetch runs as a refresher sidecar (init containers get no managed identity there).
+      buffer_storage: emptydir (replica-scoped) | azure_files (an ACA environment storage you provide; one data dir
+                      per replica) - disk buffers of the destinations live there
+      archive / azure / redaction: passed to modules/observability-pipeline
+  EOT
+  type = object({
+    pipeline_id           = optional(string)
+    name                  = optional(string)
+    hosting               = optional(string, "container_app")
+    image                 = optional(string)
+    workload_profile_name = optional(string)
+    buffer_storage        = optional(string, "emptydir")
+    azure_files_storage   = optional(string)
+    external_endpoint = optional(object({
+      host = string
+      port = optional(number, 24224)
+    }))
+    archive = optional(object({
+      enabled               = optional(bool, false)
+      container_name        = optional(string, "datadog-log-archive")
+      blob_prefix           = optional(string, "")
+      connection_string_ref = optional(string)
+    }), {})
+    azure = optional(object({
+      scope_tags        = optional(map(map(string)), {})
+      static_tags       = optional(map(string), {})
+      daily_quota_bytes = optional(number, 0)
+      sample_categories = optional(map(number), {})
+    }), {})
+    redaction_extra_patterns = optional(map(string), {})
+    otlp_logs_source         = optional(bool, false)
+  })
+  default = {}
+  validation {
+    condition     = contains(["container_app", "none"], var.observability_pipelines.hosting) && contains(["emptydir", "azure_files"], var.observability_pipelines.buffer_storage)
+    error_message = "observability_pipelines.hosting must be container_app|none and buffer_storage emptydir|azure_files."
+  }
+  validation {
+    condition     = var.observability_pipelines.buffer_storage != "azure_files" || var.observability_pipelines.azure_files_storage != null
+    error_message = "buffer_storage = azure_files needs azure_files_storage (name of an ACA environment storage)."
+  }
+}
+
+variable "apm_gateway" {
+  description = <<-EOT
+    Datadog Agent APM gateway for managed runtimes (fleet policy apm.mode = datadog, managed_runtime_path =
+    agent_gateway): Container Apps / ACI / App Service / Functions tracers send to http://<fqdn>:8126 (VNet-internal);
+    the Agent resolves its API key from Delinea DSV (ENC[dsv://...] + dsv-fetch secret backend), so no workload holds
+    a key. hosting = none: give external_url (an Agent you run).
+  EOT
+  type = object({
+    hosting      = optional(string, "container_app")
+    image        = optional(string)
+    cpu          = optional(number, 1)
+    memory       = optional(string, "2Gi")
+    min_replicas = optional(number, 1)
+    max_replicas = optional(number, 3)
+    external_url = optional(string)
+  })
+  default = {}
+  validation {
+    condition     = contains(["container_app", "none"], var.apm_gateway.hosting) && (var.apm_gateway.hosting != "none" || var.apm_gateway.external_url != null || true)
+    error_message = "apm_gateway.hosting must be container_app or none."
+  }
+}
+
+variable "dsv_fetch_source" {
+  description = "Path of dsv_fetch.py (embedded into the APM gateway Agent as its secret backend). Default: the package copy images/dsv-fetch/dsv_fetch.py."
+  type        = string
+  default     = null
 }

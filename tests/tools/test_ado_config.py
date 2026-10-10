@@ -81,7 +81,8 @@ def test_desired_policies():
 
 
 class FakeAdo:
-    def __init__(self, existing=None):
+    def __init__(self, existing=None, copilot=True):
+        self.copilot = copilot
         self.configs = {c["id"]: c for c in existing or []}
         self.calls = []
         self.next_id = 100
@@ -94,8 +95,12 @@ class FakeAdo:
         if "/_apis/build/definitions" in path:
             return {"value": [{"id": 11 if "platform" in url else 12}]}
         if path.endswith("/_apis/policy/types"):
-            return {"value": [{"id": "c6a1889d-b943-4856-b76f-9e46bb6b0df2", "displayName": "Comment requirements"},
-                              {"id": "cbdc66da-9728-4af8-aada-9a5a32e4a226", "displayName": "Status"}]}
+            types = [{"id": "c6a1889d-b943-4856-b76f-9e46bb6b0df2", "displayName": "Comment requirements"},
+                     {"id": "cbdc66da-9728-4af8-aada-9a5a32e4a226", "displayName": "Status"}]
+            if self.copilot:      # discovered by name: the id here is a test value, never hard-coded in the tool
+                types.append({"id": "11111111-2222-3333-4444-555555555555",
+                              "displayName": "Automatically request Copilot code review"})
+            return {"value": types}
         if path.endswith("/_apis/policy/configurations") and method == "GET":
             return {"value": list(self.configs.values())}
         if method == "POST":
@@ -121,7 +126,7 @@ def test_apply_is_idempotent_and_never_touches_unmanaged(monkeypatch):
                  "settings": {"scope": [{"repositoryId": "repo-1", "refName": "refs/heads/main", "matchKind": "exact"}]}}
     fake = FakeAdo([unmanaged])
     first = bp.run("apply", "https://dev.azure.com/org", "lab", "enterprise-architecture", fake)
-    assert {a["action"] for a in first} == {"create"} and len(first) == 29
+    assert {a["action"] for a in first} == {"create"} and len(first) == 31
     second = bp.run("apply", "https://dev.azure.com/org", "lab", "enterprise-architecture", fake)
     assert {a["action"] for a in second} == {"unchanged"}
     assert 1 in fake.configs                                         # unmanaged policy untouched
@@ -150,3 +155,24 @@ def test_branch_acl_tokens_are_utf16_hex():
     cmds = bp.branch_acl_commands("https://dev.azure.com/org", "p", "r", branching_doc(ROOT))
     assert any("refs/heads/6600650061007400750072006500" in c for c in cmds)   # "feature"
     assert "--deny-bit 16" in cmds[0]
+
+
+def test_copilot_review_is_discovered_by_name_or_skipped(monkeypatch):
+    doc = branching_doc(ROOT)
+    doc["identities"] = {g: f"id-{g}" for g in ("app-team", "docs-team", "observability-team", "platform-team", "security-team",
+                                                 "eh-pr-reviewer")}
+    monkeypatch.setattr(bp, "branching_doc", lambda repo=ROOT: doc)
+    with_copilot = FakeAdo()
+    acts = {a["key"]: a for a in bp.run("apply", "https://dev.azure.com/org", "lab", "enterprise-architecture", with_copilot)}
+    assert acts["copilot-review"]["action"] == "create" and acts["copilot-review-release"]["action"] == "create"
+    created = [c for c in with_copilot.configs.values() if c["type"]["id"] == "11111111-2222-3333-4444-555555555555"]
+    assert len(created) == 2 and all(c["isBlocking"] is False for c in created)
+    assert acts["comments"]["action"] == "create"                    # comments (Copilot's too) must be resolved
+    again = {a["key"]: a["action"] for a in bp.run("apply", "https://dev.azure.com/org", "lab", "enterprise-architecture",
+                                                   with_copilot)}
+    assert again["copilot-review"] == "unchanged"                      # adopted on re-run: idempotent
+    without = bp.run("plan", "https://dev.azure.com/org", "lab", "enterprise-architecture", FakeAdo(copilot=False))
+    skipped = [a for a in without if a["action"] == "skipped"]
+    assert {a["key"] for a in skipped} == {"copilot-review", "copilot-review-release"}
+    assert "not available in this organization yet" in skipped[0]["reason"]
+    assert not [a for a in without if a["action"] == "blocked"]       # skipping never blocks the other policies

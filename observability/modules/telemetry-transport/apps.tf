@@ -5,12 +5,22 @@
 # Secrets: dsv-fetch init containers read them from Delinea DSV with the collector identity into replica-scoped
 # EmptyDir volumes (Fluent Bit: env-yaml include; OTel: ${file:...}). Init containers can use managed identity
 # only in a workload-profiles environment on the Consumption profile (Microsoft Learn, ACA managed identity).
+module "tags" {
+  source = "../tagging"
+  policy = var.tag_policy
+  # used only for the policy maps (Azure tag key -> Datadog keys, pod labels); identity values are not enforced here
+  identity         = { env = var.datadog.env }
+  enforce_required = false
+}
+
 module "aggregator_config" {
   source            = "../fluent-bit"
   role              = local.eh_enabled ? "aggregator" : "aggregator-forward"
   datadog_site      = var.datadog.site
-  static_tags       = merge({ env = var.datadog.env }, var.datadog.extra_tags)
+  static_tags       = local.collector_tags
   aca_console_allow = var.aca_console_allow
+  azure_tag_key_map = module.tags.azure_tag_key_map
+  azure_scope_tags  = var.observability_pipelines.azure.scope_tags
 }
 
 module "gateway_config" {
@@ -30,7 +40,8 @@ module "gateway_config" {
 
 locals {
 
-  agg_enabled = var.aggregator.hosting == "container_app"
+  # the Fluent Bit aggregator only in fluent_bit_direct mode (in OP mode the Worker reads the hubs + forward input)
+  agg_enabled = var.aggregator.hosting == "container_app" && !local.op_mode
   gw_enabled  = var.gateway.hosting == "container_app"
 
   agg_name = coalesce(var.names.aggregator, substr("${var.name_prefix}-flb", 0, 32))

@@ -5,7 +5,8 @@ variable "hosts" {
       os_type            : linux | windows
       kind               : vm | vmss
       location           : region (required by run commands)
-      service_tags       : unified tags for the host (env/service/version/team/...) -> Agent DD_TAGS + Fluent Bit ddtags
+      service_tags       : canonical tag-policy values of the host's workload (env/service/version/team/owner/...) +
+                           optional `source` (ddsource) -> modules/tagging -> Agent DD_TAGS, Agent log tags, Fluent Bit ddtags
       log_paths          : application log files tailed by Fluent Bit (the app writes JSON lines there)
       identity_client_id : client id of the host's user-assigned managed identity, mapped to a DSV user with read on
                            the API key path (required; the key is read on the host, never in Terraform state)
@@ -23,6 +24,8 @@ variable "hosts" {
     identity_client_id = optional(string)
     install_agent      = optional(bool, true)
     install_fluent_bit = optional(bool, true)
+    # Linux: Single Step Instrumentation of the host's processes when the fleet policy apm.mode = datadog
+    apm_ssi = optional(bool, true)
   }))
   validation {
     condition     = alltrue([for h in values(var.hosts) : contains(["linux", "windows"], h.os_type) && contains(["vm", "vmss"], h.kind)])
@@ -108,5 +111,45 @@ variable "fluent_bit_version" {
 
 variable "tags" {
   type    = map(string)
+  default = {}
+}
+
+variable "fleet_policy" {
+  description = "Decoded fleet policy (null = package default): log pipeline + node collector, APM SSI and library versions, Agent Remote Configuration / remote updates."
+  type        = any
+  default     = null
+}
+
+variable "tag_policy" {
+  description = "Decoded tag policy (null = package default)."
+  type        = any
+  default     = null
+}
+
+variable "extra_tags" {
+  description = "Additional Datadog tags for every host (merged under the canonical policy keys)."
+  type        = map(string)
+  default     = {}
+}
+
+variable "enforce_tag_policy" {
+  description = "Fail the plan when a host lacks a required policy tag (null = policy enforce_required)."
+  type        = bool
+  default     = null
+}
+
+variable "log_pipeline" {
+  description = "Override the fleet policy log_pipeline (observability_pipelines | fluent_bit_direct)."
+  type        = string
+  default     = null
+}
+
+variable "op_endpoint" {
+  description = "Observability Pipelines Worker endpoints (transport contract aggregator.fqdn / agent_logs_url): fluent source host+port for Fluent Bit, Datadog Agent source URL for Agents."
+  type = object({
+    host           = optional(string)
+    fluent_port    = optional(number, 24224)
+    agent_logs_url = optional(string)
+  })
   default = {}
 }

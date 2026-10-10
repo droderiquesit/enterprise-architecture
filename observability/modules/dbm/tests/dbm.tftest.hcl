@@ -157,3 +157,28 @@ run "reject_env_password_on_aci" {
   }
   expect_failures = [azurerm_container_group.dbm]
 }
+
+run "instance_tags_from_tag_policy" {
+  command = plan
+  variables {
+    hosting  = "cluster_checks"
+    aci      = null
+    identity = { team = "data-platform", owner = "data@example.com", region = "swedencentral", application = "enterprise-hello", domain = "data", tier = "high" }
+    databases = {
+      catalog = {
+        engine          = "postgres"
+        deployment_type = "flexible_server"
+        host            = "psql-eh-dev.postgres.database.azure.com"
+        password_ref    = { kind = "dsv", name = "dsv://eh/dev/dbm-postgres-password#value" }
+        service         = "hello-catalog-api"
+        tags            = { platform_contract = "postgresql" }
+      }
+    }
+    enforce_tag_policy = true
+  }
+  assert {
+    condition = alltrue([for t in ["env:dev", "service:hello-catalog-api", "team:data-platform", "owner:data_example.com", "region:swedencentral", "db_key:catalog", "platform_contract:postgresql", "managed_by:terraform"] :
+    contains(yamldecode(output.cluster_check_confd["postgres.yaml"]).instances[0].tags, t)])
+    error_message = "DBM instance tags carry the policy tag set (service of the owning app, normalised owner) + db extras"
+  }
+}

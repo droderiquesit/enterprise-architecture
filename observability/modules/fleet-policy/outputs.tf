@@ -59,3 +59,8 @@ output "policy" {
   description = "The decoded policy in use."
   value       = local.policy
 }
+
+output "sections" {
+  description = "Merged policy sections (defaults -> architecture -> environment -> overrides) before the support matrix: logs, apm, profiling, agent, rum, op_worker."
+  value       = local.section
+}

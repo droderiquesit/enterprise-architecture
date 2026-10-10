@@ -22,6 +22,9 @@ Policies on the trunk (and release/* prefix), policy type ids from the Policy Co
   Status (required PR status)  resolved by display name "Status"; `policies.required_statuses` (eh-review/policy =
                                the automated PR reviewer's verdict), reset on every push, applies by default, only
                                the reviewer bot identity (`author`) may post it
+  Copilot code review          "Automatically request Copilot code review" (GitHub Copilot for Azure Repos, preview):
+                               type id undocumented -> discovered by display name ("copilot") from _apis/policy/types;
+                               absent -> skipped with a warning (enable Copilot in org/project/repo settings first)
   Protected classes            Required reviewers per class of tools/review/branch-policy-fragment.json (owner group
                                from `protected_owners`): reviewer, pipeline, identity/secrets, network, prod config
 Minimum reviewers on main = 1 by design: together with the required eh-review/policy status (which stays pending
@@ -66,7 +69,10 @@ TYPES = {
     "required-reviewers": "fd2167ab-b0be-447a-8ec8-39368250530e",
     "comments": None,  # "Comment requirements": resolved from _apis/policy/types at plan time
     "status": None,    # "Status" (required PR status from an external service): resolved from _apis/policy/types
+    "copilot": None,   # "Automatically request Copilot code review" (preview; id undocumented): discovered by name
 }
+OPTIONAL_TYPES = {"copilot": "not available in this organization yet (GitHub Copilot code review for Azure Repos is "
+                             "a preview: enable it in Organization/Project/Repository settings first)"}
 TYPE_NAMES = {"comments": "comment requirements", "status": "status"}
 MARK = "[lab-policy:{}]"
 SHORT_LIVED_ALLOWED = ("feature", "fix", "chore", "docs")
@@ -106,8 +112,12 @@ def desired(repo: Path = REPO, repo_id: Optional[str] = None, definitions: Optio
                                                            "allowRebase": False, "allowRebaseMerge": False}, ref=ref, kind=kind)
         if pol.get("work_item_linking", True):
             add(f"work-item{sfx}", "work-item", {}, ref=ref, kind=kind)
-        if pol.get("comment_resolution", True):
+        if pol.get("comment_resolution", True):       # Copilot and human comments must be resolved before merge
             add(f"comments{sfx}", "comments", {}, ref=ref, kind=kind)
+        if pol.get("copilot_review", True):
+            # GitHub Copilot code review for Azure Repos: Copilot comments on every PR (advisory; its comments are
+            # covered by the comment-resolution policy). Settings beyond the scope are not documented: none are set.
+            add(f"copilot-review{sfx}", "copilot", {}, blocking=False, ref=ref, kind=kind)
         # required PR statuses posted by external services (the automated PR reviewer posts eh-review/policy);
         # apply by default (pending until posted), reset on every push, any poster unless author_id is set
         for st in pol.get("required_statuses") or []:
@@ -231,7 +241,7 @@ def plan(want: List[dict], existing: List[dict], types: Dict[str, str]) -> List[
             # unmarked policies of the trunk with the same singleton type are adopted (min reviewers, merge, ...)
             tid = (cfg.get("type") or {}).get("id")
             for w in want:
-                if types.get(w["type"]) == tid and w["type"] in ("min-reviewers", "work-item", "merge-strategy", "comments") \
+                if types.get(w["type"]) == tid and w["type"] in ("min-reviewers", "work-item", "merge-strategy", "comments", "copilot") \
                         and _scope_key(w) == _scope_key(cfg) and w["key"] not in by_key:
                     k = w["key"]
                     break
@@ -240,6 +250,9 @@ def plan(want: List[dict], existing: List[dict], types: Dict[str, str]) -> List[
     actions = []
     for w in want:
         tid = types.get(w["type"])
+        if not tid and w["type"] in OPTIONAL_TYPES:
+            actions.append({"action": "skipped", "key": w["key"], "reason": OPTIONAL_TYPES[w["type"]]})
+            continue
         if not tid:
             actions.append({"action": "blocked", "key": w["key"], "reason": f"policy type '{w['type']}' not found in this organization"})
             continue
@@ -280,6 +293,11 @@ def resolve_types(http: Http, base: str) -> Dict[str, str]:
         for key, name in TYPE_NAMES.items():
             if str(t.get("displayName", "")).lower() == name:
                 types[key] = t["id"]
+        # never guess the undocumented id: any policy type whose display name mentions Copilot (e.g. "Automatically
+        # request Copilot code review"); several matches -> the one that also says "review"
+        dn = str(t.get("displayName", "")).lower()
+        if "copilot" in dn and ("copilot" not in types or "review" in dn):
+            types["copilot"] = t["id"]
     return types
 
 
@@ -331,10 +349,12 @@ def main(argv=None) -> int:
     actions = run(args.op, args.org, args.project, args.repository, make_http(), args.prune)
     blocked = 0
     for a in actions:
+        if a["action"] == "skipped":
+            print(f"##vso[task.logissue type=warning]{a['key']}: {a['reason']}")
         if a["action"] != "unchanged":
             print(f"{a['action']:<9} {a['key']}" + (f"  ({a['reason']})" if a.get("reason") else ""))
         blocked += a["action"] == "blocked"
-    print(f"{args.op}: " + ", ".join(f"{n} {k}" for k in ("create", "update", "delete", "unchanged", "blocked")
+    print(f"{args.op}: " + ", ".join(f"{n} {k}" for k in ("create", "update", "delete", "unchanged", "skipped", "blocked")
                                      if (n := sum(a["action"] == k for a in actions))))
     print("branch name patterns (administrator, not applied):")
     for c in branch_acl_commands(args.org, "<project-id>", "<repository-id>", branching_doc()):

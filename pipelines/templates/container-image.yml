@@ -19,8 +19,8 @@ parameters:
     type: object
 
 steps:
-  - script: bash pipelines/scripts/install-tools.sh syft || echo "##vso[task.logissue type=warning]syft unavailable; SBOM attestation from buildx only"
-    displayName: Install syft (SBOM)
+  - script: bash pipelines/scripts/install-tools.sh syft grype trivy || echo "##vso[task.logissue type=warning]syft/grype/trivy unavailable; SBOM attestation from buildx only"
+    displayName: Install syft (SBOM), grype + trivy (image CVE scan)
     retryCountOnTaskFailure: 2
     condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))
   - task: AzureCLI@2
@@ -60,6 +60,19 @@ steps:
         fi
         if command -v syft >/dev/null; then
           syft scan "registry:${repo}@${digest}" -o "spdx-json=$BUILD_OUT/sbom.spdx.json" || echo "##vso[task.logissue type=warning]syft SBOM failed"
+        fi
+        if [[ -s "$BUILD_OUT/sbom.spdx.json" ]]; then
+          # image CVE scan of the SBOM with two independent open-source databases, in parallel; fixable criticals fail
+          pids=()
+          if command -v grype >/dev/null; then
+            grype "sbom:$BUILD_OUT/sbom.spdx.json" --only-fixed --fail-on critical -o "sarif=$BUILD_OUT/grype.sarif" & pids+=($!)
+          fi
+          if command -v trivy >/dev/null; then
+            trivy sbom --quiet --severity CRITICAL --ignore-unfixed --exit-code 1 --format sarif \
+              --output "$BUILD_OUT/trivy-image.sarif" "$BUILD_OUT/sbom.spdx.json" & pids+=($!)
+          fi
+          rc=0; for p in "${pids[@]}"; do wait "$p" || rc=1; done
+          [[ $rc == 0 ]] || { echo "##vso[task.logissue type=error]fixable CRITICAL vulnerabilities in ${repo}@${digest}"; exit 1; }
         fi
         python3 tools/deploy/artifacts.py image-meta --out "$BUILD_OUT/container-image.json" \
           --repository "$repo" --digest "$digest" --tag "$tag"

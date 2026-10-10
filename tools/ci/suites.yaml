@@ -7,6 +7,7 @@
 # from versions.yaml + the command. Sorted by id; keep it that way (tools/ci validates it).
 #
 #   tier      gate (cheap, runs first, cancels the run on failure) | unit | integration | e2e
+#   covers    registry components this suite TESTS: it runs whenever one of them is selected for validation
 #   kind      pytest (paths, sharded by file with xdist inside each shard) | script (argv) | dotnet
 #   scope     platform | applications: the pipeline that owns the suite (both pipelines validate PRs; a suite
 #             runs in one of them only, so the work is not done twice)
@@ -33,7 +34,6 @@ suites:
     toolchain: dotnet
     projects: [applications/shared/dotnet/Hello.Common.Tests]
     inputs: [applications/shared/dotnet/**, applications/dotnet/**]
-    covers: [svc-bff, svc-orders-api, svc-inventory-api, svc-durable]
   - id: e2e
     tier: e2e
     kind: pytest
@@ -101,12 +101,11 @@ suites:
     inputs: [tests/charts/**, applications/charts/**, applications/deployments/**/*.yaml, applications/deployments/**/*.tf]
   - id: py-hello-common
     tier: unit
-    kind: pytest
+    kind: script                 # the application team's isolated, pinned venv (not the CI tool environment)
     scope: applications
     toolchain: python
-    paths: [applications/shared/python/hello_common/tests]
+    argv: [bash, applications/python/build.sh, --steps, 'lint,test', --services, hello-common]
     inputs: [applications/shared/python/**]
-    covers: [svc-catalog-api, svc-dbadapter, svc-worker, svc-partner-sim, svc-functions, svc-jobs]
   - id: py-pipeline
     tier: unit
     kind: pytest

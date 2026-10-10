@@ -79,6 +79,12 @@ def main(argv=None) -> int:
         client = AdoClient(ado.url, ORG, PROJECT, lambda: "local-e2e-token", max_attempts=1)
         for pr_id, branch, expect in ((101, "docs-only", "approve"), (102, "rbac", "human-required")):
             ado.add_pr(pr_id, "main", branch)
+            # GitHub Copilot code review (simulated thread): resolved comment on the docs PR, open one on the RBAC PR
+            ado.add_copilot_thread(
+                pr_id,
+                "docs/guides/quick-start.md" if branch == "docs-only" else "foundation/identity/main.tf",
+                status="fixed" if branch == "docs-only" else "active",
+            )
             out = process(client, PROJECT_ID, REPO_ID, pr_id, BOT_ID, keep_result=True)
             pr = ado.prs[pr_id]
             res = out.result
@@ -96,6 +102,7 @@ def main(argv=None) -> int:
                     "classes": res["classes"],
                     "components": [c["id"] for c in res["components"]],
                     "consumers_affected": len(res["consumers"]),
+                    "copilot": {k: res["copilot"].get(k) for k in ("threads", "active_threads", "reviewed_current", "stale")},
                     "findings": [{k: f[k] for k in ("rule", "severity", "kind", "file", "line", "message")} for f in res["findings"]],
                     "ado_state": {
                         "bot_vote": ado.bot_vote(pr_id),

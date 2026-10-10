@@ -8,7 +8,10 @@
 #   Windows: pinned MSIs; the installer reads the key from DSV (PowerShell, IMDS) and writes it into datadog.yaml /
 #            the Fluent Bit env-yaml include (ACL-restricted files). The Agent cannot run a script as secret backend
 #            on Windows (Win32 executable required), so the key refreshes when the installer re-runs.
-# App logs on hosts: Fluent Bit only (Agent DD_LOGS_ENABLED=false). OTLP: Agent receiver on localhost.
+# App logs on hosts (fleet policy): Linux + logs.node_collector = agent -> the Agent tails the files and ships to the
+# Observability Pipelines Worker (no Fluent Bit installed); otherwise Fluent Bit (to the Worker without any key in
+# observability_pipelines mode, to the Datadog intake in fluent_bit_direct mode). Never both. APM: Single Step
+# Instrumentation on Linux (apm.mode = datadog); OTLP receiver on localhost for otel-mode services.
 # VM   -> azurerm_virtual_machine_run_command (managed run command)
 # VMSS -> CustomScript extension running the same installer on every instance, including later autoscaled ones.
 locals {
@@ -22,17 +25,56 @@ locals {
   )
 }
 
+module "fleet" {
+  source    = "../fleet-policy"
+  policy    = var.fleet_policy
+  overrides = var.log_pipeline == null ? {} : { log_pipeline = var.log_pipeline }
+}
+
+# one tag set per host from the tag policy (service_tags = canonical identity values of the host's workload)
+module "host_tags" {
+  source           = "../tagging"
+  for_each         = var.hosts
+  policy           = var.tag_policy
+  identity         = { for k, v in each.value.service_tags : k => v if k != "source" }
+  extra_tags       = var.extra_tags
+  enforce_required = var.enforce_tag_policy
+}
+
+locals {
+  op_mode     = module.fleet.log_pipeline == "observability_pipelines"
+  agent_cfg   = module.fleet.agent
+  apm_datadog = try(module.fleet.sections.apm.mode, "datadog") == "datadog"
+  libs        = module.fleet.apm.library_versions
+  # Linux hosts with the Agent collect their own log files when the policy says so; Windows keeps Fluent Bit
+  agent_logs    = { for k, h in var.hosts : k => h.os_type == "linux" && h.install_agent && module.fleet.node_collector == "agent" && length(h.log_paths) > 0 }
+  fluent_bit    = { for k, h in var.hosts : k => h.install_fluent_bit && !local.agent_logs[k] }
+  ssi           = { for k, h in var.hosts : k => h.os_type == "linux" && h.install_agent && local.apm_datadog && h.apm_ssi }
+  ssi_libraries = join(",", [for lang in sort(keys(local.libs)) : "${lang}:${trimprefix(local.libs[lang], "v")}" if contains(["dotnet", "python", "js", "java"], lang)])
+  agent_logs_conf = { for k, h in var.hosts : k => base64encode(yamlencode({
+    logs = [for p in h.log_paths : {
+      type    = "file"
+      path    = p
+      service = lookup(module.host_tags[k].tags, "service", "unknown")
+      source  = lookup(h.service_tags, "source", "python")
+      tags    = module.host_tags[k].dd_tags_extra == "" ? [] : split(",", module.host_tags[k].dd_tags_extra)
+    }]
+  })) }
+}
+
 module "flb" {
   source            = "../fluent-bit"
-  for_each          = { for k, h in var.hosts : k => h if h.install_fluent_bit }
+  for_each          = { for k, h in var.hosts : k => h if local.fluent_bit[k] }
   role              = each.value.os_type == "linux" ? "linux-host" : "windows-host"
   datadog_site      = var.datadog.site
-  static_tags       = each.value.service_tags
+  static_tags       = module.host_tags[each.key].tags
   dd_source         = lookup(each.value.service_tags, "source", null)
-  dd_service        = lookup(each.value.service_tags, "service", null)
+  dd_service        = lookup(module.host_tags[each.key].tags, "service", null)
   log_paths         = each.value.log_paths
   systemd_unit      = each.value.systemd_unit
   windows_event_log = each.value.windows_event_log
+  log_destination   = local.op_mode ? "observability_pipelines" : "datadog"
+  op_endpoint       = local.op_mode ? { host = coalesce(var.op_endpoint.host, "unset"), port = var.op_endpoint.fluent_port } : null
 }
 
 locals {
@@ -49,12 +91,20 @@ locals {
         dsv_fetch_gz          = h.os_type == "linux" ? local.dsv_fetch_gz : ""
         install_agent         = tostring(h.install_agent)
         configure_agent       = tostring(h.install_agent)
-        install_fluent_bit    = tostring(h.install_fluent_bit)
-        process_collection    = tostring(var.datadog.process_collection)
-        agent_tags            = join(" ", [for t in sort(keys(h.service_tags)) : "${t}:${h.service_tags[t]}" if t != "source"])
-        files                 = h.install_fluent_bit ? { for p, c in module.flb[k].files : p => base64gzip(c) } : {}
-        env                   = h.install_fluent_bit ? module.flb[k].env : {}
-        secrets_file          = h.install_fluent_bit ? module.flb[k].secrets_env_file : ""
+        install_fluent_bit    = tostring(local.fluent_bit[k])
+        process_collection    = tostring(var.datadog.process_collection || try(local.agent_cfg.process_collection, false))
+        agent_tags            = module.host_tags[k].dd_tags_space
+        files                 = local.fluent_bit[k] ? { for p, c in module.flb[k].files : p => base64gzip(c) } : {}
+        env                   = local.fluent_bit[k] ? module.flb[k].env : {}
+        secrets_file          = local.fluent_bit[k] ? module.flb[k].secrets_env_file : ""
+        fb_needs_key          = local.fluent_bit[k] ? length(module.flb[k].secret_env_names) > 0 : false
+        agent_logs            = tostring(local.agent_logs[k])
+        agent_logs_conf       = local.agent_logs_conf[k]
+        op_logs_url           = local.agent_logs[k] && local.op_mode ? coalesce(var.op_endpoint.agent_logs_url, "unset") : ""
+        apm_ssi               = tostring(local.ssi[k])
+        ssi_libraries         = local.ssi_libraries
+        remote_updates        = tostring(try(local.agent_cfg.remote_updates, false))
+        remote_configuration  = tostring(try(local.agent_cfg.remote_configuration, true))
         agent_msi_sha256      = var.windows_msi_sha256.agent
         fluent_bit_msi_sha256 = var.windows_msi_sha256.fluent_bit
         setup_revision        = var.setup_revision
@@ -68,7 +118,7 @@ locals {
 
 # ---------------------------------------------------------------------------------------------- VMs
 resource "azurerm_virtual_machine_run_command" "setup" {
-  for_each           = { for k, h in local.vms : k => h if h.install_fluent_bit || h.install_agent }
+  for_each           = { for k, h in local.vms : k => h if local.fluent_bit[k] || h.install_agent }
   name               = "observability-setup"
   location           = each.value.location
   virtual_machine_id = each.value.resource_id
@@ -105,7 +155,7 @@ locals {
 # A scale set can carry only ONE CustomScript extension; if the app owner already uses one, bake the
 # installer into the image or call the rendered installer (installer_scripts output) from theirs.
 resource "azurerm_virtual_machine_scale_set_extension" "setup" {
-  for_each                     = { for k, h in local.vmsss : k => h if h.install_fluent_bit || h.install_agent }
+  for_each                     = { for k, h in local.vmsss : k => h if local.fluent_bit[k] || h.install_agent }
   name                         = "observability-setup"
   virtual_machine_scale_set_id = each.value.resource_id
   publisher                    = each.value.os_type == "linux" ? "Microsoft.Azure.Extensions" : "Microsoft.Compute"

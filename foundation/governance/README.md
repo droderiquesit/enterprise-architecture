@@ -81,3 +81,12 @@ retention period). Destroy last so cost alerts cover the teardown of everything 
 - Tag policies: https://learn.microsoft.com/azure/azure-resource-manager/management/tag-policies
 - Built-in policies: https://learn.microsoft.com/azure/governance/policy/samples/built-in-policies
 - Resource Graph: https://learn.microsoft.com/azure/governance/resource-graph/overview
+
+### GitHub Copilot code review budget
+
+`settings.copilot_review_budget` (on by default, USD 100/month) creates an alert-only budget filtered to meter
+category `GitHub` / subcategory `GitHub Copilot for AzDO` - the meter Microsoft uses for Copilot code review in
+Azure Repos ([Microsoft Learn](https://learn.microsoft.com/azure/devops/repos/git/copilot-code-reviews#billing)).
+Charges land on the subscription **linked to the Azure DevOps organization**; set `subscription_id` when that is not
+the lab subscription (the apply identity then needs Cost Management Contributor there). Budgets notify; they never
+stop reviews.

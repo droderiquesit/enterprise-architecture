@@ -5,7 +5,9 @@ mock_provider "kubernetes" {
   override_during = plan
 }
 
+# File default: the 2.x path (fluent_bit_direct: Fluent Bit DaemonSet -> Datadog); the 3.0 default runs override it.
 variables {
+  log_pipeline = "fluent_bit_direct"
   cluster_name = "aks-eh-dev"
   datadog      = { site = "datadoghq.eu", env = "dev", extra_tags = { team = "platform" } }
   dsv = {
@@ -23,7 +25,7 @@ run "defaults" {
   command = plan
 
   assert {
-    condition     = helm_release.datadog.version == "3.253.2" && helm_release.fluent_bit.version == "0.58.3"
+    condition     = helm_release.datadog.version == "3.253.2" && helm_release.fluent_bit[0].version == "0.58.3"
     error_message = "Charts pinned."
   }
   assert {
@@ -54,11 +56,11 @@ run "defaults" {
     error_message = "dsv-fetch script ConfigMap + DSV env for the Agents."
   }
   assert {
-    condition = (yamldecode(helm_release.fluent_bit.values[0]).initContainers[0].name == "dsv-fetch"
-      && contains(yamldecode(helm_release.fluent_bit.values[0]).initContainers[0].args, "DD_API_KEY=dsv://eh/dev/datadog-api-key#value")
-      && yamldecode(helm_release.fluent_bit.values[0]).extraVolumes[1].emptyDir.medium == "Memory"
-      && yamldecode(helm_release.fluent_bit.values[0]).podLabels["azure.workload.identity/use"] == "true"
-    && !anytrue([for e in yamldecode(helm_release.fluent_bit.values[0]).env : e.name == "DD_API_KEY"]))
+    condition = (yamldecode(helm_release.fluent_bit[0].values[0]).initContainers[0].name == "dsv-fetch"
+      && contains(yamldecode(helm_release.fluent_bit[0].values[0]).initContainers[0].args, "DD_API_KEY=dsv://eh/dev/datadog-api-key#value")
+      && yamldecode(helm_release.fluent_bit[0].values[0]).extraVolumes[1].emptyDir.medium == "Memory"
+      && yamldecode(helm_release.fluent_bit[0].values[0]).podLabels["azure.workload.identity/use"] == "true"
+    && !anytrue([for e in yamldecode(helm_release.fluent_bit[0].values[0]).env : e.name == "DD_API_KEY"]))
     error_message = "Fluent Bit: dsv-fetch init container writes the env-yaml into an in-memory emptyDir; no API key env."
   }
   assert {
@@ -66,11 +68,11 @@ run "defaults" {
     error_message = "DBM cluster checks dispatched to runners."
   }
   assert {
-    condition     = strcontains(kubernetes_config_map_v1.fluent_bit.data["fluent-bit.yaml"], "/var/log/containers/*.log") && contains(yamldecode(helm_release.fluent_bit.values[0]).args, "--config=/fluent-bit/etc/eh/fluent-bit.yaml")
+    condition     = strcontains(kubernetes_config_map_v1.fluent_bit[0].data["fluent-bit.yaml"], "/var/log/containers/*.log") && contains(yamldecode(helm_release.fluent_bit[0].values[0]).args, "--config=/fluent-bit/etc/eh/fluent-bit.yaml")
     error_message = "Fluent Bit DaemonSet runs the validated k8s config."
   }
   assert {
-    condition     = yamldecode(helm_release.fluent_bit.values[0]).resources.limits.memory == "512Mi" && yamldecode(helm_release.datadog.values[0]).agents.containers.agent.resources.limits.memory == "512Mi"
+    condition     = yamldecode(helm_release.fluent_bit[0].values[0]).resources.limits.memory == "512Mi" && yamldecode(helm_release.datadog.values[0]).agents.containers.agent.resources.limits.memory == "512Mi"
     error_message = "Bounded resources."
   }
   assert {
@@ -90,7 +92,7 @@ run "hostca_and_existing_secret" {
     error_message = "Fallback: Secret synced by the Delinea dsv-k8s syncer + AKS kubelet CA path."
   }
   assert {
-    condition     = length(kubernetes_config_map_v1.fluent_bit_env_placeholder) == 1 && anytrue([for e in yamldecode(helm_release.fluent_bit.values[0]).env : e.name == "DD_API_KEY"]) && length(yamldecode(helm_release.fluent_bit.values[0]).initContainers) == 0
+    condition     = length(kubernetes_config_map_v1.fluent_bit_env_placeholder) == 1 && anytrue([for e in yamldecode(helm_release.fluent_bit[0].values[0]).env : e.name == "DD_API_KEY"]) && length(yamldecode(helm_release.fluent_bit[0].values[0]).initContainers) == 0
     error_message = "Fallback Fluent Bit: key from the synced Secret, placeholder env include."
   }
 }
@@ -101,7 +103,7 @@ run "cluster_agent_syncer_secret" {
     api_key = { cluster_agent_secret_name = "datadog-cluster-agent-api-key" }
   }
   assert {
-    condition     = yamldecode(helm_release.datadog.values[0]).clusterAgent.env[0].valueFrom.secretKeyRef.name == "datadog-cluster-agent-api-key"
+    condition     = anytrue([for e in yamldecode(helm_release.datadog.values[0]).clusterAgent.env : try(e.valueFrom.secretKeyRef.name, "") == "datadog-cluster-agent-api-key" if e.name == "DD_API_KEY"])
     error_message = "The Cluster Agent (no Python) can take its key from a syncer-managed Secret."
   }
 }
@@ -128,4 +130,90 @@ run "reject_bad_kubelet_mode" {
     features = { kubelet_tls_mode = "whatever" }
   }
   expect_failures = [var.features]
+}
+
+run "fleet_default_agent_logs_to_op_ssi_profiling" {
+  command = plan
+  variables {
+    log_pipeline = null
+    op_logs_url  = "http://eh-obs-dev-opw.internal.example.azurecontainerapps.io:8282"
+    identity     = { team = "platform-engineering", region = "swedencentral", application = "enterprise-hello", owner = "platform@example.com", domain = "shared", tier = "infrastructure" }
+  }
+  assert {
+    condition     = length(helm_release.fluent_bit) == 0 && yamldecode(helm_release.datadog.values[0]).datadog.logs.enabled && yamldecode(helm_release.datadog.values[0]).datadog.logs.containerCollectAll
+    error_message = "one log collector per node: the Agent (no Fluent Bit DaemonSet)"
+  }
+  assert {
+    condition     = anytrue([for e in yamldecode(helm_release.datadog.values[0]).datadog.env : e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL" && e.value == "http://eh-obs-dev-opw.internal.example.azurecontainerapps.io:8282"]) && anytrue([for e in yamldecode(helm_release.datadog.values[0]).datadog.env : e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED" && e.value == "true"])
+    error_message = "Agent logs -> Observability Pipelines Worker"
+  }
+  assert {
+    condition     = strcontains(yamldecode(helm_release.datadog.values[0]).datadog.containerExcludeLogs, "kube_namespace:datadog")
+    error_message = "collector namespaces excluded"
+  }
+  assert {
+    condition = (yamldecode(helm_release.datadog.values[0]).datadog.apm.instrumentation.enabled
+      && yamldecode(helm_release.datadog.values[0]).datadog.apm.instrumentation.targets[0].namespaceSelector.matchNames[0] == "hello"
+      && yamldecode(helm_release.datadog.values[0]).datadog.apm.instrumentation.targets[0].ddTraceVersions.dotnet == "v3"
+      && yamldecode(helm_release.datadog.values[0]).datadog.apm.instrumentation.targets[0].ddTraceVersions.python == "v4"
+    && anytrue([for c in yamldecode(helm_release.datadog.values[0]).datadog.apm.instrumentation.targets[0].ddTraceConfigs : c.name == "DD_PROFILING_ENABLED" && c.value == "auto"]))
+    error_message = "Single Step Instrumentation: target namespaces, pinned library majors, profiler injected"
+  }
+  assert {
+    condition     = anytrue([for e in yamldecode(helm_release.datadog.values[0]).clusterAgent.env : e.name == "DD_ADMISSION_CONTROLLER_AUTO_INSTRUMENTATION_INIT_SECURITY_CONTEXT"])
+    error_message = "restricted PSS securityContext for injected init containers"
+  }
+  assert {
+    condition     = yamldecode(helm_release.datadog.values[0]).datadog.podLabelsAsTags["team"] == "team" && contains(yamldecode(helm_release.datadog.values[0]).datadog.tags, "team:platform-engineering") && contains(yamldecode(helm_release.datadog.values[0]).datadog.tags, "region:swedencentral")
+    error_message = "tag policy: cluster tags + podLabelsAsTags"
+  }
+  assert {
+    condition     = yamldecode(helm_release.datadog.values[0]).remoteConfiguration.enabled && output.contract.log_collector == "datadog-agent" && output.contract.agent.ssi_enabled
+    error_message = "Remote Configuration on; contract reflects the collector"
+  }
+}
+
+run "op_with_fluent_bit_node_collector" {
+  command = plan
+  variables {
+    log_pipeline = null
+    op_logs_url  = "http://opw.internal:8282"
+    fleet_policy = {
+      apiVersion = "observability/fleet-policy/v1"
+      kind       = "FleetPolicy"
+      logs       = { node_collector = "fluent_bit" }
+    }
+  }
+  assert {
+    condition     = length(helm_release.fluent_bit) == 1 && !yamldecode(helm_release.datadog.values[0]).datadog.logs.enabled && length(yamldecode(helm_release.fluent_bit[0].values[0]).initContainers) == 0
+    error_message = "Fluent Bit DaemonSet forwards to the Worker without a key (no dsv-fetch)"
+  }
+  assert {
+    condition     = strcontains(kubernetes_config_map_v1.fluent_bit[0].data["fluent-bit.yaml"], "- name: forward") && anytrue([for e in yamldecode(helm_release.fluent_bit[0].values[0]).env : e.name == "FLB_FORWARD_HOST" && e.value == "opw.internal"])
+    error_message = "DaemonSet output = Worker fluent source"
+  }
+}
+
+run "op_worker_on_aks" {
+  command = plan
+  variables {
+    log_pipeline = null
+    op_worker    = { enabled = true, pipeline_id = "aaaaaaaa-0000-0000-0000-000000000001" }
+  }
+  assert {
+    condition     = helm_release.op_worker[0].version == "2.22.0" && yamldecode(helm_release.op_worker[0].values[0]).persistence.enabled && yamldecode(helm_release.op_worker[0].values[0]).datadog.apiKeyExistingSecret == "datadog-api-key"
+    error_message = "Worker chart pinned, persistent disk buffers, key from the synced Secret"
+  }
+  assert {
+    condition     = anytrue([for e in yamldecode(helm_release.datadog.values[0]).datadog.env : e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL" && e.value == "http://opw-observability-pipelines-worker.observability-pipelines.svc.cluster.local:8282"])
+    error_message = "Agents ship to the in-cluster Worker service"
+  }
+}
+
+run "reject_op_agent_logs_without_endpoint" {
+  command = plan
+  variables {
+    log_pipeline = null
+  }
+  expect_failures = [helm_release.datadog]
 }

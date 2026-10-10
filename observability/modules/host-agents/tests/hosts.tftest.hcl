@@ -2,7 +2,10 @@ mock_provider "azurerm" {
   override_during = plan
 }
 
+# File default: 2.x behaviour (fluent_bit_direct, Fluent Bit collects host logs); 3.0 default runs below.
 variables {
+  log_pipeline       = "fluent_bit_direct"
+  enforce_tag_policy = false
   datadog = {
     site        = "datadoghq.eu"
     api_key_ref = "dsv://eh/dev/datadog-api-key#value"
@@ -145,4 +148,36 @@ run "reject_latest_agent" {
     datadog = { site = "datadoghq.com", agent_version = "latest", api_key_ref = "dsv://eh/dev/datadog-api-key" }
   }
   expect_failures = [var.datadog]
+}
+
+run "fleet_default_agent_logs_ssi_op" {
+  command = plan
+  variables {
+    log_pipeline = null
+    op_endpoint  = { host = "eh-obs-dev-opw.internal", agent_logs_url = "http://eh-obs-dev-opw.internal:8282" }
+  }
+  assert {
+    condition     = length(output.installer_scripts) == 3 && strcontains(output.installer_scripts["worker"], "if [ \"false\" != \"true\" ]; then log \"agent-only host")
+    error_message = "Linux VM: the Agent collects the log files - no Fluent Bit installed"
+  }
+  assert {
+    condition     = strcontains(output.installer_scripts["worker"], "Environment=DD_LOGS_ENABLED=true") && strcontains(output.installer_scripts["worker"], "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL=http://eh-obs-dev-opw.internal:8282")
+    error_message = "Agent logs -> Observability Pipelines Worker"
+  }
+  assert {
+    condition     = strcontains(output.installer_scripts["worker"], "DD_APM_INSTRUMENTATION_ENABLED=host") && strcontains(output.installer_scripts["worker"], "DD_APM_INSTRUMENTATION_LIBRARIES='dotnet:3,java:1,js:5,python:4'")
+    error_message = "host Single Step Instrumentation with pinned library majors"
+  }
+  assert {
+    condition     = strcontains(base64decode(regex("echo '([A-Za-z0-9+/=]+)' \\| base64 -d > \"\\$tmp\"", output.installer_scripts["worker"])[0]), "/var/log/enterprise-hello/*.log")
+    error_message = "Agent logs conf tails the application log files"
+  }
+  assert {
+    condition     = strcontains(output.installer_scripts["worker"], "service:hello-worker") && strcontains(output.installer_scripts["worker"], "Environment=DD_REMOTE_CONFIGURATION_ENABLED=true")
+    error_message = "policy tags in DD_TAGS; Remote Configuration on"
+  }
+  assert {
+    condition     = strcontains(output.installer_scripts["inventory_win"], "fluent-bit-eh") && !strcontains(output.installer_scripts["inventory_win"], "DD_APM_INSTRUMENTATION_ENABLED")
+    error_message = "Windows host keeps Fluent Bit (forward to the Worker) and has no SSI"
+  }
 }

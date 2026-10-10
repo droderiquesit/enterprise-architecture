@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
 SEVERITIES = ("critical", "high", "medium", "low", "info")
 SEVERITY_RANK = {s: i for i, s in enumerate(SEVERITIES)}  # lower = worse
@@ -85,6 +86,7 @@ class ReviewContext:
     pr_id: int | None = None
     iteration: int | None = None
     title: str = ""
+    copilot: Any = None  # tools.review.copilot.CopilotState (None = not evaluated, e.g. local CLI)
 
 
 @dataclass
@@ -96,6 +98,7 @@ class Decision:
     auto_approvable: bool
     human_required: bool
     reasons: list[str] = field(default_factory=list)
+    recheck: bool = False  # waiting for something external (build, Copilot review): re-check later
 
 
 @dataclass
@@ -113,6 +116,7 @@ class ReviewResult:
     stats: dict
     ai: dict
     notes: list[str] = field(default_factory=list)
+    copilot: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -123,6 +127,13 @@ class ReviewResult:
     def input_hash(self) -> str:
         """Identity of the review for idempotency (same head + policy + findings + decision => same outputs)."""
         basis = "|".join(
-            [self.head, self.policy_hash, self.decision.outcome, self.decision.status_state, ",".join(sorted(f.fingerprint for f in self.findings))]
+            [
+                self.head,
+                self.policy_hash,
+                self.decision.outcome,
+                self.decision.status_state,
+                ",".join(sorted(f.fingerprint for f in self.findings)),
+                f"copilot:{self.copilot.get('active_threads')}:{self.copilot.get('reviewed_current')}",
+            ]
         )
         return hashlib.sha256(basis.encode()).hexdigest()[:20]

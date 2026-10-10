@@ -24,7 +24,9 @@ variable "databases" {
       name = string
     }))
     resource_id = optional(string)
-    tags        = optional(map(string), {})
+    # application service that owns the database (DBM <-> APM correlation, tag policy `service`)
+    service = optional(string)
+    tags    = optional(map(string), {})
   }))
   validation {
     condition     = alltrue([for d in values(var.databases) : contains(["postgres", "mysql", "sqlserver"], d.engine)])
@@ -107,4 +109,22 @@ variable "tags" {
 variable "sqlserver_driver" {
   type    = string
   default = "ODBC Driver 18 for SQL Server"
+}
+
+variable "tag_policy" {
+  description = "Decoded tag policy (null = package default) for the DBM instance tags."
+  type        = any
+  default     = null
+}
+
+variable "identity" {
+  description = "Canonical tag values shared by the databases (team, owner, region, application, domain, tier, ...). env = datadog.env; service per database."
+  type        = map(string)
+  default     = {}
+}
+
+variable "enforce_tag_policy" {
+  description = "Fail the plan when a database lacks a required policy tag (null = policy enforce_required)."
+  type        = bool
+  default     = false
 }

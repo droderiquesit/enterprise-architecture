@@ -85,7 +85,7 @@ def test_real_registry_monitoring_change(tmp_path):
     repo = make_real_registry_repo(tmp_path)
     store = LocalStore(tmp_path / "records")
     record_successful_deployment(repo, tmp_path / "records")
-    write(repo, "observability/archetypes/web.yaml", "x: 1\n")
+    write(repo, "observability/extras/content/archetypes/web.yaml", "x: 1\n")   # monitoring content (extras)
     commit_all(repo, "archetype")
     doc = select_deploy(repo, "dev", store)
     assert doc["summary"]["plan"] == ["obs-monitoring"] and doc["artifacts_to_build"] == []

@@ -27,7 +27,8 @@ policies:                         # tools/ado/branch_policies.py (Azure Repos br
   reset_on_push: true
   creator_vote_counts: false
   work_item_linking: true
-  comment_resolution: true
+  comment_resolution: true        # Copilot and human review comments must be resolved before merge
+  copilot_review: true            # "Automatically request Copilot code review" (preview; skipped when the org lacks it)
   squash_only: true
   build_validation:               # both pipelines; expire immediately when main moves (merge-queue substitute)
     - pipeline: lab-platform

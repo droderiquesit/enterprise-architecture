@@ -1,7 +1,8 @@
 """Parallel execution of planned units (one CI leg, or everything locally) with CPU-token scheduling.
 
 Every unit takes CPU tokens from a pool of `jobs` (default: CPU count): a pytest unit runs with pytest-xdist
-`-n <tokens> --dist loadfile` and holds that many tokens; Terraform roots / modules / scripts hold one token each
+`-n <tokens> --dist loadfile` and holds that many tokens (integration / e2e suites are I/O bound: one token, one
+worker per file); Terraform roots / modules / scripts hold one token each
 (Terraform itself is mostly single-threaded per root). Units start longest-first (LPT) to shorten the makespan.
 Passes are written to the test result cache; per-file pytest durations (JUnit XML) feed the next balancing.
 """
@@ -113,7 +114,11 @@ def run_units(units: List[Unit], suites: dict, repo: Path, *, jobs: int, out_dir
         if s.needs_env and not enable_env_suites and not all(os.environ.get(k) == v for k, v in s.needs_env.items()):
             return {"unit": u.name, "suite": u.suite, "status": "skipped",
                     "reason": f"needs {' '.join(f'{k}={v}' for k, v in s.needs_env.items())}", "seconds": 0.0}
-        if s.kind == "pytest":
+        workers = None
+        if s.kind == "pytest" and s.tier in ("integration", "e2e"):
+            # I/O bound (containers, polling): one CPU token, but still one xdist worker per file
+            want, workers = 1, min(tokens.total, len(u.files or _files_of(repo, s)) or 1)
+        elif s.kind == "pytest":
             want = len(u.files or _files_of(repo, s)) or 1     # loadfile: more workers than files is idle CPU
         elif s.kind == "dotnet" or (s.kind == "component" and s.toolchain == "dotnet"):
             want = tokens.total
@@ -127,7 +132,7 @@ def run_units(units: List[Unit], suites: dict, repo: Path, *, jobs: int, out_dir
         env = dict(os.environ, **({k: v for k, v in s.needs_env.items()} if enable_env_suites else {}))
         env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
         env["CI_CPUS"] = str(got)            # tools/validate/component.py sizes xdist / dotnet parallelism by it
-        cmd = command(u, s, repo, env_name, got, junit)
+        cmd = command(u, s, repo, env_name, workers or got, junit)
         start = time.monotonic()
         try:
             with log.open("w") as fh:

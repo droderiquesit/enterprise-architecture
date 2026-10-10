@@ -10,6 +10,15 @@ module "sidecar_forward_config" {
   datadog_site = var.datadog.site
 }
 
+# Observability Pipelines mode: sidecars forward to the Worker's fluent source (no API key / shared key on the edge)
+module "sidecar_op_config" {
+  source          = "../fluent-bit"
+  role            = "sidecar"
+  datadog_site    = var.datadog.site
+  log_destination = "observability_pipelines"
+  op_endpoint     = { host = coalesce(local.op_endpoint_host, "unset"), port = local.op_endpoint_port }
+}
+
 locals {
   agg_fqdn = local.agg_enabled ? try(azapi_resource.aggregator[0].output.fqdn, null) : null
   gw_fqdn  = local.gw_enabled ? try(azapi_resource.gateway[0].output.fqdn, null) : null
@@ -17,8 +26,8 @@ locals {
   otlp_grpc_endpoint = local.gw_enabled ? "http://${local.gw_fqdn}:4317" : var.gateway.external_endpoints.grpc_endpoint
   otlp_http_endpoint = local.gw_enabled ? "https://${local.gw_fqdn}" : var.gateway.external_endpoints.http_endpoint
 
-  forward_host = local.agg_enabled ? local.agg_fqdn : var.aggregator.external_endpoint.host
-  forward_port = local.agg_enabled ? 24224 : var.aggregator.external_endpoint.port
+  forward_host = local.op_mode ? local.op_endpoint_host : (local.agg_enabled ? local.agg_fqdn : try(var.aggregator.external_endpoint.host, null))
+  forward_port = local.op_mode ? local.op_endpoint_port : (local.agg_enabled ? 24224 : try(var.aggregator.external_endpoint.port, 24224))
 
   # service-agnostic env defaults per runtime (service-specific values come from modules/instrumentation)
   runtime_env = {
@@ -44,6 +53,10 @@ locals {
     browser = {
       DD_SITE = var.datadog.site
     }
+    # Datadog tracers of managed runtimes (modules/instrumentation apm.method = agent_gateway)
+    apm_gateway = local.apm_url == null ? {} : { DD_TRACE_AGENT_URL = local.apm_url }
+    # lab-wide fleet switches read by modules/instrumentation
+    fleet = { EH_LOG_PIPELINE = local.log_pipeline }
   }
 
   contract = {
@@ -73,14 +86,14 @@ locals {
     fluentbit = {
       forward_host           = local.forward_host
       forward_port           = local.forward_port
-      forward_tls            = var.aggregator.forward_tls != null
-      forward_shared_key_ref = var.aggregator.forward_shared_key_ref
+      forward_tls            = local.op_mode ? false : var.aggregator.forward_tls != null
+      forward_shared_key_ref = local.op_mode ? null : var.aggregator.forward_shared_key_ref
       sidecar_image          = var.images.fluent_bit
       sidecar_config         = module.sidecar_config.main_config
-      sidecar_forward_config = module.sidecar_forward_config.main_config
+      sidecar_forward_config = local.op_mode ? module.sidecar_op_config.main_config : module.sidecar_forward_config.main_config
       sidecar_parsers        = local.flb_parsers
       sidecar_lua            = local.flb_lua
-      sidecar_mode           = var.sidecar_mode
+      sidecar_mode           = local.op_mode ? "forward" : var.sidecar_mode
       logs_intake_host       = local.intake_host
       metrics_port           = 2020
       aca_console_allow      = var.aca_console_allow
@@ -106,16 +119,28 @@ locals {
       functions  = local.eh_enabled ? "eventhub" : "none"
       logicapp   = local.eh_enabled ? "eventhub" : "none"
     }
+    # log aggregation tier: kind = observability_pipelines (Worker) | fluent_bit (aggregator)
     aggregator = {
-      hosting     = var.aggregator.hosting
-      resource_id = local.agg_enabled ? azapi_resource.aggregator[0].id : null
-      fqdn        = local.forward_host
+      hosting           = local.op_mode ? local.opv.hosting : var.aggregator.hosting
+      kind              = local.op_mode ? "observability_pipelines" : "fluent_bit"
+      resource_id       = local.op_mode ? (local.op_hosted ? azapi_resource.op_worker[0].id : null) : (local.agg_enabled ? azapi_resource.aggregator[0].id : null)
+      fqdn              = local.forward_host
+      pipeline_id       = local.pipeline_id
+      agent_logs_url    = local.op_mode && local.forward_host != null ? "http://${local.forward_host}:8282" : null
+      log_pipeline      = local.log_pipeline
+      eventhub_consumer = local.op_mode ? "observability-pipelines" : var.event_hub.consumer_group
     }
     gateway = {
       hosting     = var.gateway.hosting
       resource_id = local.gw_enabled ? azapi_resource.gateway[0].id : null
       fqdn        = local.gw_fqdn
       sampling    = var.gateway.sampling
+      # Datadog Agent APM gateway (Datadog tracers of managed runtimes)
+      apm = {
+        hosting     = var.apm_gateway.hosting
+        resource_id = local.apm_hosted ? azapi_resource.apm_gateway[0].id : null
+        url         = local.apm_url
+      }
     }
     collector_identity_principal_id = try(var.collector_identity.principal_id, null)
   }
@@ -137,6 +162,18 @@ output "diagnostics_authorization_rule_id" {
 
 output "aggregator_id" {
   value = local.agg_enabled ? azapi_resource.aggregator[0].id : null
+}
+
+output "op_worker_id" {
+  value = local.op_hosted ? azapi_resource.op_worker[0].id : null
+}
+
+output "op_pipeline_id" {
+  value = local.pipeline_id
+}
+
+output "apm_gateway_id" {
+  value = local.apm_hosted ? azapi_resource.apm_gateway[0].id : null
 }
 
 output "gateway_id" {

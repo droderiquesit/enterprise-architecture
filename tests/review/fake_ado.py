@@ -7,6 +7,7 @@ shapes taken from the Microsoft Learn REST reference samples. Item content is se
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 import subprocess
@@ -22,6 +23,7 @@ PROJECT_ID = "11111111-1111-1111-1111-111111111111"
 REPO_ID = "22222222-2222-2222-2222-222222222222"
 ACCOUNT_ID = "33333333-3333-3333-3333-333333333333"
 ORG, PROJECT = "example-org", "enterprise-hello"
+COPILOT_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"  # test value only: the real id is not documented
 BUILD_TYPE = "0609b952-1397-4640-95ec-e00a01b2c241"
 
 
@@ -74,10 +76,40 @@ class FakeAdo:
         if target_head:
             pr["target_head"] = git(self.repo, "rev-parse", target_head).strip()
         it_id = len(pr["iterations"]) + 1
-        pr["iterations"].append({"id": it_id, "head": head, "base": base})
+        pr["iterations"].append({"id": it_id, "head": head, "base": base, "created": self.now()})
         for r in pr["reviewers"]:
             r["vote"] = 0
         return it_id
+
+    @staticmethod
+    def now(offset_s: float = 0) -> str:
+        return (dt.datetime.now(dt.UTC) + dt.timedelta(seconds=offset_s)).isoformat().replace("+00:00", "Z")
+
+    def add_copilot_thread(self, pr_id: int, path: str, *, line: int = 1, status: str = "active", offset_s: float = 1, author: dict | None = None) -> dict:
+        """A thread as GitHub Copilot code review posts it (reviewer display name "GitHub Copilot")."""
+        self._thread_id += 1
+        who = author or {"id": COPILOT_ID, "displayName": "GitHub Copilot", "uniqueName": "GitHub Copilot"}
+        t = {
+            "id": self._thread_id,
+            "status": status,
+            "isDeleted": False,
+            "properties": {},
+            "threadContext": {"filePath": "/" + path, "rightFileStart": {"line": line, "offset": 1}, "rightFileEnd": {"line": line, "offset": 1}},
+            "comments": [
+                {
+                    "id": 1,
+                    "parentCommentId": 0,
+                    "author": who,
+                    "commentType": "text",
+                    "content": "Consider handling the error case here.",
+                    "publishedDate": self.now(offset_s),
+                }
+            ],
+        }
+        self.prs[pr_id]["threads"].append(t)
+        if not any(r["id"] == who["id"] for r in self.prs[pr_id]["reviewers"]):
+            self.prs[pr_id]["reviewers"].append({"id": who["id"], "displayName": who["displayName"], "vote": 0})
+        return t
 
     def set_vote(self, pr_id: int, reviewer_id: str, vote: int, display: str = "Human Reviewer") -> None:
         pr = self.prs[pr_id]
@@ -225,6 +257,7 @@ class FakeAdo:
                 "value": [
                     {
                         "id": it["id"],
+                        "createdDate": it["created"],
                         "sourceRefCommit": {"commitId": it["head"]},
                         "targetRefCommit": {"commitId": pr["target_head"]},
                         "commonRefCommit": {"commitId": it["base"]},
@@ -251,7 +284,7 @@ class FakeAdo:
                 "pullRequestThreadContext": body.get("pullRequestThreadContext"),
                 "isDeleted": False,
                 "properties": {},
-                "comments": [dict(c, id=i + 1, author={"id": BOT_ID}, commentType="text") for i, c in enumerate(body["comments"])],
+                "comments": [dict(c, id=i + 1, author={"id": BOT_ID}, commentType="text", publishedDate=self.now()) for i, c in enumerate(body["comments"])],
             }
             pr["threads"].append(t)
             return 200, t

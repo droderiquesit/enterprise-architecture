@@ -28,7 +28,16 @@ mock_provider "azapi" {
   }
 }
 
+mock_provider "datadog" {
+  override_during = plan
+  mock_resource "datadog_observability_pipeline" {
+    defaults = { id = "aaaaaaaa-0000-0000-0000-000000000001" }
+  }
+}
+
+# File default: the 2.x Fluent Bit path (fluent_bit_direct); the observability_pipelines runs override it.
 variables {
+  log_pipeline   = "fluent_bit_direct"
   name_prefix    = "eh-obs-dev"
   resource_group = { name = "rg-obs", id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-obs" }
   location       = "swedencentral"
@@ -310,13 +319,19 @@ run "contract_feeds_instrumentation_hook" {
   }
   variables {
     service = {
-      service = "hello-inventory-api"
-      env     = "dev"
-      version = "3.1.0"
-      team    = "inventory"
+      service     = "hello-inventory-api"
+      env         = "dev"
+      version     = "3.1.0"
+      team        = "inventory"
+      owner       = "inventory@example.com"
+      domain      = "inventory"
+      tier        = "high"
+      application = "enterprise-hello"
+      region      = "swedencentral"
     }
     runtime      = "dotnet"
     architecture = "aca"
+    apm          = { mode = "otel" }
     telemetry    = run.default_create_everything_internal.contract
   }
   assert {
@@ -356,5 +371,108 @@ run "activity_logs_share_platform_hub" {
   assert {
     condition     = length(azurerm_eventhub.hub) == 2 && output.contract.event_hub.activity_logs_hub == "platform-logs"
     error_message = "An empty activity_logs_hub shares the platform hub (no extra hub)."
+  }
+}
+
+# ------------------------------------------------------------------ package 3.0.0 default: Observability Pipelines
+run "observability_pipelines_mode" {
+  command = plan
+  variables {
+    log_pipeline = null
+    default_tags = { region = "swedencentral", managed_by = "terraform", application = "enterprise-hello" }
+    observability_pipelines = {
+      azure = { scope_tags = { "/subscriptions/00000000-0000-0000-0000-000000000000" = { env = "dev" } }, sample_categories = { AppServiceHTTPLogs = 20 } }
+    }
+  }
+  assert {
+    condition     = length(azapi_resource.aggregator) == 0 && length(azapi_resource.op_worker) == 1 && length(module.pipeline) == 1
+    error_message = "OP mode: Worker + pipeline, no Fluent Bit aggregator (no double consumption of the hubs)"
+  }
+  assert {
+    condition     = output.contract.aggregator.kind == "observability_pipelines" && output.contract.aggregator.pipeline_id == "aaaaaaaa-0000-0000-0000-000000000001" && output.contract.aggregator.agent_logs_url == "http://mock.internal.blue-sky-123.swedencentral.azurecontainerapps.io:8282"
+    error_message = "contract publishes the Worker (pipeline id, Agent logs URL)"
+  }
+  assert {
+    condition     = output.contract.fluentbit.sidecar_mode == "forward" && output.contract.fluentbit.forward_shared_key_ref == null && strcontains(output.contract.fluentbit.sidecar_forward_config, "- name: forward") && !strcontains(output.contract.fluentbit.sidecar_forward_config, "apikey")
+    error_message = "sidecars forward to the Worker without secrets"
+  }
+  assert {
+    condition     = output.contract.env.apm_gateway.DD_TRACE_AGENT_URL == "http://mock.internal.blue-sky-123.swedencentral.azurecontainerapps.io:8126" && output.contract.env.fleet.EH_LOG_PIPELINE == "observability_pipelines" && output.contract.gateway.apm.hosting == "container_app"
+    error_message = "APM gateway URL + fleet switch in the contract env"
+  }
+  assert {
+    condition     = azapi_resource.op_worker[0].body.properties.configuration.ingress.external == false && azapi_resource.apm_gateway[0].body.properties.configuration.ingress.external == false
+    error_message = "Worker and APM gateway are VNet-internal only"
+  }
+  assert {
+    condition     = anytrue([for a in azapi_resource.op_worker[0].body.properties.template.initContainers[0].args : a == "DD_OP_SOURCE_KAFKA_SASL_PASSWORD=dsv://eh/dev/eventhub-fluentbit-listen#value"]) && contains(azapi_resource.op_worker[0].body.properties.template.initContainers[0].args, "dotenv")
+    error_message = "Worker secrets from DSV via dsv-fetch dotenv (Kafka SASL password, API key)"
+  }
+  assert {
+    condition     = !anytrue([for e in azapi_resource.op_worker[0].body.properties.template.containers[0].env : e.name == "DD_API_KEY"]) && anytrue([for e in azapi_resource.op_worker[0].body.properties.template.containers[0].env : e.name == "DD_OP_PIPELINE_ID"])
+    error_message = "no secret value in the Worker env"
+  }
+  assert {
+    condition     = azapi_resource.op_worker[0].body.properties.template.scale.minReplicas == 2 && azapi_resource.op_worker[0].body.properties.template.scale.maxReplicas == 6
+    error_message = "Worker HA + scaling ceiling from the fleet policy"
+  }
+  assert {
+    condition     = strcontains(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value, "\"apm_non_local_traffic\": true") && strcontains(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value, "ENC[dsv://eh/dev/datadog-api-key#value]")
+    error_message = "APM gateway Agent: non-local APM traffic, API key resolved from DSV"
+  }
+}
+
+run "op_dedicated_profile_uses_refresher" {
+  command = plan
+  variables {
+    log_pipeline            = null
+    observability_pipelines = { workload_profile_name = "D4" }
+  }
+  assert {
+    condition     = length(azapi_resource.op_worker[0].body.properties.template.initContainers) == 0 && length(azapi_resource.op_worker[0].body.properties.template.containers) == 2
+    error_message = "Dedicated profile: dsv-fetch as refresher sidecar (init containers get no managed identity)"
+  }
+}
+
+run "op_existing_pipeline_id" {
+  command = plan
+  variables {
+    log_pipeline            = null
+    observability_pipelines = { pipeline_id = "bbbbbbbb-0000-0000-0000-000000000002" }
+  }
+  assert {
+    condition     = length(module.pipeline) == 0 && output.contract.aggregator.pipeline_id == "bbbbbbbb-0000-0000-0000-000000000002"
+    error_message = "existing pipeline: only the Worker is deployed"
+  }
+}
+
+run "op_contract_feeds_datadog_tracer" {
+  command = plan
+  module {
+    source = "../instrumentation"
+  }
+  variables {
+    service = {
+      service     = "hello-inventory-api"
+      env         = "dev"
+      version     = "3.1.0"
+      team        = "inventory"
+      owner       = "inventory@example.com"
+      domain      = "inventory"
+      tier        = "high"
+      application = "enterprise-hello"
+      region      = "swedencentral"
+    }
+    runtime      = "python"
+    architecture = "aca"
+    telemetry    = run.observability_pipelines_mode.contract
+  }
+  assert {
+    condition     = output.apm.method == "agent_gateway" && output.env["DD_TRACE_AGENT_URL"] == "http://mock.internal.blue-sky-123.swedencentral.azurecontainerapps.io:8126" && output.env["DD_PROFILING_ENABLED"] == "true"
+    error_message = "Datadog tracer + profiler of an ACA app -> APM gateway from the contract"
+  }
+  assert {
+    condition     = length(output.container_app_patch.init_containers) == 0 && one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "FLB_FORWARD_HOST"]) == "mock.internal.blue-sky-123.swedencentral.azurecontainerapps.io"
+    error_message = "Fluent Bit sidecar forwards to the Worker; no dsv-fetch needed on the edge"
   }
 }

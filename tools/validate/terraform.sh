@@ -49,6 +49,7 @@ fi
 
 if command -v tflint >/dev/null 2>&1; then
   step "tflint"
-  tflint --chdir="$dir" --no-color
+  tflint_cfg="$(cd "$(dirname "${BASH_SOURCE[0]}")/../ci" && pwd)/tflint.hcl"   # bundled terraform ruleset, recommended
+  tflint --chdir="$dir" --config="$tflint_cfg" --minimum-failure-severity=error --no-color
 fi
 step "OK"

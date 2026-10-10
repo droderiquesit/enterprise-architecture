@@ -115,6 +115,7 @@ def make_fake(tmp_path, files, build="approved"):
     repo.commit(files)
     ado = FakeAdo(repo.path).start()
     ado.add_pr(1, "main", "feature", build=build)
+    ado.add_copilot_thread(1, next(iter(files)), status="fixed")  # Copilot reviewed; comment resolved
     return ado
 
 

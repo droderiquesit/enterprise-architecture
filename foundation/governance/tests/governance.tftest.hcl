@@ -130,3 +130,11 @@ run "settings_override_budget_global" {
     error_message = "settings.budget.amount overrides the environment global."
   }
 }
+
+run "copilot_review_budget_filters_the_copilot_meter" {
+  command = plan
+  assert {
+    condition     = length(azurerm_consumption_budget_subscription.copilot_review) == 1
+    error_message = "A Copilot code review budget alert must exist by default."
+  }
+}

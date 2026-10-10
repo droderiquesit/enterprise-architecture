@@ -156,3 +156,75 @@ variable "resources" {
   })
   default = {}
 }
+
+variable "fleet_policy" {
+  description = "Decoded fleet policy (null = package default): log pipeline + node collector, APM mode / SSI library versions, profiling, Agent products and Remote Configuration."
+  type        = any
+  default     = null
+}
+
+variable "tag_policy" {
+  description = "Decoded tag policy (null = package default): cluster tags, podLabelsAsTags and the Fluent Bit label map."
+  type        = any
+  default     = null
+}
+
+variable "identity" {
+  description = "Canonical tag values of the cluster's infrastructure (team, owner, region, application, domain, tier, cost_center, ...). env comes from datadog.env, service defaults to the policy default."
+  type        = map(string)
+  default     = {}
+}
+
+variable "log_pipeline" {
+  description = "Override the fleet policy: observability_pipelines | fluent_bit_direct (null = policy)."
+  type        = string
+  default     = null
+}
+
+variable "op_logs_url" {
+  description = "Observability Pipelines Worker Datadog Agent source, e.g. http://<worker>:8282 (obs-telemetry-transport contract aggregator.agent_logs_url). Null with op_worker.enabled = false and observability_pipelines mode = plan error."
+  type        = string
+  default     = null
+}
+
+variable "apm" {
+  description = <<-EOT
+    Single Step Instrumentation (fleet policy apm.mode = datadog): namespaces whose pods get the Datadog library
+    injected by the Cluster Agent admission controller (target-based selection, Cluster Agent >= 7.64), injection
+    mode, and a securityContext for the injected init containers that satisfies the restricted Pod Security Standard.
+  EOT
+  type = object({
+    namespaces     = optional(list(string), ["hello"])
+    injection_mode = optional(string, "")
+    restricted_pss = optional(bool, true)
+  })
+  default = {}
+}
+
+variable "op_worker" {
+  description = <<-EOT
+    Optional Observability Pipelines Worker on this cluster (Helm chart observability-pipelines-worker): Datadog
+    Agents and in-cluster Fluent Bit send to it instead of the Container Apps Worker. The API key comes from an
+    existing Secret (key api-key) maintained by the Delinea dsv-k8s syncer; persistent volumes back the disk buffers.
+  EOT
+  type = object({
+    enabled             = optional(bool, false)
+    pipeline_id         = optional(string)
+    chart_version       = optional(string, "2.22.0")
+    image_tag           = optional(string, "2.22.0")
+    namespace           = optional(string, "observability-pipelines")
+    api_key_secret_name = optional(string, "datadog-api-key")
+    replicas            = optional(number, 2)
+    max_replicas        = optional(number, 6)
+    cpu_request         = optional(string, "1")
+    memory_request      = optional(string, "2Gi")
+    memory_limit        = optional(string, "4Gi")
+    persistence_size    = optional(string, "20Gi")
+    storage_class       = optional(string, "managed-csi")
+  })
+  default = {}
+  validation {
+    condition     = !var.op_worker.enabled || var.op_worker.pipeline_id != null
+    error_message = "op_worker.enabled needs op_worker.pipeline_id (modules/observability-pipeline output)."
+  }
+}

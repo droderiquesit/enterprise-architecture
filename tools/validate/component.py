@@ -64,6 +64,17 @@ def validate_artifact(repo: Path, comp) -> int:
         rc |= run(["npm", "test", "--if-present"], cwd=path)
         rc |= run(["npm", "run", "build", "--if-present"], cwd=path)
         return rc
+    py_build = repo / "applications/python/build.sh"
+    if py_build.exists() and comp.path.startswith("applications/services/") and \
+            f"{Path(comp.path).name}" in (py_build.read_text().split('SERVICES="', 1)[-1].split('"', 1)[0]).split(","):
+        # the application team's canonical test path: an isolated venv from the service's pinned requirements +
+        # pinned test deps (pytest-asyncio, ...); xdist through the build script's TEST_DEPS_EXTRA hook
+        env = dict(os.environ)
+        if CPUS > 1:
+            env.update(TEST_DEPS_EXTRA="pytest-xdist==3.8.0", PYTEST_ADDOPTS=f"-n {CPUS} --dist loadfile")
+        print(f"+ applications/python/build.sh --steps lint,test --services {Path(comp.path).name}", flush=True)
+        return subprocess.run(["bash", str(py_build), "--steps", "lint,test", "--services", Path(comp.path).name],
+                              cwd=repo, env=env).returncode
     if (path / "pyproject.toml").exists() or (path / "requirements.txt").exists():
         shared = repo / "applications/shared/python/hello_common"
         if (path / "requirements.txt").exists():

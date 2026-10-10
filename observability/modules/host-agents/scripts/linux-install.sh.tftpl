@@ -9,7 +9,8 @@
 #     non-secret DSV settings in /etc/eh-dsv/dsv.json (tenant/base URL/auth/identity client id).
 #  2. Datadog Agent ${agent_version} (pinned) via the official install script in DD_INSTALL_ONLY mode, AFTER this
 #     script wrote datadog.yaml with api_key: ENC[<dsv ref>] + secret_backend_command (the install script then
-#     keeps the file and needs no DD_API_KEY). OTLP receiver on localhost, Agent log collection OFF.
+#     keeps the file and needs no DD_API_KEY). OTLP receiver on localhost; optional APM Single Step Instrumentation;
+#     Agent log collection (-> Observability Pipelines Worker) when the fleet policy makes the Agent the collector.
 #  3. Fluent Bit ${fb_version} (pinned), config in /etc/fluent-bit-eh, unit fluent-bit-eh.service whose
 #     ExecStartPre writes /run/fluent-bit-eh/fluentbit-env.yaml (RuntimeDirectory, tmpfs, 0700 dir / 0400 file)
 #     that the config includes for ${"$"}{DD_API_KEY}.
@@ -62,12 +63,19 @@ DDYAML
     install -m 0640 "$tmp" /etc/datadog-agent/datadog.yaml; agent_cfg_changed=1
   fi
   rm -f "$tmp"
-  if ! agent_installed; then
+  # APM Single Step Instrumentation (host injection of the pinned Datadog library majors) and Fleet Automation
+  # remote upgrades are options of the same official installer (fleet policy apm.mode = datadog / agent.remote_updates)
+  ssi_missing=0
+  if [ "${apm_ssi}" = "true" ] && [ ! -d /opt/datadog-packages/datadog-apm-inject ]; then ssi_missing=1; fi
+  if ! agent_installed || [ $ssi_missing -eq 1 ]; then
     curl -fsSL --retry 5 -o /tmp/eh-dd-install.sh https://install.datadoghq.com/scripts/install_script_agent7.sh
-    DD_INSTALL_ONLY=true DD_AGENT_MAJOR_VERSION=7 DD_AGENT_MINOR_VERSION="$${AGENT_VERSION#7.}" DD_SITE="$DD_SITE_VALUE" bash /tmp/eh-dd-install.sh
+    extra=()
+    if [ "${apm_ssi}" = "true" ]; then extra+=(DD_APM_INSTRUMENTATION_ENABLED=host DD_APM_INSTRUMENTATION_LIBRARIES='${ssi_libraries}'); fi
+    if [ "${remote_updates}" = "true" ]; then extra+=(DD_REMOTE_UPDATES=true); fi
+    env DD_INSTALL_ONLY=true DD_AGENT_MAJOR_VERSION=7 DD_AGENT_MINOR_VERSION="$${AGENT_VERSION#7.}" DD_SITE="$DD_SITE_VALUE" "$${extra[@]}" bash /tmp/eh-dd-install.sh
     rm -f /tmp/eh-dd-install.sh
     agent_cfg_changed=1
-    log "datadog-agent $AGENT_VERSION installed (install-only; api_key is an ENC[] DSV reference)"
+    log "datadog-agent $AGENT_VERSION installed (install-only; api_key is an ENC[] DSV reference; SSI=${apm_ssi})"
   fi
   if getent group dd-agent >/dev/null; then chown root:dd-agent /etc/datadog-agent/datadog.yaml; fi
 fi
@@ -115,18 +123,36 @@ if [ "$CONFIGURE_AGENT" = "true" ]; then
 Environment=DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT=localhost:4317
 Environment=DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT=localhost:4318
 Environment=DD_OTLP_CONFIG_LOGS_ENABLED=false
-Environment=DD_LOGS_ENABLED=false
+Environment=DD_LOGS_ENABLED=${agent_logs}
 Environment=DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED=${process_collection}
+Environment=DD_REMOTE_CONFIGURATION_ENABLED=${remote_configuration}
+Environment=DD_APM_ENABLED=true
 Environment="DD_TAGS=${agent_tags}"
+%{ if op_logs_url != "" ~}
+Environment=DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED=true
+Environment=DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL=${op_logs_url}
+%{ endif ~}
 UNIT
     if ! cmp -s "$tmp" "$d/eh-observability.conf"; then mv "$tmp" "$d/eh-observability.conf"; chmod 0644 "$d/eh-observability.conf"; changed=1; else rm -f "$tmp"; fi
   done
+  # Agent log collection (fleet policy logs.node_collector = agent): tail the application log files
+  logs_conf=/etc/datadog-agent/conf.d/eh-applogs.d/conf.yaml
+  if [ "${agent_logs}" = "true" ]; then
+    install -d -m 0755 /etc/datadog-agent/conf.d/eh-applogs.d
+    tmp=$(mktemp)
+    echo '${agent_logs_conf}' | base64 -d > "$tmp"
+    if ! cmp -s "$tmp" "$logs_conf"; then install -m 0644 "$tmp" "$logs_conf"; changed=1; fi
+    rm -f "$tmp"
+    if getent group dd-agent >/dev/null; then chown root:dd-agent "$logs_conf"; fi
+  elif [ -f "$logs_conf" ]; then
+    rm -f "$logs_conf"; changed=1
+  fi
   if systemctl list-unit-files datadog-agent.service >/dev/null 2>&1; then
     systemctl daemon-reload
     systemctl enable datadog-agent >/dev/null 2>&1 || true
     if [ $changed -eq 1 ] || ! systemctl is-active --quiet datadog-agent; then
       systemctl restart datadog-agent || log "datadog-agent restart failed (check: datadog-agent secret)"
-      log "datadog-agent (re)configured (secret backend dsv-fetch, OTLP localhost:4317/4318, logs disabled)"
+      log "datadog-agent (re)configured (secret backend dsv-fetch, OTLP localhost:4317/4318, logs=${agent_logs})"
     fi
   fi
 fi
@@ -210,7 +236,9 @@ WorkingDirectory=/etc/fluent-bit-eh
 # tmpfs /run/fluent-bit-eh (0700, removed on stop); dsv-fetch writes the Fluent Bit env-yaml (0400) from DSV
 RuntimeDirectory=fluent-bit-eh
 RuntimeDirectoryMode=0700
+%{ if fb_needs_key ~}
 ExecStartPre=$DSV_DIR/dsv-fetch init --config $DSV_CONF --out /run/fluent-bit-eh --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=$API_KEY_REF
+%{ endif ~}
 ExecStart=/opt/fluent-bit/bin/fluent-bit -c /etc/fluent-bit-eh/fluent-bit.yaml
 Restart=always
 RestartSec=10

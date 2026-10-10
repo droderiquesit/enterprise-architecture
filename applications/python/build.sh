@@ -31,6 +31,10 @@ IMAGE_PREFIX=${IMAGE_PREFIX:-}
 STEPS="lint,test,package,image"
 SERVICES="hello-common,catalog-api,dbadapter,worker,partner-sim,jobs,traffic,functions,logicapps,frontend"
 TEST_DEPS=(pytest==9.1.1 pytest-asyncio==1.4.0 jsonschema==4.26.0)
+# CI parallelism hook (tools/validate/component.py): extra pinned test deps, e.g. TEST_DEPS_EXTRA="pytest-xdist==3.8.0"
+# together with PYTEST_ADDOPTS="-n 4 --dist loadfile"; part of the venv stamp, so the venv is rebuilt when it changes.
+read -r -a _extra <<<"${TEST_DEPS_EXTRA:-}"
+TEST_DEPS+=("${_extra[@]}")
 RUFF_VERSION=0.16.10
 
 while [[ $# -gt 0 ]]; do

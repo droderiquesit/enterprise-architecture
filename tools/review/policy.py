@@ -35,7 +35,9 @@ DEFAULTS: dict[str, Any] = {
     "terraform": {"sensitive_resource_types": ["azurerm_role_assignment"], "security_attributes": []},
     "observability": {"manifest_schema": "", "prod_envs": ["prod"], "threshold_paths": []},
     "dependencies": {"allow_new_packages": False},
+    "copilot": {"enabled": True, "reviewer_names": ["GitHub Copilot"], "reviewer_ids": [], "required_before_auto_approve": True},
     "ai": {
+        "provider": "copilot",
         "enabled": False,
         "model": "claude-opus-5-5",
         "api_key_env": "ANTHROPIC_API_KEY",

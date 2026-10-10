@@ -63,7 +63,12 @@ def test_component_and_consumers_and_covering_suites(real):
                                   validate=["svc-catalog-api", "svc-worker"]), tree, reg)
     assert {"component:svc-catalog-api", "component:svc-worker", "py-hello-common", "e2e"} <= _ids(sel)
     assert "component:svc-bff" not in sel and "dotnet-hello-common" not in sel
-    assert any("covers selected" in r or "input changed" in r for r in sel["py-hello-common"]["reasons"])
+    assert sel["py-hello-common"]["reasons"][0].startswith("input changed")
+    # a service-only change does not run the shared library's suite; a suite that `covers` it does run
+    svc = impact.select(cat, _sel(["applications/services/catalog-api/src/x.py"], validate=["svc-catalog-api"]), tree, reg)
+    assert "component:svc-catalog-api" in svc and "py-hello-common" not in svc
+    transport = impact.select(cat, _sel(["observability/lab/hosts/main.tf"], validate=["obs-hosts"]), tree, reg)
+    assert "covers selected component(s): obs-hosts" in transport["obs-transport"]["reasons"]
 
 
 def test_shared_module_change_selects_module_suite(real):
@@ -148,7 +153,7 @@ def test_sharding_and_packing_are_balanced_and_deterministic():
     s = catalog.Suite(id="py-big", paths=["t"], toolchain="python")
     files = sorted(timings["files"])
     units = balance.units_for(s, timings, target=60, files=files)
-    assert len(units) == 6 and sorted(f for u in units for f in u.files) == files       # 390 s / 60 s
+    assert len(units) == 7 and sorted(f for u in units for f in u.files) == files       # ceil(390 s / 60 s)
     loads = [u.seconds for u in units]
     assert max(loads) - min(loads) <= 29                                                 # LPT: within one item
     assert units == balance.units_for(s, timings, target=60, files=list(reversed(files)))
@@ -166,7 +171,17 @@ def test_timings_merge_is_ewma_and_sorted():
 
 
 # ----------------------------------------------------------------------------------------- runner + report
-def test_local_run_executes_selected_units_in_parallel_and_records(tmp_path):
+def test_local_run_executes_selected_units_in_parallel_and_records(tmp_path, monkeypatch):
+    from tools.ci import cli
+
+    real_suites = cli._suites_for
+
+    def hermetic(repo, plan):     # same plan/fingerprints; the link check itself replaced by a deterministic script
+        out = real_suites(repo, plan)
+        out["docs-links"] = catalog.Suite(id="docs-links", kind="script", argv=["python3", "-c", "print('links ok')"],
+                                          inputs=["**/*.md"], tier="gate")
+        return out
+    monkeypatch.setattr(cli, "_suites_for", hermetic)
     cache = ResultCache.open(str(tmp_path / "tc"))
     sel = _sel(["docs/guides/quick-start.md"])
     plan = build_plan(ROOT, sel, cache=cache)

@@ -9,7 +9,8 @@
 
 What it manages
   1. service hook subscriptions (Web Hooks consumer `webHooks`/`httpRequest`, publisher `tfs`) for
-     git.pullrequest.created, git.pullrequest.updated and (optional --comments) ms.vss-code.git-pullrequest-comment-event,
+     git.pullrequest.created, git.pullrequest.updated and ms.vss-code.git-pullrequest-comment-event (Copilot comments /
+     thread resolution re-evaluate the PR; --no-comments to skip),
      filtered to the repository, HTTPS URL, HTTP Basic auth (password = webhook secret), resourceDetailsToSend=minimal,
      no messages. Matched by (eventType, url); existing ones are left alone unless --rotate (PUT with the new secret).
   2. the reviewer's managed identity as an organization user with Basic access (Service Principal Entitlements API),
@@ -48,7 +49,7 @@ FRAGMENT = REPO_ROOT / "tools/review/branch-policy-fragment.json"
 
 
 def subscriptions(a, secret_placeholder: str = "<WEBHOOK_SECRET>") -> list[dict]:  # noqa: S107 - placeholder text, not a secret
-    events = list(EVENTS) + ([COMMENT_EVENT] if a.comments else [])
+    events = list(EVENTS) + ([] if a.no_comments else [COMMENT_EVENT])
     out = []
     for ev in events:
         out.append(
@@ -139,6 +140,18 @@ def fragment(a, policy) -> dict:
         "vote does not count) lets the bot alone approve allowlisted changes; every other change keeps the "
         "status pending until a human approves. Keeping minimum = 2 means a human always approves (the "
         "bot's vote is then one of the two).",
+        "copilot_code_review": {
+            "manual": True,
+            "note": "GitHub Copilot code review for Azure Repos (preview) has no documented REST API: enable it in the UI "
+            "(organization, project and repository toggles) and add the branch policy 'Automatically request Copilot code "
+            "review' on refs/heads/main and refs/heads/release/*. Copilot only comments (never approves or blocks).",
+            "branches": ["refs/heads/main", "refs/heads/release/*"],
+        },
+        "comment_resolution": {
+            "policy": "Comment requirements (Check for comment resolution)",
+            "isBlocking": True,
+            "note": "Required so Copilot (and human) comment threads must be resolved before completion.",
+        },
         "bot_identity_note": "Do NOT add the reviewer identity to any required-reviewer group; give it no 'Bypass policies' permission.",
     }
 
@@ -198,7 +211,11 @@ def main(argv=None) -> int:
     ap.add_argument("--webhook-username", default="eh-review")
     ap.add_argument("--reviewer-object-id", default="<pr-reviewer managed identity principal (object) id>")
     ap.add_argument("--reviewer-id", default=None, help="Azure DevOps identity id of the reviewer (status policy authorId)")
-    ap.add_argument("--comments", action="store_true", help="also subscribe to PR comment events")
+    ap.add_argument(
+        "--no-comments",
+        action="store_true",
+        help="do not subscribe to PR comment events (they re-evaluate the PR when Copilot comments or threads are resolved)",
+    )
     ap.add_argument("--rotate", action="store_true")
     ap.add_argument("--policy", default=str(REPO_ROOT / ".review/policy.yaml"))
     ap.add_argument("--fragment", default=str(FRAGMENT))

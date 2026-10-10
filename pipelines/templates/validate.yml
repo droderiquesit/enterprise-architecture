@@ -68,7 +68,6 @@ jobs:
       PIP_CACHE_DIR: $(Pipeline.Workspace)/.cache/pip
       HELM_CACHE_HOME: $(Pipeline.Workspace)/.cache/helm
       KUBECONFORM_CACHE: $(Pipeline.Workspace)/.cache/kubeconform
-      TFLINT_PLUGIN_DIR: $(Pipeline.Workspace)/.cache/tflint
     steps:
       - checkout: self
         fetchDepth: 1
@@ -88,7 +87,7 @@ jobs:
           path: $(UV_CACHE_DIR)
       - template: steps-setup.yml
         parameters:
-          tools: terraform
+          tools: terraform tflint
       - task: Cache@2
         displayName: Terraform provider mirror (all .terraform.lock.hcl)
         condition: and(succeeded(), in(variables['CI_TOOLCHAIN'], 'terraform', 'helm'))

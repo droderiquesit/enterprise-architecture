@@ -37,6 +37,17 @@ variable "settings" {
 
     action_group_short_name = optional(string, "ehlabbudget")
 
+    # GitHub Copilot code review for Azure Repos is billed (GitHub AI credits) to the Azure subscription LINKED TO THE
+    # AZURE DEVOPS ORGANIZATION, meter category "GitHub", subcategory "GitHub Copilot for AzDO". Alert-only budget;
+    # set subscription_id when the ADO-linked subscription differs from the lab subscription.
+    copilot_review_budget = optional(object({
+      enabled             = optional(bool, true)
+      amount              = optional(number, 100)
+      subscription_id     = optional(string)
+      actual_thresholds   = optional(list(number), [50, 80, 100])
+      forecast_thresholds = optional(list(number), [100])
+    }), {})
+
     policy = optional(object({
       # Assignments are at subscription scope. enforce=false => enforcementMode DoNotEnforce ("audit mode":
       # compliance is evaluated and reported, nothing is denied).

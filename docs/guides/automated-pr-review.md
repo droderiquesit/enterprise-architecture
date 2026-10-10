@@ -4,9 +4,16 @@ Status: **implemented**, **locally-verified** against a fake Azure DevOps server
 ([evidence](../evidence/local/pr-review/e2e-evidence.json)). Not deployed: no Azure DevOps organization or Azure
 subscription is connected to this lab sandbox.
 
-The lab reviews every pull request automatically. A trusted reviewer (**eh-pr-reviewer**) posts a summary, inline
-findings with suggested fixes, a required PR status `eh-review/policy`, and a vote. It **auto-approves only** a small,
-deterministic allowlist of low-risk changes; everything else gets a review and needs a human.
+The lab reviews every pull request automatically with three cooperating parts:
+
+| Part | What it does | Can approve? |
+|---|---|---|
+| **GitHub Copilot code review for Azure Repos** (Azure DevOps-native, public preview) | AI review: inline comments + suggestions, guided by `.azuredevops/copilot-instructions.md` and path-scoped `.azuredevops/instructions/*.instructions.md` (read from the target branch) | **No** - always a *Comment* review; never approves, requests changes, satisfies required reviewers or blocks merge |
+| **eh-review policy bot** (`eh-pr-reviewer`, this guide) | deterministic rules, change classes, build/Copilot gating; summary thread, inline findings, required status `eh-review/policy`, vote | only a small deterministic allowlist |
+| **Humans** | required reviewers on protected paths; resolve Copilot comments | yes |
+
+The bot **auto-approves only** low-risk allowlisted changes after Copilot reviewed the current iteration and every
+Copilot thread is resolved; everything else gets a review and needs a human.
 
 | Piece | Path |
 |---|---|
@@ -15,6 +22,8 @@ deterministic allowlist of low-risk changes; everything else gets a review and n
 | Trusted Azure Function (Python 3.13, v2 model) | `applications/services/pr-reviewer/` |
 | Infrastructure (Flex Consumption, identity, storage) | `foundation/pr-reviewer/` (component `foundation-pr-reviewer`, contract v1) |
 | Azure DevOps wiring + branch-policy fragment | `tools/review/ado_setup.py`, `tools/review/branch-policy-fragment.json` |
+| Copilot review instructions | `.azuredevops/copilot-instructions.md`, `.azuredevops/instructions/*.instructions.md` (`applyTo` globs) |
+| Copilot gating (reads Copilot threads) | `tools/review/copilot.py`, policy section `copilot` |
 | Tests, fake Azure DevOps, local e2e | `tests/review/`, `applications/services/pr-reviewer/tests/` |
 
 ## 1. Security design
@@ -89,7 +98,7 @@ inbound connections from Azure DevOps, including service hooks), with an opt-out
 | PR modifies pipeline YAML to steal reviewer credentials | reviewer is not a pipeline job; PR builds hold no credentials |
 | PR edits `.review/policy.yaml` / the reviewer to approve itself | policy read from target branch; governance classes never approved; non-owner policy edit ⇒ reject |
 | Forged webhook / replay | constant-time Basic auth, allowlist, createdDate window, event-id cache; worker re-reads everything from ADO |
-| Prompt injection in the diff | AI output is untrusted data, schema-validated, can only add findings; approval is computed by `decide.py` only |
+| Prompt injection in the diff | Copilot comments are only counted as open/resolved threads (text never interpreted) and can only withhold approval; optional Claude output is schema-validated and can only add findings; approval is computed by `decide.py` only |
 | Human comment imitating a bot marker | only threads whose first comment's author is the bot are managed |
 | Fake "succeeded" status by someone else | status policy restricted to the bot identity (`authorId`) |
 | Stale approval after a new push | branch policy resets votes on push; status is per iteration and resets on source update |
@@ -117,15 +126,28 @@ runs exactly the same engine on a local checkout (policy/registry from `--base`)
      credential-looking assignments (high); high-entropy tokens (medium). `dsv://`, `${…}`, `[[…]]`, placeholders are fine.
    - Size (files/changed lines), binary/oversized files, missing tests per component, dependency major/downgrade notes,
      owner-protected policy paths.
-3. **Optional AI review** (`ai.enabled` in the policy **and** an API key) — official `anthropic` SDK (1.13.0):
-   `client.beta.messages.create(model="claude-opus-5-5", max_tokens=<cap>, output_config={"effort": "medium",
-   "format": {"type": "json_schema", ...}}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")`
-   (adaptive thinking is the model default; disabling it is a 400 on Opus 5.5). Input: unified diffs only, lockfiles /
-   generated / binary / large files excluded, every secret-looking token replaced by `<redacted>`, per-file and total
-   character caps, wrapped in `<untrusted_diff>` with a system prompt that forbids following embedded instructions.
-   Output: validated against the JSON schema locally, ≤ `max_findings`, length-capped, file must be in the change, line
-   must exist; refusals / garbage / API errors simply mean "no AI findings". Cached by (head commit, policy hash,
-   model, excerpt hash). `model: claude-sonnet-5-5` halves the cost.
+3. **AI review = GitHub Copilot** (`ai.provider: copilot`, default). The bot does not call any model; it reads
+   Copilot's PR threads (first comment authored by an identity matching `copilot.reviewer_names` /
+   `copilot.reviewer_ids`; default display name `GitHub Copilot`, no id hard-coded because none is documented):
+   - active/pending Copilot threads ⇒ auto-approval withheld, vote none, status pending
+     **"resolve Copilot comments"** (also holds the status after a human approval). They never cause
+     wait-for-author or reject;
+   - `copilot.required_before_auto_approve: true` (default) ⇒ no auto-approval until Copilot reviewed the current
+     iteration; the job re-checks while waiting;
+   - commits pushed after Copilot's newest comment ⇒ the summary says **"request a fresh Copilot review"**
+     (Copilot does not re-review new commits automatically).
+   Detection is a heuristic: there is no documented Copilot review-status API, so "reviewed the current iteration" =
+   Copilot's newest comment is not older than the latest iteration's `createdDate` (Copilot appears as a reviewer with
+   vote 0). A Copilot review that leaves no comment on a new iteration looks like "not reviewed yet": request a review
+   or have a human approve. A user whose display name equals the matcher could fake a Copilot thread; it can only
+   withhold or (for allowlisted classes) satisfy the Copilot gate, never approve - set `copilot.reviewer_ids` once the
+   real id is observed. Copilot comment text is never interpreted (prompt injection in it changes nothing).
+
+   **Alternative provider `claude`** (`ai.provider: claude`, `ai.enabled: true`, `ANTHROPIC_API_KEY` from DSV): the
+   bot's own Claude review (`tools/review/ai.py`, official `anthropic` SDK 1.13.0,
+   `client.beta.messages.create(model="claude-opus-5-5", output_config={"effort": "medium", "format": json_schema},
+   betas=["server-side-fallback-2026-07-01"], fallbacks="default")`), bounded + redacted diff, schema-validated output,
+   capped findings, cached per (head commit, policy hash); output can only add findings. Disabled by default.
 4. **Decision** (`tools/review/decide.py`, strictest first):
 
 | Outcome | Vote | Status | When |
@@ -133,6 +155,7 @@ runs exactly the same engine on a local checkout (policy/registry from `--base`)
 | `reject` | -10 | failed | definite violation: committed secret, owner-protected policy changed by a non-owner |
 | `wait-for-author` | -5 | failed | PR build validation failed; violation/AI finding at `wait_for_author_severities` |
 | `no-vote` (pending build) | 0 | pending | build not green yet (re-checked every 2 min, bounded) |
+| `no-vote` (Copilot gate) | 0 | pending | otherwise auto-approvable, but Copilot threads unresolved or no Copilot review of the current iteration |
 | `approve` / `approve-with-suggestions` | 10 / 5 | succeeded | **all** files in `auto_approve_classes`, no finding at `blocking_severities`, build green, author ≠ bot, target not `release/*`, ≤ 40 files (5 when only low findings) |
 | human required | `human_required_vote` (0, or 5) | pending → succeeded when a non-author human approved | everything else |
 
@@ -160,7 +183,37 @@ Auto-approvable classes: `docs`, `tests`, `generated` (the PR build's `--check` 
 The bot vote is one reviewer; it can never satisfy a required-reviewer group (it is not a member) and the status stays
 `pending` until a human approves anything outside the allowlist.
 
-## 4. Setup (operator, once per organization)
+## 4. GitHub Copilot code review: setup, cost, limits
+
+Checklist (Azure DevOps UI - no documented REST API for these toggles, none is scripted here):
+
+1. **Enable** Copilot code review: organization (Project Collection Administrator) → project → repository toggles.
+2. **Billing**: per token through the Azure subscription linked to the Azure DevOps organization (GitHub AI credits,
+   meter **"GitHub Copilot for AzDO"**, tags `_organizationname_` / `_projectname_`). Create a **budget alert** in Cost
+   Management filtered on that meter (and the tags) for the lab subscription.
+3. **Branch policy** "Automatically request Copilot code review" on `main` and `release/*`.
+4. **Branch policy "Check for comment resolution"** (Comment requirements) **required**, so Copilot and human threads
+   must be resolved before completion (`tools/review/branch-policy-fragment.json` → `comment_resolution`).
+5. **Compute**: Copilot runs on the organization's default Azure Pipelines (Microsoft-hosted) pool or a **Managed DevOps
+   Pool with the latest Ubuntu image**; self-hosted pools and Windows images are not supported - keep the
+   `foundation-deploy-agents` MDP option with an Ubuntu image (the VMSS self-hosted agents cannot run it).
+6. Keep the service hook for `ms.vss-code.git-pullrequest-comment-event` (created by `ado_setup.py` by default) so the bot
+   re-evaluates when Copilot comments or threads are resolved.
+7. After the first Copilot review, copy the reviewer's Azure DevOps identity id into `copilot.reviewer_ids`.
+
+Limits (Microsoft Learn): PR must be Active with no merge conflicts; ≤ 100 changed files/changes; repository ≤ 10 GB;
+one review per merge commit; 5 concurrent reviews per organization. Larger PRs never get a Copilot review, so with
+`required_before_auto_approve` they are never bot-approved (they exceed `max_files_for_auto_approve` anyway).
+
+What Copilot cannot do: approve, request changes, satisfy required reviewers or block merge (only the required
+comment-resolution policy makes its comments binding); re-review new commits automatically; run on self-hosted or
+Windows pools; read instructions from the PR source branch (instructions come from the target branch - a PR cannot
+weaken them for its own review; `.azuredevops/**` is a never-auto-approved `review-governance` path).
+
+Cost: no fixed fee; token-based per review. Budget the meter rather than estimate per PR (token use depends on diff
+size and instructions). The bot itself adds ≈ $0-2/month (Flex Consumption) - see `foundation/pr-reviewer/README.md`.
+
+## 5. Setup (operator, once per organization)
 
 1. Apply `foundation-pr-reviewer` (pipeline). Note `contract.identity_principal_id` and `contract.webhook_url`.
 2. Create the secrets in DSV: `dsv secret create --path eh/<env>/pr-reviewer-webhook-secret --data '{"value":"<random 48 bytes>"}'`
@@ -171,11 +224,12 @@ The bot vote is one reviewer; it can never satisfy a required-reviewer group (it
 4. Set `components.foundation-pr-reviewer.settings.ado.reviewer_id` to the identity's Azure DevOps id; re-apply.
 5. Hand the branch-policy fragment to `tools/ado/branch_policies.py`.
 
-## 5. Not verified (needs a real organization)
+## 6. Not verified (needs a real organization)
 
 Real service hook delivery and Basic-auth input names (`basicAuthUsername`/`basicAuthPassword` — the Learn consumer
 table lists the setting as *Basic authentication credentials*), a managed identity added as an Azure DevOps user and
 its vote/status permissions, the Git security bit values (Read = 2, PullRequestContribute = 16384), the status-policy
 setting names (`statusGenre`, `statusName`, `authorId`, `invalidateOnSourceUpdate`, `policyApplicability`), inline
-thread anchoring in the web UI, `AzureDevOps` service tag coverage of service-hook senders, and a live Claude API call
-(tests use a fake client).
+thread anchoring in the web UI, `AzureDevOps` service tag coverage of service-hook senders, a live Claude API call
+(tests use a fake client), and the real shape of Copilot's threads (author display/unique name and id, whether it
+posts a summary thread, comment timestamps): tests use simulated Copilot threads in the fake server.

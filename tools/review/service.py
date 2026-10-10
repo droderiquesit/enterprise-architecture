@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from tools.changeset.registry import REGISTRY_PATH, REGISTRY_SCHEMA
 
+from . import copilot as copilot_mod
 from . import render
 from .ado import AdoClient, AdoError, AdoPr, PrRef
 from .analysis import MappingTree, TrustedBase
@@ -99,6 +100,7 @@ def process(  # noqa: PLR0917
         pr_id=pull_request_id,
         iteration=iteration,
         title=info.get("title", ""),
+        copilot=copilot_mod.assess(threads, reviewers, it, policy["copilot"]) if policy["copilot"]["enabled"] else None,
     )
     changes = pr.file_changes(it)
     result = review(changes, policy, base, ctx, ai_reviewer=ai_from_policy(policy, env, ai_client), human_approved=approved)
@@ -113,12 +115,12 @@ def process(  # noqa: PLR0917
         d.outcome,
         d.vote,
         d.status_state,
-        requeue=(build.state in ("pending", "unknown") and policy["decision"]["require_build_green"] and d.outcome not in ("reject", "wait-for-author")),
+        requeue=d.recheck,
         result=result.to_dict() if keep_result else None,
     )
     if prev.get("inputs") == result.input_hash and prev.get("iteration") == str(iteration):
-        log.info("review unchanged", extra={"pr": pull_request_id, "iteration": iteration, "outcome": d.outcome})
-        # the vote/status may still need to follow (e.g. a human approval flips status) - publish is diff-based
+        # inputs unchanged; publish still runs because it is diff-based (writes nothing when nothing differs)
+        log.info("review inputs unchanged", extra={"pr": pull_request_id, "iteration": iteration, "outcome": d.outcome})
     try:
         actions = publish(client, ref, result, iteration, bot_id, policy, changes, threads=threads)
     except AdoError as exc:

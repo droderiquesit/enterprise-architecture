@@ -6,6 +6,8 @@ CLI (`python3 -m tools.review`, local git) and by the Azure Function (Azure DevO
 
 from __future__ import annotations
 
+import dataclasses
+
 from tools.changeset import globs
 
 from . import secrets_scan, terraform_rules
@@ -155,15 +157,17 @@ def review(changes: list[FileChange], policy: Policy, base: TrustedBase, ctx: Re
         stats=stats,
         ai=ai_meta,
         notes=notes,
+        copilot=dataclasses.asdict(ctx.copilot) if dataclasses.is_dataclass(ctx.copilot) else {},
     )
 
 
 def ai_from_policy(policy: Policy, env: dict | None = None, client=None):
-    """AiReviewer when the policy enables it AND a key is configured (env var named by ai.api_key_env)."""
+    """Claude AiReviewer when ai.provider == claude, ai.enabled AND a key is configured (env var ai.api_key_env).
+    With the default provider `copilot` the AI review is GitHub Copilot in Azure DevOps (gated in decide.py)."""
     import os
 
     cfg = policy["ai"]
-    if not cfg.get("enabled"):
+    if cfg.get("provider") != "claude" or not cfg.get("enabled"):
         return None
     key = (env or os.environ).get(cfg["api_key_env"])
     if key and key.startswith("dsv://"):

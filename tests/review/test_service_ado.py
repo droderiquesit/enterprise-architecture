@@ -38,6 +38,7 @@ def test_docs_pr_approved_and_idempotent(repo, ado):
     repo.branch("docs")
     repo.commit({"docs/guide.md": "# Guide\n\nBetter.\n"})
     ado.add_pr(1, "main", "docs")
+    ado.add_copilot_thread(1, "docs/guide.md", status="fixed")  # Copilot reviewed this iteration; its comment is resolved
     out = review_pr(ado)
     assert (out.decision, out.vote, out.status) == ("approve", 10, "succeeded")
     assert ado.bot_vote(1) == 10 and ado.latest_status(1)["state"] == "succeeded"

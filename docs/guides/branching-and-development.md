@@ -50,6 +50,9 @@ Branch policies on `main` (and `release/*`) are applied idempotently by `tools/a
   owner group (`protected_owners`). The bot is never a member of these groups and has no "Bypass policies" permission.
 * **Path-based owners** from the registry `owners` field (default by layer): the same map generates
   `.github/CODEOWNERS` (CI fails when it is stale).
+* **GitHub Copilot code review** is requested automatically on every PR (Azure Repos preview, advisory, policy
+  type discovered by name; skipped until the organization enables it) and, like every human comment, its comments
+  must be resolved before completion.
 * Linked work item, all comments resolved, **squash merge only**, no direct pushes (any required policy blocks them).
 * **Build validation of both pipelines with `validDuration: 0`**: a PR's validation expires as soon as `main` moves,
   so every PR is validated against the newest `main` before it completes (Azure Repos' substitute for a merge queue;

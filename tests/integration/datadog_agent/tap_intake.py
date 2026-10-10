@@ -114,15 +114,78 @@ def decode_span(buf: bytes) -> dict:
     return span
 
 
+def _decode_idx_tracer_payload(buf: bytes) -> dict:
+    """Agent >= 7.7x "idx" TracerPayload (AgentPayload field 11): a string table + spans referencing it.
+
+    Field numbers observed from datadog/agent:7.84.2 output (reverse-engineered, local evidence only):
+    TracerPayload: strings=1 (repeated, [0]="") containerID=2 languageName=3 languageVersion=4 tracerVersion=5 env=7
+    appVersion=9 chunks=11 ; TraceChunk: priority=1 spans=4 traceID=6 (16 bytes) ; Span: service=1 name=2 resource=3
+    spanID=4 parentID=5 start=6 duration=7 attributes=9 {key=1, value=2 {string=1 | double=3}} type=10
+    """
+    fs = fields(buf)
+    table = [_s(v) for n, wt, v in fs if n == 1 and wt == 2]
+
+    def st(i: object) -> str:
+        return table[i] if isinstance(i, int) and 0 <= i < len(table) else ""
+
+    tp: dict = {"spans": []}
+    for n, wt, v in fs:
+        if n == 3:
+            tp["language"] = st(v)
+        elif n == 5:
+            tp["tracer_version"] = st(v)
+        elif n == 7:
+            tp["env"] = st(v)
+        elif n == 9:
+            tp["app_version"] = st(v)
+        elif n == 11 and wt == 2:
+            chunk = fields(v)
+            trace_hex = next((cv.hex() for cn, cwt, cv in chunk if cn == 6 and cwt == 2), None)
+            for cn, cwt, cv in chunk:
+                if cn != 4 or cwt != 2:
+                    continue
+                span: dict = {"meta": {}, "metrics": {}, "links": [], "trace_id_128": trace_hex}
+                if trace_hex:
+                    span["trace_id"] = int(trace_hex[16:], 16)
+                for sn, swt, sv in fields(cv):
+                    if sn == 1:
+                        span["service"] = st(sv)
+                    elif sn == 2:
+                        span["name"] = st(sv)
+                    elif sn == 3:
+                        span["resource"] = st(sv)
+                    elif sn == 4:
+                        span["span_id"] = sv
+                    elif sn == 5:
+                        span["parent_id"] = sv
+                    elif sn == 10:
+                        span["type"] = st(sv)
+                    elif sn == 9 and swt == 2:
+                        kv = {k: val for k, _, val in fields(sv)}
+                        key = st(kv.get(1))
+                        inner = {k: val for k, _, val in fields(kv.get(2, b""))}
+                        if 1 in inner:
+                            span["meta"][key] = st(inner[1])
+                        elif 3 in inner:
+                            import struct
+
+                            span["metrics"][key] = struct.unpack("<d", inner[3].to_bytes(8, "little"))[0]
+                tp["spans"].append(span)
+    return tp
+
+
 def decode_agent_payload(buf: bytes) -> dict:
-    # AgentPayload: hostName=1 env=2 tracerPayloads=5 ; TracerPayload: containerID=1 languageName=2 languageVersion=3
-    # tracerVersion=4 runtimeID=5 chunks=6 tags=7 env=8 hostname=9 appVersion=10 ; TraceChunk: priority=1 origin=2 spans=3
+    # AgentPayload: hostName=1 env=2 tracerPayloads=5 (legacy pb.Span) | idxTracerPayloads=11 (string-table format)
+    # legacy TracerPayload: containerID=1 languageName=2 languageVersion=3 tracerVersion=4 runtimeID=5 chunks=6 tags=7
+    # env=8 hostname=9 appVersion=10 ; TraceChunk: priority=1 origin=2 spans=3
     doc: dict = {"tracer_payloads": []}
     for num, wt, val in fields(buf):
         if num == 1:
             doc["hostname"] = _s(val)
         elif num == 2:
             doc["env"] = _s(val)
+        elif num == 11 and wt == 2:
+            doc["tracer_payloads"].append(_decode_idx_tracer_payload(val))
         elif num == 5 and wt == 2:
             tp: dict = {"spans": []}
             for tn, twt, tv in fields(val):
@@ -204,7 +267,10 @@ def summarize(path: str, headers: dict, body: bytes) -> dict:
         raw = decompress(body, headers.get("content-encoding") or "")
         if path == "/api/v0.2/traces":
             doc["traces"] = decode_agent_payload(raw)
-            doc["top_fields"] = sorted({n for n, _, _ in fields(raw)})
+            if os.environ.get("TAP_KEEP_RAW"):
+                import base64
+
+                doc["raw_b64"] = base64.b64encode(raw).decode()
         elif path in ("/api/v2/series", "/api/beta/sketches", "/api/v1/series"):
             doc["strings"] = sorted(set(s for s in strings(raw) if s.startswith(("hello.", "env:", "service:", "version:", "outcome", "cache.result", "order.status", "status:"))))
             if path == "/api/v1/series":

@@ -64,6 +64,23 @@ def decide(policy: Policy, classes: dict[str, list[str]], findings: list[Finding
             reasons=reasons,
         )
 
+    # ---- Copilot (AI comments, read-only): can withhold approval / keep the status pending, never approve or reject
+    ccfg = policy["copilot"]
+    cp = ctx.copilot
+    copilot_active = copilot_wait = None
+    if ccfg["enabled"] and cp is not None and getattr(cp, "evaluated", False):
+        if cp.active_threads:
+            copilot_active = f"resolve Copilot comments ({cp.active_threads} active thread(s))"
+            reasons.append(copilot_active)
+        if cp.stale:
+            reasons.append("commits were pushed after Copilot's last review: request a fresh Copilot review")
+        if ccfg["required_before_auto_approve"] and not cp.reviewed_current:
+            copilot_wait = "request a fresh Copilot review" if cp.stale else "waiting for a Copilot review of the current iteration"
+            if not cp.stale:
+                reasons.append(copilot_wait)
+    elif ccfg["enabled"] and cp is not None:
+        reasons.append("Copilot review state not evaluated (local run)")
+
     # ---- outcome (strictest first)
     if definite:
         reasons.insert(0, f"definite violation: {', '.join(sorted({f.rule for f in definite}))}")
@@ -74,12 +91,20 @@ def decide(policy: Policy, classes: dict[str, list[str]], findings: list[Finding
         n = len(violations) + len(ai_blockers)
         return make("wait-for-author", "failed", f"{n} issue(s) must be fixed by the author", False, True)
     if dec["require_build_green"] and build != "green":
-        return make("no-vote", "pending", f"Waiting for PR build validation ({build})", False, not auto)
+        d = make("no-vote", "pending", f"Waiting for PR build validation ({build})", False, not auto)
+        d.recheck = build in ("pending", "unknown")
+        return d
+    if auto and (copilot_active or copilot_wait):
+        d = make("no-vote", "pending", "Auto-approval held: " + (copilot_active or copilot_wait), False, False)
+        d.recheck = bool(copilot_wait and not copilot_active)
+        return d
     if auto:
         low = [f for f in findings if f.severity in ("low",)]
         outcome = "approve-with-suggestions" if low else "approve"
         return make(outcome, "succeeded", "Auto-approved by policy (" + ", ".join(sorted(file_classes)) + ")", True, False)
     human_vote_outcome = "approve-with-suggestions" if dec["human_required_vote"] == 5 else "no-vote"
+    if human_approved and copilot_active:
+        return make(human_vote_outcome, "pending", "Human approval present; " + copilot_active, False, True)
     if human_approved:
         return make(human_vote_outcome, "succeeded", "Human approval present; no blocking findings", False, True)
     return make(human_vote_outcome, "pending", "Human approval required: " + "; ".join(reasons[:2]), False, True)

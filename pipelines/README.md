@@ -261,17 +261,24 @@ the validation matrix; `ciMaxLegs` bounds how many legs one run plans).
    reviewer, protected path classes and registry owners as required reviewers, work items, comments, squash only.
    PR builds compile only Select/Validate/Security on hosted agents without credentials; each validates its own
    scope; a docs-only PR runs only the gates and the link check.
-7. **Agent pools**: Microsoft-hosted for Validate/Security/PR/release; self-hosted `foundation-deploy-agents`
+7. **GitHub Copilot code review for Azure Repos** (public preview; the toggles have no documented REST API - UI
+   only): Organization settings -> enable Copilot code review (and its billing: meter "GitHub Copilot for AzDO"),
+   Project settings -> Repos -> enable for the project, Repository settings -> enable for `enterprise-architecture`.
+   Afterwards `branch_policies.py apply` finds the "Automatically request Copilot code review" policy type by name
+   and enables it on `main` and `release/*` (until then it is skipped with a warning). Copilot reviews run on the
+   organization's default Microsoft-hosted pool or a Managed DevOps Pool with the latest Ubuntu image -
+   self-hosted pools such as `deployPool` are not supported.
+8. **Agent pools**: Microsoft-hosted for Validate/Security/PR/release; self-hosted `foundation-deploy-agents`
    (VNet) for everything that reaches private endpoints (needs `python3`, `az`, `git`, `docker` or
    `useAcrBuild`, `curl`).
-8. **Permissions**: only release managers may queue runs with `environment: prod`; contributors may queue
+9. **Permissions**: only release managers may queue runs with `environment: prod`; contributors may queue
    dev. Azure Artifacts feed `observabilityFeed` (pipelines/variables/tools.yml): the project Build Service
    needs *Feed Publisher*.
-9. **Self-healing permissions**: the project *Build Service* identity needs *Queue builds* on both pipelines (heal
+10. **Self-healing permissions**: the project *Build Service* identity needs *Queue builds* on both pipelines (heal
    fan-out) and *Create work items* in the area of `self_healing.notify.area_path` (quarantine alerts); the plan
    identities need Storage Blob Data Contributor on `deployments` (failure/verification records, lock claims);
    lock breaking uses the apply identity (blob lease break needs Data Contributor on `tfstate`).
-10. **Bootstrap prerequisites**: storage containers `tfstate`, `contracts`, `plans`, `deployments`,
+11. **Bootstrap prerequisites**: storage containers `tfstate`, `contracts`, `plans`, `deployments`,
    `evidence`, `packages` and the role assignments of `bootstrap/identities.tf`.
 
 ## What only a real Azure DevOps organisation can prove
@@ -302,3 +309,6 @@ conditions, ordering, promotion gates, lint) with tests and static checks only.
 | `pipelines/scripts/*.sh` | Terraform env/init/prepare/plan/apply/failure-record, agent setup, pinned tool installer |
 | `pipelines/variables/` | compile-time settings per environment, tool versions |
 | `environments/promotion.yaml` | promotion chains |
+| `environments/branching.yaml` | branching model, branch policies (tools/ado/branch_policies.py), owners (CODEOWNERS) |
+| `tools/ci/` | fast CI: suite catalog (`suites.yaml`), impact selection, test result cache, balancing, runner, gates, scanners, provider mirror, timing report (`python3 -m tools.ci`) |
+| `pipelines/requirements-*.{in,txt}` | hash-pinned Python tooling (uv-compiled; installed with `uv pip sync --require-hashes`) |

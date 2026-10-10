@@ -44,6 +44,7 @@
         "minimumApproverCount": 1,
         "creatorVoteCounts": false,
         "filenamePatterns": [
+          "/.azuredevops/*",
           "/.review/*",
           "/applications/services/pr-reviewer/*",
           "/catalog/contracts/foundation-pr-reviewer.v1.schema.json",
@@ -51,7 +52,7 @@
           "/tests/review/*",
           "/tools/review/*"
         ],
-        "message": "[eh-review] review-governance: The reviewer itself, its policy, infrastructure and tests (changes can never be bot-approved).",
+        "message": "[eh-review] review-governance: The reviewer itself, its policy, Copilot review instructions, infrastructure and tests (never bot-approved).",
         "scope": [
           {
             "repositoryId": "<repository id>",
@@ -224,5 +225,18 @@
     }
   ],
   "minimum_reviewers_note": "With the required status above, `Minimum number of reviewers = 1` (reset on push, creator vote does not count) lets the bot alone approve allowlisted changes; every other change keeps the status pending until a human approves. Keeping minimum = 2 means a human always approves (the bot's vote is then one of the two).",
+  "copilot_code_review": {
+    "manual": true,
+    "note": "GitHub Copilot code review for Azure Repos (preview) has no documented REST API: enable it in the UI (organization, project and repository toggles) and add the branch policy 'Automatically request Copilot code review' on refs/heads/main and refs/heads/release/*. Copilot only comments (never approves or blocks).",
+    "branches": [
+      "refs/heads/main",
+      "refs/heads/release/*"
+    ]
+  },
+  "comment_resolution": {
+    "policy": "Comment requirements (Check for comment resolution)",
+    "isBlocking": true,
+    "note": "Required so Copilot (and human) comment threads must be resolved before completion."
+  },
   "bot_identity_note": "Do NOT add the reviewer identity to any required-reviewer group; give it no 'Bypass policies' permission."
 }
