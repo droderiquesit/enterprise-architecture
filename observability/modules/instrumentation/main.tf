@@ -501,7 +501,8 @@ locals {
       secret_refresh_interval = 3600
     },
   ))
-  agent_logs_conf = yamlencode({ logs = [{ type = "file", path = var.log_file_path, service = local.u.service, source = local.dd_source }] })
+  # log source tags = the full policy tag set (as Fluent Bit ddtags): host tags are not attached to logs by the Agent
+  agent_logs_conf = yamlencode({ logs = [{ type = "file", path = var.log_file_path, service = local.u.service, source = local.dd_source, tags = compact(split(",", local.dd_tags)) }] })
   agent_dsv_json  = jsonencode(local.fetch_env)
   agent_start = join(" && ", concat(
     [

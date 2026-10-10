@@ -562,3 +562,102 @@ services:
   references:
   - https://learn.microsoft.com/en-us/azure/azure-app-configuration/overview
   - https://docs.datadoghq.com/integrations/azure_app_configuration/
+- id: vm-applications
+  family: compute-gallery
+  hosting_variant: Azure Compute Gallery VM Applications (gallery + applications + versions) enforced on VMs / VMSS by Azure Policy DeployIfNotExists
+  category: platform-support
+  display_name: Azure VM Applications (Compute Gallery) + Azure Policy
+  summary: Delivery of the Datadog Agent to VMs and VM scale sets (observability 4.0.0) - one VM Application per OS whose package is the dsv-fetch binary and whose configuration is the rendered setup script; an Azure Policy initiative attaches it and the DSV-reader identity to every VM / VMSS tagged datadog:enabled.
+  lifecycle:
+    status: ga
+    notes: VM Applications are generally available; publishing with a gallery managed identity (plain blob URLs, no SAS) is documented on Microsoft Learn (portal experience not yet available - REST / IaC only).
+    verified_on: '2026-10-10'
+  availability:
+    regions_checked:
+      swedencentral: unknown
+      eastus2: unknown
+      westeurope: unknown
+    region_notes: "Not checked per region; some restricted regions need a subscription feature flag for VM Application target regions (Microsoft Learn error list)."
+    quotas:
+    - 300 application versions per region (all applications); 25 applications per VM; 2 GB package, 1 GB configuration file
+    registrations:
+    - Microsoft.Compute
+    - Microsoft.PolicyInsights
+    licensing: []
+  networking:
+    private_support: partial
+    notes: package storage account denies network access by default; the gallery reads it through its user-assigned identity as a trusted Microsoft service; VMs download packages from Azure-managed replicas (no storage access from the VM)
+  iac:
+    terraform_resources:
+    - azurerm_gallery_application
+    - azurerm_gallery_application_version
+    - azurerm_virtual_machine_gallery_application_assignment
+    - azurerm_storage_account
+    - azurerm_storage_container
+    - azurerm_storage_blob
+    - azurerm_user_assigned_identity
+    - azurerm_policy_definition
+    - azurerm_policy_set_definition
+    - azurerm_management_group_policy_set_definition
+    - azurerm_subscription_policy_assignment
+    - azurerm_management_group_policy_assignment
+    - azurerm_subscription_policy_remediation
+    - azurerm_management_group_policy_remediation
+    - azurerm_role_definition
+    - azurerm_role_assignment
+    azapi:
+    - type: Microsoft.Compute/galleries
+      api_version: '2025-12-03'
+      reason: azurerm_shared_image_gallery (5.9.0) has no identity block; the gallery's user-assigned identity publishes versions from a private storage account with plain blob URLs (no SAS)
+    component: obs-hosts
+    implemented: true
+    notes: modules/host-agent-package (gallery, applications, versions), modules/host-agent-policy (definitions, initiative, assignment, custom role, remediation), modules/host-agents (composition; mode = direct uses azurerm_virtual_machine_gallery_application_assignment per VM)
+  workload:
+    exercised_by:
+    - lab VMs / VMSS of platform-vm, platform-vmss, platform-db-sqlvm (tag datadog:enabled = true)
+    operations:
+    - publish a version per package_version bump (dev -> test -> prod)
+    - DeployIfNotExists remediation of tagged VMs / VMSS (identity + applicationProfile)
+  telemetry:
+    azure_metric_namespace: none
+    signals:
+      metrics:
+        supported: n/a
+        method: delivery mechanism; host metrics come from the Datadog Agent it installs
+      logs:
+        supported: partial
+        method: Azure Policy compliance + Activity Log (remediation deployments) through the subscription Activity Log path
+      traces:
+        supported: n/a
+        method: n/a
+      dbm:
+        supported: n/a
+        method: not applicable
+      rum:
+        supported: n/a
+        method: browser RUM applies to hello-frontend only (static-web-apps)
+      profiling:
+        supported: n/a
+        method: no application process owned by this resource
+  datadog_limitations:
+  - The VM Application install runs once per version (and on update); configuration changes need a new package_version
+  - VMSS with a Manual upgrade policy apply the model change only after an instance upgrade / reimage
+  cost:
+    profile: low
+    approx_monthly_usd_default: 2
+    assumptions: VM Applications are free; storage of the packages (a few MB per version, ZRS) and replicas; Azure Policy custom definitions are free
+    teardown: terraform destroy of obs-hosts removes policy, gallery and storage; installed Agents stay on the hosts until the application is removed from their model (remove script)
+    data_retention: versions retained per settings.retained_versions; blob soft delete 7 days
+  status:
+    implementation: implemented
+    live_validation: not-run
+    default_profiles:
+    - enterprise
+    - full
+  references:
+  - https://learn.microsoft.com/en-us/azure/virtual-machines/vm-applications
+  - https://learn.microsoft.com/en-us/azure/virtual-machines/vm-applications-how-to
+  - https://learn.microsoft.com/en-us/azure/virtual-machines/vm-applications-publish-with-managed-identity
+  - https://learn.microsoft.com/en-us/azure/virtual-machines/vm-applications-inject-with-policy
+  - https://learn.microsoft.com/en-us/azure/governance/policy/concepts/effect-deploy-if-not-exists
+  - https://learn.microsoft.com/en-us/azure/governance/policy/how-to/remediate-resources

@@ -5,5 +5,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 5.9"
     }
+    # provider gap (catalog/provider-gaps.yaml, vm-applications): the Compute Gallery's user-assigned identity
+    azapi = {
+      source  = "Azure/azapi"
+      version = "~> 2.13"
+    }
   }
 }

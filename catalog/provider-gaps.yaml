@@ -214,3 +214,13 @@ gaps:
     references:
       - https://learn.microsoft.com/en-us/azure/templates/microsoft.datadog/2025-06-11/monitors/monitoredsubscriptions
       - https://learn.microsoft.com/en-us/azure/partner-solutions/datadog/overview
+  - service_id: vm-applications
+    arm_types:
+      - {type: Microsoft.Compute/galleries, api_version: "2025-12-03"}
+    azurerm_status: partial
+    resolution: azapi
+    reason: "azurerm_shared_image_gallery in 5.9.0 has no `identity` block. A user-assigned identity on the gallery is what lets Azure Compute Gallery publish VM Application versions from a private storage account (shared keys disabled, no anonymous access) with plain blob URLs instead of SAS URLs stored in plain text in the version (Microsoft Learn: publish VM applications using managed identity). Galleries 2025-12-03 has identity {type, userAssignedIdentities} (newest version embedded in azapi 2.13; 2025-04-01 from the Learn sample is not embedded). Applications, versions and assignments stay on azurerm."
+    owner_component: obs-hosts
+    references:
+      - https://learn.microsoft.com/en-us/azure/virtual-machines/vm-applications-publish-with-managed-identity
+      - https://learn.microsoft.com/en-us/azure/templates/microsoft.compute/galleries

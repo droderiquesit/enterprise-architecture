@@ -362,12 +362,15 @@ components:
     layer: observability
     kind: terraform
     path: observability/lab/hosts
-    scope: applications         # ordered after deploy-vm-workloads (optional_consumes below)
-    consumes: [obs-telemetry-transport, platform-vm, platform-vmss]
-    # deploy-vm-workloads: ordering only (its run commands create the app log directories the Fluent Bit installer
-    # tails, and two managed run commands on one VM should not race); the root declares no variable for it.
-    optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm, deploy-vm-workloads]
-    inputs: [observability/images/dsv-fetch/**, observability/config/fleet-policy.yaml, observability/onboarding/rendered/**]
+    scope: applications         # after the platform VMs / VMSS exist: the remediation tasks enrol them right away
+    # 4.0.0: Azure VM Applications + Azure Policy (DeployIfNotExists on VMs / VMSS tagged datadog:enabled) - no
+    # per-host Terraform. foundation-identity: the per-environment DSV-reader identity obs-host-agent.
+    consumes: [obs-telemetry-transport, foundation-identity]
+    # settings.mode = direct only (no Azure Policy rights): the hosts come from these contracts
+    optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm]
+    artifacts: [img-dsv-fetch]  # zip-package: the dsv-fetch release files are the VM Application packages (.dsv-fetch-release)
+    catalog_refs: [vm-applications]
+    inputs: [observability/config/fleet-policy.yaml, observability/config/tag-policy.yaml]
   - id: obs-kubernetes
     layer: observability
     kind: terraform

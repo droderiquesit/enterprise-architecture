@@ -285,7 +285,7 @@ run "datadog_mode_aci_agent_sidecar" {
     error_message = "datadog.yaml: key via the dsv-fetch secret backend, APM + DogStatsD on localhost only, Remote Configuration on"
   }
   assert {
-    condition     = yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].path == "/var/log/app/app.log" && yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].source == "csharp" && yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].service == "hello-orders-api"
+    condition     = yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].path == "/var/log/app/app.log" && yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].source == "csharp" && yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].service == "hello-orders-api" && contains(yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].tags, "env:dev") && contains(yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].tags, "team:orders")
     error_message = "the Agent tails LOG_FILE_PATH with source/service"
   }
   assert {

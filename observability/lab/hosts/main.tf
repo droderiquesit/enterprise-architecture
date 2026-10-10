@@ -55,6 +55,17 @@ resource "azurerm_resource_group" "hosts" {
   name     = module.naming.names.resource_group
   location = var.environment.location
   tags     = module.tags.tags
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${path.module}/${var.settings.dsv_fetch_release_dir}/SHA256SUMS")
+      error_message = "Stage the img-dsv-fetch release (dsv-fetch-linux-amd64, dsv-fetch-linux-arm64, dsv-fetch-windows-amd64.exe, SHA256SUMS) into observability/lab/hosts/${var.settings.dsv_fetch_release_dir} before plan."
+    }
+    precondition {
+      condition     = contains(keys(var.foundation_identity.identities), var.settings.agent_identity_key)
+      error_message = "foundation-identity has no ${var.settings.agent_identity_key} identity (the per-environment DSV reader of the host Agents)."
+    }
+  }
 }
 
 module "hosts" {
@@ -63,7 +74,8 @@ module "hosts" {
   env    = local.env
 
   package = {
-    resource_group_id = azurerm_resource_group.hosts.id
+    # composed (known at plan: the policy scope / gallery checks need it); depends_on below orders the creation
+    resource_group_id = "/subscriptions/${var.environment.subscription_id}/resourceGroups/${azurerm_resource_group.hosts.name}"
     location          = var.environment.location
     names = {
       gallery            = replace("${local.prefix}-gal-obshosts-${local.env}-${local.region}", "-", "_")
@@ -105,4 +117,6 @@ module "hosts" {
   op_agent_logs_url = local.op_logs_url
   host_logs         = var.settings.host_logs
   tags              = merge(module.tags.tags, local.dsv_fetch == null ? {} : { "dsv-fetch-version" = coalesce(local.dsv_fetch.version, "unknown") })
+
+  depends_on = [azurerm_resource_group.hosts]
 }
