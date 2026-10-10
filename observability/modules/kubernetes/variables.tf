@@ -221,6 +221,11 @@ variable "op_worker" {
     memory_limit        = optional(string, "4Gi")
     persistence_size    = optional(string, "20Gi")
     storage_class       = optional(string, "managed-csi")
+    # extra non-secret Worker env (e.g. modules/observability-pipeline worker_env: Kafka bootstrap / SASL username of
+    # the Event Hubs source) and secret env from existing Secrets kept by the Delinea dsv-k8s syncer
+    # (name -> {secret_name, key}, e.g. DD_OP_SOURCE_KAFKA_SASL_PASSWORD); never values
+    env        = optional(map(string), {})
+    secret_env = optional(map(object({ secret_name = string, key = string })), {})
   })
   default = {}
   validation {

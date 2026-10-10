@@ -4,6 +4,8 @@
     <AssemblyName>Hello.Common</AssemblyName>
     <OutputType>Library</OutputType>
     <IsPackable>false</IsPackable>
+    <!-- Lock file must cover the RIDs hello-inventory-api publishes for (win-x64 self-contained, linux-x64). -->
+    <RuntimeIdentifiers>linux-x64;win-x64</RuntimeIdentifiers>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

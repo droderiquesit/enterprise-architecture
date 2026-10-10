@@ -2,10 +2,12 @@
 # Rendered to docs/coverage/telemetry-capability-matrix.md by tools/catalog/render_coverage.py
 # Validated by tools/catalog/validate.py (keys must cover architecture-matrix.yaml + database catalog entries).
 schema_version: 1
-verified_on: '2026-10-09'
-description: 'Authoritative telemetry collection path per signal for every compute architecture (catalog/architecture-matrix.yaml) and database family. Consistent with ADR-0001 section
-  10: Fluent Bit for application logs; Datadog Agent OTLP (AKS/VM) or the OTel gateway (managed runtimes) for traces/metrics; Datadog Azure integration for platform metrics; diagnostic
-  settings (obs-diagnostics) for platform logs; Agent DBM checks from the observability subnet.'
+verified_on: '2026-10-10'
+description: 'Authoritative telemetry collection path per signal for every compute architecture (catalog/architecture-matrix.yaml) and database family - observability package 3.0.0 defaults
+  (observability/config/fleet-policy.yaml): every log source (Datadog Agent where it runs, Fluent Bit edge collectors where it cannot, Azure Event Hubs) goes to the Datadog Observability
+  Pipelines Worker and from there to Datadog Logs; Datadog tracing libraries (Single Step Instrumentation on AKS and Linux hosts, library in the image + the in-VNet Datadog Agent APM
+  gateway for managed runtimes) with the Continuous Profiler; Datadog Azure integration for platform metrics; diagnostic settings (obs-diagnostics) for platform logs; Agent DBM checks.
+  log_pipeline = fluent_bit_direct / apm.mode = otel restore the 2.x paths. Per-resource matrix and unsupported combinations: docs/guides/datadog-fleet-collection.md.'
 signals:
 - app_logs
 - traces
@@ -31,6 +33,15 @@ sources:
   datadog_azure_app_service: https://docs.datadoghq.com/serverless/azure_app_service/
   datadog_azure_container_apps: https://docs.datadoghq.com/serverless/azure_container_apps/
   datadog_azure_integration: https://docs.datadoghq.com/integrations/azure/
+  datadog_observability_pipelines: https://docs.datadoghq.com/observability_pipelines/
+  datadog_op_worker_install: https://docs.datadoghq.com/observability_pipelines/configuration/install_the_worker/
+  datadog_ssi: https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/single-step-apm/
+  datadog_profiler_dotnet: https://docs.datadoghq.com/profiler/enabling/dotnet/
+  datadog_profiler_python: https://docs.datadoghq.com/profiler/enabling/python/
+  datadog_profiler_compat: https://docs.datadoghq.com/profiler/enabling/supported_versions/
+  datadog_fleet_automation: https://docs.datadoghq.com/agent/fleet_automation/
+  datadog_dsm: https://docs.datadoghq.com/data_streams/
+  datadog_rum_browser: https://docs.datadoghq.com/real_user_monitoring/browser/
 findings:
   dbm_support:
     azure_sql_database: supported (deployment_type sql_database; one instance per database; elastic pool DBs are separate hosts; no Agent Jobs; autodiscovery unsupported); Agent 7.41.0+
@@ -49,33 +60,51 @@ findings:
     on Windows Dedicated/Premium); profiler preview for Python/Node only. Not used by default (OTel path is authoritative).'
   app_service_native: 'Datadog App Service instrumentation: Linux code, Linux container, Windows code (Java/Node/.NET); Windows containers not listed. Not used by default.'
   container_apps_native: Datadog serverless-init (in-container or sidecar) gives traces, enhanced metrics (azure.app_containerapps.enhanced.*), custom metrics and logs. Not used by default.
+  package_3_defaults:
+    log_pipeline: 'observability_pipelines: Agents (8282 datadog_agent source), Fluent Bit (24224 fluent source, forward without metadata) and Event Hubs (Kafka source, SASL PLAIN $ConnectionString)
+      -> one pipeline per environment (VRL tag policy + Azure shaping, SDS redaction, dedupe, quotas) -> Datadog Logs with a disk buffer (when_full block = backpressure). fluent_bit_direct
+      keeps the 2.x paths.'
+    apm: 'datadog: TELEMETRY_SDK=datadog, OTEL_SDK_DISABLED=true - one tracer per process. AKS: Cluster Agent admission controller SSI (target namespaces, ddTraceVersions per language).
+      Linux VM/VMSS: host SSI by the installer. ACA / ACI / App Service / Functions: library in the image (.NET dd-trace-dotnet, Python ddtrace) -> Datadog Agent APM gateway on ACA (internal
+      TCP 8126, API key ENC[dsv://] via dsv-fetch). serverless-init is opt-in on ACA only: version 1.10.4 does not resolve ENC[] secrets, so DD_API_KEY must be a Container Apps secret
+      (documented exception to ADR-0001 section 14).'
+    profiling: 'Datadog Continuous Profiler wherever a Datadog library runs and Datadog supports the runtime: .NET (Linux/Windows x64; Function Apps NOT supported), Python (POSIX; Azure
+      Functions preview -> off by package policy), Node/Java (library default). SSI sets DD_PROFILING_ENABLED=auto. Profiles upload through the same Agent as traces (node Agent / APM
+      gateway / serverless-init). apm.mode = otel: no Datadog profiling, except the opt-in Python preview DD_PROFILING_PREVIEW_OTEL_CONTEXT_ENABLED (profiling.otel_mode = python_preview).'
+    runtime_metrics: 'DD_RUNTIME_METRICS_ENABLED only where an Agent runs next to the process (DogStatsD UDP/UDS): node Agent, serverless-init. Behind the APM gateway runtime metrics
+      are off (Container Apps ingress has no UDP).'
+    rum: 'modules/rum (obs-prereqs): RUM application create or existing; browser SDK config allowedTracingUrls with propagatorTypes [datadog, tracecontext], session replay 0, globalContext
+      from the tag policy.'
+    fleet: Agent version pinned by the fleet policy (7.84.2), Remote Configuration on, remote upgrades off by default; optional datadog_fleet_schedule (modules/fleet-automation).
 compute:
   aks:
     catalog_ref: aks
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit DaemonSet tails /var/log/containers -> Datadog
+        method: Datadog Agent DaemonSet (containerCollectAll; per-pod ad.datadoghq.com/<container>.logs source/service) -> Observability Pipelines Worker (datadog_agent source :8282)
+          -> Datadog Logs
         owner: obs-kubernetes
-        duplicate_prevention: Datadog Agent DD_LOGS_ENABLED=false / containerCollectAll=false
+        duplicate_prevention: 'Fluent Bit DaemonSet not installed (log_pipeline = fluent_bit_direct: Fluent Bit DaemonSet, Agent log collection off)'
         datadog_limitation: none
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> Datadog Agent DaemonSet (hostPort 4317 via status.hostIP)
+        method: Datadog library injected by Single Step Instrumentation (Cluster Agent admission controller, targets = settings ssi_namespaces, ddTraceVersions per language) -> node
+          Agent :8126
         owner: obs-kubernetes
-        duplicate_prevention: no dd-trace; no separate collector
-        datadog_limitation: none
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: 'SSI needs Cluster Agent >= 7.64 for target-based selection; restricted PSS: init container securityContext set by the package'
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> Agent OTLP
+        supported: partial
+        method: 'custom metrics: DogStatsD to the node Agent (apm.mode = datadog) or OTel SDK metrics -> Agent OTLP (apm.mode = otel)'
         owner: obs-kubernetes
-        duplicate_prevention: single exporter
-        datadog_limitation: none
+        duplicate_prevention: single exporter per app (decided by TELEMETRY_SDK)
+        datadog_limitation: OTel metrics SDK is disabled in datadog mode - apps emit custom metrics through DogStatsD
       runtime_metrics:
         supported: 'yes'
-        method: OTel runtime instrumentation -> Agent OTLP
+        method: Datadog library runtime metrics (DD_RUNTIME_METRICS_ENABLED) -> node Agent DogStatsD
         owner: obs-kubernetes
-        duplicate_prevention: dd-trace runtime metrics off
+        duplicate_prevention: OTel runtime instrumentation off in datadog mode
         datadog_limitation: none
       platform_metrics:
         supported: 'yes'
@@ -95,45 +124,49 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: &id001
+      rum:
         supported: n/a
         method: browser RUM applies only to hello-frontend (static-web-apps)
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      profiling: &id002
-        supported: partial
-        method: dd-trace continuous profiler, opt-in per service (DD_PROFILING_ENABLED) - not OTel
-        owner: applications deploy root (env vars from instrumentation contract)
-        duplicate_prevention: profiler only; tracing stays on OTel SDK (DD_TRACE_ENABLED=false when profiler is used)
-        datadog_limitation: profiling requires the Datadog library; OTel profiling signal not used
+      profiling:
+        supported: 'yes'
+        method: Datadog Continuous Profiler through SSI (DD_PROFILING_ENABLED=auto) -> node Agent -> Datadog; .NET profile types cpu/walltime/exceptions/gc (lock/allocation/heap off;
+          allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: obs-kubernetes
+        duplicate_prevention: profiler only inside the Datadog library; no OTel profiling signal
+        datadog_limitation: 'apm.mode = otel: unavailable (Python preview opt-in only)'
   container-apps-consumption:
     catalog_ref: container-apps-consumption
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
-        owner: applications deploy root (sidecar spec from obs instrumentation contract)
-        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        method: Fluent Bit sidecar tails the shared EmptyDir file (LOG_FILE_PATH) -> forward -> Observability Pipelines Worker (fluent source :24224, require_ack_response, filesystem
+          buffer) -> Datadog Logs
+        owner: applications deploy root (sidecar spec from modules/instrumentation)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; serverless-init log collection off; no API key on the edge
         datadog_limitation: sidecar adds CPU/memory to each replica
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: no serverless-init / dd-trace
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: internal VNet path to the APM gateway required; serverless-init (opt-in, managed_runtime_path = serverless_init) needs DD_API_KEY as a Container Apps secret
+          - not DSV-compliant
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host-level metrics (no Agent)
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps, azure.app_managedenvironments)
@@ -142,7 +175,7 @@ compute:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Observability Pipelines Worker
         owner: obs-diagnostics
         duplicate_prevention: system logs only
         datadog_limitation: none
@@ -152,35 +185,48 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'yes'
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+          (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: '.NET: x64 only; apm.mode = otel: unavailable (Python preview opt-in only)'
   container-apps-dedicated:
     catalog_ref: container-apps-dedicated
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
-        owner: applications deploy root (sidecar spec from obs instrumentation contract)
-        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        method: Fluent Bit sidecar tails the shared EmptyDir file (LOG_FILE_PATH) -> forward -> Observability Pipelines Worker (fluent source :24224, require_ack_response, filesystem
+          buffer) -> Datadog Logs
+        owner: applications deploy root (sidecar spec from modules/instrumentation)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; serverless-init log collection off; no API key on the edge
         datadog_limitation: sidecar adds CPU/memory to each replica
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: no serverless-init / dd-trace
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: internal VNet path to the APM gateway required
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host-level metrics (no Agent)
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps, azure.app_managedenvironments)
@@ -189,7 +235,7 @@ compute:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Observability Pipelines Worker
         owner: obs-diagnostics
         duplicate_prevention: system logs only
         datadog_limitation: none
@@ -199,35 +245,49 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'yes'
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+          (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: '.NET: x64 only; apm.mode = otel: unavailable (Python preview opt-in only)'
   container-apps-job-manual:
     catalog_ref: container-apps-job-manual
     signals:
       app_logs:
         supported: 'yes'
-        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input, allow-list aca_console_allow keeps only the job apps) -> Datadog
-        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (aggregator); deploy-jobs sets app_log_route = eventhub, no sidecar
-        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the aggregator drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected apps); Datadog serverless-init log collection unused
+        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source, allow-list aca_console_allow
+          keeps only the job apps) -> Datadog
+        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (Observability Pipelines); deploy-jobs sets app_log_route = eventhub, no sidecar
+        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the pipeline drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected
+          apps); Datadog serverless-init log collection unused
         datadog_limitation: diagnostic-setting latency (minutes); console lines from apps outside the allow-list are dropped by design
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: no serverless-init / dd-trace
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: internal VNet path to the APM gateway required
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host-level metrics (no Agent)
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps / azure.app_jobs)
@@ -236,7 +296,7 @@ compute:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Observability Pipelines Worker
         owner: obs-diagnostics
         duplicate_prevention: system logs only
         datadog_limitation: none
@@ -246,35 +306,49 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: partial
+        method: Datadog Continuous Profiler in the library -> APM gateway; .NET profile types cpu/walltime/exceptions/gc (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline;
+          code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: 'profiles upload every 60 s: executions shorter than one interval produce little or no profile data'
   container-apps-job-scheduled:
     catalog_ref: container-apps-job-scheduled
     signals:
       app_logs:
         supported: 'yes'
-        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input, allow-list aca_console_allow keeps only the job apps) -> Datadog
-        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (aggregator); deploy-jobs sets app_log_route = eventhub, no sidecar
-        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the aggregator drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected apps); Datadog serverless-init log collection unused
+        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source, allow-list aca_console_allow
+          keeps only the job apps) -> Datadog
+        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (Observability Pipelines); deploy-jobs sets app_log_route = eventhub, no sidecar
+        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the pipeline drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected
+          apps); Datadog serverless-init log collection unused
         datadog_limitation: diagnostic-setting latency (minutes); console lines from apps outside the allow-list are dropped by design
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: no serverless-init / dd-trace
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: internal VNet path to the APM gateway required
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host-level metrics (no Agent)
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps / azure.app_jobs)
@@ -283,7 +357,7 @@ compute:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Observability Pipelines Worker
         owner: obs-diagnostics
         duplicate_prevention: system logs only
         datadog_limitation: none
@@ -293,35 +367,49 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: partial
+        method: Datadog Continuous Profiler in the library -> APM gateway; .NET profile types cpu/walltime/exceptions/gc (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline;
+          code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: 'profiles upload every 60 s: executions shorter than one interval produce little or no profile data'
   container-apps-job-event:
     catalog_ref: container-apps-job-event
     signals:
       app_logs:
         supported: 'yes'
-        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input, allow-list aca_console_allow keeps only the job apps) -> Datadog
-        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (aggregator); deploy-jobs sets app_log_route = eventhub, no sidecar
-        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the aggregator drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected apps); Datadog serverless-init log collection unused
+        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source, allow-list aca_console_allow
+          keeps only the job apps) -> Datadog
+        owner: obs-diagnostics (environment diagnostic setting) + obs-telemetry-transport (Observability Pipelines); deploy-jobs sets app_log_route = eventhub, no sidecar
+        duplicate_prevention: no Fluent Bit sidecar in jobs (it would keep executions alive); the pipeline drops ContainerAppConsoleLogs of apps not in aca_console_allow (sidecar-collected
+          apps); Datadog serverless-init log collection unused
         datadog_limitation: diagnostic-setting latency (minutes); console lines from apps outside the allow-list are dropped by design
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: no serverless-init / dd-trace
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: internal VNet path to the APM gateway required
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host-level metrics (no Agent)
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps / azure.app_jobs)
@@ -330,7 +418,7 @@ compute:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Observability Pipelines Worker
         owner: obs-diagnostics
         duplicate_prevention: system logs only
         datadog_limitation: none
@@ -340,35 +428,48 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: partial
+        method: Datadog Continuous Profiler in the library -> APM gateway; .NET profile types cpu/walltime/exceptions/gc (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline;
+          code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: 'profiles upload every 60 s: executions shorter than one interval produce little or no profile data'
   container-instances:
     catalog_ref: container-instances
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
-        owner: applications deploy root (sidecar spec from obs instrumentation contract)
-        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        method: Fluent Bit sidecar tails the shared EmptyDir file (LOG_FILE_PATH) -> forward -> Observability Pipelines Worker (fluent source :24224, require_ack_response, filesystem
+          buffer) -> Datadog Logs
+        owner: applications deploy root (sidecar spec from modules/instrumentation)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; serverless-init log collection off; no API key on the edge
         datadog_limitation: sidecar adds CPU/memory to each replica
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: no serverless-init / dd-trace
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: internal VNet path to the APM gateway required
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host-level metrics (no Agent)
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.containerinstance_containergroups)
@@ -387,35 +488,48 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'yes'
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+          (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: '.NET: x64 only; apm.mode = otel: unavailable (Python preview opt-in only)'
   app-service-linux-code:
     catalog_ref: app-service-linux-code
     signals:
       app_logs:
         supported: 'yes'
-        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source, Azure unwrap/shape VRL, resource-scope tags)
+          -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: App Service VNet integration required to reach the APM gateway
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_services, azure.web_serverfarms)
@@ -434,35 +548,48 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'yes'
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+          (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: '.NET: x64 only; apm.mode = otel: unavailable (Python preview opt-in only)'
   app-service-linux-container:
     catalog_ref: app-service-linux-container
     signals:
       app_logs:
         supported: 'yes'
-        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source, Azure unwrap/shape VRL, resource-scope tags)
+          -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: App Service VNet integration required to reach the APM gateway
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_services, azure.web_serverfarms)
@@ -481,35 +608,48 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'yes'
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+          (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: '.NET: x64 only; apm.mode = otel: unavailable (Python preview opt-in only)'
   app-service-windows-code:
     catalog_ref: app-service-windows-code
     signals:
       app_logs:
         supported: 'yes'
-        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source, Azure unwrap/shape VRL, resource-scope tags)
+          -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: App Service VNet integration required to reach the APM gateway
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_services, azure.web_serverfarms)
@@ -528,35 +668,48 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'yes'
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+          (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: '.NET: x64 only; apm.mode = otel: unavailable (Python preview opt-in only)'
   app-service-windows-container:
     catalog_ref: app-service-windows-container
     signals:
       app_logs:
         supported: 'yes'
-        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: AppServiceConsoleLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source, Azure unwrap/shape VRL, resource-scope tags)
+          -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only; Windows containers not in Datadog App Service matrix
       traces:
-        supported: 'yes'
-        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        supported: partial
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: Windows containers are not listed by Datadog App Service instrumentation; library in the image + APM gateway only
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_services, azure.web_serverfarms)
@@ -575,35 +728,47 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: partial
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+          (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
+        owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: Windows containers are not a documented Datadog App Service target
   functions-flex-consumption:
     catalog_ref: functions-flex-consumption
     signals:
       app_logs:
         supported: 'yes'
-        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source) -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: VNet integration required to reach the APM gateway
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
@@ -622,35 +787,47 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled by the package: Datadog .NET profiler does not support Function Apps; Python profiler on Azure Functions is preview (fleet policy architectures.functions.profiling.enabled
+          = false)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Function Apps unsupported (.NET) / preview (Python)
   functions-premium:
     catalog_ref: functions-premium
     signals:
       app_logs:
         supported: 'yes'
-        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source) -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: VNet integration required to reach the APM gateway
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
@@ -669,35 +846,47 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled by the package: Datadog .NET profiler does not support Function Apps; Python profiler on Azure Functions is preview (fleet policy architectures.functions.profiling.enabled
+          = false)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Function Apps unsupported (.NET) / preview (Python)
   functions-dedicated:
     catalog_ref: functions-dedicated
     signals:
       app_logs:
         supported: 'yes'
-        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source) -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: VNet integration required to reach the APM gateway
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
@@ -716,35 +905,46 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled by the package: Datadog .NET profiler does not support Function Apps; Python profiler on Azure Functions is preview (fleet policy architectures.functions.profiling.enabled
+          = false)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Function Apps unsupported (.NET) / preview (Python)
   functions-consumption-windows:
     catalog_ref: functions-consumption-windows
     signals:
       app_logs:
         supported: 'yes'
-        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source) -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: partial
-        method: OTel SDK -> OTLP/HTTP direct to Datadog serverless OTLP intake (dd-otlp-source=serverless) - no VNet integration on Consumption
+        method: 'no VNet integration: the APM gateway is unreachable - set apm.mode = otel for this workload (OTel SDK -> OTLP/HTTP serverless intake, 2.x path)'
         owner: applications deploy root
-        duplicate_prevention: only exporter for this app
-        datadog_limitation: gRPC not supported by the serverless OTLP intake; API key must be a Delinea DSV reference resolved at start-up (dsv://...)
+        duplicate_prevention: one tracer per process
+        datadog_limitation: Windows Consumption has no VNet integration
       app_metrics:
         supported: partial
-        method: OTel SDK metrics -> Datadog OTLP metrics intake (public)
-        owner: applications deploy root
-        duplicate_prevention: single exporter
-        datadog_limitation: public egress
-      runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
+      runtime_metrics:
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
+        owner: obs-telemetry-transport
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
@@ -763,35 +963,48 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled by the package: Datadog .NET profiler does not support Function Apps; Python profiler on Azure Functions is preview (fleet policy architectures.functions.profiling.enabled
+          = false)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Function Apps unsupported (.NET) / preview (Python)
   functions-on-container-apps:
     catalog_ref: functions-on-container-apps
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog
-        owner: applications deploy root (sidecar spec from obs instrumentation contract)
-        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; Datadog serverless-init log collection unused
+        method: Fluent Bit sidecar tails the shared EmptyDir file (LOG_FILE_PATH) -> forward -> Observability Pipelines Worker (fluent source :24224, require_ack_response, filesystem
+          buffer) -> Datadog Logs
+        owner: applications deploy root (sidecar spec from modules/instrumentation)
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; serverless-init log collection off; no API key on the edge
         datadog_limitation: sidecar adds CPU/memory to each replica
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> OTel gateway (ACA internal ingress) -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: no serverless-init / dd-trace
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: internal VNet path to the APM gateway required
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host-level metrics (no Agent)
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.app_containerapps, azure.app_managedenvironments)
@@ -800,7 +1013,7 @@ compute:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        method: ContainerAppSystemLogs diagnostic setting -> Event Hubs -> Observability Pipelines Worker
         owner: obs-diagnostics
         duplicate_prevention: system logs only
         datadog_limitation: none
@@ -810,35 +1023,47 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled by the package: Datadog .NET profiler does not support Function Apps; Python profiler on Azure Functions is preview (fleet policy architectures.functions.profiling.enabled
+          = false)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Function Apps unsupported (.NET) / preview (Python)
   durable-functions:
     catalog_ref: durable-functions
     signals:
       app_logs:
         supported: 'yes'
-        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source) -> Datadog Logs
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP over VNet integration -> OTel gateway -> Datadog
-        owner: obs-telemetry-transport
-        duplicate_prevention: Datadog sidecar/extension/serverless-compat tracer not installed
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: VNet integration required to reach the APM gateway
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> OTel gateway
+        supported: partial
+        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: single exporter
-        datadog_limitation: OTel Collector azure resource detection only supports VMs; set cloud.provider=azure, cloud.platform, cloud.resource_id via OTEL_RESOURCE_ATTRIBUTES
+        duplicate_prevention: single exporter per app
+        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
       runtime_metrics:
-        supported: 'yes'
-        method: OTel runtime instrumentation -> OTel gateway
+        supported: partial
+        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
         owner: obs-telemetry-transport
-        duplicate_prevention: dd-trace runtime metrics off
-        datadog_limitation: no host Agent
+        duplicate_prevention: one runtime-metrics source per process
+        datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.functions)
@@ -857,8 +1082,19 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled by the package: Datadog .NET profiler does not support Function Apps; Python profiler on Azure Functions is preview (fleet policy architectures.functions.profiling.enabled
+          = false)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: Function Apps unsupported (.NET) / preview (Python)
   static-web-apps:
     catalog_ref: static-web-apps
     signals:
@@ -906,8 +1142,9 @@ compute:
         datadog_limitation: n/a
       rum:
         supported: 'yes'
-        method: '@datadog/browser-rum 7.x (sessionSampleRate per profile; session replay off by default)'
-        owner: deploy-frontend
+        method: 'modules/rum (obs-prereqs, RUM application create | existing) + @datadog/browser-rum: allowedTracingUrls propagatorTypes [datadog, tracecontext], session replay 0, globalContext
+          from the tag policy'
+        owner: obs-prereqs (application) + deploy-frontend (SDK init)
         duplicate_prevention: single RUM application per env
         datadog_limitation: ad blockers drop events unless a proxy is used
       profiling:
@@ -921,7 +1158,7 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: WorkflowRuntime diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        method: WorkflowRuntime diagnostic setting -> Event Hubs -> Observability Pipelines Worker
         owner: obs-diagnostics
         duplicate_prevention: single diagnostic setting
         datadog_limitation: run history only
@@ -961,7 +1198,12 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
       profiling:
         supported: n/a
         method: not applicable
@@ -973,7 +1215,7 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: WorkflowRuntime + FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Fluent Bit aggregator (kafka input) -> Datadog
+        method: WorkflowRuntime + FunctionAppLogs diagnostic setting -> Event Hubs (Kafka endpoint) -> Observability Pipelines Worker (kafka source) -> Datadog
         owner: obs-diagnostics + obs-telemetry-transport
         duplicate_prevention: Datadog App Service sidecar/extension log collection not installed; no Azure log-forwarding function
         datadog_limitation: minutes of latency through Event Hubs; stdout only
@@ -1013,23 +1255,35 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not applicable: Logic Apps run no application tracer'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
   vm-linux:
     catalog_ref: vm-linux
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        method: 'Datadog Agent tails LOG_FILE_PATH (conf.d/eh-applogs.d) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: Fluent Bit
+          service -> forward -> Worker'
         owner: obs-hosts
-        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        duplicate_prevention: 'Fluent Bit not installed on Linux hosts in observability_pipelines mode (fluent_bit_direct: Fluent Bit service, Agent logs off)'
         datadog_limitation: none
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        method: 'Linux: host Single Step Instrumentation (installer DD_APM_INSTRUMENTATION_ENABLED=host, library versions from the fleet policy) -> local Agent :8126; Windows: OTel SDK
+          -> Agent OTLP'
         owner: obs-hosts
-        duplicate_prevention: no dd-trace tracer; single exporter
-        datadog_limitation: none
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: SSI on Windows covers IIS only - the package keeps OpenTelemetry for Windows services
       app_metrics:
         supported: 'yes'
         method: OTel SDK metrics -> Agent OTLP receiver
@@ -1038,10 +1292,10 @@ compute:
         datadog_limitation: OTel cumulative->delta conversion in the Agent
       runtime_metrics:
         supported: 'yes'
-        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        method: Datadog library runtime metrics -> local Agent DogStatsD (Linux); OTel runtime instrumentation (Windows)
         owner: obs-hosts
-        duplicate_prevention: dd-trace runtime metrics disabled
-        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+        duplicate_prevention: one source per process
+        datadog_limitation: none
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.vm)
@@ -1060,16 +1314,27 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: partial
+        method: 'Linux: Datadog Continuous Profiler through host SSI (DD_PROFILING_ENABLED=auto) -> local Agent; .NET profile types cpu/walltime/exceptions/gc (lock/allocation/heap off;
+          allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile. Windows: not enabled (OTel mode)'
+        owner: obs-hosts
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: Windows hosts fall back to apm.mode = otel (no Datadog profiling)
   vm-windows:
     catalog_ref: vm-windows
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        method: Fluent Bit service tails LOG_FILE_PATH -> forward -> Observability Pipelines Worker (fluent source) -> Datadog Logs
         owner: obs-hosts
-        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        duplicate_prevention: Datadog Agent logs_enabled=false on Windows hosts
         datadog_limitation: none
       traces:
         supported: 'yes'
@@ -1107,23 +1372,35 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled: Windows services stay on OpenTelemetry (SSI on Windows covers IIS only); Datadog profiling needs the Datadog library'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: apm.mode = otel fallback
   vmss-flexible:
     catalog_ref: vmss-flexible
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        method: 'Datadog Agent tails LOG_FILE_PATH (conf.d/eh-applogs.d) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: Fluent Bit
+          service -> forward -> Worker'
         owner: obs-hosts
-        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        duplicate_prevention: 'Fluent Bit not installed on Linux hosts in observability_pipelines mode (fluent_bit_direct: Fluent Bit service, Agent logs off)'
         datadog_limitation: none
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        method: 'Linux: host Single Step Instrumentation (installer DD_APM_INSTRUMENTATION_ENABLED=host, library versions from the fleet policy) -> local Agent :8126; Windows: OTel SDK
+          -> Agent OTLP'
         owner: obs-hosts
-        duplicate_prevention: no dd-trace tracer; single exporter
-        datadog_limitation: none
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: SSI on Windows covers IIS only - the package keeps OpenTelemetry for Windows services
       app_metrics:
         supported: 'yes'
         method: OTel SDK metrics -> Agent OTLP receiver
@@ -1132,10 +1409,10 @@ compute:
         datadog_limitation: OTel cumulative->delta conversion in the Agent
       runtime_metrics:
         supported: 'yes'
-        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        method: Datadog library runtime metrics -> local Agent DogStatsD (Linux); OTel runtime instrumentation (Windows)
         owner: obs-hosts
-        duplicate_prevention: dd-trace runtime metrics disabled
-        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+        duplicate_prevention: one source per process
+        datadog_limitation: none
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.compute_virtualmachinescalesets)
@@ -1154,23 +1431,36 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: partial
+        method: 'Linux: Datadog Continuous Profiler through host SSI (DD_PROFILING_ENABLED=auto) -> local Agent; .NET profile types cpu/walltime/exceptions/gc (lock/allocation/heap off;
+          allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile. Windows: not enabled (OTel mode)'
+        owner: obs-hosts
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: Windows hosts fall back to apm.mode = otel (no Datadog profiling)
   vmss-uniform:
     catalog_ref: vmss-uniform
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        method: 'Datadog Agent tails LOG_FILE_PATH (conf.d/eh-applogs.d) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: Fluent Bit
+          service -> forward -> Worker'
         owner: obs-hosts
-        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        duplicate_prevention: 'Fluent Bit not installed on Linux hosts in observability_pipelines mode (fluent_bit_direct: Fluent Bit service, Agent logs off)'
         datadog_limitation: none
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        method: 'Linux: host Single Step Instrumentation (installer DD_APM_INSTRUMENTATION_ENABLED=host, library versions from the fleet policy) -> local Agent :8126; Windows: OTel SDK
+          -> Agent OTLP'
         owner: obs-hosts
-        duplicate_prevention: no dd-trace tracer; single exporter
-        datadog_limitation: none
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: SSI on Windows covers IIS only - the package keeps OpenTelemetry for Windows services
       app_metrics:
         supported: 'yes'
         method: OTel SDK metrics -> Agent OTLP receiver
@@ -1179,10 +1469,10 @@ compute:
         datadog_limitation: OTel cumulative->delta conversion in the Agent
       runtime_metrics:
         supported: 'yes'
-        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        method: Datadog library runtime metrics -> local Agent DogStatsD (Linux); OTel runtime instrumentation (Windows)
         owner: obs-hosts
-        duplicate_prevention: dd-trace runtime metrics disabled
-        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+        duplicate_prevention: one source per process
+        datadog_limitation: none
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.compute_virtualmachinescalesets)
@@ -1201,17 +1491,30 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: partial
+        method: 'Linux: Datadog Continuous Profiler through host SSI (DD_PROFILING_ENABLED=auto) -> local Agent; .NET profile types cpu/walltime/exceptions/gc (lock/allocation/heap off;
+          allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile. Windows: not enabled (OTel mode)'
+        owner: obs-hosts
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: Windows hosts fall back to apm.mode = otel (no Datadog profiling)
   batch:
     catalog_ref: batch
     signals:
       app_logs:
         supported: partial
-        method: job preparation task (deploy-jobs, submit-batch-job.sh) runs the obs-telemetry-transport batch_log_setup script - pinned Fluent Bit systemd service tailing Batch task stdout.txt ($AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt) -> Datadog HTTP intake
+        method: job preparation task (deploy-jobs, submit-batch-job.sh) runs the obs-telemetry-transport batch_log_setup script - pinned Fluent Bit systemd service tailing Batch task
+          stdout.txt ($AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt) -> forward -> Observability Pipelines Worker (no API key on the node) HTTP intake
         owner: obs-telemetry-transport (script content) + deploy-jobs (job preparation task); ADR-0001 section 13
         duplicate_prevention: no Datadog Agent on Batch nodes; task stdout is not exported anywhere else
-        datadog_limitation: setup re-runs once per node per job; an existing job keeps its original preparation task (re-create the job to change it); Fluent Bit self-metrics have no local Agent OTLP receiver on Batch nodes
+        datadog_limitation: setup re-runs once per node per job; an existing job keeps its original preparation task (re-create the job to change it); Fluent Bit self-metrics have no
+          local Agent OTLP receiver on Batch nodes
       traces:
         supported: 'yes'
         method: OTel SDK -> OTel gateway (pool subnet routes to ACA internal ingress)
@@ -1248,8 +1551,18 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled: Batch tasks stay on OpenTelemetry (fleet policy has no Datadog tracer path for batch)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: apm.mode = otel fallback
   service-fabric-managed:
     catalog_ref: service-fabric-managed
     signals:
@@ -1295,8 +1608,18 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled by the package: Service Fabric is not a fleet-policy architecture (OpenTelemetry)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: apm.mode = otel path
   aro:
     catalog_ref: aro
     signals:
@@ -1342,23 +1665,35 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: 'no'
+        method: 'not enabled by the package: ARO is not a fleet-policy architecture (stays on OpenTelemetry + Fluent Bit)'
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: apm.mode = otel path
   vm-confidential:
     catalog_ref: vm-confidential
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        method: 'Datadog Agent tails LOG_FILE_PATH (conf.d/eh-applogs.d) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs; Windows instances: Fluent Bit
+          service -> forward -> Worker'
         owner: obs-hosts
-        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
+        duplicate_prevention: 'Fluent Bit not installed on Linux hosts in observability_pipelines mode (fluent_bit_direct: Fluent Bit service, Agent logs off)'
         datadog_limitation: none
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        method: 'Linux: host Single Step Instrumentation (installer DD_APM_INSTRUMENTATION_ENABLED=host, library versions from the fleet policy) -> local Agent :8126; Windows: OTel SDK
+          -> Agent OTLP'
         owner: obs-hosts
-        duplicate_prevention: no dd-trace tracer; single exporter
-        datadog_limitation: none
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: SSI on Windows covers IIS only - the package keeps OpenTelemetry for Windows services
       app_metrics:
         supported: 'yes'
         method: OTel SDK metrics -> Agent OTLP receiver
@@ -1367,10 +1702,10 @@ compute:
         datadog_limitation: OTel cumulative->delta conversion in the Agent
       runtime_metrics:
         supported: 'yes'
-        method: OTel runtime instrumentation (.NET/Python) -> Agent OTLP
+        method: Datadog library runtime metrics -> local Agent DogStatsD (Linux); OTel runtime instrumentation (Windows)
         owner: obs-hosts
-        duplicate_prevention: dd-trace runtime metrics disabled
-        datadog_limitation: names differ from dd-trace runtime metrics (otel.* / process.runtime.*)
+        duplicate_prevention: one source per process
+        datadog_limitation: none
       platform_metrics:
         supported: 'yes'
         method: Datadog Azure integration (Azure Monitor metrics, azure.vm)
@@ -1389,14 +1724,25 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
-      profiling: *id002
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
+      profiling:
+        supported: partial
+        method: 'Linux: Datadog Continuous Profiler through host SSI (DD_PROFILING_ENABLED=auto) -> local Agent; .NET profile types cpu/walltime/exceptions/gc (lock/allocation/heap off;
+          allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile. Windows: not enabled (OTel mode)'
+        owner: obs-hosts
+        duplicate_prevention: profiler only inside the Datadog library
+        datadog_limitation: Windows hosts fall back to apm.mode = otel (no Datadog profiling)
   automation:
     catalog_ref: automation
     signals:
       app_logs:
         supported: 'yes'
-        method: JobLogs/JobStreams diagnostic setting -> Event Hubs -> Fluent Bit aggregator
+        method: JobLogs/JobStreams diagnostic setting -> Event Hubs -> Observability Pipelines Worker
         owner: obs-diagnostics
         duplicate_prevention: one destination
         datadog_limitation: runbook output only
@@ -1436,7 +1782,12 @@ compute:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-      rum: *id001
+      rum:
+        supported: n/a
+        method: browser RUM applies only to hello-frontend (static-web-apps)
+        owner: null
+        duplicate_prevention: n/a
+        datadog_limitation: n/a
       profiling:
         supported: n/a
         method: not applicable
@@ -1455,8 +1806,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
-          / Datadog log forwarding
+        method: 'diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Observability
+          Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1483,8 +1834,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
-          / Datadog log forwarding
+        method: 'diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Observability
+          Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1511,8 +1862,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
-          / Datadog log forwarding
+        method: 'diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Observability
+          Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1539,8 +1890,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator
-          / Datadog log forwarding
+        method: 'diagnostic settings (SQLSecurityAuditEvents, QueryStoreRuntimeStatistics, Errors, Timeouts, Blocks, Deadlocks) owned by obs-diagnostics -> Event Hubs -> Observability
+          Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1567,7 +1918,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (SQLSecurityAuditEvents, ResourceUsageStats, Errors) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (SQLSecurityAuditEvents, ResourceUsageStats, Errors) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct:
+          Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1621,8 +1973,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (PostgreSQLLogs, PostgreSQLFlexSessions, PostgreSQLFlexQueryStoreRuntime) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog
-          log forwarding
+        method: 'diagnostic settings (PostgreSQLLogs, PostgreSQLFlexSessions, PostgreSQLFlexQueryStoreRuntime) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker
+          (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1649,7 +2001,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (PostgreSQLLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (PostgreSQLLogs) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1676,7 +2028,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (MySqlSlowLogs, MySqlAuditLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (MySqlSlowLogs, MySqlAuditLogs) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1703,8 +2055,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (DataPlaneRequests, QueryRuntimeStatistics, PartitionKeyStatistics) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log
-          forwarding
+        method: 'diagnostic settings (DataPlaneRequests, QueryRuntimeStatistics, PartitionKeyStatistics) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct:
+          Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1731,7 +2083,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (MongoRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (MongoRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1758,7 +2110,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (CassandraRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (CassandraRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1785,7 +2137,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (GremlinRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (GremlinRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1812,7 +2164,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (TableApiRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (TableApiRequests, DataPlaneRequests) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1839,7 +2191,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (vCoreMongoRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (vCoreMongoRequests) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1866,7 +2218,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (CassandraAudit, CassandraLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (CassandraAudit, CassandraLogs) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1893,7 +2245,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (ConnectionEvents) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (ConnectionEvents) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1920,7 +2272,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (StorageRead, StorageWrite, StorageDelete (tableServices)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (StorageRead, StorageWrite, StorageDelete (tableServices)) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct:
+          Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1947,7 +2300,7 @@ databases:
         datadog_limitation: no curated dashboards
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (ApplicationLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (ApplicationLogs) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -1974,7 +2327,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (PostgreSQL logs (category names not verified)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (PostgreSQL logs (category names not verified)) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent
+          Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -2001,7 +2355,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (SucceededIngestion, FailedIngestion, Command, Query) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (SucceededIngestion, FailedIngestion, Command, Query) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct:
+          Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -2028,7 +2383,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (OperationLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (OperationLogs) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -2055,7 +2410,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (StorageRead, StorageWrite, StorageDelete (blobServices)) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (StorageRead, StorageWrite, StorageDelete (blobServices)) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct:
+          Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -2082,7 +2438,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (StorageRead, StorageWrite) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (StorageRead, StorageWrite) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -2109,7 +2465,8 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (SqlRequests, RequestSteps, ExecRequests) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (SqlRequests, RequestSteps, ExecRequests) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit
+          aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -2136,7 +2493,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (ConnectedClientList) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (ConnectedClientList) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -2163,7 +2520,7 @@ databases:
         datadog_limitation: Azure Monitor latency (typically several minutes); metric granularity 1 min
       platform_logs:
         supported: 'yes'
-        method: diagnostic settings (PostgreSQLLogs) owned by obs-diagnostics -> Event Hubs -> Fluent Bit aggregator / Datadog log forwarding
+        method: 'diagnostic settings (PostgreSQLLogs) owned by obs-diagnostics -> Event Hubs -> Observability Pipelines Worker (fluent_bit_direct: Fluent Bit aggregator)'
         owner: obs-diagnostics
         duplicate_prevention: database diagnostic logs only; never application logs
         datadog_limitation: none
@@ -2179,12 +2536,11 @@ databases:
         owner: null
         duplicate_prevention: n/a
         datadog_limitation: n/a
-# Azure control-plane and platform logs (package 1.1.0). Not rendered by tools/catalog/render_coverage.py; the
-# human-readable table is docs/guides/azure-logs-to-datadog.md. verified_on applies (Microsoft Learn + Datadog docs).
 control_plane_logs:
   activity_log:
     supported: 'yes'
-    method: subscription-scoped diagnostic setting (all 8 categories) -> Event Hubs activity-logs hub -> Fluent Bit aggregator -> Datadog (ddsource azure.<provider> / azure.subscription / azure.resourcegroup, service azure)
+    method: subscription-scoped diagnostic setting (all 8 categories) -> Event Hubs activity-logs hub -> Observability Pipelines Worker -> Datadog (ddsource azure.<provider> / azure.subscription
+      / azure.resourcegroup, service azure)
     owner: obs-diagnostics
     module: observability/modules/azure-logs
     default: 'on'
@@ -2195,7 +2551,8 @@ control_plane_logs:
     owner: obs-diagnostics
     module: observability/modules/azure-logs
     default: 'off'
-    prerequisites: Security Administrator role for the deploying identity; Entra ID P1/P2 to export sign-in logs (ProvisioningLogs and MicrosoftGraphActivityLogs need P1/P2); Event Hub in a subscription of the same tenant; settings.entra.acknowledge_prerequisites = true
+    prerequisites: Security Administrator role for the deploying identity; Entra ID P1/P2 to export sign-in logs (ProvisioningLogs and MicrosoftGraphActivityLogs need P1/P2); Event Hub
+      in a subscription of the same tenant; settings.entra.acknowledge_prerequisites = true
   resource_logs:
     supported: 'yes'
     method: per-resource diagnostic settings with a tiered category policy (security | standard | verbose) -> platform-logs hub -> aggregator
@@ -2204,13 +2561,16 @@ control_plane_logs:
     default: standard (minimal profile should set security)
   sql_audit:
     supported: partial
-    method: diagnostic setting SQLSecurityAuditEvents on <server>/databases/master (obs-diagnostics); requires server auditing with the Azure Monitor target (azurerm_mssql_server_extended_auditing_policy log_monitoring_enabled = true) owned by platform-db-sql
+    method: diagnostic setting SQLSecurityAuditEvents on <server>/databases/master (obs-diagnostics); requires server auditing with the Azure Monitor target (azurerm_mssql_server_extended_auditing_policy
+      log_monitoring_enabled = true) owned by platform-db-sql
     owner: obs-diagnostics
   flow_logs:
     supported: 'no'
-    method: NSG flow logs (retiring 2027-09-30, no new ones since 2025-06-30) and VNet flow logs are Network Watcher features written to Storage only, never to Event Hubs; not collected by this package
+    method: NSG flow logs (retiring 2027-09-30, no new ones since 2025-06-30) and VNet flow logs are Network Watcher features written to Storage only, never to Event Hubs; not collected
+      by this package
     owner: null
   datadog_side:
     supported: 'yes'
-    method: observability/modules/log-management (dashboard, log-based metrics; opt-in index with quota + sampled exclusions, Activity Log pipeline, archive) + archetype profile azure-platform-logs (monitors)
+    method: observability/modules/log-management (dashboard, log-based metrics; opt-in index with quota + sampled exclusions, Activity Log pipeline, archive) + archetype profile azure-platform-logs
+      (monitors)
     owner: obs-azure-integration

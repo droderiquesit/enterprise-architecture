@@ -1,26 +1,37 @@
-output "onboarding" {
-  description = "Onboarded services, dropped optional references, object counts."
-  value       = module.onboarding.summary
-}
-
 output "resources" {
-  description = "Monitored Azure resources (ids exactly as supplied) and their Datadog scopes."
-  value       = module.onboarding.resources
+  description = "Connected Azure resources (ids exactly as supplied) and their collection plan per signal (fleet inventory)."
+  value       = module.fleet.plan
 }
 
-output "dashboards" {
-  value = module.onboarding.dashboard_urls
+output "collection_matrix" {
+  description = "Per-resource collection matrix: metrics, platform logs, application logs, log destination, Agent, APM."
+  value       = module.fleet.matrix
+}
+
+output "observability_pipeline_id" {
+  description = "Observability Pipelines pipeline id (DD_OP_PIPELINE_ID of the Worker on AKS)."
+  value       = local.op_enabled ? module.observability_pipeline[0].pipeline_id : null
+}
+
+output "rum" {
+  description = "RUM applications and the browser SDK init settings (propagatorTypes datadog + tracecontext, replay off) for the frontend owners."
+  value       = length(var.rum) > 0 ? { applications = module.rum[0].applications, browser_config = module.rum[0].browser_config } : null
 }
 
 output "instrumentation" {
-  description = "Per service: log route, non-secret env, secret env references, App Service settings / Kubernetes patch. Hand these to the application owners."
+  description = "Per service: tags, log route, APM / profiling method, non-secret env, secret env references, App Service settings / Kubernetes patch and what the application image must contain. Hand these to the application owners."
   value = {
     for k, m in module.instrumentation : k => {
-      log_route    = m.log_route
-      env          = merge(m.env, { FAULTS_ENABLED = tostring(var.fault_injection_enabled) })
-      secret_env   = m.secret_env
-      app_settings = var.instrumented_services[k].architecture == "appservice" ? m.app_settings : null
-      k8s_patch    = var.instrumented_services[k].architecture == "aks" ? m.k8s_patch : null
+      tags             = m.tags
+      azure_tags       = m.azure_tags
+      log_route        = m.log_route
+      apm              = m.apm
+      profiling        = m.profiling
+      app_requirements = m.app_requirements
+      env              = merge(m.env, { FAULTS_ENABLED = tostring(var.fault_injection_enabled) })
+      secret_env       = m.secret_env
+      app_settings     = local.by_service[k].architecture == "appservice" ? m.app_settings : null
+      k8s_patch        = local.by_service[k].architecture == "aks" ? m.k8s_patch : null
     }
   }
 }
@@ -35,14 +46,6 @@ output "diagnostic_settings" {
     activity_log  = module.azure_logs[0].activity_log_settings
     entra         = module.azure_logs[0].entra_setting_id
   } : null
-}
-
-output "azure_logs" {
-  description = "Azure platform logs in Datadog: dashboard and log-based metrics."
-  value = {
-    dashboard_url = module.log_management.dashboard_url
-    metrics       = module.log_management.metric_names
-  }
 }
 
 output "dbm" {

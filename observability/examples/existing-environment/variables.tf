@@ -1,7 +1,13 @@
 variable "env" {
-  description = "Environment name; selects rendered/<env> and routing/<env>.yaml."
+  description = "Environment name; selects rendered/<env>."
   type        = string
   default     = "prod"
+}
+
+variable "region" {
+  description = "Azure region of the environment (tag policy key region)."
+  type        = string
+  default     = "westeurope"
 }
 
 variable "datadog_site" {
@@ -9,22 +15,13 @@ variable "datadog_site" {
   default = "datadoghq.com"
 }
 
-variable "synthetics" {
-  description = "Synthetic tests. private_location_id = an existing Datadog private location for private endpoints."
-  type = object({
-    enabled             = optional(bool, true)
-    paused              = optional(bool, false)
-    private_location_id = optional(string)
-  })
-  default = {}
-}
-
 variable "telemetry" {
   description = <<-EOT
     The existing telemetry transport (equivalent of the obs-telemetry-transport contract), supplied by hand:
-    OTLP endpoints of your collector/agents, Fluent Bit forward target, the Datadog API key as a Delinea DSV
-    reference (dsv://...) and the DSV endpoint + dsv-fetch image your workloads use. Used only to compute
-    instrumentation patches for the application owners.
+    OTLP endpoints of your collector/agents, Fluent Bit forward target (the Observability Pipelines Worker's fluent
+    source), the Datadog API key as a Delinea DSV reference (dsv://...), the DSV endpoint + dsv-fetch image your
+    workloads use, and env.fleet / env.apm_gateway (package 3.0.0: log pipeline, APM mode and the Datadog Agent APM
+    endpoint of managed runtimes). Used only to compute instrumentation settings for the application owners.
   EOT
   type = object({
     datadog_site = string
@@ -42,7 +39,9 @@ variable "telemetry" {
     fluentbit = object({
       forward_host = string
       forward_port = number
+      sidecar_mode = optional(string, "forward")
     })
+    env = optional(map(map(string)), {})
   })
   default = {
     datadog_site = "datadoghq.com"
@@ -57,23 +56,24 @@ variable "telemetry" {
       http_endpoint = "http://otel-gateway.observability.internal:4318"
     }
     fluentbit = {
-      forward_host = "fluent-bit-aggregator.observability.internal"
+      forward_host = "opw-observability-pipelines-worker.observability-pipelines.svc.cluster.local"
       forward_port = 24224
+    }
+    env = {
+      fleet       = { EH_LOG_PIPELINE = "observability_pipelines", EH_APM_MODE = "datadog", EH_PROFILING_ENABLED = "true" }
+      apm_gateway = { DD_TRACE_AGENT_URL = "http://datadog-apm.observability.internal:8126" }
     }
   }
 }
 
 variable "instrumented_services" {
-  description = "Services that receive instrumentation patches (outputs for the application owners to apply)."
+  description = "Services that receive instrumentation settings (outputs for the application owners). Identity, runtime and hosting come from rendered/<env>."
   type = map(object({
-    version      = string
-    team         = string
-    runtime      = string
-    architecture = string
+    version = string
   }))
   default = {
-    orders-web = { version = "2026.10.1", team = "orders", runtime = "dotnet", architecture = "appservice" }
-    orders-api = { version = "4.2.0", team = "orders", runtime = "java", architecture = "aks" }
+    orders-web = { version = "2026.10.1" }
+    orders-api = { version = "4.2.0" }
   }
 }
 
@@ -95,7 +95,7 @@ variable "azure_subscription_id" {
 
 variable "diagnostics" {
   description = <<-EOT
-    Diagnostic settings on the manifest resources -> existing Event Hubs (Fluent Bit aggregator reads them).
+    Diagnostic settings on the manifest resources -> existing Event Hubs (the Observability Pipelines Worker reads them).
     platform_log_tier: security | standard | verbose (package category policy, see docs/guides/azure-logs-to-datadog.md).
   EOT
   type = object({
@@ -136,17 +136,6 @@ variable "azure_logs" {
   default = {}
 }
 
-variable "log_management" {
-  description = "Datadog-side handling of the Azure platform logs (package modules/log-management). Index, pipeline and archive are org-wide objects and stay off unless this root owns them."
-  type = object({
-    dashboard = optional(bool, true)
-    metrics   = optional(bool, true)
-    index     = optional(bool, false)
-    pipeline  = optional(bool, false)
-  })
-  default = {}
-}
-
 variable "azure_integration" {
   description = <<-EOT
     Datadog Azure integration (platform metrics for every monitor on azure.* metrics). Default: an EXISTING Entra app
@@ -167,7 +156,8 @@ variable "azure_integration" {
 
 variable "kubernetes" {
   description = <<-EOT
-    Existing AKS cluster for the Datadog Agent (DaemonSet + Cluster Agent) and the Fluent Bit DaemonSet
+    Existing AKS cluster for the Datadog Agent (DaemonSet + Cluster Agent; collects the pod logs and sends them to the
+    Observability Pipelines Worker, Single Step Instrumentation of ssi_namespaces) and the Worker itself
     (modules/kubernetes). api_key_mode = dsv_secret_backend (default): the Agents and Fluent Bit read the key from
     Delinea DSV with workload identity (identity_client_id, federated with the service accounts datadog/datadog,
     datadog/datadog-cluster-checks and fluent-bit/fluent-bit by your identity team); existing: a Secret
@@ -181,6 +171,9 @@ variable "kubernetes" {
     cluster_name              = optional(string, "aks-prod-weu")
     host                      = optional(string, "https://aks-prod-weu.hcp.westeurope.azmk8s.io:443")
     cluster_ca_certificate    = optional(string, "")
+    ssi_namespaces            = optional(list(string), ["orders"])
+    # canonical tag-policy values of the cluster infrastructure
+    identity = optional(map(string), { team = "platform", owner = "platform-team@contoso.example", application = "platform", domain = "platform", tier = "infrastructure" })
   })
   default = {}
 }
@@ -199,4 +192,47 @@ variable "dbm" {
     password_ref = optional(string, "dsv://monitoring/prod/dbm-orders-postgresql#value")
   })
   default = {}
+}
+
+variable "observability_pipelines" {
+  description = <<-EOT
+    Datadog Observability Pipelines (package default log pipeline): the pipeline is created here, the Worker runs on the
+    existing AKS cluster. Its API key comes from the Secret api_key_secret_name and the Event Hubs listen connection
+    string from eventhub.synced_secret_name - both kept by the Delinea dsv-k8s syncer from the DSV references
+    (connection_string_ref documents the source; Terraform never reads a value). enabled = false: Fluent Bit direct.
+  EOT
+  type = object({
+    enabled             = optional(bool, true)
+    api_key_secret_name = optional(string, "datadog-api-key")
+    eventhub = optional(object({
+      bootstrap             = string
+      topics                = list(string)
+      connection_string_ref = string
+      synced_secret_name    = optional(string, "eventhub-listen")
+      synced_secret_key     = optional(string, "connection-string")
+      }), {
+      bootstrap             = "evhns-obs-prod.servicebus.windows.net:9093"
+      topics                = ["app-logs", "platform-logs", "activity-logs"]
+      connection_string_ref = "dsv://monitoring/prod/eventhub-listen#value"
+    })
+  })
+  default = {}
+}
+
+variable "rum" {
+  description = <<-EOT
+    RUM applications keyed by the frontend service (modules/rum): mode = create (name) or existing (application_id +
+    client_token of an application your organisation already has). allowed_tracing_origins: first-party API origins
+    that receive datadog + tracecontext headers.
+  EOT
+  type = map(object({
+    mode                    = optional(string, "create")
+    name                    = optional(string)
+    application_id          = optional(string)
+    client_token            = optional(string)
+    allowed_tracing_origins = optional(list(string), [])
+  }))
+  default = {
+    orders-web = { mode = "create", name = "orders-web (prod)", allowed_tracing_origins = ["https://api.orders.contoso.example"] }
+  }
 }

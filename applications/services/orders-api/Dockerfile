@@ -13,14 +13,14 @@ WORKDIR /src/dotnet
 # Restore layer: only build metadata + project files.
 COPY dotnet/global.json dotnet/nuget.config dotnet/Directory.Build.props dotnet/Directory.Packages.props ./
 COPY shared/dotnet/Directory.Build.props shared/dotnet/Directory.Packages.props ../shared/dotnet/
-COPY shared/dotnet/Hello.Common/Hello.Common.csproj ../shared/dotnet/Hello.Common/
+COPY shared/dotnet/Hello.Common/Hello.Common.csproj shared/dotnet/Hello.Common/packages.lock.json ../shared/dotnet/Hello.Common/
 COPY services/orders-api/Directory.Build.props services/orders-api/Directory.Packages.props ../services/orders-api/
-COPY services/orders-api/src/Hello.OrdersApi/Hello.OrdersApi.csproj ../services/orders-api/src/Hello.OrdersApi/
+COPY services/orders-api/src/Hello.OrdersApi/Hello.OrdersApi.csproj services/orders-api/src/Hello.OrdersApi/packages.lock.json ../services/orders-api/src/Hello.OrdersApi/
 # Optional secret `ca_bundle`: CA bundle for TLS-intercepting egress proxies (build-time only, never in the image).
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     --mount=type=secret,id=ca_bundle,required=false \
     if [ -s /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
-    dotnet restore ../services/orders-api/src/Hello.OrdersApi/Hello.OrdersApi.csproj
+    dotnet restore ../services/orders-api/src/Hello.OrdersApi/Hello.OrdersApi.csproj --locked-mode
 COPY shared/dotnet/Hello.Common/ ../shared/dotnet/Hello.Common/
 COPY services/orders-api/src/ ../services/orders-api/src/
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \

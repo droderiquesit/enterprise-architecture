@@ -20,3 +20,43 @@ Installable package (`pip install ./applications/shared/python/hello_common`; se
 | `testing` | throwaway docker containers for `integration` tests, Service Bus emulator (+ SQL Server) bootstrap |
 
 Tests: `pytest` (unit tests; `tests/test_secrets.py` runs against `tools/secrets/mock_dsv.py`). See `applications/python/README.md` for the build pipeline.
+
+## Telemetry modes: `TELEMETRY_SDK = otel | datadog` (one tracer per process)
+
+`hello_common.apm` selects the tracer at import time (`hello_common/__init__.py` runs before any service imports
+FastAPI/httpx/psycopg/redis, which is what `ddtrace.auto` requires). The .NET equivalent is `Hello.Common`
+(`HelloTelemetryMode`, see `applications/dotnet/README.md`); both read the same variables.
+
+| Variable | Values / default | Effect |
+|---|---|---|
+| `TELEMETRY_SDK` | `otel` (default when unset) \| `datadog`; anything else fails start-up | `otel`: OTel SDK tracer + meter providers, OTLP exporters, OTel instrumentations (unchanged behaviour). `datadog`: **no** OTel SDK provider, exporter or instrumentation is created. Unset **and** a Datadog tracer already injected ⇒ `datadog` (safety net); explicit `otel` next to an injected tracer is kept but logged as a WARNING (two tracers) |
+| `OTEL_SDK_DISABLED` | `true` | otel mode: no OTel provider at all. **Do not set in datadog mode**: Datadog SDKs map it to `DD_TRACE_OTEL_ENABLED=false` (manual spans dropped; a WARNING is logged) |
+| `DD_TRACE_ENABLED` | default true | `false` in datadog mode: ddtrace is not imported (profiler alone if `DD_PROFILING_ENABLED=true`) |
+| `DD_TRACE_OTEL_ENABLED` | **set `true`** (hello_common defaults it to `true` when it enables ddtrace itself) | OTel **API** calls (worker `servicebus.process` spans with links, jobs/traffic spans) become ddtrace spans (operation name = span kind, resource = span name); `trace.get_current_span()` returns the active ddtrace span, so `traceparent` propagation helpers keep working |
+| `DD_PROFILING_ENABLED` | `true` to enable | datadog mode: Continuous Profiler started by `ddtrace.auto` (ddtrace 4.15.6 ships cp313 profiler extensions; locally verified on Python 3.13.16); injected tracer ⇒ the injector owns it (never started twice). otel mode: ignored with an INFO line (Datadog documents no profiler + OTel SDK pairing) |
+| `DD_METRICS_OTEL_ENABLED` | default false | datadog mode, `false`: `hello.*` metrics → **DogStatsD** (`datadog` client 0.55.0). `true`: they stay on the OTel Metrics API and ddtrace's MeterProvider exports OTLP to the Agent (needs the Agent OTLP receiver, ddtrace ≥ 3.18) |
+| `DD_DOGSTATSD_URL` / `DD_AGENT_HOST` + `DD_DOGSTATSD_PORT` | default `localhost:8125` | DogStatsD destination (`udp://host:8125` or `unix:///var/run/datadog/dsd.socket`) |
+| `DD_ENV`, `DD_SERVICE`, `DD_VERSION` | required | unified service tags on spans, logs, DogStatsD metrics (client adds `env:`/`service:`/`version:`) |
+| `DD_LOGS_INJECTION` | optional | not needed: the JSON formatter writes the ids itself; ddtrace's record attributes are ignored (same field names) |
+
+Datadog mode details:
+
+* **Tracer source.** Injected (SSI on AKS/VMs `_DD_PY_SSI_INJECT=1`, `ddtrace-run` in a serverless-init entrypoint):
+  detected via `ddtrace.bootstrap.sitecustomize` in `sys.modules` and left alone. Otherwise `import ddtrace.auto`
+  (`ddtrace==4.15.6` is installed in every service image via `requirements-datadog.in`). Azure Functions: if
+  `datadog-serverless-compat` is installed its `start()` runs first (Datadog's documented order) — it is **not** a
+  dependency today (see `services/functions/README.md`).
+* **Logs.** `trace_id` (32 hex; ddtrace 128-bit ids), `span_id` (16 hex), `dd.trace_id` (decimal low 64 bits),
+  `dd.span_id` come from `ddtrace.tracer.current_span()`; omitted when no span is active. Same field names in both modes.
+* **Metrics.** `telemetry.meter()` returns a facade: identical call sites, attributes filtered by
+  `ALLOWED_METRIC_ATTRIBUTES` in both modes; DogStatsD types: counter/up-down → `count`, histogram → `distribution`,
+  gauge → `gauge`; same metric names (`hello.catalog.cache.requests`, `hello.worker.messages`, ...).
+* **Probes.** `/healthz`, `/readyz`, `/version` traces are dropped in-process by a ddtrace `TraceFilter`.
+* **Not used in datadog mode:** `OTEL_EXPORTER_OTLP_*`, `OTEL_RESOURCE_ATTRIBUTES` (Datadog SDKs map it to `DD_TAGS`;
+  set `DD_TAGS=team:…,domain:…,tier:…` instead — do not set both, the Agent would merge duplicates),
+  `OTEL_TRACES_SAMPLER` (mapped to `DD_TRACE_SAMPLE_RATE`), azure-core OTel span plugin (ddtrace's `azure_servicebus`
+  / `azure_cosmos` integrations cover the SDK calls).
+
+Tests: `tests/test_apm.py` (both modes, each datadog case in a fresh interpreter: no OTel providers/OTLP exporter,
+ddtrace-injected detection, log correlation from real ddtrace spans, fake DogStatsD UDP listener, profiler start /
+ignore). Real-Agent proof: `tests/integration/run_dd_agent_e2e.py` (evidence `docs/evidence/local/LATEST-datadog-agent.md`).

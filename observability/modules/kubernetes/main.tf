@@ -382,6 +382,8 @@ resource "helm_release" "fluent_bit" {
 
 # ------------------------------------------------------------------ optional Observability Pipelines Worker on AKS
 locals {
+  # chart-managed keys (pipeline id, site, API key, data dir, listen addresses) are not overridable through env
+  opw_extra_env = { for k, v in var.op_worker.env : k => v if !contains(["DD_OP_PIPELINE_ID", "DD_SITE", "DD_API_KEY", "DD_OP_DATA_DIR", "DD_OP_DATA_DIR_BASE", "DD_OP_API_ENABLED", "DD_OP_API_ADDRESS", "DD_OP_SOURCE_DATADOG_AGENT_ADDRESS", "DD_OP_SOURCE_FLUENT_ADDRESS", "DD_OP_TAGS", "DD_OP_LOG_FORMAT"], k) }
   opw_values = {
     image = { tag = var.op_worker.image_tag }
     datadog = {
@@ -401,14 +403,17 @@ locals {
       requests = { cpu = var.op_worker.cpu_request, memory = var.op_worker.memory_request }
       limits   = { memory = var.op_worker.memory_limit }
     }
-    env = [
+    env = concat([
       { name = "DD_OP_SOURCE_DATADOG_AGENT_ADDRESS", value = "0.0.0.0:8282" },
       { name = "DD_OP_SOURCE_FLUENT_ADDRESS", value = "0.0.0.0:24224" },
       { name = "DD_OP_API_ENABLED", value = "true" },
       { name = "DD_OP_API_ADDRESS", value = "0.0.0.0:8686" },
       { name = "DD_OP_TAGS", value = "env:${var.datadog.env},kube_cluster_name:${var.cluster_name}" },
       { name = "DD_OP_LOG_FORMAT", value = "json" },
-    ]
+      ],
+      [for k in sort(keys(local.opw_extra_env)) : { name = k, value = local.opw_extra_env[k] }],
+      [for k in sort(keys(var.op_worker.secret_env)) : { name = k, valueFrom = { secretKeyRef = { name = var.op_worker.secret_env[k].secret_name, key = var.op_worker.secret_env[k].key } } }],
+    )
     service = {
       enabled = true
       type    = "ClusterIP"

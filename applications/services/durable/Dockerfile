@@ -13,13 +13,13 @@ ARG BUILD_TIME=unknown
 WORKDIR /src/dotnet
 COPY dotnet/global.json dotnet/nuget.config dotnet/Directory.Build.props dotnet/Directory.Packages.props ./
 COPY shared/dotnet/Directory.Build.props shared/dotnet/Directory.Packages.props ../shared/dotnet/
-COPY shared/dotnet/Hello.Common/Hello.Common.csproj ../shared/dotnet/Hello.Common/
+COPY shared/dotnet/Hello.Common/Hello.Common.csproj shared/dotnet/Hello.Common/packages.lock.json ../shared/dotnet/Hello.Common/
 COPY services/durable/Directory.Build.props services/durable/Directory.Packages.props ../services/durable/
-COPY services/durable/src/Hello.Durable/Hello.Durable.csproj ../services/durable/src/Hello.Durable/
+COPY services/durable/src/Hello.Durable/Hello.Durable.csproj services/durable/src/Hello.Durable/packages.lock.json ../services/durable/src/Hello.Durable/
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     --mount=type=secret,id=ca_bundle,required=false \
     if [ -s /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
-    dotnet restore ../services/durable/src/Hello.Durable/Hello.Durable.csproj
+    dotnet restore ../services/durable/src/Hello.Durable/Hello.Durable.csproj --locked-mode
 COPY shared/dotnet/Hello.Common/ ../shared/dotnet/Hello.Common/
 COPY services/durable/src/ ../services/durable/src/
 # The Functions SDK restores/builds a generated WorkerExtensions project during build (needs NuGet access too).

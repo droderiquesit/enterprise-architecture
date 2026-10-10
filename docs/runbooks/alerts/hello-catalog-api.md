@@ -3,8 +3,8 @@
 # Alert runbook: hello-catalog-api
 
 Service `hello-catalog-api` - team `catalog`, owner catalog@example.com, tier `high`,
-architecture `aca`. Source: `observability/onboarding/dev/hello-catalog-api.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-catalog-api.json`).
+architecture `aca`. Source: `observability/extras/content/onboarding/dev/hello-catalog-api.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-catalog-api.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

@@ -42,6 +42,43 @@ here (MSBuild discovers them by walking up from the project directory).
 `DSV_AUTH`, `DSV_TENANT`, `DSV_TLD`, `DSV_BASE_URL`, `DSV_TIMEOUT_SECONDS`, `DSV_CACHE_TTL_SECONDS`, `DSV_MAX_ATTEMPTS`, `DSV_REFRESH_SECONDS`
 (any value may be a `dsv://` reference — secrets such as `FAULT_TOKEN` and connection strings must be).
 
+## Telemetry modes: `TELEMETRY_SDK = otel | datadog` (one tracer per process)
+
+Same variables as Python (`applications/shared/python/hello_common/README.md`). `AddHelloOpenTelemetry` resolves the
+mode with `HelloTelemetryMode` and returns `null` (no `OpenTelemetryBuilder`) when it registers no OTel SDK.
+
+| Variable | Effect in Hello.Common |
+|---|---|
+| `TELEMETRY_SDK` | `otel` (default) — OTel SDK traces/metrics + OTLP as before. `datadog` — **no** TracerProvider/MeterProvider/OTLP exporter registered. Unset + Datadog CLR profiler attached (`CORECLR_ENABLE_PROFILING=1` + `CORECLR_PROFILER={846F5F1C-F9AE-4B07-969E-05C26BC060D8}`, or `COR_*`, or `Datadog.Trace` loaded) ⇒ `datadog`. Explicit `otel` + attached profiler ⇒ WARNING "two tracers". Invalid ⇒ start-up exception |
+| `OTEL_SDK_DISABLED=true` | no OTel provider (either mode); in datadog mode a WARNING: the tracer maps it to `DD_TRACE_OTEL_ENABLED=false` |
+| `DD_TRACE_OTEL_ENABLED=true` | **required in datadog mode** (the deployment sets it; Hello.Common cannot): `System.Diagnostics.Activity` spans (`Hello.App` producer/consumer/workflow spans, Durable Task worker spans) are recorded by the Datadog tracer — locally verified: `send order-events` (otel.library.name `Hello.App`) appears in the same Datadog trace as `aspnet_core.request` |
+| `DD_METRICS_OTEL_ENABLED` | `false` (default): `DogStatsdMetricsBridge` (MeterListener on meter `Hello.App` only) forwards `hello.*` to DogStatsD via `DogStatsD-CSharp-Client` 9.2.1 — counter/up-down → count, histogram → distribution, gauge → gauge; id-like tag keys dropped. `true`: the tracer (≥ 3.30, .NET 6+) exports the Meter over OTLP to the Agent itself (Agent OTLP receiver required; do not add OTel SDK packages) and the bridge is not registered |
+| `DD_DOGSTATSD_URL` / `DD_AGENT_HOST` + `DD_DOGSTATSD_PORT` | DogStatsD destination (default `localhost:8125`; `unix:///…` supported); `DD_ENV/DD_SERVICE/DD_VERSION` become `env/service/version` tags |
+| `DD_PROFILING_ENABLED` | read by the CLR profiler only (SSI / serverless-init / site extension; Linux also needs `LD_PRELOAD=…/Datadog.Linux.ApiWrapper.x64.so`, set by the injectors). Hello.Common never sets or changes `CORECLR_*`, `COR_*`, `LD_PRELOAD` or `DD_*` (unit-tested); without the profiler attached an INFO line says the setting is ignored |
+| `DD_LOGS_INJECTION` | harmless: the tracer's `dd_*` ILogger scope keys are skipped; JSON logs keep the same field names |
+
+Log correlation (`HelloJsonLogWriter`) and the `traceparent` response header / Service Bus `traceparent` /
+problem `trace_id` use the **active Datadog span** first (`DatadogCorrelation`: reflection on the auto-instrumentation
+`Datadog.Trace` assembly — `Tracer.Instance.ActiveScope.Span` TraceId/SpanId + 128-bit `RawTraceId`; no NuGet
+reference), then `Activity.Current`; no span ⇒ fields omitted. (Without this, ASP.NET Core's own Activity — not the
+Datadog span — would be reported: observed locally before the fix.)
+
+Recommended deployment defaults for datadog mode (observability instrumentation module): `TELEMETRY_SDK=datadog`,
+`DD_TRACE_OTEL_ENABLED=true`, `DD_ENV/DD_SERVICE/DD_VERSION`, `DD_TAGS=team:…,domain:…,tier:…` (instead of
+`OTEL_RESOURCE_ATTRIBUTES`), `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED=true` (otherwise .NET HTTP client spans
+get service `hello-orders-api-http-client`, observed), `DD_PROFILING_ENABLED=true` where wanted, no `OTEL_EXPORTER_OTLP_*`
+/ `OTEL_SDK_DISABLED`. .NET probes are traced by the tracer's ASP.NET Core integration: drop them Agent-side with
+`DD_APM_IGNORE_RESOURCES="GET /healthz,GET /readyz,GET /version,GET /api/healthz"` (Python drops them in-process).
+
+## NuGet lock files
+
+`RestorePackagesWithLockFile=true` (Directory.Build.props): every project has a committed `packages.lock.json`.
+`build.sh build` restores with `--locked-mode` (drift fails with NU1004; `RestoreLockedMode` is also on whenever
+`ContinuousIntegrationBuild=true`), the Dockerfiles copy the lock files into the restore layer and restore with
+`--locked-mode`. Hello.Common declares `RuntimeIdentifiers linux-x64;win-x64` so the inventory-api win-x64/linux-x64
+publishes stay within the lock files. After changing `Directory.Packages.props`: `LOCKED_RESTORE=false ./build.sh build`
+(regenerates the lock files) and commit them.
+
 ## Build, test, package
 
 ```bash

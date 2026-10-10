@@ -26,6 +26,15 @@ Settings: `CATALOG_API_URL`, `AUDIT_SINK`, `LEDGER_ENDPOINT`, `LEDGER_COLLECTION
   container (quote returned 200 against a catalog container).
 * `host.json` extension bundle `[4.0.0, 5.0.0)` (current Microsoft Learn guidance).
 
+## `TELEMETRY_SDK=datadog` (not the default here)
+`hello_common` supports it (no OTel SDK; `ddtrace` from the image, imported via `ddtrace.auto`; if the
+`datadog-serverless-compat` package is installed its `start()` runs first, as Datadog's Python Functions guide
+prescribes, triggered by `FUNCTIONS_WORKER_RUNTIME`). It is **not** enabled for hello-functions: `datadog-serverless-compat`
+is not a dependency, the guide requires `DD_API_KEY` as an app setting, and in this model `azure.functions` is imported by
+`function_app.py` before `hello_common` (ddtrace still patches already-imported modules, but this ordering is unverified on
+Azure). Keep `TELEMETRY_SDK` unset (otel) and `PYTHON_ENABLE_OPENTELEMETRY=true` until verified on a deployed app; in
+datadog mode set `PYTHON_ENABLE_OPENTELEMETRY=false`.
+
 ## Packaging
 * Zip (Flex Consumption / Premium / Dedicated): `.artifacts/functions/hello-functions-<ver>.zip` with dependencies
   pre-installed in `.python_packages/lib/site-packages` (linux x64, cp313) and `hello_common/` vendored at the root

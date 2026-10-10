@@ -3,8 +3,8 @@
 # Alert runbook: hello-functions
 
 Service `hello-functions` - team `platform-engineering`, owner platform-engineering@example.com, tier `medium`,
-architecture `functions`. Source: `observability/onboarding/dev/hello-functions.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-functions.json`).
+architecture `functions`. Source: `observability/extras/content/onboarding/dev/hello-functions.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-functions.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

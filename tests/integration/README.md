@@ -130,3 +130,29 @@ path itself is tested by `observability/tests/transport`.
   file exporter).
 - The RUM SDK is fed by route interception rather than a configured `proxy`; hello-frontend has no proxy option.
 - Only the `postgresql` dbadapter family is included.
+
+## Datadog Agent variant (`TELEMETRY_SDK=datadog`, real `datadog/agent:7.84.2`)
+
+```bash
+python3 tests/integration/run_dd_agent_e2e.py            # build missing images, up, journey, 10 checks, evidence, down -v
+python3 tests/integration/run_dd_agent_e2e.py --keep     # leave eh-dd running (catalog 18182, orders 18183, tap 18191, mock intake 18190)
+E2E_DD=1 pytest -v -k dd tests/integration/test_e2e.py   # same, one pytest test per check
+```
+
+Stack `datadog_agent/docker-compose.yml` (project `eh-dd`, 5 containers, ~1 min): hello-catalog-api (Python, ddtrace
+4.15.6 enabled by hello_common, profiler on), hello-orders-api-ddtrace (TEST-ONLY image = hello-orders-api + Datadog .NET
+tracer 3.55.1 home downloaded at build time from the GitHub release, SHA-256 pinned in
+`datadog_agent/Dockerfile.orders-api-ddtrace`, CLR profiler env as SSI/serverless-init set it), the real Agent (fake API
+key, `DD_SITE=e2e.invalid`, every intake URL → `tap`), `tap` (`datadog_agent/tap_intake.py`, Python 3.14 for stdlib
+zstd: records + decodes the Agent's payloads — trace AgentPayload incl. the 7.8x string-table format, series strings,
+profile multipart — and forwards them unchanged) → `intake` (the existing mock intake, unmodified; stores the logs).
+Checks dd-1..dd-10 (see the runner docstring): both tracers' traces through the Agent, one .NET → Python distributed
+trace, Activity span recorded by the .NET tracer, probes not traced (Python), log correlation against received trace
+ids, `hello.*` DogStatsD metrics, Python + .NET profiles via the Agent's profiling proxy, no OTel SDK/OTLP in datadog mode,
+API key on every payload. Evidence: `docs/evidence/local/<UTC>-datadog-agent/`, `docs/evidence/local/LATEST-datadog-agent.md`.
+Not covered: SSI itself (admission controller / host injector), serverless-init, App Service sidecar — the variant
+emulates their result (tracer in-process + Agent reachable).
+
+Browser: if the installed Playwright expects a Chromium revision that is not under `PLAYWRIGHT_BROWSERS_PATH`
+(e.g. playwright upgraded to 1.63 without `playwright install`), `run_e2e.py` falls back to the newest local
+`chromium-*/chrome-linux*/chrome` build (`PW_CHROMIUM_EXECUTABLE` still wins).

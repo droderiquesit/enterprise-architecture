@@ -75,6 +75,16 @@ module "dbm" {
   hosting   = length(local.module_databases) == 0 ? "none" : var.settings.hosting
   datadog   = { site = var.obs_telemetry_transport.datadog_site, env = var.environment.name }
   tags      = module.tags.tags
+  # package 3.0.0: canonical tag policy values of the lab databases (modules/tagging; service = database key)
+  identity = {
+    team        = var.environment.team
+    owner       = var.environment.owner
+    application = "enterprise-hello"
+    domain      = "data"
+    tier        = "infrastructure"
+    region      = var.environment.location
+    managed_by  = "terraform"
+  }
   aci = var.settings.hosting == "aci" && length(local.module_databases) > 0 ? {
     name                = module.naming.names.container_group
     resource_group_name = azurerm_resource_group.this[0].name

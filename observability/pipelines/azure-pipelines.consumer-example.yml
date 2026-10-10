@@ -12,12 +12,12 @@ resources:
     - repository: obs
       type: git
       name: Platform/observability-package          # <project>/<repo> hosting the package
-      ref: refs/tags/observability-v2.0.0
+      ref: refs/tags/observability-v3.0.0
 
 variables:
   environment: prod
   rootDir: $(Build.SourcesDirectory)/monitoring
-  packageDir: $(Build.SourcesDirectory)/monitoring/.vendor/observability-2.0.0
+  packageDir: $(Build.SourcesDirectory)/monitoring/.vendor/observability-3.0.0
 
 stages:
   - stage: validate
@@ -33,8 +33,7 @@ stages:
           - template: pipelines/templates/validate-onboarding.yml@obs
             parameters:
               packageDir: $(packageDir)
-              manifestsDir: $(rootDir)/manifests
-              routingFile: $(rootDir)/routing/prod.yaml
+              manifestsDir: $(rootDir)/manifests/prod
               environment: prod
               renderedDir: $(rootDir)/rendered/prod
 
@@ -72,7 +71,7 @@ stages:
           datadogApiKeyRef: dsv://monitoring/prod/datadog-api-key#value
           datadogAppKeyRef: dsv://monitoring/prod/datadog-app-key#value
           # the plan artifact contains the root incl. its vendored package
-          dsvFetchPath: $(Pipeline.Workspace)/tfplan-prod/.vendor/observability-2.0.0/images/dsv-fetch/dsv_fetch.py
+          dsvFetchPath: $(Pipeline.Workspace)/tfplan-prod/.vendor/observability-3.0.0/images/dsv-fetch/dsv_fetch.py
           pool: {name: self-hosted-monitoring}
 
   - stage: verify
@@ -100,6 +99,7 @@ stages:
               packageDir: $(packageDir)
               environment: prod
               journeyServices: [orders-web, orders-api]
+              expectedTagsDir: $(rootDir)/rendered/prod
               infraMetrics: ['avg:azure.app_services.requests{*}']
               azureServiceConnection: sc-monitoring-prod
               dsv: {tenant: contoso, tld: com, identity_client_id: 00000000-0000-0000-0000-000000000000}

@@ -198,7 +198,18 @@ run "op_worker_on_aks" {
   command = plan
   variables {
     log_pipeline = null
-    op_worker    = { enabled = true, pipeline_id = "aaaaaaaa-0000-0000-0000-000000000001" }
+    op_worker = {
+      enabled     = true
+      pipeline_id = "aaaaaaaa-0000-0000-0000-000000000001"
+      env         = { DD_OP_SOURCE_KAFKA_BOOTSTRAP_SERVERS = "evhns.servicebus.windows.net:9093", DD_API_KEY = "must-be-ignored" }
+      secret_env  = { DD_OP_SOURCE_KAFKA_SASL_PASSWORD = { secret_name = "eventhub-listen", key = "connection-string" } }
+    }
+  }
+  assert {
+    condition = (anytrue([for e in yamldecode(helm_release.op_worker[0].values[0]).env : e.name == "DD_OP_SOURCE_KAFKA_BOOTSTRAP_SERVERS" && try(e.value, "") == "evhns.servicebus.windows.net:9093"])
+      && anytrue([for e in yamldecode(helm_release.op_worker[0].values[0]).env : e.name == "DD_OP_SOURCE_KAFKA_SASL_PASSWORD" && try(e.valueFrom.secretKeyRef.name, "") == "eventhub-listen"])
+    && !anytrue([for e in yamldecode(helm_release.op_worker[0].values[0]).env : e.name == "DD_API_KEY"]))
+    error_message = "Event Hubs source env for the in-cluster Worker: bootstrap as value, SASL password from a synced Secret; chart-managed keys cannot be overridden"
   }
   assert {
     condition     = helm_release.op_worker[0].version == "2.22.0" && yamldecode(helm_release.op_worker[0].values[0]).persistence.enabled && yamldecode(helm_release.op_worker[0].values[0]).datadog.apiKeyExistingSecret == "datadog-api-key"

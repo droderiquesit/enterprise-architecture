@@ -3,8 +3,8 @@
 # Alert runbook: hello-dbadapter-cosmos-nosql
 
 Service `hello-dbadapter-cosmos-nosql` - team `data-platform`, owner data-platform@example.com, tier `low`,
-architecture `aca`. Source: `observability/onboarding/dev/hello-dbadapter-cosmos-nosql.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-dbadapter-cosmos-nosql.json`).
+architecture `aca`. Source: `observability/extras/content/onboarding/dev/hello-dbadapter-cosmos-nosql.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-dbadapter-cosmos-nosql.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

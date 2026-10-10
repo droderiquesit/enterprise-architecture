@@ -6,7 +6,8 @@
 (d) terraform init -backend=false / validate / test (mock providers); assert that only allowed resource types are
     planned and that supplied resource ids are used verbatim (example tests)
 (e) prove that no path in the consumer copy escapes to the source repository or its lab roots
-(f) simulate an upgrade <VERSION> -> <VERSION>-upgrade-test (no destroy of anything) and a removal (destroy lists only monitoring objects)
+(f) simulate an upgrade <VERSION> -> <VERSION>-upgrade-test (no destroy of anything) and a removal (destroy lists only
+    Datadog-side / collection objects, never monitored infrastructure)
 
 Requires terraform, bash, tar, sha256sum. No network beyond the provider plugin cache, no credentials.
 """
@@ -96,8 +97,8 @@ def run_sections(output: str) -> dict[str, str]:
 # Mock providers for every provider a consumer root may use (no credentials, no network).
 MOCKS = (
     'mock_provider "datadog" {\n'
-    '  mock_resource "datadog_service_level_objective" { defaults = { id = "0123456789abcdef0123456789abcdef" } }\n'
-    '  mock_resource "datadog_dashboard_json" { defaults = { url = "/dashboard/abc" } }\n'
+    '  mock_resource "datadog_observability_pipeline" { defaults = { id = "aaaaaaaa-0000-0000-0000-000000000001" } }\n'
+    '  mock_resource "datadog_rum_application" { defaults = { id = "bbbbbbbb-0000-0000-0000-000000000002", client_token = "pub0123" } }\n'
     '}\n'
     'mock_provider "azurerm" {\n'
     '  mock_data "azurerm_monitor_diagnostic_categories" {\n'
@@ -132,9 +133,10 @@ def test_a_release_contents(consumer):
     top = {p.split("/")[0] for p in listing}
     assert top == {f"observability-{CUR}"}
     second = {p.split("/")[1] for p in listing if p.count("/") >= 1 and p.split("/")[1]}
-    assert {"modules", "schemas", "archetypes", "tools", "pipelines", "examples", "VERSION", "README.md",
+    assert {"modules", "config", "schemas", "tools", "pipelines", "examples", "VERSION", "README.md",
             "CHANGELOG.md", "UPGRADING.md"} <= second
-    assert "lab" not in second and "onboarding" not in second
+    assert not second & {"lab", "onboarding", "extras", "archetypes"}, "lab roots and optional monitoring content are not released"
+    assert not [p for p in listing if "/modules/monitors/" in p or "/modules/slos/" in p or "/modules/dashboards/" in p]
     assert not [p for p in listing if "/.terraform/" in p or p.endswith(".tfstate")]
     # reproducible build: same inputs -> same checksum
     _, sha2 = build(CUR, consumer["work"] / "dist2")
@@ -197,7 +199,7 @@ def test_f_upgrade_and_removal(consumer):
     # planned against the state installed by 1.0.0 (shared state_key).
     up = d / "upgrade"
     up.mkdir()
-    for item in ("versions.tf", "providers.tf", "variables.tf", "main.tf", "outputs.tf", "vendor.sh", "rendered", "routing", "manifests"):
+    for item in ("versions.tf", "providers.tf", "variables.tf", "main.tf", "outputs.tf", "vendor.sh", "rendered", "manifests"):
         src = d / item
         (shutil.copytree if src.is_dir() else shutil.copy2)(src, up / item)
     lock(up, NEXT, tarball, sha)

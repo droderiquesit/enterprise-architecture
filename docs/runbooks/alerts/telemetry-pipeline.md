@@ -3,8 +3,8 @@
 # Alert runbook: telemetry-pipeline
 
 Service `telemetry-pipeline` - team `observability`, owner observability@example.com, tier `critical`,
-architecture `aca`. Source: `observability/onboarding/dev/telemetry-pipeline.yaml`
-(rendered `observability/onboarding/rendered/dev/telemetry-pipeline.json`).
+architecture `aca`. Source: `observability/extras/content/onboarding/dev/telemetry-pipeline.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/telemetry-pipeline.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

@@ -88,8 +88,8 @@ run "no_log_content_in_core" {
     settings = { log_management = { index = true } }
   }
   assert {
-    condition     = !contains(keys(output), "azure_logs_dashboard_url")
-    error_message = "Package 3.0.0: no Datadog log content (dashboards, metrics, indexes) in the core lab; settings.log_management is ignored."
+    condition     = output.mode == "none"
+    error_message = "Package 3.0.0: settings.log_management (2.x log content, now extras) is accepted and ignored."
   }
 }
 

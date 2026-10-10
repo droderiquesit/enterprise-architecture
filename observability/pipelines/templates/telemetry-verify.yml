@@ -12,15 +12,24 @@ parameters:
   - name: marker
     type: string
     default: ''
-  - name: pipelineTag
+  - name: pipelineTag            # empty = derived from the fleet policy log_pipeline
     type: string
-    default: telemetry.pipeline:fluent-bit
+    default: ''
+  - name: tagPolicy              # empty = package config/tag-policy.yaml
+    type: string
+    default: ''
+  - name: fleetPolicy            # empty = package config/fleet-policy.yaml
+    type: string
+    default: ''
+  - name: expectedTagsDir        # rendered onboarding dir (rendered/<env>): expected tag values per service
+    type: string
+    default: 
   - name: infraMetrics
     type: object
     default: []
-  - name: requiredTags
+  - name: requiredTags           # empty = the tag policy's required keys
     type: object
-    default: [env, service, version]
+    default: []
   - name: maxWaitSeconds
     type: number
     default: 600
@@ -49,7 +58,7 @@ steps:
       secrets: {DD_API_KEY: '${{ parameters.datadogApiKeyRef }}', DD_APP_KEY: '${{ parameters.datadogAppKeyRef }}'}
   - bash: |
       set -euo pipefail
-      ARGS=(--site "${{ parameters.datadogSite }}" --env "${{ parameters.environment }}" --pipeline-tag "${{ parameters.pipelineTag }}"
+      ARGS=(--site "${{ parameters.datadogSite }}" --env "${{ parameters.environment }}"
             --max-wait "${{ parameters.maxWaitSeconds }}" --evidence "$(Build.ArtifactStagingDirectory)/telemetry-evidence.json")
       while IFS= read -r a; do ARGS+=("$a"); done < <(python3 -c '
       import json, os
@@ -58,6 +67,10 @@ steps:
               print(flag); print(v)')
       if [ -n "${{ parameters.frontendService }}" ]; then ARGS+=(--frontend-service "${{ parameters.frontendService }}"); fi
       if [ -n "${{ parameters.marker }}" ]; then ARGS+=(--marker "${{ parameters.marker }}"); fi
+      if [ -n "${{ parameters.pipelineTag }}" ]; then ARGS+=(--pipeline-tag "${{ parameters.pipelineTag }}"); fi
+      if [ -n "${{ parameters.tagPolicy }}" ]; then ARGS+=(--tag-policy "${{ parameters.tagPolicy }}"); fi
+      if [ -n "${{ parameters.fleetPolicy }}" ]; then ARGS+=(--fleet-policy "${{ parameters.fleetPolicy }}"); fi
+      if [ -n "${{ parameters.expectedTagsDir }}" ]; then ARGS+=(--expected-tags-dir "${{ parameters.expectedTagsDir }}"); fi
       python3 "${{ parameters.packageDir }}/tools/verify/telemetry_verify.py" "${ARGS[@]}"
     displayName: Verify telemetry (${{ parameters.environment }})
     env:

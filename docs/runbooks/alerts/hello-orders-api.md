@@ -3,8 +3,8 @@
 # Alert runbook: hello-orders-api
 
 Service `hello-orders-api` - team `orders`, owner orders@example.com, tier `critical`,
-architecture `aca`. Source: `observability/onboarding/dev/hello-orders-api.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-orders-api.json`).
+architecture `aca`. Source: `observability/extras/content/onboarding/dev/hello-orders-api.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-orders-api.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

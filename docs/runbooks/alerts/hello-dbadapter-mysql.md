@@ -3,8 +3,8 @@
 # Alert runbook: hello-dbadapter-mysql
 
 Service `hello-dbadapter-mysql` - team `data-platform`, owner data-platform@example.com, tier `low`,
-architecture `appservice`. Source: `observability/onboarding/dev/hello-dbadapter-mysql.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-dbadapter-mysql.json`).
+architecture `appservice`. Source: `observability/extras/content/onboarding/dev/hello-dbadapter-mysql.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-dbadapter-mysql.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

@@ -3,8 +3,8 @@
 # Alert runbook: hello-frontend
 
 Service `hello-frontend` - team `web`, owner web@example.com, tier `high`,
-architecture `swa`. Source: `observability/onboarding/dev/hello-frontend.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-frontend.json`).
+architecture `swa`. Source: `observability/extras/content/onboarding/dev/hello-frontend.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-frontend.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

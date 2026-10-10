@@ -13,6 +13,10 @@ the API key and downloads the pipeline definition by DD_OP_PIPELINE_ID through R
 * test_worker_bootstrap_fail_closed_and_env: the real Worker image (pinned 2.22.0) with the module's worker command:
   refuses to start without the dsv-fetch dotenv file, and with it accepts the bootstrap env (pipeline id, site, source
   addresses, data dir per replica) and reaches API-key validation (which needs Datadog - not reachable here).
+* test_apm_gateway_agent_resolves_key_from_dsv: the APM gateway of modules/telemetry-transport (Datadog Agent 7.84.2,
+  datadog.yaml rendered by terraform console, the module's start command) resolves api_key ENC[dsv://...] through the
+  dsv-fetch secret backend from a mock Delinea DSV, accepts Datadog tracer payloads from another container on 8126
+  (apm_non_local_traffic) and reports healthy on 5555 - no API key in env, image or Terraform.
 """
 
 from __future__ import annotations
@@ -30,6 +34,9 @@ PKG = HERE.parents[1]
 SAMPLES = HERE / "samples"
 VECTOR_IMAGE = "timberio/vector:0.58.0-debian"   # test-only stand-in for the Worker's VRL / fluent source engine
 OPW_IMAGE = "datadog/observability-pipelines-worker:2.22.0"
+AGENT_IMAGE = "datadog/agent:7.84.2"                 # same build as gcr.io/datadoghq/agent:7.84.2 (module default)
+PYTHON_IMAGE = "python:3.13-slim"
+REPO = PKG.parent
 
 pytestmark = pytest.mark.skipif(not (shutil.which("docker") and shutil.which("terraform")), reason="docker + terraform needed")
 
@@ -42,7 +49,8 @@ def console(module: Path, expr: str, tfvars: dict, tmp: Path) -> object:
     vf.write_text(json.dumps(tfvars))
     out = subprocess.run(["terraform", f"-chdir={module}", "console", f"-var-file={vf}"], input=f"jsonencode({expr})\n",
                          capture_output=True, text=True, check=True).stdout.strip()
-    return json.loads(json.loads(out))
+    # warnings (e.g. about the console's evaluation mode) precede the value: the value is the last line
+    return json.loads(json.loads(out.splitlines()[-1]))
 
 
 OP_VARS = {
@@ -193,3 +201,79 @@ def test_worker_bootstrap_fail_closed_and_env(tmp_path):
         assert listing.strip(), "per-replica data dir created"
     finally:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+
+
+TRANSPORT_VARS = {
+    "name_prefix": "eh-obs-test", "location": "swedencentral", "tags": {"env": "test"},
+    "resource_group": {"name": "rg-obs", "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-obs"},
+    "datadog": {"site": "datadoghq.com", "api_key_ref": "dsv://eh/test/datadog-api-key#value", "env": "test", "extra_tags": {"team": "observability"}},
+    "secrets": {"tenant": "contoso", "fetch_image": "ehacr.azurecr.io/dsv-fetch@sha256:" + "1" * 64},
+    "collector_identity": {"id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-obs",
+                           "principal_id": "11111111-1111-1111-1111-111111111111", "client_id": "22222222-2222-2222-2222-222222222222"},
+    "event_hub": {"mode": "none"},
+    "container_apps": {"environment_id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aca/providers/Microsoft.App/managedEnvironments/cae"},
+    "observability_pipelines": {"pipeline_id": "aaaaaaaa-0000-0000-0000-000000000001"},
+    "default_tags": {"region": "swedencentral", "managed_by": "terraform"},
+}
+
+
+def test_apm_gateway_agent_resolves_key_from_dsv(tmp_path):
+    import yaml
+    tr = PKG / "modules/telemetry-transport"
+    dd_yaml = yaml.safe_load(console(tr, "local.apm_datadog_yaml", TRANSPORT_VARS, tmp_path))
+    start = console(tr, "azapi_resource.apm_gateway[0].body.properties.template.containers[0].command", TRANSPORT_VARS, tmp_path)
+    assert dd_yaml["api_key"] == "ENC[dsv://eh/test/datadog-api-key#value]" and dd_yaml["apm_config"]["apm_non_local_traffic"] is True
+    assert dd_yaml["secret_backend_command"] == "/opt/dsv-fetch/dsv-fetch" and dd_yaml["logs_enabled"] is False
+    assert "managed_by:terraform" in dd_yaml["tags"] and "env:test" in dd_yaml["tags"]
+    key = "abcdef0123456789abcdef0123456789"
+    cfg = tmp_path / "apm"
+    for d in ("dsvmock", "eh-agent", "eh-dsv"):
+        (cfg / d).mkdir(parents=True)
+    (cfg / "dsvmock" / "cfg.json").write_text(json.dumps({
+        "clients": {"apm-test": {"secret": "apm-test-secret", "identity": "obs-apm-test"}},
+        "users": {"obs-apm-test": {"read": ["eh/test/*"]}},
+        "secrets": {"eh/test/datadog-api-key": {"value": key}}}))
+    (cfg / "eh-agent" / "datadog.yaml").write_text(yaml.safe_dump(dd_yaml))
+    shutil.copy(PKG / "images/dsv-fetch/dsv_fetch.py", cfg / "eh-dsv" / "dsv_fetch.py")
+    # the module's dsv.json uses managed identity (DSV_AUTH azure); locally the mock DSV authenticates a client
+    (cfg / "eh-dsv" / "dsv.json").write_text(json.dumps({
+        "DSV_AUTH": "client_credentials", "DSV_CLIENT_ID": "apm-test", "DSV_CLIENT_SECRET": "apm-test-secret",
+        "DSV_BASE_URL": "http://dsv:8200/v1", "DSV_ALLOW_INSECURE_HTTP": "true"}))
+    for p in cfg.rglob("*"):
+        p.chmod(0o755 if p.is_dir() else 0o644)
+    s = Stack("apmgw")
+    try:
+        s.run("dsv", PYTHON_IMAGE, volumes=[f"{REPO / 'tools' / 'secrets'}:/m:ro", f"{cfg / 'dsvmock'}:/c:ro"],
+              cmd=["python", "-u", "/m/mock_dsv.py", "--config", "/c/cfg.json", "--host", "0.0.0.0", "--port", "8200"])
+        agent = s.run("apm", AGENT_IMAGE, env={"HOSTNAME": "apm-gw-0"},
+                      volumes=[f"{cfg / 'eh-agent'}:/eh/agent:ro", f"{cfg / 'eh-dsv'}:/eh/dsv:ro"],
+                      entrypoint=start[0], cmd=start[1:])
+
+        def secret_resolved():
+            out = subprocess.run(["docker", "exec", agent, "agent", "secret"], capture_output=True, text=True).stdout
+            return ("Number of secrets resolved: 1" in out or "Number of secrets decrypted: 1" in out) and out
+        out = wait_for(secret_resolved, 120, 3, "API key resolved through dsv-fetch")
+        assert "Executable permissions: OK" in out and key not in out
+        # a Datadog tracer payload from ANOTHER container (managed runtime) on 8126
+        payload = json.dumps([[{"trace_id": 1, "span_id": 1, "parent_id": 0, "name": "web.request", "resource": "GET /",
+                                "service": "hello-orders-api", "type": "web", "start": time.time_ns(), "duration": 1000000,
+                                "meta": {"env": "test", "version": "1.0.0"}}]])
+        client = ("import urllib.request,sys; r=urllib.request.Request('http://apm:8126/v0.4/traces', data=sys.argv[1].encode(),"
+                  " method='PUT', headers={'Content-Type':'application/json','X-Datadog-Trace-Count':'1'});"
+                  " print(urllib.request.urlopen(r, timeout=10).status)")
+
+        def accepted():
+            r = subprocess.run(["docker", "run", "--rm", "--network", s.id, PYTHON_IMAGE, "python", "-c", client, payload],
+                               capture_output=True, text=True)
+            return r.returncode == 0 and r.stdout.strip() == "200"
+        wait_for(accepted, 90, 3, "trace-agent accepts non-local traffic on 8126")
+        health = subprocess.run(["docker", "run", "--rm", "--network", s.id, PYTHON_IMAGE, "python", "-c",
+                                 "import urllib.request; print(urllib.request.urlopen('http://apm:5555/live', timeout=10).status)"],
+                                capture_output=True, text=True)
+        assert health.stdout.strip() == "200", health.stderr
+        logs = s.logs(agent)
+        assert key not in logs, "the API key is never logged"
+    finally:
+        for c in s.containers:
+            print(f"==== {c}\n{s.logs(c)[-3000:]}")
+        s.close()

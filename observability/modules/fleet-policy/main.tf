@@ -108,7 +108,9 @@ locals {
       TELEMETRY_SDK              = "datadog"
       DD_TRACE_ENABLED           = "true"
       DD_LOGS_INJECTION          = tostring(try(local.apm.logs_injection, true))
-      DD_RUNTIME_METRICS_ENABLED = "true"
+      # runtime metrics travel over DogStatsD (UDP/UDS): only where an Agent runs next to the process (node Agent,
+      # serverless-init); the APM gateway's TCP ingress cannot carry them
+      DD_RUNTIME_METRICS_ENABLED = tostring(contains(["ssi_kubernetes", "ssi_host", "serverless_init"], coalesce(local.method, "none")))
       # never two tracers in one process: the OpenTelemetry SDK stays off (apps read TELEMETRY_SDK)
       OTEL_SDK_DISABLED     = "true"
       OTEL_TRACES_EXPORTER  = "none"

@@ -9,6 +9,9 @@
 #   BUILD_TIME     UTC ISO-8601                        (default: now)
 #   ARTIFACTS_DIR  output root                         (default: applications/dotnet/.artifacts)
 #   CA_BUNDLE      optional CA bundle passed to `docker build --secret id=ca_bundle` (TLS-intercepting proxies)
+#   LOCKED_RESTORE true (default): `dotnet restore --locked-mode` against the committed packages.lock.json files
+#                  (fails on drift: NU1004). false: unlocked restore that may update the lock files (after a
+#                  Directory.Packages.props change; then commit the regenerated packages.lock.json files).
 # Output (publish):
 #   .artifacts/<svc>/<artifact>.zip + build-info.json (sha256 of every zip) ; .artifacts/test-results/
 set -euo pipefail
@@ -45,7 +48,11 @@ zipdir() { # zipdir <dir> <zipfile> — zip the CONTENTS of dir (host.json at th
 
 do_build() {
   log "restore + build (Release) $VERSION $GIT_COMMIT"
-  dotnet restore EnterpriseHello.sln
+  if [[ "${LOCKED_RESTORE:-true}" == true ]]; then
+    dotnet restore EnterpriseHello.sln --locked-mode
+  else
+    dotnet restore EnterpriseHello.sln --force-evaluate -p:RestoreLockedMode=false
+  fi
   dotnet build EnterpriseHello.sln -c Release --no-restore "${PROPS[@]}"
 }
 

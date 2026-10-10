@@ -13,14 +13,14 @@ WORKDIR /src/dotnet
 # Restore layer: only build metadata + project files.
 COPY dotnet/global.json dotnet/nuget.config dotnet/Directory.Build.props dotnet/Directory.Packages.props ./
 COPY shared/dotnet/Directory.Build.props shared/dotnet/Directory.Packages.props ../shared/dotnet/
-COPY shared/dotnet/Hello.Common/Hello.Common.csproj ../shared/dotnet/Hello.Common/
+COPY shared/dotnet/Hello.Common/Hello.Common.csproj shared/dotnet/Hello.Common/packages.lock.json ../shared/dotnet/Hello.Common/
 COPY services/bff/Directory.Build.props services/bff/Directory.Packages.props ../services/bff/
-COPY services/bff/src/Hello.Bff/Hello.Bff.csproj ../services/bff/src/Hello.Bff/
+COPY services/bff/src/Hello.Bff/Hello.Bff.csproj services/bff/src/Hello.Bff/packages.lock.json ../services/bff/src/Hello.Bff/
 # Optional secret `ca_bundle`: CA bundle for TLS-intercepting egress proxies (build-time only, never in the image).
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     --mount=type=secret,id=ca_bundle,required=false \
     if [ -s /run/secrets/ca_bundle ]; then export SSL_CERT_FILE=/run/secrets/ca_bundle; fi; \
-    dotnet restore ../services/bff/src/Hello.Bff/Hello.Bff.csproj
+    dotnet restore ../services/bff/src/Hello.Bff/Hello.Bff.csproj --locked-mode
 COPY shared/dotnet/Hello.Common/ ../shared/dotnet/Hello.Common/
 COPY services/bff/src/ ../services/bff/src/
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \

@@ -3,8 +3,8 @@
 # Alert runbook: hello-dbadapter-blob
 
 Service `hello-dbadapter-blob` - team `data-platform`, owner data-platform@example.com, tier `low`,
-architecture `aca`. Source: `observability/onboarding/dev/hello-dbadapter-blob.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-dbadapter-blob.json`).
+architecture `aca`. Source: `observability/extras/content/onboarding/dev/hello-dbadapter-blob.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-dbadapter-blob.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

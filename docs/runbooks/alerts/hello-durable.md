@@ -3,8 +3,8 @@
 # Alert runbook: hello-durable
 
 Service `hello-durable` - team `fulfillment`, owner fulfillment@example.com, tier `critical`,
-architecture `functions`. Source: `observability/onboarding/dev/hello-durable.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-durable.json`).
+architecture `functions`. Source: `observability/extras/content/onboarding/dev/hello-durable.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-durable.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

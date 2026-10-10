@@ -83,6 +83,24 @@ Recommendation (ADR-0001 §10 — logs only via FunctionAppLogs → Event Hubs �
 service (no `logs` pipeline, or a filter on `service.name=hello-durable`). Alternative: per-signal endpoints only (no
 duplicate logs, no host/orchestration spans).
 
+### `TELEMETRY_SDK=datadog` for Functions — keep `otel` (the default) for hello-durable
+
+Datadog's Azure Functions guidance (docs.datadoghq.com/serverless/azure_functions, checked 2026-10-09) covers .NET
+isolated on Consumption, Flex Consumption, Premium and Dedicated plans: add the `Datadog.AzureFunctions` NuGet package,
+call `Datadog.Serverless.CompatibilityLayer.Start()` in `Program.cs`, set `CORECLR_ENABLE_PROFILING=1`,
+`CORECLR_PROFILER={846F5F1C-F9AE-4B07-969E-05C26BC060D8}`, `CORECLR_PROFILER_PATH=/home/site/wwwroot/datadog/linux-x64/
+Datadog.Trace.ClrProfiler.Native.so`, `DD_DOTNET_TRACER_HOME=/home/site/wwwroot/datadog`, `DD_API_KEY`, `DD_SITE`
+(`DD_AZURE_RESOURCE_GROUP` on Flex), and **not** `DD_AGENT_HOST`. The page does **not** say whether the Functions
+*host* process is traced or how Durable Functions are handled. The Durable distributed-tracing V2 spans
+(`orchestration:*`, `activity:*`) are emitted by the Durable extension **in the host** and today reach Datadog only via
+the host's OTLP export (item 2 above). In datadog mode Hello.Common would register no OTel SDK in the worker
+(`AddHelloOpenTelemetry` returns null; `UseFunctionsWorkerDefaults` is skipped), worker Activities would become
+Datadog spans only with the profiler attached and `DD_TRACE_OTEL_ENABLED=true`, and the host-side Durable spans
+would be lost or duplicated depending on host OTLP settings — none of which is verified. Therefore: **hello-durable
+stays on `TELEMETRY_SDK=otel`** (unset) until a deployed check shows the host-side Durable spans in Datadog;
+`Datadog.AzureFunctions` is deliberately not referenced (it would also put `DD_API_KEY` into app settings). The code
+path is ready: setting `TELEMETRY_SDK=datadog` plus the settings above (and adding the package + `Start()`) is the switch.
+
 ### Workflow metrics (monitors depend on these)
 
 | Instrument | Type / unit | Attributes |

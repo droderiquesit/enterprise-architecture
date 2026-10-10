@@ -23,6 +23,11 @@
     <SourceRevisionId Condition="'$(SourceRevisionId)' == ''">$(GIT_COMMIT)</SourceRevisionId>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- NuGet lock files (packages.lock.json next to every project): reproducible + cacheable restores. CI restores run
+         in locked mode (build.sh passes the locked-mode switch; RestoreLockedMode is also on for CI builds below). After
+         changing Directory.Packages.props regenerate them: LOCKED_RESTORE=false applications/dotnet/build.sh build. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(RestoreLockedMode)' == '' and '$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>moderate</NuGetAuditLevel>

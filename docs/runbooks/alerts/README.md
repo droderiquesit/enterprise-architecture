@@ -2,11 +2,11 @@
 
 # Alert runbooks per service
 
-One page per service rendered from `observability/onboarding/rendered/dev/*.json`. Each monitor message links to
+One page per service rendered from `observability/extras/content/onboarding/rendered/dev/*.json`. Each monitor message links to
 `<runbook_url>#<section>`; the anchors on these pages match those sections, and each section points to the shared
 procedure in [alert-response.md](../alert-response.md).
 
-> Monitor links come from the archetype default `runbook_base_url` (`observability/archetypes/global-defaults.yaml`):
+> Monitor links come from the archetype default `runbook_base_url` (`observability/extras/content/archetypes/global-defaults.yaml`):
 > `[[repository]]?path=/docs/runbooks/alerts/[[service]].md`, i.e. these pages in the repository named by each
 > manifest's `metadata.repository` (Azure Repos file URL). The lab manifests use the placeholder organisation
 > `example-org`; set `metadata.repository` (or override `runbook_base_url`) to your repository URL

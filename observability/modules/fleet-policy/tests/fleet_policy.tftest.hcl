@@ -28,6 +28,10 @@ run "aks_dotnet_ssi_with_profiler_dsm_dbm" {
     condition     = !contains(keys(output.apm_env), "DD_TRACE_SAMPLE_RATE")
     error_message = "sampling left to the Agent by default"
   }
+  assert {
+    condition     = output.apm_env["DD_RUNTIME_METRICS_ENABLED"] == "true"
+    error_message = "Runtime metrics to the node Agent"
+  }
 }
 
 run "aca_python_agent_gateway" {
@@ -43,6 +47,10 @@ run "aca_python_agent_gateway" {
   assert {
     condition     = !contains(keys(output.apm_env), "DD_DATA_STREAMS_ENABLED")
     error_message = "no DSM for Python Service Bus"
+  }
+  assert {
+    condition     = output.apm_env["DD_RUNTIME_METRICS_ENABLED"] == "false"
+    error_message = "Runtime metrics need DogStatsD next to the process: off behind the APM gateway"
   }
 }
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Build a versioned, portable release of the observability package:
 #   <out>/observability-<version>.tar.gz  (+ .sha256)
-# Contents: modules/ config/ schemas/ archetypes/ tools/ pipelines/ examples/ README.md CHANGELOG.md UPGRADING.md VERSION
-# Never included: lab roots, lab onboarding manifests/rendered output, .terraform/, caches, vendored copies.
+# Contents: modules/ config/ schemas/ tools/ pipelines/ examples/ images/ README.md CHANGELOG.md UPGRADING.md VERSION
+# Never included: lab roots, lab onboarding manifests/rendered output, extras/ (optional monitoring content of the
+# source repository), .terraform/, caches, vendored copies.
 # The build FAILS if any packaged file references paths outside the package, lab roots, remote state,
 # or a real subscription id. Allowed placeholders: the all-zero GUID and test GUIDs of the form
 # xxxxxxxx-0000-0000-0000-000000000000 (third group 0000 = no RFC 4122 version, so never a real subscription id).
@@ -33,7 +34,7 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "${STAGE}/${NAME}" "$OUT"
 
-INCLUDE=(modules config schemas archetypes tools pipelines examples images README.md CHANGELOG.md UPGRADING.md VERSION)
+INCLUDE=(modules config schemas tools pipelines examples images README.md CHANGELOG.md UPGRADING.md VERSION)
 for item in "${INCLUDE[@]}"; do
   [[ -e "${PKG_ROOT}/${item}" ]] || { echo "note: ${item} not present, skipped" >&2; continue; }
   tar -C "$PKG_ROOT" \

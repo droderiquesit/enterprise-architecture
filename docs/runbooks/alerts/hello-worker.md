@@ -3,8 +3,8 @@
 # Alert runbook: hello-worker
 
 Service `hello-worker` - team `fulfillment`, owner fulfillment@example.com, tier `medium`,
-architecture `aks`. Source: `observability/onboarding/dev/hello-worker.yaml`
-(rendered `observability/onboarding/rendered/dev/hello-worker.json`).
+architecture `aks`. Source: `observability/extras/content/onboarding/dev/hello-worker.yaml`
+(rendered `observability/extras/content/onboarding/rendered/dev/hello-worker.json`).
 
 Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):
 a broken pipeline looks like silence.

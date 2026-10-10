@@ -1,17 +1,21 @@
-# Steps template: validate onboarding manifests and verify the committed rendered output is current.
-# Consumers: include from the package repository (see ../README.md in the package root, "Pipelines").
+# Steps template: validate onboarding manifests (v2) against the tag policy and verify the committed rendered output
+# is current. Consumers: include from the package repository (see ../README.md in the package root, "Pipelines").
 parameters:
-  - name: packageDir          # directory that contains the package (modules/, tools/, archetypes/, schemas/)
+  - name: packageDir          # directory that contains the package (modules/, tools/, config/, schemas/)
     type: string
   - name: manifestsDir        # consumer manifests for this environment
-    type: string
-  - name: routingFile         # NotificationRouting file for this environment
     type: string
   - name: environment
     type: string
   - name: renderedDir         # committed render.py output consumed by Terraform
     type: string
-  - name: archetypesDir       # optional consumer archetype overlay; empty = package archetypes
+  - name: tagPolicy           # consumer tag policy (empty = package config/tag-policy.yaml)
+    type: string
+    default: ''
+  - name: routingFile         # DEPRECATED (package 2.x notification routing): accepted and ignored
+    type: string
+    default: ''
+  - name: archetypesDir       # DEPRECATED (package 2.x archetypes): accepted and ignored
     type: string
     default: ''
   - name: strict
@@ -32,20 +36,22 @@ steps:
 
   - bash: |
       set -euo pipefail
-      ARCH_ARGS=()
-      if [ -n "${{ parameters.archetypesDir }}" ]; then ARCH_ARGS=(--archetypes "${{ parameters.archetypesDir }}"); fi
+      POLICY_ARGS=()
+      if [ -n "${{ parameters.tagPolicy }}" ]; then POLICY_ARGS=(--tag-policy "${{ parameters.tagPolicy }}"); fi
+      if [ -n "${{ parameters.routingFile }}${{ parameters.archetypesDir }}" ]; then
+        echo "##[warning]routingFile / archetypesDir are ignored since package 3.0.0 (monitoring content is not part of the package)"
+      fi
       python "${{ parameters.packageDir }}/tools/onboarding/validate.py" \
         --manifests "${{ parameters.manifestsDir }}" \
         --env "${{ parameters.environment }}" \
-        --routing "${{ parameters.routingFile }}" \
-        "${ARCH_ARGS[@]}" ${{ iif(parameters.strict, '--strict', '') }}
+        "${POLICY_ARGS[@]}" ${{ iif(parameters.strict, '--strict', '') }}
     displayName: Validate onboarding manifests (${{ parameters.environment }})
 
   - bash: |
       set -euo pipefail
-      ARCH_ARGS=()
-      if [ -n "${{ parameters.archetypesDir }}" ]; then ARCH_ARGS=(--archetypes "${{ parameters.archetypesDir }}"); fi
+      POLICY_ARGS=()
+      if [ -n "${{ parameters.tagPolicy }}" ]; then POLICY_ARGS=(--tag-policy "${{ parameters.tagPolicy }}"); fi
       python "${{ parameters.packageDir }}/tools/onboarding/render.py" render \
         --manifests "${{ parameters.manifestsDir }}" --env "${{ parameters.environment }}" \
-        --out "${{ parameters.renderedDir }}" "${ARCH_ARGS[@]}" --check
+        --out "${{ parameters.renderedDir }}" "${POLICY_ARGS[@]}" --check
     displayName: Verify rendered output is up to date
