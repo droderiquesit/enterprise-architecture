@@ -7,10 +7,10 @@
    and the `@obs` repository `ref` of the pipeline templates. Keep both on the same version.
 3. `./vendor.sh` (checksum verified), then re-render every environment:
    `python3 .vendor/observability-<v>/tools/onboarding/render.py render --manifests manifests --env <env> --out rendered/<env>`.
-   Review the diff of `rendered/` - it is the exact change set of monitoring content.
+   Review the diff of `rendered/` - it is the exact change set of tags and telemetry routing.
 4. `terraform init -upgrade` (only if the provider constraint changed), `terraform plan -out tfplan`.
    The plan template prints `DESTROY: [...]`. For MINOR/PATCH upgrades this must list no monitored
-   infrastructure (the package never manages it) and no monitor whose key still exists.
+   infrastructure (the package never manages it) and no collection resource that still exists in the new version.
 5. Apply the saved plan. Rollback = previous lock + re-render + apply (README section 5).
 
 ## Version-specific notes
@@ -60,8 +60,14 @@ Nothing in this release was deployed or verified live; plan carefully and roll o
 5. **DBM**: with a cluster the checks run as cluster checks (`modules/dbm` `hosting = cluster_checks`); keep the ACI
    Agent only without one. Password references must be DSV (`password_ref.kind = dsv`).
 6. **Fleet policy**: `logs.collector` per architecture replaces the global switch (`logs.node_collector` is still
-   honoured on aks / vm / vmss); host log files and Windows Event Log channels are `logs.hosts`.
+   honoured on aks; VM / VMSS hosts always use the Agent); host log files and Windows Event Log channels are
+   `logs.hosts`. RUM `rum.propagator_types` defaults to `[tracecontext]` (was `[datadog, tracecontext]`): the
+   first-party APIs receive only `traceparent` from the browser.
 7. **Contracts**: consumers of `obs-kubernetes` read **v2** (`agent.logs_enabled` is true when the Agent collects).
+8. **Fleet inventory** (`modules/fleet-inventory` `plan` / `matrix`): values follow 4.0.0 (`serverless_init`,
+   `datadog_agent_sidecar`, `agent_sidecar`, `datadog_agent_vm_application`); update reports that matched the 3.x
+   values (`fluent_bit_sidecar`, `datadog_agent_installer`).
+9. `modules/instrumentation`: drop `serverless_init.api_key_secret_name` (removed; it was ignored).
 
 
 ### 3.0.0 (from 2.x) - MAJOR: collection + tagging package; monitoring content moves out
@@ -188,8 +194,10 @@ Initial release. No migration.
 
 ## Compatibility promises
 
-* Monitor keys (`<service>/<monitor_key>[@role]`) are part of the public interface; renaming one is a MAJOR change
-  because it recreates the monitor (history and mute state are lost).
-* `rendered-service/v1` is consumed by `modules/onboarding`; a new rendered schema is a MAJOR change and the
-  previous major is accepted for one release.
-* Manifest `apiVersion: observability/v1` stays valid for every 1.x release; new optional fields may be added.
+* The rendered schema (`rendered-service/v2`, `schemas/rendered-service.v2.schema.json`) and the manifest
+  `apiVersion` (`observability/v2`) are public interfaces; a new rendered schema or manifest version is a MAJOR change.
+  New optional manifest fields may be added in MINOR releases.
+* Module inputs / outputs and the fleet / tag policy schemas follow README section 6 (versioning policy).
+* The optional 2.x monitoring content (`extras/content/`, monitor keys `<service>/<monitor_key>[@role]`, manifest
+  `observability/v1`, `rendered-service/v1`) keeps its own 2.0.0 promises; renaming a monitor key there recreates the
+  monitor (history and mute state are lost).

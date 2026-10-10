@@ -2,7 +2,8 @@ variable "resources" {
   description = <<-EOT
     Existing resources to export logs from, keyed by a STABLE caller-chosen key (renaming a key recreates
     its settings). app_log_route says who collects the resource's APPLICATION logs:
-      eventhub  -> app-log categories are exported to the app-logs hub (Fluent Bit aggregator ships them)
+      eventhub  -> app-log categories are exported to the app-logs hub (the Observability Pipelines Worker, or the
+                   Fluent Bit aggregator with fluent_bit_direct, ships them)
       sidecar | daemonset | host | none -> app-log categories are NOT exported (no duplicates)
     Platform (non-application) categories from the allow-list go to the platform-logs hub when platform_logs = true.
   EOT

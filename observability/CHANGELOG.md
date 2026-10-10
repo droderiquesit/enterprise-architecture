@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the observability package. Format: Keep a Changelog; versioning: SemVer (see README section 7).
+All notable changes to the observability package. Format: Keep a Changelog; versioning: SemVer (see README section 6).
 
 ## [Unreleased]
 
@@ -54,7 +54,17 @@ secret path for every Agent (Delinea DSV + the static dsv-fetch binary), no per-
 - `modules/telemetry-transport`: APM gateway Agent gets the binary from a `dsv-fetch-install` init container (no
   embedded script, no Python); the OP Worker refresher runs the binary's refresher mode.
 - `modules/dbm`: passwords only as DSV references (`password_ref.kind = dsv`).
-- Agent version: no hard-coded fallbacks; the fleet policy `agent.version` is required.
+- Agent version: no hard-coded fallbacks; the fleet policy `agent.version` is required (also for the APM gateway,
+  whose image is now the fleet pin `agent.image:agent.version`; its Container App gets the `registries` entry the
+  `dsv-fetch-install` init container needs for the private dsv-fetch image).
+- `modules/fleet-policy`: VM / VMSS hosts always use the Agent - `log_pipeline = fluent_bit_direct` only makes it ship to
+  the Datadog intake, and the 3.x `logs.node_collector` key is honoured on AKS only (4.0.0 installs no Fluent Bit on
+  hosts; `log_collector` / `node_collector` now say so).
+- `modules/fleet-inventory`: the per-resource plan is resolved through `modules/fleet-policy` (architecture, runtime,
+  OS); `app_logs` / `apm` / `agent` follow the 4.0.0 paths (`serverless_init`, `datadog_agent_sidecar`,
+  `agent_sidecar`, `datadog_agent_vm_application`; App Service and Functions `otel` by policy).
+- RUM: `allowedTracingUrls` propagate W3C `tracecontext` only (fleet policy `rum.propagator_types`, ADR-0001 section 10).
+- `modules/kubernetes` contract: `agent.cluster_checks` follows `features.cluster_checks_runner`.
 
 ### Removed
 - **Python dsv-fetch 1.x** (`images/dsv-fetch/dsv_fetch.py`) and every embedding of it (Agent ConfigMap secret
@@ -68,6 +78,7 @@ secret path for every Agent (Delinea DSV + the static dsv-fetch binary), no per-
   `mode = direct` keeps one gallery application assignment per VM).
 - `modules/instrumentation`: the Fluent Bit sidecar as default ACA / ACI log collector (fallback only).
 - `modules/dbm`: `k8s_secret`, `file` and `env` password references.
+- `modules/instrumentation`: `serverless_init.api_key_secret_name` (ignored since the key comes from DSV).
 
 ## [3.0.0] - 2026-10-10
 

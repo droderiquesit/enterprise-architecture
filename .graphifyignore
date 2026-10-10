@@ -1,5 +1,7 @@
 # Graphify (codebase knowledge graph) - paths excluded from extraction, in addition to .gitignore.
 # Generated, vendored or bulky content that adds noise without architectural signal.
+# tools/graphify/iac_graph.py honors these patterns too (graphify evicts nodes sourced from ignored files).
+# Guide: docs/guides/graphify.md
 graphify-out/
 **/.terraform/
 **/.vendor/
