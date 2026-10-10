@@ -1,6 +1,6 @@
 # Datadog RUM for browser frontends: the application (created here or an existing one) + the browser SDK init the
-# frontend deployment renders into its runtime config (APM <-> RUM: allowedTracingUrls with the datadog and W3C
-# tracecontext propagators for first-party API origins only; unified service tags; tag-policy global context).
+# frontend deployment renders into its runtime config (APM <-> RUM: allowedTracingUrls with the W3C tracecontext
+# propagator for first-party API origins only; unified service tags; tag-policy global context).
 module "fleet" {
   source       = "../fleet-policy"
   policy       = var.fleet_policy
@@ -46,7 +46,7 @@ locals {
     trackUserInteractions   = try(local.rum.track_user_interactions, true)
     trackResources          = try(local.rum.track_resources, true)
     trackLongTasks          = try(local.rum.track_long_tasks, true)
-    allowedTracingUrls      = [for o in a.allowed_tracing_origins : { match = o, propagatorTypes = try(local.rum.propagator_types, ["datadog", "tracecontext"]) }]
+    allowedTracingUrls      = [for o in a.allowed_tracing_origins : { match = o, propagatorTypes = try(local.rum.propagator_types, ["tracecontext"]) }]
     # datadogRum.setGlobalContextProperty(k, v) for every entry (tag policy keys besides env/service/version)
     globalContext = module.tags[k].rum_global_context
   } }

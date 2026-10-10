@@ -260,7 +260,7 @@ variable "rum" {
   description = <<-EOT
     RUM applications keyed by the frontend service (modules/rum): mode = create (name) or existing (application_id +
     client_token of an application your organisation already has). allowed_tracing_origins: first-party API origins
-    that receive datadog + tracecontext headers.
+    that receive W3C tracecontext headers.
   EOT
   type = map(object({
     mode                    = optional(string, "create")

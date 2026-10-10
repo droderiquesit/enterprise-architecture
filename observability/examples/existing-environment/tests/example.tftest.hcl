@@ -74,7 +74,7 @@ run "connects_existing_resources_verbatim" {
   }
   assert {
     condition     = output.rum.browser_config["orders-web"].sessionReplaySampleRate == 0 && contains(output.rum.browser_config["orders-web"].allowedTracingUrls[0].propagatorTypes, "tracecontext")
-    error_message = "RUM: session replay off, datadog + tracecontext propagation to first-party APIs"
+    error_message = "RUM: session replay off, W3C tracecontext propagation to first-party APIs"
   }
 }
 

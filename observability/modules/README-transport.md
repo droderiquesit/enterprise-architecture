@@ -40,7 +40,7 @@ reads the API key through the ONE secret path `ENC[dsv://...]` + the static dsv-
 | Functions, Durable Functions | `FunctionAppLogs` -> Event Hubs -> Worker | **OpenTelemetry** (exception: Datadog documents neither the Functions host nor Durable V2 spans) -> OTel gateway | OTel -> gateway | Azure integration | as App Service |
 | Logic Apps | `WorkflowRuntime` -> Event Hubs -> Worker | none | - | Azure integration | - |
 | Batch nodes | Fluent Bit (job preparation task; the transport contract `batch_log_setup` of the source repository's transport root) -> forward -> Worker (no key on the node; with `fluent_bit_direct` the static dsv-fetch release binary reads it from DSV) | OpenTelemetry -> gateway | OTel | Azure integration | - |
-| Browser (Static Web Apps) | - | **RUM** (`modules/rum`, create or existing; `allowedTracingUrls` with `propagatorTypes [datadog, tracecontext]`; replay 0) | RUM | - | - |
+| Browser (Static Web Apps) | - | **RUM** (`modules/rum`, create or existing; `allowedTracingUrls` with `propagatorTypes [tracecontext]` (W3C); replay 0) | RUM | - | - |
 | Databases | - | DBM <-> APM propagation `DD_DBM_PROPAGATION_MODE=full` in the tracers | Agent DBM checks (`modules/dbm`: AKS cluster checks whenever a cluster exists; ACI Agent only without one) | Azure integration | diagnostic settings -> Worker |
 | Subscription / tenant | - | - | - | - | Activity Log / Entra ID (`modules/azure-logs`) -> Event Hub `activity-logs` -> Worker |
 

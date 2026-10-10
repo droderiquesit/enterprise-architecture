@@ -17,7 +17,7 @@ Outputs:
   * `applicationId`, `clientToken`, `site`;
   * `service`, `env`, `version`, normalised by the tag policy;
   * `sessionSampleRate` and `sessionReplaySampleRate`, from fleet policy `rum` (replay **0** by default);
-  * `allowedTracingUrls`: `[{match: <origin>, propagatorTypes: ["datadog", "tracecontext"]}]` for the first-party
+  * `allowedTracingUrls`: `[{match: <origin>, propagatorTypes: ["tracecontext"]}]` (W3C trace context, fleet policy `rum.propagator_types`) for the first-party
     API origins (exact `https://` origins only), so RUM sessions join the backend traces of both Datadog and
     OpenTelemetry-instrumented services;
   * `globalContext`: the tag-policy identity (team, owner, domain, tier, ...). The app applies it with

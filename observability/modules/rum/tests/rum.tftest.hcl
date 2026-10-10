@@ -32,8 +32,8 @@ run "create_application_and_sdk_config" {
     error_message = "unified service tags in the SDK init"
   }
   assert {
-    condition     = output.browser_config.storefront.allowedTracingUrls[0].match == "https://api.example.com" && join(",", output.browser_config.storefront.allowedTracingUrls[0].propagatorTypes) == "datadog,tracecontext"
-    error_message = "APM <-> RUM: datadog + tracecontext propagators for first-party origins"
+    condition     = output.browser_config.storefront.allowedTracingUrls[0].match == "https://api.example.com" && join(",", output.browser_config.storefront.allowedTracingUrls[0].propagatorTypes) == "tracecontext"
+    error_message = "APM <-> RUM: W3C tracecontext propagator for first-party origins"
   }
   assert {
     condition     = output.browser_config.storefront.sessionReplaySampleRate == 0 && output.browser_config.storefront.globalContext["team"] == "web" && output.browser_config.storefront.globalContext["owner"] == "web_example.com"

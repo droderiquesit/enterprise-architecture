@@ -140,7 +140,8 @@ rum:
   session_sample_rate: 100
   session_replay_sample_rate: 0
   trace_sample_rate: 100
-  propagator_types: [datadog, tracecontext]
+  # W3C trace context only (ADR-0001 section 10: the SPA sends `traceparent`; no x-datadog-* headers to the APIs)
+  propagator_types: [tracecontext]
   default_privacy_level: mask-user-input
   track_user_interactions: true
   track_resources: true

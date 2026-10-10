@@ -14,7 +14,7 @@ output "observability_pipeline_id" {
 }
 
 output "rum" {
-  description = "RUM applications and the browser SDK init settings (propagatorTypes datadog + tracecontext, replay off) for the frontend owners."
+  description = "RUM applications and the browser SDK init settings (propagatorTypes tracecontext, replay off) for the frontend owners."
   value       = length(var.rum) > 0 ? { applications = module.rum[0].applications, browser_config = module.rum[0].browser_config } : null
 }
 
