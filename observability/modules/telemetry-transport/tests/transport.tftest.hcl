@@ -465,6 +465,7 @@ run "op_contract_feeds_datadog_tracer" {
     }
     runtime      = "python"
     architecture = "aca"
+    apm          = { managed_runtime_path = "agent_gateway" } # per-workload opt-out of the aca serverless-init default
     telemetry    = run.observability_pipelines_mode.contract
   }
   assert {

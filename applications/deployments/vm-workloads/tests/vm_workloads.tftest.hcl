@@ -409,6 +409,10 @@ run "all_hosts" {
     condition     = output.contract.apps["inventory-vm"].type == "Microsoft.Compute/virtualMachines" && output.contract.deploy_steps[0].kind == "vmss-flex-rollout"
     error_message = "Contract per host and VMSS rollout step."
   }
+  assert {
+    condition     = contains(keys(azurerm_virtual_machine_run_command.worker[0].tags), "team") && contains(keys(azurerm_virtual_machine_run_command.inventory[0].tags), "tier") && azurerm_virtual_machine_run_command.inventory[0].tags["service"] == "hello-inventory-api"
+    error_message = "Host run commands carry the tag policy azure_tags."
+  }
 }
 
 run "no_hosts" {

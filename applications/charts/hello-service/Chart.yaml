@@ -8,7 +8,7 @@ description: >-
 type: application
 # Chart version: semver of the CHART (templates/schema), independent from the application version.
 # Bump MINOR for backwards-compatible template/values additions, MAJOR for breaking values changes.
-version: 2.0.0
+version: 2.1.0
 # appVersion is informational only: one chart serves many applications. The deployed application version is
 # `service.version` (DD_VERSION, app.kubernetes.io/version, tags.datadoghq.com/version), set per release by the
 # deployer (Terraform / deploy script); `helm package --app-version` may override this field.

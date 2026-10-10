@@ -26,6 +26,8 @@ export interface RumSettings {
   trackUserInteractions: boolean;
   defaultPrivacyLevel: PrivacyLevel;
   allowedTracingUrls: string[]; // first-party API origins (scheme://host[:port])
+  // tag-policy keys besides env/service/version (observability tagging module rum_global_context)
+  globalContext: Record<string, string>;
 }
 
 export interface AppConfig {
@@ -99,6 +101,17 @@ export function tracingMatchers(origins: string[]): { match: (url: string) => bo
   }));
 }
 
+function stringMap(v: unknown, name: string): Record<string, string> {
+  if (v === undefined || v === null) return {};
+  if (typeof v !== 'object' || Array.isArray(v)) throw new ConfigError(`${name} must be an object of strings`);
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof val !== 'string') throw new ConfigError(`${name}.${k} must be a string`);
+    out[k] = val;
+  }
+  return out;
+}
+
 export function parseConfig(raw: unknown, pageOrigin?: string): AppConfig {
   if (!raw || typeof raw !== 'object') throw new ConfigError('config.json must be a JSON object');
   const c = raw as Record<string, unknown>;
@@ -126,6 +139,7 @@ export function parseConfig(raw: unknown, pageOrigin?: string): AppConfig {
       trackUserInteractions: r.trackUserInteractions !== false,
       defaultPrivacyLevel: privacy,
       allowedTracingUrls: deriveTracingOrigins(base, r.allowedTracingUrls, pageOrigin),
+      globalContext: stringMap(r.globalContext, 'rum.globalContext'),
     };
     if (!config.rum.clientToken.startsWith('pub')) {
       throw new ConfigError('rum.clientToken must be a public client token (pub...), never an API or application key');

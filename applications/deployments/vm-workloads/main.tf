@@ -107,7 +107,7 @@ resource "azurerm_virtual_machine_run_command" "worker" {
   name               = "install-hello-worker"
   location           = coalesce(local.vm.location, local.location)
   virtual_machine_id = local.linux_vm.id
-  tags               = merge(local.tags, { service = "hello-worker", version = local.artifact_version["svc-worker"], force = var.settings.package_force })
+  tags               = merge(local.tags, { service = "hello-worker", version = local.artifact_version["svc-worker"], force = var.settings.package_force }, module.env["worker-vm"].azure_tags)
 
   source {
     script = module.linux_script["worker-vm"].script
@@ -119,7 +119,7 @@ resource "azurerm_virtual_machine_run_command" "inventory" {
   name               = "install-hello-inventory-api"
   location           = coalesce(local.vm.location, local.location)
   virtual_machine_id = local.windows_vm.id
-  tags               = merge(local.tags, { service = "hello-inventory-api", version = local.artifact_version["svc-inventory-api"], force = var.settings.package_force })
+  tags               = merge(local.tags, { service = "hello-inventory-api", version = local.artifact_version["svc-inventory-api"], force = var.settings.package_force }, module.env["inventory-vm"].azure_tags)
 
   source {
     script = templatefile("${path.module}/scripts/install-windows-service.ps1.tftpl", {

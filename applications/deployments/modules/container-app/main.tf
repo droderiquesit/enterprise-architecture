@@ -17,7 +17,8 @@ locals {
 
   volumes    = local.has_sidecar ? local.patch.volumes : []
   app_mounts = local.has_sidecar ? local.patch.app_container.volume_mounts : []
-  sidecars   = local.has_sidecar ? local.patch.sidecars : []
+  # for-expression, not a conditional: the Fluent Bit and serverless-init sidecars have different shapes (tuple)
+  sidecars   = [for s in try(local.patch.sidecars, []) : s if local.has_sidecar]
   sorted_env = sort(keys(var.env))
   extra_containers = concat(
     [for s in local.sidecars : { name = s.name, image = s.image, cpu = s.cpu, memory = s.memory, command = try(s.command, null), args = s.args, env = s.env, volume_mounts = s.volume_mounts, liveness_probe = s.liveness_probe }],

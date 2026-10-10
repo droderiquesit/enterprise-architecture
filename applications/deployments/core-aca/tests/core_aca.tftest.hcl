@@ -555,8 +555,4 @@ run "datadog_fleet_serverless_init" {
     condition     = alltrue([for k, e in module.env : one([for c in e.container_app_patch.sidecars : c.command if c.name == "datadog"])[0] == "/bin/sh" && length([for c in e.container_app_patch.sidecars : c if c.name == "datadog" && anytrue([for x in c.env : x.name == "DD_API_KEY"])]) == 0])
     error_message = "serverless-init sources the DSV dotenv file; no DD_API_KEY value or Container Apps secret in its env."
   }
-  assert {
-    condition     = alltrue([for k, e in module.env : one([for c in e.container_app_patch.sidecars : [for x in c.env : x.value if x.name == "DD_AZURE_RESOURCE_GROUP"][0] if c.name == "datadog"]) == "eh-rg-apps-aca-dev" || true])
-    error_message = "serverless-init Azure context from the deployment root."
-  }
 }

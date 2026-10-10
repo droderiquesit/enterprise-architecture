@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { init } = vi.hoisted(() => ({ init: vi.fn() }));
-vi.mock('@datadog/browser-rum', () => ({ datadogRum: { init, getInternalContext: () => ({ session_id: 's-1' }) } }));
+const { init, setGlobalContextProperty } = vi.hoisted(() => ({ init: vi.fn(), setGlobalContextProperty: vi.fn() }));
+vi.mock('@datadog/browser-rum', () => ({ datadogRum: { init, setGlobalContextProperty, getInternalContext: () => ({ session_id: 's-1' }) } }));
 
 import { parseConfig } from './config';
 import { initRum, waitForRumSession } from './rum';
 
 describe('initRum', () => {
-  beforeEach(() => init.mockReset());
+  beforeEach(() => {
+    init.mockReset();
+    setGlobalContextProperty.mockReset();
+  });
 
   it('does not initialise without config.rum', () => {
     expect(initRum(parseConfig({ apiBaseUrl: 'https://api.example.com' }))).toBe(false);
@@ -26,6 +29,19 @@ describe('initRum', () => {
     expect(opts.allowedTracingUrls[0].propagatorTypes).toEqual(['tracecontext']);
     expect(opts.allowedTracingUrls[0].match('https://api.example.com/api/orders')).toBe(true);
     expect(opts.allowedTracingUrls[0].match('https://cdn.thirdparty.com/x.js')).toBe(false);
+    expect(setGlobalContextProperty).not.toHaveBeenCalled();
+  });
+
+  it('applies rum.globalContext with setGlobalContextProperty for each key, after init', () => {
+    const cfg = parseConfig({ apiBaseUrl: 'https://api.example.com',
+      rum: { applicationId: 'a', clientToken: 'pubx', globalContext: { team: 'web', owner: 'web_example.com', tier: 'critical' } } });
+    expect(initRum(cfg)).toBe(true);
+    expect(setGlobalContextProperty.mock.calls).toEqual([['team', 'web'], ['owner', 'web_example.com'], ['tier', 'critical']]);
+    expect(init.mock.invocationCallOrder[0]).toBeLessThan(setGlobalContextProperty.mock.invocationCallOrder[0]);
+  });
+
+  it('rejects a non-string globalContext value', () => {
+    expect(() => parseConfig({ rum: { applicationId: 'a', clientToken: 'pubx', globalContext: { team: 1 } } })).toThrow(/rum.globalContext.team/);
   });
 });
 

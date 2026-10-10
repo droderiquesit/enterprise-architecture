@@ -57,6 +57,7 @@ module "env" {
 
 resource "azurerm_container_group" "this" {
   #checkov:skip=CKV_AZURE_98:Private IP in the delegated aci subnet (ip_address_type = Private); no public exposure.
+  #checkov:skip=CKV_AZURE_235:Secret settings are dsv:// references resolved by the app at start-up (ADR-0001 §14); no secret value is in environment_variables, and secure_environment_variables would only hide references.
   name                = local.names.container_group
   resource_group_name = azurerm_resource_group.this.name
   location            = local.location

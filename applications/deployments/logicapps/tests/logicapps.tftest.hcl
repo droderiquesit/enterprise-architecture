@@ -387,6 +387,10 @@ run "consumption_and_standard" {
     condition     = output.contract.deploy_steps[0].kind == "logicapp-zip" && output.contract.workflows["consumption"].id != null
     error_message = "Contract: workflows + zip deploy step for Standard."
   }
+  assert {
+    condition     = azurerm_logic_app_workflow.batch_request[0].tags["team"] == azurerm_logic_app_standard.archive[0].tags["team"] && azurerm_logic_app_standard.archive[0].tags["application"] == "enterprise-hello" && contains(keys(azurerm_logic_app_workflow.batch_request[0].tags), "tier")
+    error_message = "Consumption and Standard carry the tag policy azure_tags (Datadog Azure integration imports them)."
+  }
 }
 
 run "standard_only" {

@@ -8,6 +8,25 @@ module "meta" {
   source = "../modules/service-meta"
 }
 
+# Tag policy of the service for resources without an app-env (the Consumption workflow); the Standard app uses
+# module.env[0].azure_tags (same tagging module inside the instrumentation hook).
+module "svc_tags" {
+  source = "../../../observability/modules/tagging"
+  identity = {
+    env         = local.env_name
+    service     = local.svc
+    version     = lookup(local.artifact_version, local.meta.artifact, "unknown")
+    team        = local.meta.team
+    owner       = local.meta.owner
+    domain      = local.meta.domain
+    tier        = local.meta.tier
+    application = "enterprise-hello"
+    region      = local.location
+    managed_by  = "terraform"
+    component   = "deploy-logicapps"
+  }
+}
+
 resource "azurerm_resource_group" "this" {
   name     = local.names.resource_group
   location = local.location
@@ -61,7 +80,7 @@ resource "azurerm_logic_app_workflow" "batch_request" {
   name                = "${local.prefix}-logic-batchreq-${local.env_name}"
   resource_group_name = azurerm_resource_group.this.name
   location            = local.location
-  tags                = merge(local.tags, { service = local.svc, version = lookup(local.artifact_version, local.meta.artifact, "n/a") })
+  tags                = merge(local.tags, { service = local.svc, version = lookup(local.artifact_version, local.meta.artifact, "n/a") }, module.svc_tags.azure_tags)
 
   identity {
     type         = "UserAssigned"
@@ -162,7 +181,7 @@ resource "azurerm_logic_app_standard" "archive" {
   scm_publish_basic_authentication_enabled = false
   storage_account_name                     = local.as.logicapps_storage.name
   storage_account_access_key               = data.azurerm_storage_account.logicapps[0].primary_access_key
-  tags                                     = merge(local.tags, { service = local.svc, version = lookup(local.artifact_version, local.meta.artifact, "n/a") })
+  tags                                     = merge(local.tags, { service = local.svc, version = lookup(local.artifact_version, local.meta.artifact, "n/a") }, module.env[0].azure_tags)
 
   # Built-in (service provider) Service Bus / Blob connectors authenticate with the SYSTEM-assigned identity
   # (most built-in connectors cannot select a user-assigned identity:

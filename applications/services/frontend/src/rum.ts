@@ -22,6 +22,10 @@ export function initRum(config: AppConfig): boolean {
     defaultPrivacyLevel: rum.defaultPrivacyLevel,
     allowedTracingUrls: tracingMatchers(rum.allowedTracingUrls),
   });
+  // tag policy (team, owner, domain, ...) on every RUM event, the same values as on the backend signals
+  for (const [key, value] of Object.entries(rum.globalContext ?? {})) {
+    datadogRum.setGlobalContextProperty(key, value);
+  }
   return true;
 }
 

@@ -59,20 +59,22 @@ findings:
   functions_native: 'Datadog native Functions APM: Dedicated/Premium/Consumption/Flex (Flex needs DD_AZURE_RESOURCE_GROUP), via Serverless Compatibility Layer + tracer (or .NET APM extension
     on Windows Dedicated/Premium); profiler preview for Python/Node only. Not used by default (OTel path is authoritative).'
   app_service_native: 'Datadog App Service instrumentation: Linux code, Linux container, Windows code (Java/Node/.NET); Windows containers not listed. Not used by default.'
-  container_apps_native: Datadog serverless-init (in-container or sidecar) gives traces, enhanced metrics (azure.app_containerapps.enhanced.*), custom metrics and logs. Not used by default.
+  container_apps_native: Datadog serverless-init (in-container or sidecar) gives traces, enhanced metrics (azure.app_containerapps.enhanced.*), custom metrics and logs. Sidecar mode is the
+    package default for Container Apps in datadog mode (logs stay on Fluent Bit).
   package_3_defaults:
     log_pipeline: 'observability_pipelines: Agents (8282 datadog_agent source), Fluent Bit (24224 fluent source, forward without metadata) and Event Hubs (Kafka source, SASL PLAIN $ConnectionString)
       -> one pipeline per environment (VRL tag policy + Azure shaping, SDS redaction, dedupe, quotas) -> Datadog Logs with a disk buffer (when_full block = backpressure). fluent_bit_direct
       keeps the 2.x paths.'
     apm: 'datadog: TELEMETRY_SDK=datadog, OTEL_SDK_DISABLED=true - one tracer per process. AKS: Cluster Agent admission controller SSI (target namespaces, ddTraceVersions per language).
-      Linux VM/VMSS: host SSI by the installer. ACA / ACI / App Service / Functions: library in the image (.NET dd-trace-dotnet, Python ddtrace) -> Datadog Agent APM gateway on ACA (internal
-      TCP 8126, API key ENC[dsv://] via dsv-fetch). serverless-init is opt-in on ACA only: version 1.10.4 does not resolve ENC[] secrets, so DD_API_KEY must be a Container Apps secret
-      (documented exception to ADR-0001 section 14).'
+      Linux VM/VMSS: host SSI by the installer. Container Apps (default): library in the image -> Datadog serverless-init sidecar on localhost (traces + DogStatsD); serverless-init 1.10.4
+      reads DD_API_KEY only from its environment, so a dsv-fetch run writes it from Delinea DSV into a dotenv file on the in-memory volume that the sidecar sources before exec /datadog-init.
+      ACI / ACA jobs / App Service (per-workload datadog): library in the image -> Datadog Agent APM gateway on ACA (internal TCP 8126, API key ENC[dsv://] via dsv-fetch). App Service
+      defaults to otel (no Datadog App Service sidecar integration); Functions stay on OpenTelemetry.'
     profiling: 'Datadog Continuous Profiler wherever a Datadog library runs and Datadog supports the runtime: .NET (Linux/Windows x64; Function Apps NOT supported), Python (POSIX; Azure
       Functions preview -> off by package policy), Node/Java (library default). SSI sets DD_PROFILING_ENABLED=auto. Profiles upload through the same Agent as traces (node Agent / APM
       gateway / serverless-init). apm.mode = otel: no Datadog profiling, except the opt-in Python preview DD_PROFILING_PREVIEW_OTEL_CONTEXT_ENABLED (profiling.otel_mode = python_preview).'
-    runtime_metrics: 'DD_RUNTIME_METRICS_ENABLED only where an Agent runs next to the process (DogStatsD UDP/UDS): node Agent, serverless-init. Behind the APM gateway runtime metrics
-      are off (Container Apps ingress has no UDP).'
+    runtime_metrics: 'DD_RUNTIME_METRICS_ENABLED only where an Agent runs next to the process (DogStatsD UDP/UDS): node Agent, host Agent, serverless-init (Container Apps default). Behind
+      the APM gateway (ACI, ACA jobs, App Service per-workload datadog) runtime metrics are off (Container Apps ingress has no UDP).'
     rum: 'modules/rum (obs-prereqs): RUM application create or existing; browser SDK config allowedTracingUrls with propagatorTypes [datadog, tracecontext], session replay 0, globalContext
       from the tag policy.'
     fleet: Agent version pinned by the fleet policy (7.84.2), Remote Configuration on, remote upgrades off by default; optional datadog_fleet_schedule (modules/fleet-automation).
@@ -149,21 +151,21 @@ compute:
         datadog_limitation: sidecar adds CPU/memory to each replica
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
-        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME, Python ddtrace) -> Datadog serverless-init sidecar (localhost:8126, default) -> Datadog;
+          per workload managed_runtime_path = agent_gateway -> Datadog Agent APM gateway (obs-telemetry-transport, ACA internal TCP 8126, DD_TRACE_AGENT_URL)
+        owner: applications deploy root (sidecar + env from modules/instrumentation); obs-telemetry-transport (APM gateway)
         duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
-        datadog_limitation: internal VNet path to the APM gateway required; serverless-init (opt-in, managed_runtime_path = serverless_init) needs DD_API_KEY as a Container Apps secret
-          - not DSV-compliant
+        datadog_limitation: serverless-init sidecar adds CPU/memory per replica and needs DD_API_KEY in its environment (written from DSV by dsv-fetch; no Container Apps secret); the
+          agent_gateway opt-out needs the internal VNet path to the APM gateway
       app_metrics:
-        supported: partial
-        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
-        owner: obs-telemetry-transport
+        supported: 'yes'
+        method: Datadog library custom metrics -> DogStatsD udp://localhost:8125 -> serverless-init sidecar (default) / OTel SDK metrics -> OTel gateway (apm.mode = otel)
+        owner: applications deploy root (serverless-init sidecar) / obs-telemetry-transport (OTel gateway)
         duplicate_prevention: single exporter per app
-        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
+        datadog_limitation: no DogStatsD behind the APM gateway (agent_gateway opt-out; Container Apps ingress is TCP)
       runtime_metrics:
-        supported: partial
-        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
+        supported: 'yes'
+        method: on with the serverless-init sidecar (default, DogStatsD on localhost) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway); off on the agent_gateway opt-out
         owner: obs-telemetry-transport
         duplicate_prevention: one runtime-metrics source per process
         datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
@@ -193,7 +195,7 @@ compute:
         datadog_limitation: n/a
       profiling:
         supported: 'yes'
-        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> serverless-init sidecar (default) or APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
           (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
         owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
         duplicate_prevention: profiler only inside the Datadog library
@@ -210,20 +212,21 @@ compute:
         datadog_limitation: sidecar adds CPU/memory to each replica
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
-        owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
+        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME, Python ddtrace) -> Datadog serverless-init sidecar (localhost:8126, default) -> Datadog;
+          per workload managed_runtime_path = agent_gateway -> Datadog Agent APM gateway (obs-telemetry-transport, ACA internal TCP 8126, DD_TRACE_AGENT_URL)
+        owner: applications deploy root (sidecar + env from modules/instrumentation); obs-telemetry-transport (APM gateway)
         duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
-        datadog_limitation: internal VNet path to the APM gateway required
+        datadog_limitation: serverless-init sidecar adds CPU/memory per replica (DD_API_KEY written from DSV by dsv-fetch); the agent_gateway opt-out needs the internal
+          VNet path to the APM gateway
       app_metrics:
-        supported: partial
-        method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
-        owner: obs-telemetry-transport
+        supported: 'yes'
+        method: Datadog library custom metrics -> DogStatsD udp://localhost:8125 -> serverless-init sidecar (default) / OTel SDK metrics -> OTel gateway (apm.mode = otel)
+        owner: applications deploy root (serverless-init sidecar) / obs-telemetry-transport (OTel gateway)
         duplicate_prevention: single exporter per app
-        datadog_limitation: no DogStatsD path for managed runtimes behind the APM gateway (Container Apps ingress is TCP); serverless-init (ACA opt-in) provides one
+        datadog_limitation: no DogStatsD behind the APM gateway (agent_gateway opt-out; Container Apps ingress is TCP)
       runtime_metrics:
-        supported: partial
-        method: off behind the APM gateway (DogStatsD); on with serverless-init (ACA opt-in) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway)
+        supported: 'yes'
+        method: on with the serverless-init sidecar (default, DogStatsD on localhost) or apm.mode = otel (OTel runtime instrumentation -> OTel gateway); off on the agent_gateway opt-out
         owner: obs-telemetry-transport
         duplicate_prevention: one runtime-metrics source per process
         datadog_limitation: DogStatsD runtime metrics need an Agent next to the process
@@ -253,7 +256,7 @@ compute:
         datadog_limitation: n/a
       profiling:
         supported: 'yes'
-        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> serverless-init sidecar (default) or APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
           (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
         owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
         duplicate_prevention: profiler only inside the Datadog library
@@ -513,8 +516,9 @@ compute:
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: 'default (fleet policy architectures.appservice): OpenTelemetry SDK -> OTel gateway (no Datadog App Service sidecar integration; no DogStatsD behind the APM gateway).
+          Per workload apm.mode = datadog: Datadog library (.NET Datadog.Trace.Bundle at DD_DOTNET_TRACER_HOME, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog'
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
         duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
         datadog_limitation: App Service VNet integration required to reach the APM gateway
@@ -556,7 +560,7 @@ compute:
         datadog_limitation: n/a
       profiling:
         supported: 'yes'
-        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+        method: per-workload apm.mode = datadog only - Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
           (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
         owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
         duplicate_prevention: profiler only inside the Datadog library
@@ -573,8 +577,9 @@ compute:
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: 'default (fleet policy architectures.appservice): OpenTelemetry SDK -> OTel gateway (no Datadog App Service sidecar integration; no DogStatsD behind the APM gateway).
+          Per workload apm.mode = datadog: Datadog library (.NET Datadog.Trace.Bundle at DD_DOTNET_TRACER_HOME, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog'
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
         duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
         datadog_limitation: App Service VNet integration required to reach the APM gateway
@@ -616,7 +621,7 @@ compute:
         datadog_limitation: n/a
       profiling:
         supported: 'yes'
-        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+        method: per-workload apm.mode = datadog only - Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
           (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
         owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
         duplicate_prevention: profiler only inside the Datadog library
@@ -633,8 +638,9 @@ compute:
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: 'default (fleet policy architectures.appservice): OpenTelemetry SDK -> OTel gateway (no Datadog App Service sidecar integration; no DogStatsD behind the APM gateway).
+          Per workload apm.mode = datadog: Datadog library (.NET Datadog.Trace.Bundle at DD_DOTNET_TRACER_HOME, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog'
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
         duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
         datadog_limitation: App Service VNet integration required to reach the APM gateway
@@ -676,7 +682,7 @@ compute:
         datadog_limitation: n/a
       profiling:
         supported: 'yes'
-        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+        method: per-workload apm.mode = datadog only - Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
           (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
         owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
         duplicate_prevention: profiler only inside the Datadog library
@@ -693,8 +699,9 @@ compute:
         datadog_limitation: minutes of latency through Event Hubs; stdout only; Windows containers not in Datadog App Service matrix
       traces:
         supported: partial
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: 'default (fleet policy architectures.appservice): OpenTelemetry SDK -> OTel gateway (no Datadog App Service sidecar integration; no DogStatsD behind the APM gateway).
+          Per workload apm.mode = datadog: Datadog library (.NET Datadog.Trace.Bundle at DD_DOTNET_TRACER_HOME, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
+          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog'
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
         duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
         datadog_limitation: Windows containers are not listed by Datadog App Service instrumentation; library in the image + APM gateway only
@@ -736,7 +743,7 @@ compute:
         datadog_limitation: n/a
       profiling:
         supported: partial
-        method: Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
+        method: per-workload apm.mode = datadog only - Datadog Continuous Profiler in the library (DD_PROFILING_ENABLED=true) -> APM gateway (/profiling/v1/input) -> Datadog; .NET profile types cpu/walltime/exceptions/gc
           (lock/allocation/heap off; allocation+heap preview), Python stack/lock/memory/heap/timeline; code hotspots + endpoint profiling; UST + DD_TAGS on every profile
         owner: applications deploy root (env from modules/instrumentation, fleet policy profiling)
         duplicate_prevention: profiler only inside the Datadog library
@@ -752,11 +759,11 @@ compute:
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: OpenTelemetry SDK -> OTLP -> OTel gateway (obs-telemetry-transport) -> Datadog (package exception, fleet policy architectures.functions.apm.mode = otel; Functions on
+          Container Apps likewise)
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
-        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
-        datadog_limitation: VNet integration required to reach the APM gateway
+        duplicate_prevention: 'TELEMETRY_SDK=otel: only the OpenTelemetry SDK (no Datadog library in the process; one tracer per process)'
+        datadog_limitation: VNet integration required to reach the OTel gateway
       app_metrics:
         supported: partial
         method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
@@ -811,11 +818,11 @@ compute:
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: OpenTelemetry SDK -> OTLP -> OTel gateway (obs-telemetry-transport) -> Datadog (package exception, fleet policy architectures.functions.apm.mode = otel; Functions on
+          Container Apps likewise)
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
-        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
-        datadog_limitation: VNet integration required to reach the APM gateway
+        duplicate_prevention: 'TELEMETRY_SDK=otel: only the OpenTelemetry SDK (no Datadog library in the process; one tracer per process)'
+        datadog_limitation: VNet integration required to reach the OTel gateway
       app_metrics:
         supported: partial
         method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
@@ -870,11 +877,11 @@ compute:
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: OpenTelemetry SDK -> OTLP -> OTel gateway (obs-telemetry-transport) -> Datadog (package exception, fleet policy architectures.functions.apm.mode = otel; Functions on
+          Container Apps likewise)
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
-        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
-        datadog_limitation: VNet integration required to reach the APM gateway
+        duplicate_prevention: 'TELEMETRY_SDK=otel: only the OpenTelemetry SDK (no Datadog library in the process; one tracer per process)'
+        datadog_limitation: VNet integration required to reach the OTel gateway
       app_metrics:
         supported: partial
         method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
@@ -988,11 +995,11 @@ compute:
         datadog_limitation: sidecar adds CPU/memory to each replica
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: OpenTelemetry SDK -> OTLP -> OTel gateway (obs-telemetry-transport) -> Datadog (package exception, fleet policy architectures.functions.apm.mode = otel; Functions on
+          Container Apps likewise)
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
-        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
-        datadog_limitation: internal VNet path to the APM gateway required
+        duplicate_prevention: 'TELEMETRY_SDK=otel: only the OpenTelemetry SDK (no Datadog library in the process; one tracer per process)'
+        datadog_limitation: internal VNet path to the OTel gateway required
       app_metrics:
         supported: partial
         method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)
@@ -1047,11 +1054,11 @@ compute:
         datadog_limitation: minutes of latency through Event Hubs; stdout only
       traces:
         supported: 'yes'
-        method: Datadog library in the image (.NET dd-trace-dotnet at DD_DOTNET_TRACER_HOME / Datadog.Trace.Bundle, Python ddtrace) -> Datadog Agent APM gateway (obs-telemetry-transport,
-          ACA internal TCP 8126, DD_TRACE_AGENT_URL) -> Datadog
+        method: OpenTelemetry SDK -> OTLP -> OTel gateway (obs-telemetry-transport) -> Datadog (package exception, fleet policy architectures.functions.apm.mode = otel; Functions on
+          Container Apps likewise)
         owner: obs-telemetry-transport (gateway) + applications deploy root (env from modules/instrumentation)
-        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
-        datadog_limitation: VNet integration required to reach the APM gateway
+        duplicate_prevention: 'TELEMETRY_SDK=otel: only the OpenTelemetry SDK (no Datadog library in the process; one tracer per process)'
+        datadog_limitation: VNet integration required to reach the OTel gateway
       app_metrics:
         supported: partial
         method: OTel SDK metrics -> OTel gateway (apm.mode = otel) / Datadog library custom metrics need DogStatsD (not available behind the APM gateway)

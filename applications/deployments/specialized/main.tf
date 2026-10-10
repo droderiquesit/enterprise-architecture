@@ -152,7 +152,7 @@ resource "azurerm_virtual_machine_run_command" "cvm_worker" {
   name               = "install-hello-worker-cvm"
   location           = local.location
   virtual_machine_id = local.cvm.id
-  tags               = merge(local.tags, { service = "hello-worker", version = lookup(local.artifact_version, "svc-worker", "unknown") })
+  tags               = merge(local.tags, { service = "hello-worker", version = lookup(local.artifact_version, "svc-worker", "unknown") }, module.env["cvm"].azure_tags)
   source {
     script = module.cvm_script[0].script
   }

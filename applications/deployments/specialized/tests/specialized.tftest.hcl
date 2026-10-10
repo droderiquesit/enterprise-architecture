@@ -344,6 +344,10 @@ run "all_specialized" {
     condition     = length(azurerm_virtual_machine_run_command.cvm_worker) == 1 && azurerm_automation_runbook.health_probe[0].runbook_type == "Python3" && length(azurerm_automation_job_schedule.health_probe) == 1
     error_message = "Confidential VM worker run command and python3 health-probe runbook with schedule."
   }
+  assert {
+    condition     = contains(keys(azurerm_virtual_machine_run_command.cvm_worker[0].tags), "team") && azurerm_virtual_machine_run_command.cvm_worker[0].tags["service"] == "hello-worker"
+    error_message = "The confidential VM worker run command carries the tag policy azure_tags."
+  }
 }
 
 run "aro_rejects_plain_secrets" {

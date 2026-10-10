@@ -34,11 +34,24 @@ run "aks_dotnet_ssi_with_profiler_dsm_dbm" {
   }
 }
 
+run "aca_python_serverless_init_default" {
+  command = plan
+  variables {
+    architecture = "aca"
+    runtime      = "python"
+  }
+  assert {
+    condition     = output.apm.method == "serverless_init" && output.apm_env["DD_DOGSTATSD_URL"] == "udp://localhost:8125" && output.apm_env["DD_RUNTIME_METRICS_ENABLED"] == "true"
+    error_message = "Container Apps default (architectures.aca): serverless-init sidecar with DogStatsD on localhost"
+  }
+}
+
 run "aca_python_agent_gateway" {
   command = plan
   variables {
     architecture = "aca"
     runtime      = "python"
+    overrides    = { apm = { managed_runtime_path = "agent_gateway" } }
   }
   assert {
     condition     = output.apm.method == "agent_gateway" && output.profiling.env["DD_PROFILING_ENABLED"] == "true" && output.profiling.env["DD_PROFILING_MEMORY_ENABLED"] == "true"
@@ -130,5 +143,29 @@ run "aca_serverless_init_opt_in" {
   assert {
     condition     = output.apm.method == "serverless_init"
     error_message = "serverless-init only on explicit opt-in"
+  }
+}
+
+run "appservice_defaults_to_otel" {
+  command = plan
+  variables {
+    architecture = "appservice"
+    runtime      = "dotnet"
+  }
+  assert {
+    condition     = output.apm.mode == "otel" && output.apm.method == "otlp_gateway" && length(output.apm_env) == 0
+    error_message = "App Service (architectures.appservice): OpenTelemetry - no Datadog sidecar integration, no DogStatsD behind the APM gateway"
+  }
+}
+
+run "aci_agent_gateway_no_dogstatsd" {
+  command = plan
+  variables {
+    architecture = "aci"
+    runtime      = "python"
+  }
+  assert {
+    condition     = output.apm.method == "agent_gateway" && output.apm_env["DD_RUNTIME_METRICS_ENABLED"] == "false" && !contains(keys(output.apm_env), "DD_DOGSTATSD_URL")
+    error_message = "ACI: APM gateway only (serverless-init is Container Apps only)"
   }
 }

@@ -204,6 +204,13 @@ key fallback) in their READMEs.
   `servicebus.process`; RUM monitor syntax not validated by the Datadog API; DBM per-node behaviour on PostgreSQL elastic
   clusters unverified; synthetic browser steps limited to simple assertions.
 * `telemetry_verify.py` is tested only against recorded API responses.
+* DogStatsD on managed runtimes (Datadog mode): Container Apps use the serverless-init sidecar by default (DogStatsD on
+  localhost; its API key is fetched from Delinea DSV by dsv-fetch, verified locally with serverless-init 1.10.4 against a
+  mock intake, not on Azure). Residual gaps where the tracer goes through the TCP-only APM gateway and DogStatsD
+  (`hello.*` custom metrics, runtime metrics) is unavailable: ACI (no serverless-init support), Container Apps jobs
+  (run-to-completion, no sidecar), App Service workloads that opt into `apm.mode = datadog` (the package has no Datadog
+  App Service sidecar integration; App Service defaults to OpenTelemetry instead), and Container Apps workloads that opt
+  out with `managed_runtime_path = agent_gateway`. Use `apm.mode = otel` for such a workload when its custom metrics matter.
 
 ## Documentation and links
 

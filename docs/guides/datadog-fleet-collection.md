@@ -22,7 +22,8 @@ Status: implemented and tested offline. Locally verified with docker:
 * the VRL programs;
 * the Worker 2.22.0 bootstrap;
 * the APM gateway Agent 7.84.2: DSV secret backend, non-local traces, health;
-* serverless-init 1.10.4 secret handling;
+* serverless-init 1.10.4 secret handling (no `ENC[]`, no `datadog.yaml` `api_key`; a `DD_API_KEY` sourced from a
+  dsv-fetch dotenv file before `exec /datadog-init` reaches the intake with traces and DogStatsD metrics);
 * `helm template` of the datadog chart 3.253.2 and the observability-pipelines-worker chart 2.22.0.
 
 The application libraries were verified by the app tracer builder against a real Agent 7.84.2: ddtrace 4.15.6 and
@@ -50,9 +51,10 @@ collector per signal. `terraform output collection_matrix` of
 | AKS pods | Agent DaemonSet -> OP Worker | SSI (admission controller) -> node Agent | SSI `DD_PROFILING_ENABLED=auto` | DogStatsD -> node Agent | Azure integration | diagnostic settings -> Event Hubs -> Worker | DBM cluster checks |
 | Linux VM / VMSS | host Agent file tail -> Worker | host SSI -> local Agent | host SSI `auto` | DogStatsD `localhost` | Azure integration + Agent | - | Agent DBM on SQL VMs |
 | Windows VM / VMSS | Fluent Bit service -> Worker | OpenTelemetry -> Agent OTLP | **no** (see 4) | OTel -> Agent | Azure integration + Agent | - | - |
-| Container Apps / ACI | Fluent Bit sidecar -> Worker | library in image -> APM gateway | library -> APM gateway | **no DogStatsD** behind the gateway; serverless-init opt-in | Azure integration | system logs -> Worker | - |
-| Container Apps jobs | console logs -> Event Hubs -> Worker | as Container Apps | partial (short runs) | as Container Apps | Azure integration | as Container Apps | - |
-| App Service Linux / Windows code | console / app logs -> Event Hubs -> Worker | library (`Datadog.Trace.Bundle`, `ddtrace`) -> APM gateway (VNet integration) | yes (.NET Linux / Windows x64, Python Linux) | no DogStatsD | Azure integration | HTTP / platform logs -> Worker | - |
+| Container Apps | Fluent Bit sidecar -> Worker | library in image -> **serverless-init sidecar** (default; `localhost:8126`) | library -> serverless-init | DogStatsD `udp://localhost:8125` -> serverless-init | Azure integration | system logs -> Worker | - |
+| ACI | Fluent Bit sidecar -> Worker | library in image -> APM gateway | library -> APM gateway | **no DogStatsD** behind the gateway | Azure integration | - | - |
+| Container Apps jobs | console logs -> Event Hubs -> Worker | library -> APM gateway (no sidecar in run-to-completion jobs) | partial (short runs) | **no DogStatsD** | Azure integration | as Container Apps | - |
+| App Service Linux / Windows code | console / app logs -> Event Hubs -> Worker | **OpenTelemetry** -> OTel gateway by default (`architectures.appservice`); per workload `apm.mode = datadog`: library (`Datadog.Trace.Bundle`, `ddtrace`) -> APM gateway (VNet integration) | default: no; per-workload datadog: yes (.NET Linux / Windows x64, Python Linux) | default: OTel; per-workload datadog: no DogStatsD | Azure integration | HTTP / platform logs -> Worker | - |
 | App Service Windows container | as above | partial (not a documented Datadog target) | partial | no DogStatsD | Azure integration | as above | - |
 | Functions (all plans), Durable Functions | `FunctionAppLogs` -> Event Hubs -> Worker | **OpenTelemetry** -> OTel gateway (package exception) | **no** | OTel | Azure integration | as App Service | - |
 | Logic Apps | `WorkflowRuntime` -> Event Hubs -> Worker | none | n/a | - | Azure integration | - | - |
@@ -140,8 +142,9 @@ The `app_requirements` output of `modules/instrumentation` lists them per worklo
 |---|---|---|
 | Datadog tracers on Azure Functions / Durable Functions | Datadog documents neither the Functions host spans nor Durable Functions V2 orchestration spans for this setup | `architectures.functions.apm.mode: otel` (OpenTelemetry -> OTel gateway) |
 | SSI on Windows services | Windows SSI is IIS only | Windows hosts fall back to OpenTelemetry |
-| DogStatsD behind the APM gateway (Container Apps, ACI, App Service) | DogStatsD is UDP / UDS; Container Apps ingress is TCP | runtime metrics off; custom metrics need `managed_runtime_path = serverless_init` (ACA) or `apm.mode = otel` for that workload |
-| serverless-init with Delinea DSV | serverless-init 1.10.4 does not resolve `ENC[]` (verified: it sent the literal value) | opt-in only; `DD_API_KEY` must be a Container Apps secret (documented exception to ADR-0001 §14) |
+| DogStatsD behind the APM gateway (ACI, Container Apps jobs, App Service per-workload datadog, ACA `managed_runtime_path = agent_gateway`) | DogStatsD is UDP / UDS; Container Apps ingress is TCP | Container Apps default to serverless-init (DogStatsD on localhost); App Service defaults to `apm.mode = otel`; elsewhere runtime metrics off and custom metrics need `apm.mode = otel` for that workload |
+| serverless-init with Delinea DSV | serverless-init 1.10.4 reads `DD_API_KEY` only from its environment (no `ENC[]`, no `datadog.yaml` key - verified) | a second dsv-fetch init / refresher run writes `DD_API_KEY` from DSV into a dotenv file on the in-memory `dsv-secrets` volume; the sidecar runs `/bin/sh -c 'set -a; . /dsv-secrets/serverless-init.env; set +a; exec /datadog-init'` (no Container Apps secret, nothing in state) |
+| Datadog App Service sidecar | not integrated in the package modules | App Service workloads default to OpenTelemetry (`architectures.appservice.apm.mode: otel`) |
 | Functions Consumption (Windows) and the APM gateway | no VNet integration | OpenTelemetry (functions exception) to the serverless OTLP intake |
 | Agent on Container Apps / App Service / Functions nodes | no node access | Fluent Bit sidecar or Event Hubs for logs; APM gateway for traces |
 | Profiling in otel mode | needs the Datadog library | off (Python preview opt-in) |
