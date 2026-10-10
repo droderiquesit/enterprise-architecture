@@ -19,6 +19,8 @@ variable "settings" {
   type = object({
     budget = optional(object({
       # Azure budgets ALERT; they never stop or cap spend.
+      # Override of the environment global `budget.enabled`; true when neither is set. false = no consumption budget.
+      enabled = optional(bool)
       # Override of the environment global `budget.monthly_amount` (var.budget); 300 when neither is set.
       amount = optional(number)
       # "subscription" (default) or "resource_group" (one budget per id in resource_group_ids).
@@ -90,6 +92,7 @@ variable "settings" {
 variable "budget" {
   description = "Environment global `budget` (environments/<env>/environment.yaml; rendered by tools/config/render.py because this root declares it). settings.budget.amount / contact_emails override it."
   type = object({
+    enabled        = optional(bool)
     monthly_amount = optional(number)
     currency       = optional(string)
     contact_emails = optional(list(string), [])

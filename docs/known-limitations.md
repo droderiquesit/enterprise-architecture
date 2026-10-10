@@ -185,8 +185,9 @@ key fallback) in their READMEs.
   Routing host) explicitly.
 * Two-pass settings: BFF `cors_allowed_origins` needs the SWA hostname (known after `deploy-frontend`); BFF
   `adapters` must be copied from `deploy-dbadapters` `adapters_json`; firewall egress switch is three applies.
-* Budgets alert only; they never cap spend. The dev budget (500) predates the observability 4.0.0 transport defaults
-  and is below the current minimal-profile estimate (~600-650, [deployment profiles](guides/deployment-profiles.md#minimal)).
+* Budgets alert only; they never cap spend. dev has no consumption budget at all (`budget.enabled: false`, owner
+  decision), so there are no cost alerts in dev; the minimal-profile estimate is ~600-650/month
+  ([deployment profiles](guides/deployment-profiles.md#minimal)).
 
 ## Application and telemetry limitations
 

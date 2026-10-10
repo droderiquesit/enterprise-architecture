@@ -138,3 +138,18 @@ run "copilot_review_budget_filters_the_copilot_meter" {
     error_message = "A Copilot code review budget alert must exist by default."
   }
 }
+
+run "budget_disabled_by_environment_global" {
+  command = plan
+  variables {
+    budget = { enabled = false, currency = "USD" }
+  }
+  assert {
+    condition     = length(azurerm_consumption_budget_subscription.this) == 0 && length(azurerm_consumption_budget_resource_group.this) == 0
+    error_message = "budget.enabled = false must create no consumption budget"
+  }
+  assert {
+    condition     = length(output.contract.budget.ids) == 0 && output.contract.budget.caps_spend == false
+    error_message = "contract reports no budget ids when disabled"
+  }
+}

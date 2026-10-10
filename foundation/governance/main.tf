@@ -20,6 +20,7 @@ locals {
   tags            = module.tags.tags
   subscription_id = "/subscriptions/${var.environment.subscription_id}"
   budget = merge(var.settings.budget, {
+    enabled        = coalesce(var.settings.budget.enabled, try(var.budget.enabled, null), true)
     amount         = coalesce(var.settings.budget.amount, try(var.budget.monthly_amount, null), 300)
     contact_emails = length(var.settings.budget.contact_emails) > 0 ? var.settings.budget.contact_emails : try(coalesce(var.budget.contact_emails, []), [])
   })
@@ -85,7 +86,7 @@ resource "azurerm_monitor_action_group" "budget" {
 resource "time_static" "budget_start" {}
 
 resource "azurerm_consumption_budget_subscription" "this" {
-  count = local.budget.scope == "subscription" ? 1 : 0
+  count = local.budget.enabled && local.budget.scope == "subscription" ? 1 : 0
 
   name            = local.names.budget
   subscription_id = local.subscription_id
@@ -131,7 +132,7 @@ resource "azurerm_consumption_budget_subscription" "this" {
 }
 
 resource "azurerm_consumption_budget_resource_group" "this" {
-  for_each = local.budget.scope == "resource_group" ? toset(local.budget.resource_group_ids) : toset([])
+  for_each = local.budget.enabled && local.budget.scope == "resource_group" ? toset(local.budget.resource_group_ids) : toset([])
 
   name              = "${local.names.budget}-${element(split("/", each.value), length(split("/", each.value)) - 1)}"
   resource_group_id = each.value

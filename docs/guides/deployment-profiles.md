@@ -57,7 +57,7 @@ profile: minimal
 custom_components: []
 datadog: {site: datadoghq.com, api_key_secret_name: datadog-api-key, app_key_secret_name: datadog-app-key}
 network: {hub_address_space: 10.40.0.0/20, spoke_address_space: 10.41.0.0/16}
-budget: {monthly_amount: 500, currency: USD, contact_emails: [platform-team@example.com]}
+budget: {enabled: false, currency: USD, contact_emails: [platform-team@example.com]}   # dev: no consumption budget
 components:
   bootstrap:
     operator_ip_ranges: ["203.0.113.10"]
@@ -88,10 +88,10 @@ pricing calculator - nothing here has been billed):
 | Datadog | billed by Datadog | RUM sessions, synthetic runs (tests created **paused**), APM/infra hosts, logs, DBM |
 
 Order of magnitude: roughly USD 600-650/month before Datadog charges (observability 4.0.0 defaults; the Worker
-dominates the transport - `op_worker` sizing in the fleet policy). `environments/dev/environment.yaml` sets
-`budget.monthly_amount: 500`, which was sized for the 3.x transport (~110) and is now below the estimate; raise it
-when deploying `minimal` with the default transport. foundation-governance reads that global (`var.budget`) unless
-`components.foundation-governance.budget.amount` overrides it (root fallback 300). The minimal profile creates only
+dominates the transport - `op_worker` sizing in the fleet policy). dev has **no consumption budget**
+(`budget.enabled: false` in `environments/dev/environment.yaml`); test and prod keep theirs. foundation-governance
+reads that global (`var.budget`) unless `components.foundation-governance.budget.{enabled,amount}` overrides it
+(root fallback: enabled, 300). The minimal profile creates only
 the `fulfillment` Service Bus subscription (the only `order-events` consumer in the profile).
 
 ## enterprise
@@ -154,7 +154,7 @@ custom_components: [deploy-core-aca, deploy-durable, obs-monitoring]
 
 ## Budgets do not cap spend
 
-`foundation-governance` creates a monthly consumption budget (environment `budget.monthly_amount`, root fallback 300; filter `application=enterprise-hello` and
+`foundation-governance` creates a monthly consumption budget unless `budget.enabled` is `false` (dev) (environment `budget.monthly_amount`, root fallback 300; filter `application=enterprise-hello` and
 `env=<env>`) with actual 50/80/100 % and forecast 80/100 % notifications. **Azure budgets only alert; resources keep
 running and keep costing money**, and cost data lags by up to about 24 hours. Stopping spend is a human decision (or
 automation you add). Cost controls that are implemented: [cost-and-lifecycle.md](cost-and-lifecycle.md).

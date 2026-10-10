@@ -15,8 +15,9 @@
 
 | | Default |
 |---|---|
+| Enabled | `settings.budget.enabled`, else the environment global `budget.enabled`, else `true`; `false` creates no consumption budget (dev: `false`) |
 | Scope | subscription (`budget.scope = "resource_group"` + `resource_group_ids` for per-RG budgets) |
-| Amount | `settings.budget.amount`, else the environment global `budget.monthly_amount` (`var.budget`, rendered by `tools/config/render.py`; dev: 500), else 300 — billing currency, monthly grain |
+| Amount | `settings.budget.amount`, else the environment global `budget.monthly_amount` (`var.budget`, rendered by `tools/config/render.py`), else 300 — billing currency, monthly grain |
 | Filter | tags `application = enterprise-hello` AND `env = <env>` (safe in shared subscriptions; `filter_by_lab_tags = false` to count everything) |
 | Notifications | Actual ≥ 50 %, 80 %, 100 %; Forecasted > 80 %, 100 % (Azure allows max 5) |
 | Recipients | `settings.budget.contact_emails`, else the global `budget.contact_emails`, else `environment.owner` if it is an e-mail; + action group `budget` (e-mail receivers) |
@@ -56,7 +57,7 @@ resourcecontainers
 
 ## Settings (`components.foundation-governance`)
 
-`budget.{amount, scope, resource_group_ids, contact_emails, actual_thresholds, forecast_thresholds, filter_by_lab_tags, start_date, end_date}`,
+`budget.{enabled, amount, scope, resource_group_ids, contact_emails, actual_thresholds, forecast_thresholds, filter_by_lab_tags, start_date, end_date}`,
 `action_group_short_name` (≤ 12 chars), `policy.{allowed_locations, allowed_locations_enforce, required_rg_tags, required_rg_tags_enforce,
 deny_nic_public_ip, deny_nic_public_ip_enforce, nic_public_ip_allowlisted_rg_ids, not_scopes}`. See `variables.tf` for defaults.
 

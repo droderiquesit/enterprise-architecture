@@ -9,7 +9,7 @@ has been deployed.
 
 | Control | Where | Behaviour |
 |---|---|---|
-| Monthly budget | `foundation-governance` `budget.*` (environment `budget.monthly_amount` — dev 500 —, root fallback 300, monthly) | actual 50/80/100 %, forecast 80/100 % e-mail + action group; filter `application=enterprise-hello` and `env=<env>`. **Alerts only - Azure budgets never stop or cap spend**; cost data lags up to ~24 h |
+| Monthly budget | `foundation-governance` `budget.*` (environment `budget.enabled` / `budget.monthly_amount` — dev: no budget (`enabled: false`) —, root fallback 300, monthly) | actual 50/80/100 %, forecast 80/100 % e-mail + action group; filter `application=enterprise-hello` and `env=<env>`. **Alerts only - Azure budgets never stop or cap spend**; cost data lags up to ~24 h |
 | `expires_on` tag | `environment.expires_on` -> `foundation/modules/tags` on every taggable resource (also `env, application, owner, component, layer, cost_center, data_classification=synthetic, repository, ...`) | informational; nothing deletes on expiry automatically |
 | Expired-resource finder | [`foundation/governance/scripts/find-expired.sh`](../../foundation/governance/scripts/find-expired.sh) | Resource Graph query scoped to `application == enterprise-hello` **and** `repository == azure-enterprise-observability-lab` and `expires_on < now`; `--print-delete-commands` prints (never runs) `az group delete` commands |
 | Required RG tags policy | `foundation-governance` `policy.required_rg_tags` (`env, owner, expires_on`) | **audit** by default (platform-managed RGs would be denied) |
