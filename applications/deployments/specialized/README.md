@@ -4,8 +4,8 @@
 - **Service Fabric managed cluster** — `hello-inventory-api` guest executable. azurerm 5.9 has **no** Service Fabric
   application/application-type resources, so Terraform renders `ApplicationManifest.xml` / `ServiceManifest.xml` (env vars,
   endpoint port from platform-servicefabric `app_port`) into the contract and `scripts/deploy-sf.sh` uploads/provisions/
-  upgrades with `sfctl` (monitored upgrade, FailureAction=Rollback). The cluster admin client certificate is fetched by the
-  pipeline at deploy time (not in state).
+  upgrades with `sfctl` (monitored upgrade, FailureAction=Rollback). The cluster admin client certificate is read from
+  Delinea DSV by the pipeline at deploy time (not in state).
 - **ARO** — `hello-catalog-api` with the shared Helm chart [`applications/charts/hello-service`](../../charts/hello-service/README.md):
   Terraform renders the release values into the contract (`aro.helm.{release,chart,chart_path,values}`) with OpenShift
   settings (`openshift.enabled`: no fixed `runAsUser` — the restricted-v2 SCC assigns the UID; `openshift.route.enabled`:
@@ -30,6 +30,10 @@ failed upgrade; manual `helm -n hello rollback hello-catalog-api <revision> --wa
 
 ## Cost
 No billable resources of its own beyond the runbook (Automation free minutes cover an hourly probe).
+
+## Test
+`bash tools/validate/terraform.sh applications/deployments/specialized` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/specialized.tftest.hcl`).
 
 Docs: https://learn.microsoft.com/azure/service-fabric/service-fabric-guest-executables-introduction , https://learn.microsoft.com/azure/openshift/ ,
 https://learn.microsoft.com/azure/automation/automation-runbook-types

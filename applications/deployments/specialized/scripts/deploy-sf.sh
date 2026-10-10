@@ -4,9 +4,10 @@
 #
 #   deploy-sf.sh --contract <deploy-specialized contract JSON> --cert-pem <client cert PEM file>
 #
-# The client certificate (admin client of the managed cluster) is downloaded from Key Vault by the pipeline at
-# deploy time (`az keyvault secret download ... --encoding base64` -> PEM) and deleted afterwards; it is never stored
-# in Terraform state or contracts. Upgrade is monitored with automatic rollback (FailureAction=Rollback).
+# The client certificate (admin client of the managed cluster, platform-servicefabric client_certificate_thumbprint) is
+# read from Delinea DSV by the pipeline at deploy time (tools/secrets/fetch.py on a self-hosted agent, ADR-0001 §14)
+# into a temporary PEM file that it deletes afterwards; it is never stored in Terraform state or contracts.
+# Upgrade is monitored with automatic rollback (FailureAction=Rollback).
 set -euo pipefail
 CONTRACT="" ; CERT=""
 while [[ $# -gt 0 ]]; do
@@ -35,6 +36,8 @@ az storage blob download --auth-mode login --account-name "$ACCOUNT" --container
 echo "$SHA  $WORK/pkg.zip" | sha256sum -c --status
 python3 -m zipfile -e "$WORK/pkg.zip" "$APPDIR/InventoryApiPkg/Code"
 
+# --no-verify: the managed cluster's server certificate is Azure-managed and rotated; sfctl can only pin a CA bundle,
+# not the cluster certificate thumbprint. The client certificate authenticates us; the endpoint comes from the contract.
 sfctl cluster select --endpoint "https://$HOST" --pem "$CERT" --no-verify
 sfctl application upload --path "$APPDIR" --show-progress
 sfctl application provision --application-type-build-path HelloInventoryApp

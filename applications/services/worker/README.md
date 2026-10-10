@@ -38,8 +38,8 @@ Logs: journald + `/var/log/hello-worker/worker.log` (`LOG_FILE_PATH`, tailed by 
 Datadog Agent (`localhost:4317`).
 
 ## Tests
-`pytest` (6 unit: link-not-parent, idempotent upsert, poison DLQ, retry→DLQ, fault retry, bounded concurrency,
-process SIGTERM drain + LOG_FILE_PATH); `pytest -m integration` (1: official Service Bus emulator + SQL Server +
+`pytest` (8 unit: link-not-parent, idempotent upsert, poison DLQ, retry→DLQ, fault retry, bounded concurrency,
+process SIGTERM drain + LOG_FILE_PATH, bounded open retry); `pytest -m integration` (1: official Service Bus emulator + SQL Server +
 Azurite Tables, producer → worker → table row + DLQ assertion). install.sh was exercised offline in a
 `python:3.13-slim` container (install, run as `hello-worker`, SIGTERM exit 0, upgrade, rollback) with
 `SKIP_SYSTEMD=1`; systemd itself was not exercised.

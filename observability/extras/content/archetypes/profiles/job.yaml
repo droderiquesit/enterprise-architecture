@@ -26,7 +26,7 @@ monitors:
     summary: The job did not run (or its logs are not reaching Datadog) within the expected schedule window.
     troubleshooting: |-
       1. az containerapp job execution list -n <job> -g <rg> -o table
-      2. If executions succeeded, check the Fluent Bit sidecar of the job (telemetry pipeline dashboard).
+      2. If executions succeeded, check the job's log path (Container Apps console logs via diagnostic settings -> Event Hubs -> Observability Pipelines Worker).
     runbook_section: job-missed
   job.errors:
     scope: service

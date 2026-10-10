@@ -54,5 +54,9 @@ Y1 identity-based storage without Azure Files and run-from-package-with-MI are d
 Durable state uses `AzureWebJobsStorage` (host.json `connectionName`); the separate platform `durable_storage` account
 is unused until host.json points at another connection.
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/durable` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/durable.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan , https://learn.microsoft.com/azure/azure-functions/functions-reference#connecting-to-host-storage-with-an-identity ,
 https://learn.microsoft.com/azure/azure-functions/deployment-zip-push

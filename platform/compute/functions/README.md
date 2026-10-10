@@ -65,6 +65,12 @@ Blob soft delete keeps deleted blobs 7 days while the account exists.
 - Deployment (zip upload to the private container) needs VNet-connected agents or `private_endpoints_enabled = false`.
 - The `flex-integration` subnet must be delegated to `Microsoft.App/environments` (foundation).
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/functions   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan

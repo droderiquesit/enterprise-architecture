@@ -152,6 +152,17 @@ suites:
     toolchain: helm
     paths: [tests/charts]
     inputs: [tests/charts/**, applications/charts/**, applications/deployments/**/*.yaml, applications/deployments/**/*.tf]
+  - id: py-graphify
+    # Graphify IaC layer (tools/graphify/iac_graph.py, docs/guides/graphify.md): synthetic tree + a smoke run over
+    # the real registry/contracts/roots (~5 s, no graphify CLI needed; the CLI check is skipped when not installed)
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: python
+    paths: [tools/graphify/tests]
+    inputs: [tools/graphify/**, .graphifyignore, catalog/components.yaml, catalog/contracts/**, catalog/services/**,
+             environments/profiles/**, environments/*/environment.yaml, applications/charts/*/Chart.yaml,
+             pipelines/**/*.yml, azure-pipelines*.yml, '**/*.tf']
   - id: py-hello-common
     tier: unit
     kind: script                 # the application team's isolated, pinned venv (not the CI tool environment)

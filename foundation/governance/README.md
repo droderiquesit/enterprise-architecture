@@ -75,6 +75,12 @@ retention period). Destroy last so cost alerts cover the teardown of everything 
   `policy.not_scopes` or keep audit mode.
 - Budget currency is the billing account currency; the `budget.currency` value in environment.yaml is informational.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh foundation/governance   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## References
 
 - Budgets: https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets

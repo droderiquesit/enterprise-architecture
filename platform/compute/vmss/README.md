@@ -46,6 +46,12 @@ instance (`az vmss update-instances`), which keeps rollouts controlled without c
 2 × B2s_v2 Linux 24×7 ≈ USD 70/month + disks ~6. No auto-shutdown for scale sets; use
 `az vmss deallocate` or scale `min_instances` to 0 off-hours.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/vmss   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/virtual-machine-scale-sets/virtual-machine-scale-sets-orchestration-modes

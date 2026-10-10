@@ -1,6 +1,6 @@
 # Lab onboarding manifest (Enterprise Hello, env dev): Azure control-plane / platform logs of the lab subscription.
 # The logs themselves are exported by obs-diagnostics (Activity Log, resource diagnostic settings, optional Entra)
-# and shipped by the obs-telemetry-transport aggregator; this manifest only creates the monitors.
+# and shipped by the obs-telemetry-transport Observability Pipelines Worker; this manifest only creates the monitors.
 apiVersion: observability/v1
 kind: ServiceOnboarding
 metadata:

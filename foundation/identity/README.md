@@ -29,10 +29,10 @@ References are not secrets (ADR-0001 section 14) and may appear in contracts, st
 | Key | DSV secrets it reads (foundation-secrets grants `read` on exactly these paths) |
 |---|---|
 | hello-bff, hello-orders-api, hello-catalog-api, hello-functions | `fault-token`, `datadog-api-key` (dsv-fetch for Datadog serverless-init on Container Apps; the Fluent Bit sidecar only with `log_pipeline = fluent_bit_direct`) |
-| hello-inventory-api, hello-dbadapter | `fault-token`, `datadog-api-key` (Container Apps serverless-init as above; on VMs / VMSS the policy-enrolled Agent uses `obs-host-agent`, the workload identity is needed there only for the `fluent_bit_direct` fallback); hello-dbadapter also the adapter secrets |
+| hello-inventory-api, hello-dbadapter | `fault-token`, `datadog-api-key` (Container Apps serverless-init as above; on VMs / VMSS the policy-enrolled Agent uses `obs-host-agent`); hello-dbadapter also the adapter secrets |
 | hello-durable, hello-traffic | `fault-token` |
+| hello-worker | — (runs on AKS / VM / VMSS: the node Agent uses `obs-collector`, policy-enrolled host Agents use `obs-host-agent`; observability 4.0.0 installs no Fluent Bit on hosts) |
 | hello-partner-sim | `fault-token`, `datadog-api-key` (the `dsv-fetch` init container of the ACI Datadog Agent sidecar reads it with this identity) |
-| hello-worker | `datadog-api-key` (only the `fluent_bit_direct` fallback host service; policy-enrolled VM/VMSS Agents use `obs-host-agent`) |
 | hello-jobs | `datadog-api-key` (Batch job preparation task installs Fluent Bit with the pool identity, ADR-0001 §13) |
 | obs-collector (Fluent Bit aggregator / OTel gateway) | `datadog-api-key`, `fluentbit-shared-key` (aggregator forward input), `eventhub-fluentbit-listen` (kafka input) |
 | obs-dbm (Datadog Agent DBM) | `datadog-api-key`, `dbm-<engine>-password` |
@@ -105,6 +105,13 @@ default allow-list (`foundation-edge`) includes `*.secretsvaultcloud.*`.
 - AKS pods authenticate to DSV with workload identity: whether DSV accepts workload-identity-federated tokens (it maps
   users by the `xms_mirid` claim) is **not verified**; fallback documented in `docs/known-limitations.md`.
 - `hello-frontend` gets no secret access; the RUM client token is injected by the deployment pipeline.
+
+## Validation
+
+```bash
+tools/validate/terraform.sh foundation/identity   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+python3 -m pytest foundation/identity/tests -q                 # static guards (no secret values / Key Vault)
+```
 
 ## References
 

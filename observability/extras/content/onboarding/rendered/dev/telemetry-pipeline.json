@@ -24,7 +24,7 @@
       "manifest"
     ],
     "manifest": "dev/telemetry-pipeline.yaml",
-    "sha256": "47981f6af84e03f1ae77fcc92023d0ef03d80704b42f5c043f353fdeee677433"
+    "sha256": "af561b78018f45f7cfa5028b00a43c2f2d722684a481106f9c19adad58e488a8"
   },
   "idle_behavior": {
     "expected_quiet_hours": null,
@@ -40,7 +40,7 @@
       }
     ],
     "depends_on": [],
-    "description": "Fluent Bit aggregator + OTel gateway (transport) health and the pipeline canary.",
+    "description": "Fluent Bit collectors (fluent_bit_direct fallback, Batch) + OTel gateway (transport) health and the pipeline canary.",
     "display_name": "telemetry-pipeline",
     "domain": "observability",
     "languages": [],
@@ -54,7 +54,7 @@
     "eventhub.throttled@log-export": {
       "evaluation_delay": 900,
       "key": "eventhub.throttled@log-export",
-      "message": "{{#is_alert}}**WARNING**: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).{{/is_alert}}\n{{#is_warning}}**WARNING**: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Increase throughput units / enable auto-inflate.\n2. Check the Fluent Bit kafka input lag on the telemetry pipeline dashboard.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#eventhub-throttled",
+      "message": "{{#is_alert}}**WARNING**: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).{{/is_alert}}\n{{#is_warning}}**WARNING**: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `telemetry-pipeline` | env: `dev` | team: `observability` | owner: observability@example.com | tier: critical\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Increase throughput units / enable auto-inflate.\n2. Check the consumer lag of the Observability Pipelines Worker kafka source (consumer group observability-pipelines).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/telemetry-pipeline.md#eventhub-throttled",
       "name": "[dev] telemetry-pipeline Event Hubs [[resource.name]] throttled requests",
       "new_group_delay": 60,
       "no_data_timeframe": null,

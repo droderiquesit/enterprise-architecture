@@ -1,8 +1,7 @@
 locals {
-  component  = "platform-db-cosmos-mongo"
-  workload   = "data-mongo"
-  identities = var.foundation_identity.identities
-  autoscale  = var.settings.capacity_mode == "provisioned" ? [var.settings.autoscale_max_throughput] : []
+  component = "platform-db-cosmos-mongo"
+  workload  = "data-mongo"
+  autoscale = var.settings.capacity_mode == "provisioned" ? [var.settings.autoscale_max_throughput] : []
 
   # catalog/architecture-matrix.yaml databases.cosmos-mongodb-ru
   owner    = "hello-dbadapter"

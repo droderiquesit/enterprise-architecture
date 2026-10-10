@@ -1,8 +1,7 @@
 locals {
-  component  = "platform-db-cosmos-gremlin"
-  workload   = "data-gremlin"
-  identities = var.foundation_identity.identities
-  autoscale  = var.settings.capacity_mode == "provisioned" ? [var.settings.autoscale_max_throughput] : []
+  component = "platform-db-cosmos-gremlin"
+  workload  = "data-gremlin"
+  autoscale = var.settings.capacity_mode == "provisioned" ? [var.settings.autoscale_max_throughput] : []
 
   # catalog/architecture-matrix.yaml databases.cosmos-gremlin
   owner    = "hello-dbadapter"

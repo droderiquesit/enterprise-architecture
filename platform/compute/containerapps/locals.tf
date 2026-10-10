@@ -27,7 +27,6 @@ module "tags" {
 locals {
   tags     = module.tags.tags
   names    = module.naming.names
-  unique   = module.naming.unique
   location = var.environment.location
   subnets  = var.foundation_network.subnets
 }

@@ -120,6 +120,12 @@ take hours to release after the instance is deleted. Do not put a Delete lock on
 - ARO subnets get no NSG unless `aro_preconfigured_nsg` (ARO "bring your own NSG"); ARO needs outbound via its LB.
 - Bastion/App Gateway subnets live in the hub only for hub-spoke; single-spoke places them in the spoke.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh foundation/network   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## References
 
 - Container Apps subnet sizing: https://learn.microsoft.com/azure/container-apps/custom-virtual-networks#subnet

@@ -110,7 +110,7 @@ Lab: OrderProcessing races `ChargePayment` (3 attempts) against a durable timer;
 Monitors: `job.missed_run` (warning, extras/content/archetypes/profiles/job.yaml).
 
 1. az containerapp job execution list -n <job> -g <rg> -o table
-2. If executions succeeded, check the Fluent Bit sidecar of the job (telemetry pipeline dashboard).
+2. If executions succeeded, check the job's log path (Container Apps console logs via diagnostic settings -> Event Hubs -> Observability Pipelines Worker).
 
 Lab: ACA jobs `seed` (manual), `reconcile` and `traffic` (scheduled), `batchitems` (event). `az containerapp job execution list -n <job> -g <rg>`.
 
@@ -179,7 +179,7 @@ Monitors: `aca.http_5xx_ratio` (critical, extras/content/archetypes/platform/aca
 Monitors: `aca.restarts` (warning, extras/content/archetypes/platform/aca.yaml).
 
 1. az containerapp logs show -n <app> -g <rg> --type system to read restart reasons.
-2. Check the Fluent Bit sidecar is not the restarting container (telemetry pipeline dashboard).
+2. Check whether the restarting container is the serverless-init sidecar (`datadog`) rather than the app.
 
 ## appservice-5xx
 
@@ -206,7 +206,7 @@ Monitors: `appsvc.response_time` (warning, extras/content/archetypes/platform/ap
 
 Monitors: `func.http_5xx_ratio` (warning, extras/content/archetypes/platform/functions.yaml).
 
-1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.
+1. Check FunctionAppLogs (diagnostic settings -> Event Hubs -> Observability Pipelines Worker) for the failing function name.
 2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.
 
 ## host-cpu
@@ -434,7 +434,7 @@ Monitors: `queue.server_errors` (warning, extras/content/archetypes/platform/mes
 Monitors: `eventhub.throttled` (warning, extras/content/archetypes/platform/messaging.yaml).
 
 1. Increase throughput units / enable auto-inflate.
-2. Check the Fluent Bit kafka input lag on the telemetry pipeline dashboard.
+2. Check the consumer lag of the Observability Pipelines Worker kafka source (consumer group observability-pipelines).
 
 Lab: Event Hubs Standard 1 TU by default (`obs-telemetry-transport` `event_hub.capacity`, auto-inflate optional). Diagnostic settings of every app write here.
 
@@ -588,13 +588,14 @@ Monitors: `azlogs.diagnostic_settings_deleted` (critical, extras/content/archety
 
 ## azure-logs-missing
 
-**No Azure platform / Activity Log record reached Datadog (diagnostic settings, Event Hubs or the aggregator Kafka input broken).**
+**No Azure platform / Activity Log record reached Datadog (diagnostic settings, Event Hubs or the Worker's kafka source broken).**
 
 Monitors: `azlogs.logs_missing` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
-1. Check the telemetry pipeline canary first (aggregator alive?).
-2. Event Hubs metrics: incoming messages on platform-logs / activity-logs; consumer group fluent-bit lag.
-3. Aggregator logs: kafka input errors (SASL, connection string rotated?); re-apply obs-diagnostics if settings were deleted.
+1. Observability Pipelines Worker health first (/health on port 8686, pipeline status in Datadog).
+2. Event Hubs metrics: incoming messages on platform-logs / activity-logs; consumer group observability-pipelines lag
+   (fluent-bit with log_pipeline = fluent_bit_direct).
+3. Worker (or aggregator) logs: kafka errors (SASL, connection string rotated in DSV?); re-apply obs-diagnostics if settings were deleted.
 
 ## azure-policy-denies
 
@@ -636,7 +637,7 @@ Monitors: `azlogs.entra_signin_failures` (warning, extras/content/archetypes/pro
 
 ## keyvault-access-denied
 
-**A burst of denied Key Vault requests (missing RBAC role / access policy, or someone probing secrets).**
+**A burst of denied requests to a Key Vault in the monitored subscription (missing RBAC role / access policy, or someone probing). The package keeps no secrets in Key Vault (Delinea DSV); this watches the vaults of the workloads.**
 
 Monitors: `azlogs.keyvault_access_denied` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 

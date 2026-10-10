@@ -3,7 +3,7 @@ kind: Archetype
 metadata:
   name: vm
   layer: platform
-  description: Virtual machines and VM scale sets running the Datadog Agent and a Fluent Bit service.
+  description: Virtual machines and VM scale sets running the Datadog Agent (VM Application; the Agent also collects the logs).
 match:
   architectures: [vm, vmss, sfmc]
 defaults:

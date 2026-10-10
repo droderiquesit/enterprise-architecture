@@ -40,6 +40,12 @@
 
 > USD 2,000/month (3 × D8s_v5 + 3 × D4s_v5 + ARO worker fees + disks/LB). Disabled: 0.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/aro   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/openshift/howto-create-openshift-cluster

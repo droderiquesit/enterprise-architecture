@@ -33,5 +33,9 @@ Free SKU is public (static files only; APIs remain behind their own controls). P
 platform-owned private endpoint (not created here). If no API contract is present the check `api_origin_known` warns
 and config.json points to `https://api.invalid`.
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/frontend` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/frontend.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/static-web-apps/configuration , https://docs.datadoghq.com/real_user_monitoring/browser/setup/ ,
 https://docs.datadoghq.com/real_user_monitoring/correlate_with_other_telemetry/apm/

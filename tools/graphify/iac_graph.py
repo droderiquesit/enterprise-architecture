@@ -455,8 +455,8 @@ class Builder:
                     elif btype == "terraform":
                         rp = re.search(r"required_providers\s*\{", body)
                         if rp:
-                            for m in re.finditer(r'^\s*source\s*=\s*"([^"\n]+)"', body[rp.end():], re.MULTILINE):
-                                pline = line + body.count("\n", 0, rp.end() + m.start()) + 0
+                            for m in re.finditer(r'\bsource\s*=\s*"([^"\n]+)"', body[rp.end():]):
+                                pline = line + body.count("\n", 0, rp.end() + m.start())
                                 pid = self.g.add_node("tfprovider", m.group(1), f"{m.group(1)} terraform provider",
                                                       src, pline, file_type="concept")
                                 self.g.add_link(owner, pid, "requires_provider", src, pline)
@@ -486,7 +486,7 @@ class Builder:
         files = [f for f in files if not self.ignored(rel(self.repo, f))]   # e.g. pipelines/generated/
         nodes: Dict[str, str] = {}
 
-        def pnode(path: str, line: Optional[int] = 1) -> str:
+        def pnode(path: str) -> str:
             if path not in nodes:
                 nodes[path] = self.g.add_node("pipeline", path, f"{path} pipeline", path, 1)
             return nodes[path]

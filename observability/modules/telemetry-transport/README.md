@@ -1,12 +1,16 @@
 # modules/telemetry-transport
 
-The shared telemetry transport for an **existing** environment. It produces the `obs-telemetry-transport` v1
-contract (`catalog/contracts/obs-telemetry-transport.v1.schema.json`).
+The shared telemetry transport for an **existing** environment. It produces the `obs-telemetry-transport` v3
+contract (`catalog/contracts/obs-telemetry-transport.v3.schema.json`). By default (`log_pipeline =
+observability_pipelines`) it deploys the Observability Pipelines Worker, the Datadog Agent APM gateway and the OTel
+gateway; the Fluent Bit aggregator is deployed only with `log_pipeline = fluent_bit_direct` (fallback).
 
 | Part | Resources (existing-or-new) |
 |---|---|
 | Event Hubs | `event_hub.mode = create`: Standard namespace (Kafka endpoint, TLS 1.2, default-deny network rules + trusted services, optional private endpoint), hubs `app-logs`, `platform-logs` and `activity-logs` (control-plane logs: Activity Log, Entra ID; `event_hub.activity_logs_hub = ""` shares `platform-logs`) (2 partitions, 1 day), consumer group `fluent-bit` per hub, SAS rules `diagnostic-settings-send` (Manage+Send+Listen, required by diagnostic settings) and `fluent-bit-listen` (Listen). The generated listen connection string is exposed only as the **sensitive output `generated_secrets["eventhub-fluentbit-listen"]`** (write it to DSV after apply, e.g. `tools/secrets/publish.py` in the source repository); the aggregator reads it back from `event_hub.listen_connection_string_ref`. `existing`: bring the namespace id, send rule id and the listen connection string's DSV reference. `none`: no Event Hub route. |
-| Fluent Bit aggregator | `aggregator.hosting = container_app`: Container App on the provided ACA environment and workload profile. **Internal** TCP ingress on 24224 (forward, shared key, optional TLS cert/key from DSV) plus an internal port on 2020 (health and self-metrics). `kafka` input against `<ns>.servicebus.windows.net:9093` (SASL_SSL). Datadog output (gzip, TLS). Filesystem buffer bounded by `storage.total_limit_size`, retries, `mem_buf_limit`, health check, canary. `none`: the caller provides `external_endpoint`. |
+| Observability Pipelines Worker (default) | `observability_pipelines.hosting = container_app`: pipeline definition (`modules/observability-pipeline`, unless `pipeline_id` is given) and the Worker Container App - **internal** TCP ingress 24224 (fluent), 8282 (Datadog Agent source), 8686 (API / health); the `kafka` source reads the hubs (consumer group `observability-pipelines`); sizing from the fleet policy `op_worker` (2-6 replicas, 1 vCPU / 2 GiB); secrets from a dsv-fetch dotenv file (fail closed). `none`: the caller runs the Worker (e.g. `modules/kubernetes` `op_worker`). |
+| Datadog Agent APM gateway (default) | `apm_gateway.hosting = container_app`: Agent Container App (fleet policy Agent pin) with **internal** TCP ingress 8126 for tracers on managed runtimes; API key `ENC[dsv://...]` resolved by the dsv-fetch binary (`dsv-fetch-install` init container). `none`: `external_url`. |
+| Fluent Bit aggregator (`fluent_bit_direct` only) | `aggregator.hosting = container_app`: Container App on the provided ACA environment and workload profile. **Internal** TCP ingress on 24224 (forward, shared key, optional TLS cert/key from DSV) plus an internal port on 2020 (health and self-metrics). `kafka` input against `<ns>.servicebus.windows.net:9093` (SASL_SSL). Datadog output (gzip, TLS). Filesystem buffer bounded by `storage.total_limit_size`, retries, `mem_buf_limit`, health check, canary. `none`: the caller provides `external_endpoint`. |
 | OTel gateway | `gateway.hosting = container_app`: upstream contrib (default) or DDOT. **Internal** HTTP ingress (OTLP/HTTP on 4318 behind the environment's HTTPS endpoint) plus an internal TCP port on 4317 (gRPC). Optional bearer-token auth, probabilistic or tail sampling, OTLP logs drop. `none`: `external_endpoints`. |
 
 Secrets (Delinea DSV, ADR-0001 §14 of the source repository): the Datadog API key, the forward shared key and the
@@ -52,8 +56,8 @@ Validations include:
 * `existing` Event Hub mode requires all ids
 
 ## Outputs
-`contract`, `event_hub_namespace_id`, `diagnostics_authorization_rule_id`, `aggregator_id`, `gateway_id`,
-`gateway_args`.
+`contract`, `event_hub_namespace_id`, `diagnostics_authorization_rule_id`, `aggregator_id`, `op_worker_id`,
+`op_pipeline_id`, `apm_gateway_id`, `gateway_id`, `gateway_args`, `generated_secrets` (sensitive).
 
 ## Private networking
 ACA internal ingress is reachable only from the environment's VNet and from peered networks.
@@ -64,15 +68,20 @@ The callers have to resolve two kinds of DNS names:
 
 Diagnostic settings reach Event Hubs as a trusted service.
 
-## Costs at defaults (approx. USD/month, swedencentral list prices, 730 h, no free grants)
+## Costs at defaults (approx. USD/month, swedencentral list prices, Consumption profile, 730 h, no free grants)
+Container Apps active usage is about $63 per vCPU and $8 per GiB per month.
 * Event Hubs Standard, 1 TU: about $22, plus ingress events at about $0.03 per million.
-* Two Container Apps, each with 0.5 vCPU / 1 GiB and min 1 replica, always active: about $40 each.
+* Observability Pipelines Worker: min 2 replicas x 1 vCPU / 2 GiB, always active: about $160.
+* Datadog Agent APM gateway: min 1 replica x 1 vCPU / 2 GiB: about $80.
+* OTel gateway: min 1 replica x 0.5 vCPU / 1 GiB: about $40.
 * Private endpoint: about $7.5.
-* **Total about $110**, plus Datadog ingestion.
+* **Total about $310**, plus Datadog ingestion (and Observability Pipelines licensing). With
+  `log_pipeline = fluent_bit_direct` the Worker is replaced by the 0.5 vCPU / 1 GiB aggregator (about $40; total
+  about $190).
 
 ## Teardown / retention
-Destroy removes the namespace, which discards its retained events (1 day), and both apps. The Fluent Bit buffer
-is ephemeral and is lost on scale-in. Retries bound the in-flight loss. The DSV secret `eventhub-fluentbit-listen` is not touched by Terraform
+Destroy removes the namespace, which discards its retained events (1 day), and the Container Apps. Worker disk
+buffers on EmptyDir (and the Fluent Bit buffer) are ephemeral and are lost on scale-in. Retries bound the in-flight loss. The DSV secret `eventhub-fluentbit-listen` is not touched by Terraform
 (delete it in DSV when the namespace is gone; its key no longer works anyway).
 
 ## Secrets in state

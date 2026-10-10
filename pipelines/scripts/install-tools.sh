@@ -8,6 +8,8 @@
 #   pipelines/scripts/install-tools.sh go                   # Go toolchain of the dsv-fetch build (versions.yaml
 #                                                       # images.dsv_fetch_builder golang:<X.Y.Z>-...); only for agents
 #                                                       # WITHOUT Docker - build.sh otherwise uses the pinned golang image
+#   pipelines/scripts/install-tools.sh graphify             # optional: Graphify CLI (tools/graphify/VERSION), for
+#                                                       # tools/graphify/build.sh (docs/guides/graphify.md)
 # Python-distributed tools (uv, ruff, yamllint, pytest-xdist) come hash-pinned from PyPI (setup-agent.sh).
 # Versions for scanners come from environment variables GITLEAKS_VERSION, TRIVY_VERSION, SYFT_VERSION
 # (set by pipelines/variables/tools.yml).
@@ -165,6 +167,21 @@ install_shellcheck() {
   docker pull --quiet "$img" >/dev/null
   printf '#!/usr/bin/env bash\nexec docker run --rm -v "$PWD:$PWD" -w "$PWD" %s "$@"\n' "$img" > "$BIN/shellcheck"
   chmod +x "$BIN/shellcheck"; shellcheck --version | sed -n 2p
+}
+
+install_graphify() {
+  # optional dev/CI tool (codebase knowledge graph, docs/guides/graphify.md): PyPI graphifyy pinned in
+  # tools/graphify/VERSION, with the Terraform + SQL grammars (without the extras every .tf file is skipped).
+  # Version-pinned (not hash-pinned): never install it on an agent job that holds deployment credentials.
+  local v; v="${GRAPHIFY_VERSION:-$(tr -d '[:space:]' < "$REPO_ROOT/tools/graphify/VERSION")}"
+  if command -v graphify >/dev/null && [[ "$(graphify --version 2>/dev/null | awk '{print $2}')" == "$v" ]]; then
+    echo "graphify $v present"; return; fi
+  if command -v uv >/dev/null; then
+    UV_TOOL_BIN_DIR="$BIN" uv tool install --force "graphifyy[terraform,sql]==${v}"
+  else
+    python3 -m pip install --quiet --user "graphifyy[terraform,sql]==${v}"
+  fi
+  graphify --version
 }
 
 for tool in "$@"; do "install_${tool}"; done

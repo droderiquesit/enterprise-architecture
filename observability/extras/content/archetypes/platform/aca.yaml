@@ -42,5 +42,5 @@ monitors:
     summary: Container replicas restarted repeatedly (probe failures, crashes or OOM).
     troubleshooting: |-
       1. az containerapp logs show -n <app> -g <rg> --type system to read restart reasons.
-      2. Check the Fluent Bit sidecar is not the restarting container (telemetry pipeline dashboard).
+      2. Check whether the restarting container is the serverless-init sidecar (`datadog`) rather than the app.
     runbook_section: aca-restarts

@@ -84,7 +84,7 @@ publishes stay within the lock files. After changing `Directory.Packages.props`:
 ```bash
 cd applications/dotnet
 dotnet build EnterpriseHello.sln -c Release          # 0 warnings, 0 errors (warnings are errors in src)
-dotnet test --solution EnterpriseHello.sln -c Release # 79 tests
+dotnet test --solution EnterpriseHello.sln -c Release # 116 tests
 VERSION=1.2.3 GIT_COMMIT=$(git rev-parse --short HEAD) ./build.sh all        # build + test + publish
 VERSION=1.2.3 CA_BUNDLE=/path/ca.crt ./build.sh images bff orders-api      # docker images (optional CA secret)
 ```

@@ -58,5 +58,9 @@ OTLP and the Observability Pipelines Worker (Datadog Agent source, 8282) stay in
 - Container Apps CORS needs explicit origins (no wildcards here).
 - `FAULT_TOKEN` requires the app identities to read `fault-token` (foundation-identity grants it).
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/core-aca` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/core_aca.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/container-apps/revisions , https://learn.microsoft.com/azure/container-apps/manage-secrets ,
 https://learn.microsoft.com/azure/container-apps/health-probes

@@ -3,8 +3,9 @@ kind: Archetype
 metadata:
   name: telemetry-pipeline
   layer: profile
-  description: Health of the telemetry transport itself (Fluent Bit + OpenTelemetry gateway) and the pipeline canary.
-    The canary is what separates "the pipeline is broken" from "the application is idle".
+  description: Health of the Fluent Bit collectors (log_pipeline = fluent_bit_direct fallback and Batch nodes) and the
+    OpenTelemetry gateway, plus the Fluent Bit pipeline canary. The canary is what separates "the pipeline is broken"
+    from "the application is idle". Observability Pipelines Worker health is monitored in Datadog itself.
 defaults:
   metadata:
     tier: critical

@@ -77,6 +77,12 @@ scale a missing scale set). MDP: the subnet keeps a service association link unt
 - `encryption_at_host` needs the `Microsoft.Compute/EncryptionAtHost` feature registered (off by default; checkov skip documented).
 - The MDP well-known image name and `Standard_D2ads_v5` availability are region dependent; verify on first deploy.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh foundation/deploy-agents   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## References
 
 - https://learn.microsoft.com/azure/devops/pipelines/agents/scale-set-agents

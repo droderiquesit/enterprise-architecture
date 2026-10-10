@@ -66,6 +66,12 @@ Standard/Basic registries are public endpoints protected by Entra ID RBAC. Premi
 - Image vulnerability scanning is Microsoft Defender for Containers (subscription plan), not configured here.
 - Checkov findings on registry hardening are justified inline (`#checkov:skip`).
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/shared   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/container-registry/container-registry-skus

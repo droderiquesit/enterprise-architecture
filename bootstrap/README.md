@@ -229,6 +229,12 @@ Phase 2 adds a private endpoint (≈ 7.3/month).
   variable (CKV_AZURE_206), blob read logging owned by observability diagnostics (CKV2_AZURE_21), GitHub OIDC check on the
   Datadog credential (CKV_AZURE_249).
 
+## Validation
+
+```bash
+tools/validate/terraform.sh bootstrap   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## References
 
 - Terraform azurerm backend: https://developer.hashicorp.com/terraform/language/backend/azurerm

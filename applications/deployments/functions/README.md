@@ -39,5 +39,9 @@ plan, ACA scale-to-zero ≈ $0 idle.
 Python packages for run-from-package must include `.python_packages` (built by the Python builder). Network:
 private endpoints when foundation-network is supplied, else deny-by-default restrictions.
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/functions` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/functions.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/container-apps/functions-overview , https://learn.microsoft.com/azure/azure-functions/run-functions-from-deployment-package ,
 https://learn.microsoft.com/azure/azure-functions/disable-function

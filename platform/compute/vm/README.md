@@ -47,6 +47,12 @@ manual starts, compute drops proportionally; disks are always billed.
 
 Destroy deletes VMs, NICs and OS disks (no data disks; app state lives in Table Storage/Cosmos).
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/vm   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/virtual-machines/linux/using-cloud-init

@@ -41,5 +41,9 @@ traces, one APM host (Datadog host-based billing) - see docs/guides/datadog-flee
 ## Limitations
 No TLS (private HTTP inside the spoke). Restart policy Always.
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/partner-sim` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/partner_sim.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/container-instances/container-instances-vnet , https://learn.microsoft.com/azure/container-instances/using-azure-container-registry-mi ,
 https://learn.microsoft.com/azure/container-instances/container-instances-volume-emptydir

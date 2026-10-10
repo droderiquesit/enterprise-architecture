@@ -34,6 +34,12 @@ Not here: Batch jobs/tasks/schedules (deploy-jobs).
 Account free; pool idles at 0 nodes; D2s_v5 ~USD 0.10/h while tasks run. 3 private endpoints ≈ USD 22/month,
 storage ~1.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/batch   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/batch/simplified-compute-node-communication

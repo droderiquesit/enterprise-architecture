@@ -26,6 +26,6 @@ monitors:
     priority: 3
     summary: HTTP-triggered functions return server errors.
     troubleshooting: |-
-      1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.
+      1. Check FunctionAppLogs (diagnostic settings -> Event Hubs -> Observability Pipelines Worker) for the failing function name.
       2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.
     runbook_section: functions-5xx

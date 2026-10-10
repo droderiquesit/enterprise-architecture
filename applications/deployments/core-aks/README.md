@@ -105,6 +105,10 @@ by the chart and asserted in `tests/charts` (kind smoke installs into a `restric
 - Values (non-secret) are stored in Terraform state and in the Helm release Secret (`sh.helm.release.v1.*`).
 - TLS on the internal LB path is not available without the app routing add-on (requested change).
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/core-aks` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/core_aks.tftest.hcl`).
+
 Docs: https://registry.terraform.io/providers/hashicorp/helm/3.3.0/docs/resources/release ,
 https://learn.microsoft.com/azure/aks/workload-identity-overview , https://docs.delinea.com/online-help/dsv/ (Kubernetes syncer / Azure authentication) ,
 https://learn.microsoft.com/azure/aks/app-routing , https://azure.github.io/kubelogin/

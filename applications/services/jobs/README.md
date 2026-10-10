@@ -22,4 +22,4 @@ venv once per node/version under `$AZ_BATCH_NODE_SHARED_DIR` (flock-protected). 
 `python3.13` (start task) — verified offline in a `python:3.13-slim` container.
 
 ## Tests
-`pytest` (7 unit), `pytest -m integration` (1: Service Bus emulator queue `batch-items` + Azurite Tables).
+`pytest` (8 unit), `pytest -m integration` (1: Service Bus emulator queue `batch-items` + Azurite Tables).

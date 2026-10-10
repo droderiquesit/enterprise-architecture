@@ -26,6 +26,12 @@ password in state only unless `admin_ssh_public_key` is set. Datadog Agent enrol
 
 0 (nothing enabled).
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/specialized   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/confidential-computing/confidential-vm-overview

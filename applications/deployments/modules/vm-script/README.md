@@ -11,4 +11,4 @@ a hardened systemd unit (`mode = python-service`), then health-checks and rolls 
 
 **Inputs / outputs**: see `variables.tf` and `main.tf` (`script`, `env_file`).
 
-**Tests**: through the consuming roots (`terraform test` asserts on the rendered script; `bash -n` in vm-workloads).
+**Tests**: through the consuming roots (their `terraform test` runs assert on the rendered script).

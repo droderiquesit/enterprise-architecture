@@ -29,9 +29,9 @@ network:
   hub_address_space: 10.50.0.0/20
   spoke_address_space: 10.51.0.0/16
 budget:
-  # Rendered into foundation-governance (var.budget). 500 = the minimal-profile estimate of roughly USD 400-450/month
-  # (docs/guides/deployment-profiles.md, cost table) + ~10 % headroom, so the 100 % alert means "above plan".
-  # Azure budgets alert only; they never cap spend.
+  # Rendered into foundation-governance (var.budget). Monthly cost estimates per profile: docs/guides/deployment-profiles.md
+  # (cost table; the minimal profile with the 4.0.0 Observability Pipelines Worker and APM/OTel gateways is estimated at
+  # roughly USD 600-650/month, above this amount - review it). Azure budgets alert only; they never cap spend.
   monthly_amount: 500
   currency: USD
   contact_emails: [platform-team@example.com]

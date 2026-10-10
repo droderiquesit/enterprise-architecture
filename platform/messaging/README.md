@@ -59,6 +59,12 @@ recreated empty.
 - Standard namespaces are reachable publicly (Entra ID required). Use Premium for private-only access.
 - CMK / double encryption not used (justified inline for checkov).
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/messaging   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/service-bus-messaging/network-security

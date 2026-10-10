@@ -32,5 +32,9 @@ No plan cost here (plans owned by platform-appservice: P0v3 ≈ $60–80/month e
 ## Limitations
 `PORT` is not set for the Windows code app (ANCM supplies the port); hello-inventory-api must not force `PORT` there.
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/appservice` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/appservice.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/app-service/deploy-staging-slots , https://learn.microsoft.com/azure/app-service/deploy-zip ,
 https://learn.microsoft.com/azure/app-service/app-service-key-vault-references

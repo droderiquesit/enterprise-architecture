@@ -30,4 +30,8 @@ Re-apply with the previous package (run command / extension re-runs); installers
 Identities `hello-worker` / `hello-inventory-api` need Storage Blob Data Reader on the packages container; the inventory
 identity reads `fault-token` (granted by foundation-identity).
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/vm-workloads` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/vm_workloads.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/virtual-machines/run-command-managed , https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/how-to-use-vm-token

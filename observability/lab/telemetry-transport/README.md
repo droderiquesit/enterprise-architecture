@@ -1,8 +1,9 @@
 # lab/telemetry-transport (component `obs-telemetry-transport`)
 
 **Owner:** observability (transport & collection). **Purpose:** maps the lab contracts to the portable
-`modules/telemetry-transport`. It creates an Event Hubs namespace (app-logs and platform-logs hubs), the
-Fluent Bit aggregator and the OTel gateway (Container Apps, internal ingress).
+`modules/telemetry-transport`. It creates an Event Hubs namespace (app-logs, platform-logs and activity-logs hubs),
+the Observability Pipelines pipeline and Worker, the Datadog Agent APM gateway and the OTel gateway (Container Apps,
+internal ingress). The Fluent Bit aggregator replaces the Worker only with `log_pipeline = fluent_bit_direct`.
 
 * **Consumes:**
   * `foundation_network` (`subnets["private-endpoints"]`, `private_dns_zones["privatelink.servicebus.windows.net"]`)
@@ -37,7 +38,7 @@ Fluent Bit aggregator and the OTel gateway (Container Apps, internal ingress).
     `op_azure_files_storage`, `op_daily_quota_bytes` (Azure platform logs quota in the pipeline; 0 = none)
   * `apm_gateway_hosting` (`container_app`), `apm_gateway_max_replicas` (≤ 5 in the lab)
 
-* `eventhub_listen_secret_name` (`eventhub-fluentbit-listen`): DSV secret the aggregator reads; after apply the
+* `eventhub_listen_secret_name` (`eventhub-fluentbit-listen`): DSV secret the Worker's kafka source (or the aggregator) reads; after apply the
   pipeline runs `tools/secrets/publish.py --output generated_secrets`, which writes the sensitive output
   `generated_secrets["eventhub-fluentbit-listen"]` (the generated Listen connection string) to DSV. Rotation:
   regenerate the rule key, apply, publish again (docs/runbooks/secret-rotation.md)
@@ -60,8 +61,11 @@ the Batch job preparation task. No secrets are rendered.
   package URL/sha256 are missing. No Python is involved (package 4.0.0 retired the 1.x `dsv_fetch.py`).
 
 ## Cost at defaults
-About $110/month. Event Hubs Standard 1 TU is about $22; two always-on 0.5 vCPU / 1 GiB Container Apps are about
-$80; the private endpoint is about $7.5. Datadog ingestion is extra. See `modules/telemetry-transport/README.md`.
+About $310/month (Consumption profile list prices). Event Hubs Standard 1 TU is about $22; the Observability Pipelines
+Worker (min 2 x 1 vCPU / 2 GiB) about $160; the APM gateway (1 vCPU / 2 GiB) about $80; the OTel gateway
+(0.5 vCPU / 1 GiB) about $40; the private endpoint about $7.5. With `fleet = {log_pipeline: fluent_bit_direct}` the
+0.5 vCPU / 1 GiB aggregator replaces the Worker (about $190 in total). Datadog ingestion is extra. See
+`modules/telemetry-transport/README.md`.
 
 ## Teardown / retention
 Destroy removes the resource group `<prefix>-rg-obs-<env>-<region>-transport`, which deletes the namespace (1-day

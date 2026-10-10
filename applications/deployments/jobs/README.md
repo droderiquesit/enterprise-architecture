@@ -41,5 +41,9 @@ Previous digests; Batch re-submit with the previous package. Smoke: `scripts/smo
 ## Cost
 Consumption jobs billed per execution second: traffic 1 vCPU × 7 min × 48/day ≈ $15/month (disable or slow the cron to reduce).
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/jobs` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/jobs.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/container-apps/jobs , https://learn.microsoft.com/azure/container-apps/tutorial-event-driven-jobs ,
 https://keda.sh/docs/latest/scalers/azure-service-bus/ , https://learn.microsoft.com/azure/batch/managed-identity-pools

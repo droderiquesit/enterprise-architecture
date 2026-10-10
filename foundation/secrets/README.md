@@ -75,6 +75,13 @@ None in Azure. The deploy pool needs HTTPS egress to `<tenant>.secretsvaultcloud
 - `provider`/`externalId` of a DSV user cannot be updated through the API (dsv-cli `user update` sends only password /
   displayName): changing an identity's resource id is a conflict that needs an operator.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh foundation/secrets   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+python3 -m pytest tests/tools/test_secrets_tools.py -q   # dsv_apply plan/apply against tools/secrets/mock_dsv.py
+```
+
 ## References
 
 - https://docs.delinea.com/dsv/current/usage/auth-general/authazure

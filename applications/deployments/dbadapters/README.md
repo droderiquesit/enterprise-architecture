@@ -45,4 +45,8 @@ Consumption apps scale to zero (≈ $0 idle). dedicated-d4 profile is billed by 
 - Observability (4.0.0): every ACA adapter runs the Datadog serverless-init sidecar (traces, DogStatsD, the app log file -> OP Worker). Its key is read from DSV by the dsv-fetch binary that an identity-free init container installs, so the Dedicated workload profile needs no refresher any more. Only with `log_pipeline = fluent_bit_direct` (fallback) the Fluent Bit key is written by a dsv-fetch **refresher** container on the Dedicated profile (init containers get no managed identity there).
 - The mysql App Service startup builds a venv from the wheelhouse on first start (slow cold start).
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/dbadapters` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/dbadapters.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/container-apps/workload-profiles-overview , https://learn.microsoft.com/azure/virtual-machines/extensions/custom-script-linux

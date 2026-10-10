@@ -12,7 +12,7 @@ metadata:
   tier: critical
   env: dev
   repository: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture
-  description: Fluent Bit aggregator + OTel gateway (transport) health and the pipeline canary.
+  description: Fluent Bit collectors (fluent_bit_direct fallback, Batch) + OTel gateway (transport) health and the pipeline canary.
   languages: []
   depends_on: []
   contacts:

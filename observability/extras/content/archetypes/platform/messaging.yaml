@@ -98,5 +98,5 @@ monitors:
     summary: Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).
     troubleshooting: |-
       1. Increase throughput units / enable auto-inflate.
-      2. Check the Fluent Bit kafka input lag on the telemetry pipeline dashboard.
+      2. Check the consumer lag of the Observability Pipelines Worker kafka source (consumer group observability-pipelines).
     runbook_section: eventhub-throttled

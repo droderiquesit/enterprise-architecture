@@ -1,7 +1,8 @@
 # systemd unit for hello-worker on Linux VMs / VMSS (installed by install.sh).
 # Settings come from /etc/hello-worker/hello-worker.env (written by the deployment, mode 0640).
-# Logs: JSON lines to journald (stdout) AND /var/log/hello-worker/worker.log (LOG_FILE_PATH) which the
-# Fluent Bit service (observability layer) tails; the Datadog Agent receives OTLP on localhost:4317.
+# Logs: JSON lines to journald (stdout) AND /var/log/hello-worker/worker.log (LOG_FILE_PATH) which the host
+# Datadog Agent (observability layer; Fluent Bit with log_pipeline = fluent_bit_direct) tails; the Agent also
+# receives OTLP on localhost:4317.
 [Unit]
 Description=Enterprise Hello notification worker (hello-worker)
 Documentation=file:///opt/hello-worker/current/README.md

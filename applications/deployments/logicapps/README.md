@@ -35,4 +35,8 @@ Consumption ≈ $0.000025/action ⇒ < $1/month hourly; Standard WS1 ≈ $175/mo
 ## Requirements on other roots
 platform-messaging: Data Sender on `batch-items` and a Data Receiver on subscription `archive` (new) for `hello-logicapps`.
 
+## Test
+`bash tools/validate/terraform.sh applications/deployments/logicapps` (fmt -check, init -backend=false, validate,
+`terraform test` with mock providers: `tests/logicapps.tftest.hcl`).
+
 Docs: https://learn.microsoft.com/azure/logic-apps/authenticate-with-managed-identity , https://learn.microsoft.com/azure/logic-apps/devops-deployment-single-tenant-azure-logic-apps

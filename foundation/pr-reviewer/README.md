@@ -86,6 +86,12 @@ Outbound calls go to `dev.azure.com`, `vssps`, Entra ID, Delinea DSV and (option
   to secret-only authentication).
 - One Flex app per plan (FC1). Replay protection's event-id cache is per instance (processing is idempotent per PR iteration).
 
+## Validation
+
+```bash
+tools/validate/terraform.sh foundation/pr-reviewer   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - Flex Consumption: https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan

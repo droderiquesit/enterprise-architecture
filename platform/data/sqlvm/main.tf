@@ -8,7 +8,6 @@ locals {
   user_identity_ids = distinct(compact([try(local.host_identity.id, null), local.dd_identity_id]))
   component         = "platform-db-sqlvm"
   workload          = "data-sqlvm"
-  identities        = var.foundation_identity.identities
   admin_login       = "ehsqladmin"
   vm_name           = substr(module.naming.names.virtual_machine, 0, 64)
   # Windows computer names are limited to 15 characters.

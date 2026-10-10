@@ -64,6 +64,12 @@ Microsoft-managed certificate and custom domains can use Front Door managed cert
 (`azurerm_cdn_frontdoor_custom_domain` `tls { certificate_type = "ManagedCertificate" }`), so no certificate secret
 exists at all. Use App Gateway only when you need regional WAF in the VNet.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh foundation/edge   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## References
 
 - App Gateway infrastructure + NSG: https://learn.microsoft.com/azure/application-gateway/configuration-infrastructure

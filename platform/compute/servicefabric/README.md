@@ -32,6 +32,12 @@
 
 3 × D2s_v5 Windows ≈ USD 410/month + Standard LB/public IP ~20 + disks ~30. Disabled: 0.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/servicefabric   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/service-fabric/overview-managed-cluster

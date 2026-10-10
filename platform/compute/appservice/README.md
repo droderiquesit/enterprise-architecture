@@ -41,6 +41,12 @@ P0v3 Linux ~60 + P0v3 Windows ~90 ≈ **150**. Windows container P1v3 ~+250; WS1
 Destroy requires the apps on the plans to be destroyed first. Logic Apps storage (run history) is deleted;
 blob soft delete keeps deleted blobs 7 days while the account exists.
 
+## Validation
+
+```bash
+tools/validate/terraform.sh platform/compute/appservice   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
+```
+
 ## Docs
 
 - https://learn.microsoft.com/azure/app-service/overview-hosting-plans
