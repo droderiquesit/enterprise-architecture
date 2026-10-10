@@ -21,13 +21,15 @@ locals {
   linux     = var.os_type == "linux"
 
   managed            = contains(["aca", "aci", "appservice", "functions"], local.arch)
-  serverless_init_ok = local.arch == "aca" && try(local.apm.managed_runtime_path, "agent_gateway") == "serverless_init"
+  runtime_path       = try(local.apm.managed_runtime_path, "agent_gateway")
+  serverless_init_ok = local.arch == "aca" && local.runtime_path == "serverless_init"
+  agent_sidecar_ok   = local.arch == "aci" && local.runtime_path == "agent_sidecar"
 
   # Datadog-mode method per hosting type; null = Datadog tracer not configurable there (falls back to otel).
   datadog_method = (
     local.arch == "aks" ? "ssi_kubernetes" :
     contains(["vm", "vmss"], local.arch) ? (local.linux ? "ssi_host" : null) :
-    local.managed ? (local.serverless_init_ok ? "serverless_init" : "agent_gateway") :
+    local.managed ? (local.serverless_init_ok ? "serverless_init" : local.agent_sidecar_ok ? "agent_sidecar" : "agent_gateway") :
     null
   )
   fallback_reason = local.requested != "datadog" || local.datadog_method != null ? null : (
@@ -115,17 +117,50 @@ locals {
       DD_LOGS_INJECTION                                 = tostring(try(local.apm.logs_injection, true))
       DD_METRICS_OTEL_ENABLED                           = "false"
       # runtime metrics travel over DogStatsD (UDP/UDS): only where an Agent runs next to the process (node Agent,
-      # host Agent, serverless-init); the APM gateway's TCP ingress cannot carry them
+      # host Agent, ACI Agent sidecar, serverless-init); the APM gateway's TCP ingress cannot carry them
       DD_RUNTIME_METRICS_ENABLED = tostring(local.dogstatsd_local)
     },
     local.sample_rate == null ? {} : { DD_TRACE_SAMPLE_RATE = tostring(local.sample_rate) },
     local.dbm_env, local.dsm_env,
   )
   # DogStatsD target of the Datadog libraries (hello.* custom metrics, runtime metrics). AKS: DD_AGENT_HOST =
-  # status.hostIP (modules/instrumentation k8s_patch) + port; hosts / serverless-init sidecar: localhost.
-  dogstatsd_local = contains(["ssi_kubernetes", "ssi_host", "serverless_init"], coalesce(local.method, "none"))
+  # status.hostIP (modules/instrumentation k8s_patch) + port; hosts / ACI Agent sidecar / serverless-init sidecar:
+  # localhost (containers of an ACI group / Container Apps replica share one network namespace).
+  dogstatsd_local = contains(["ssi_kubernetes", "ssi_host", "serverless_init", "agent_sidecar"], coalesce(local.method, "none"))
   dogstatsd_env = local.effective_mode != "datadog" ? {} : (
     local.method == "ssi_kubernetes" ? { DD_DOGSTATSD_PORT = "8125" } :
-    contains(["ssi_host", "serverless_init"], coalesce(local.method, "none")) ? { DD_DOGSTATSD_URL = "udp://localhost:8125" } : {}
+    contains(["ssi_host", "serverless_init", "agent_sidecar"], coalesce(local.method, "none")) ? { DD_DOGSTATSD_URL = "udp://localhost:8125" } : {}
   )
+
+  # ------------------------------------------------------------------ application-log collector (4.0.0)
+  # One Datadog collection path per platform. Defaults per architecture (config/fleet-policy.yaml architectures.*,
+  # repeated here for custom policies that omit them); Fluent Bit only with log_pipeline = fluent_bit_direct (and on
+  # Batch nodes, where no Agent runs).
+  default_collector = lookup({
+    aks        = "agent", vm = "agent", vmss = "agent", aci = "agent_sidecar", aca = "serverless_init",
+    appservice = "azure", functions = "azure", logicapp = "azure", batch = "fluent_bit",
+  }, local.arch, "none")
+  allowed_collectors = {
+    aks        = ["agent", "fluent_bit"], vm = ["agent", "fluent_bit"], vmss = ["agent", "fluent_bit"],
+    aci        = ["agent_sidecar"], aca = ["serverless_init", "azure"],
+    appservice = ["azure"], functions = ["azure"], logicapp = ["azure"], batch = ["fluent_bit"],
+  }
+  node_arch   = contains(["aks", "vm", "vmss"], local.arch)
+  legacy_node = try(local.section.logs.node_collector, null)
+  # 3.x key: logs.node_collector = fluent_bit on a node architecture still selects Fluent Bit there
+  requested_collector = local.node_arch && local.legacy_node == "fluent_bit" ? "fluent_bit" : coalesce(try(local.section.logs.collector, null), local.default_collector)
+  collector_valid     = contains(lookup(local.allowed_collectors, local.arch, ["none"]), local.requested_collector)
+  chosen_collector    = local.collector_valid ? local.requested_collector : local.default_collector
+  fb_direct           = local.log_pipeline == "fluent_bit_direct"
+  log_collector = !local.fb_direct || contains(["azure", "none"], local.chosen_collector) ? local.chosen_collector : (
+    contains(["aca", "aci"], local.arch) ? "fluent_bit_sidecar" : "fluent_bit"
+  )
+  log_collector_reason = !local.collector_valid ? "logs.collector '${local.requested_collector}' is not a collection path for '${local.arch}' (allowed: ${join(", ", lookup(local.allowed_collectors, local.arch, ["none"]))}); using ${local.default_collector}" : (
+    local.log_collector != local.chosen_collector ? "log_pipeline = fluent_bit_direct: Fluent Bit replaces ${local.chosen_collector}" : null
+  )
+
+  # ------------------------------------------------------------------ Datadog sidecar images (single pins)
+  agent_s     = local.section.agent
+  agent_image = try("${local.agent_s.image}:${local.agent_s.version}", null)
+  si          = try(local.agent_s.serverless_init, {})
 }

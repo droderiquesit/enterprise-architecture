@@ -1,121 +1,132 @@
-variable "hosts" {
+variable "mode" {
   description = <<-EOT
-    Existing VMs / VM scale sets (keyed by a stable name).
-      resource_id        : VM or VMSS resource id
-      os_type            : linux | windows
-      kind               : vm | vmss
-      location           : region (required by run commands)
-      service_tags       : canonical tag-policy values of the host's workload (env/service/version/team/owner/...) +
-                           optional `source` (ddsource) -> modules/tagging -> Agent DD_TAGS, Agent log tags, Fluent Bit ddtags
-      log_paths          : application log files tailed by Fluent Bit (the app writes JSON lines there)
-      identity_client_id : client id of the host's user-assigned managed identity, mapped to a DSV user with read on
-                           the API key path (required; the key is read on the host, never in Terraform state)
-      install_agent      : install + configure the Datadog Agent (pinned datadog.agent_version)
+    How VMs / VMSS get the Datadog Agent VM Application:
+      policy : (default) Azure Policy DeployIfNotExists enrols every VM / VMSS tagged <enrollment_tag> in the scope -
+               no per-host Terraform; new VMSS instances and new VMs get it automatically (modules/host-agent-policy).
+      direct : escape hatch for environments WITHOUT Azure Policy rights: one
+               azurerm_virtual_machine_gallery_application_assignment per VM in var.hosts (same VM Application, same
+               version); VMSS models are set by their platform root from output vmss_gallery_applications; the hosts
+               must already carry the DSV-reader identity (agent_identity).
   EOT
-  type = map(object({
-    resource_id        = string
-    os_type            = string
-    kind               = optional(string, "vm")
-    location           = string
-    service_tags       = optional(map(string), {})
-    log_paths          = list(string)
-    systemd_unit       = optional(string)
-    windows_event_log  = optional(bool, false)
-    identity_client_id = optional(string)
-    install_agent      = optional(bool, true)
-    install_fluent_bit = optional(bool, true)
-    # Linux: Single Step Instrumentation of the host's processes when the fleet policy apm.mode = datadog
-    apm_ssi = optional(bool, true)
-  }))
+  type        = string
+  default     = "policy"
   validation {
-    condition     = alltrue([for h in values(var.hosts) : contains(["linux", "windows"], h.os_type) && contains(["vm", "vmss"], h.kind)])
-    error_message = "hosts[*].os_type must be linux|windows and kind vm|vmss."
-  }
-  validation {
-    condition = alltrue([for h in values(var.hosts) : (
-      h.kind == "vm" ? can(regex("(?i)/providers/Microsoft.Compute/virtualMachines/[^/]+$", h.resource_id)) : can(regex("(?i)/providers/Microsoft.Compute/virtualMachineScaleSets/[^/]+$", h.resource_id))
-    )])
-    error_message = "hosts[*].resource_id must be a virtualMachines id for kind = vm and a virtualMachineScaleSets id for kind = vmss."
-  }
-  validation {
-    condition     = alltrue([for h in values(var.hosts) : length(h.log_paths) > 0 || !h.install_fluent_bit])
-    error_message = "hosts[*].log_paths must list at least one application log file when Fluent Bit is installed."
+    condition     = contains(["policy", "direct"], var.mode)
+    error_message = "mode must be policy or direct."
   }
 }
 
-variable "datadog" {
-  description = <<-EOT
-    site, agent_version (pinned 7.x.y) and the Delinea DSV reference of the API key (never the key):
-      api_key_ref : dsv://<path>#<element>; Linux Agents resolve it through secret_backend_command (dsv-fetch
-                    agent-backend), Fluent Bit through the dsv-fetch env-yaml file; Windows installers read it at run time.
-  EOT
+variable "env" {
+  description = "Environment name."
+  type        = string
+}
+
+variable "package" {
+  description = "VM Application package (modules/host-agent-package): gallery + storage names, version (bumped per release, promoted dev -> test -> prod), dsv-fetch release directory, regions."
   type = object({
-    site               = string
-    agent_version      = optional(string) # null = fleet policy agent.version
-    api_key_ref        = string
-    process_collection = optional(bool, false)
+    resource_group_id = string
+    location          = string
+    names = object({
+      gallery            = string
+      storage_account    = string
+      publisher_identity = string
+      container          = optional(string, "vm-applications")
+    })
+    version               = string
+    retained_versions     = optional(list(string), [])
+    applications          = optional(map(object({ name = optional(string) })), { linux = {}, windows = {} })
+    dsv_fetch_release_dir = string
+    replica_regions = optional(list(object({
+      name                 = string
+      regional_replicas    = optional(number, 1)
+      storage_account_type = optional(string, "Standard_ZRS")
+    })), [])
+    publisher_principal_ids = optional(list(string), [])
+    network = optional(object({
+      public_network_access_enabled = optional(bool, true)
+      ip_rules                      = optional(list(string), [])
+      subnet_ids                    = optional(list(string), [])
+    }), {})
+    agent_msi_sha256 = optional(map(string))
   })
-  validation {
-    condition     = var.datadog.agent_version == null || can(regex("^7\\.[0-9]+\\.[0-9]+$", coalesce(var.datadog.agent_version, "x")))
-    error_message = "datadog.agent_version must be a pinned 7.x.y version (no 'latest')."
-  }
+}
+
+variable "datadog" {
+  description = "Datadog site and the Delinea DSV reference of the ingest-only API key (never the key)."
+  type = object({
+    site        = string
+    api_key_ref = string
+  })
   validation {
     condition     = can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", var.datadog.api_key_ref))
     error_message = "datadog.api_key_ref must be a Delinea DSV reference (dsv://<path>#<element>), never a key."
   }
 }
 
-variable "secrets" {
-  description = "Delinea DSV endpoint for the on-host reader (non-secret): tenant/tld or base_url, auth (azure = managed identity via IMDS)."
+variable "dsv" {
+  description = "Delinea DSV endpoint (non-secret) for dsv-fetch on the hosts."
   type = object({
     tenant   = optional(string)
     tld      = optional(string, "com")
     base_url = optional(string)
     auth     = optional(string, "azure")
   })
-  validation {
-    condition     = (var.secrets.tenant != null || var.secrets.base_url != null) && contains(["azure", "client_credentials"], var.secrets.auth)
-    error_message = "secrets needs tenant or base_url; auth azure (hosts) or client_credentials (tests only)."
-  }
 }
 
-variable "dsv_fetch_source" {
-  description = "Path of dsv_fetch.py embedded into the Linux installer (null = observability/images/dsv-fetch/dsv_fetch.py of this package)."
-  type        = string
-  default     = null
-}
-
-variable "windows_msi_sha256" {
-  description = "Pinned SHA256 of the Windows MSIs (vendors publish no checksum files). Values computed 2026-10-09 for agent 7.84.2 / Fluent Bit 5.1.3; update together with the versions."
+variable "agent_identity" {
+  description = <<-EOT
+    Per-environment DSV-reader user-assigned identity (foundation-identity identities["obs-host-agent"]): the policy
+    attaches it to every enrolled VM / VMSS, dsv-fetch on the host uses its client id. DSV grants it read on the
+    ingest-only Datadog API key and nothing else (accepted risk: any process on an enrolled host can use it).
+  EOT
   type = object({
-    agent      = optional(string, "9ebecc6f16fad77df6dd14cf55d7edf84587cdf43f259442301bd6f2671b0b86")
-    fluent_bit = optional(string, "334685284bfd830a61d04161406473bf2174dd1ac14df9f459e26819ab874944")
+    id        = string
+    client_id = string
   })
+}
+
+variable "policy" {
+  description = "mode = policy: assignment scope (subscription | management_group), names, enrolment tag, effect, targets, remediation."
+  type = object({
+    name_prefix                  = string
+    scope                        = object({ type = string, id = string, not_scopes = optional(list(string), []) })
+    identity_resource_group_name = string
+    enrollment_tag               = optional(object({ name = optional(string, "datadog:enabled"), value = optional(string, "true") }), {})
+    arch_tag_name                = optional(string, "datadog:arch")
+    effect                       = optional(string, "DeployIfNotExists")
+    targets                      = optional(set(string), ["vm", "vmss"])
+    application_order            = optional(number, 10)
+    remediation = optional(object({
+      enabled              = optional(bool, true)
+      location_filters     = optional(list(string), [])
+      parallel_deployments = optional(number, 10)
+      resource_count       = optional(number, 500)
+      failure_percentage   = optional(number, 0.1)
+    }), {})
+    extra_role_actions = optional(list(string), [])
+  })
+  default = null
+}
+
+variable "hosts" {
+  description = "mode = direct only: VMs / VMSS (key -> resource_id, os_type linux | windows, kind vm | vmss, arch amd64 | arm64). Ignored in policy mode."
+  type = map(object({
+    resource_id = string
+    os_type     = string
+    kind        = optional(string, "vm")
+    arch        = optional(string, "amd64")
+  }))
   default = {}
-}
-
-variable "setup_revision" {
-  description = "Bump to force the installer to re-run everywhere (e.g. after removing the 1.x Datadog VM extension, or to refresh a rotated key on Windows)."
-  type        = number
-  default     = 1
-}
-
-variable "fluent_bit_version" {
-  type    = string
-  default = "5.1.3"
   validation {
-    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.fluent_bit_version))
-    error_message = "fluent_bit_version must be pinned (x.y.z)."
+    condition = alltrue([for h in values(var.hosts) : contains(["linux", "windows"], h.os_type) && contains(["vm", "vmss"], h.kind) && contains(["amd64", "arm64"], h.arch) && (
+      h.kind == "vm" ? can(regex("(?i)/providers/Microsoft.Compute/virtualMachines/[^/]+$", h.resource_id)) : can(regex("(?i)/providers/Microsoft.Compute/virtualMachineScaleSets/[^/]+$", h.resource_id))
+    )])
+    error_message = "hosts[*]: os_type linux|windows, kind vm|vmss with a matching resource id, arch amd64|arm64."
   }
-}
-
-variable "tags" {
-  type    = map(string)
-  default = {}
 }
 
 variable "fleet_policy" {
-  description = "Decoded fleet policy (null = package default): log pipeline + node collector, APM SSI and library versions, Agent Remote Configuration / remote updates."
+  description = "Decoded fleet policy (null = package default)."
   type        = any
   default     = null
 }
@@ -127,15 +138,9 @@ variable "tag_policy" {
 }
 
 variable "extra_tags" {
-  description = "Additional Datadog tags for every host (merged under the canonical policy keys)."
+  description = "Additional static Datadog host tags."
   type        = map(string)
   default     = {}
-}
-
-variable "enforce_tag_policy" {
-  description = "Fail the plan when a host lacks a required policy tag (null = policy enforce_required)."
-  type        = bool
-  default     = null
 }
 
 variable "log_pipeline" {
@@ -144,12 +149,32 @@ variable "log_pipeline" {
   default     = null
 }
 
-variable "op_endpoint" {
-  description = "Observability Pipelines Worker endpoints (transport contract aggregator.fqdn / agent_logs_url): fluent source host+port for Fluent Bit, Datadog Agent source URL for Agents."
-  type = object({
-    host           = optional(string)
-    fluent_port    = optional(number, 24224)
-    agent_logs_url = optional(string)
-  })
-  default = {}
+variable "op_agent_logs_url" {
+  description = "Observability Pipelines Worker Datadog Agent source URL (transport contract aggregator.agent_logs_url)."
+  type        = string
+  default     = null
+}
+
+variable "host_logs" {
+  description = "Host log collection by the Agent (see modules/host-agent-package var.host_logs)."
+  type        = any
+  default     = {}
+}
+
+variable "default_service" {
+  description = "Agent log `service` when the instance has no service tag."
+  type        = string
+  default     = "platform"
+}
+
+variable "metadata_tag_prefix" {
+  description = "Prefix of the per-host Azure tags read on the host (<prefix>log_paths, <prefix>source)."
+  type        = string
+  default     = "datadog:"
+}
+
+variable "tags" {
+  description = "Azure resource tags."
+  type        = map(string)
+  default     = {}
 }

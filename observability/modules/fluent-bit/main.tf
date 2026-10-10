@@ -1,3 +1,5 @@
+# Fluent Bit config renderer - FALLBACK ONLY (observability 4.0.0): used with log_pipeline = fluent_bit_direct and on
+# Batch nodes. Default collection is Datadog-native per platform (fleet policy logs.collector; README.md).
 locals {
   dir = "${path.module}/../../config/fluent-bit"
 

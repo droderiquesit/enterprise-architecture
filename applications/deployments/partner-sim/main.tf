@@ -1,9 +1,13 @@
 # hello-partner-sim (simulated payment API) on Azure Container Instances: private IP in the `aci` subnet,
-# user-assigned identity (ACR pull + runtime), Fluent Bit sidecar tailing a shared emptyDir volume
-# (ADR-0001 §10), private DNS A record in the lab internal zone.
+# user-assigned identity (ACR pull + runtime), private DNS A record in the lab internal zone.
+# Observability (observability 4.0.0, modules/instrumentation aci_sidecar): a Datadog Agent SIDECAR in the container
+# group - traces on localhost:8126, DogStatsD on udp://localhost:8125, and the app's log file on the shared app-logs
+# emptyDir, shipped to the Observability Pipelines Worker. With log_pipeline = fluent_bit_direct (fallback) a Fluent
+# Bit sidecar + dsv-fetch refresher collect the logs instead.
 # Secrets (ADR-0001 §14): nothing secret in this root or its state. The app resolves its dsv:// settings (FAULT_TOKEN)
-# at start-up with its managed identity; the Fluent Bit sidecar's Datadog key is written into the shared emptyDir by a
-# dsv-fetch REFRESHER container (ACI init containers cannot use managed identities - Microsoft Learn).
+# at start-up with its managed identity; the Agent resolves api_key ENC[dsv://...] itself through the dsv-fetch binary
+# (secret_backend_command) with the group's identity. ACI init containers cannot use managed identities (Microsoft
+# Learn), so the dsv-fetch-install init container only copies the binary into the dsv-bin emptyDir.
 module "meta" {
   source = "../modules/service-meta"
 }
@@ -20,7 +24,6 @@ locals {
   identity = var.foundation_identity.identities[local.svc]
   artifact = local.meta.artifact
   sidecar  = module.env.aci_sidecar
-  fetcher  = local.sidecar == null ? null : local.sidecar.fetcher
 
   dns_zone = var.foundation_network.internal_dns_zone_id == null ? null : var.foundation_network.internal_dns_zone
   fqdn     = local.dns_zone == null ? null : "${var.settings.dns_record_name}.${local.dns_zone}"
@@ -49,6 +52,8 @@ module "env" {
   }
   log_level          = var.settings.log_level
   trace_sample_ratio = var.settings.trace_sample_ratio
+  # one Datadog host per container group (Agent hostname = the group name)
+  agent_sidecar = merge(var.settings.agent_sidecar, { hostname = local.names.container_group })
   extra_env = {
     LATENCY_MS_MEAN      = tostring(var.settings.latency_ms_mean)
     PARTNER_FAILURE_RATE = tostring(var.settings.partner_failure_rate)
@@ -112,7 +117,7 @@ resource "azurerm_container_group" "this" {
     }
 
     dynamic "volume" {
-      for_each = local.sidecar == null ? [] : local.sidecar.app_volume_mounts
+      for_each = try(local.sidecar.app_volume_mounts, [])
       content {
         name       = volume.value.name
         mount_path = volume.value.mount_path
@@ -121,9 +126,31 @@ resource "azurerm_container_group" "this" {
     }
   }
 
-  # Fluent Bit sidecar (observability instrumentation hook): tails LOG_FILE_PATH on the shared emptyDir.
+  # dsv-fetch-install (observability instrumentation hook): copies the dsv-fetch binary into the dsv-bin emptyDir
+  # before the containers start (no identity needed - ACI init containers have none).
+  dynamic "init_container" {
+    for_each = try(local.sidecar.init_containers, [])
+    content {
+      name                  = init_container.value.name
+      image                 = init_container.value.image
+      commands              = init_container.value.commands
+      environment_variables = init_container.value.environment_variables
+
+      dynamic "volume" {
+        for_each = init_container.value.volumes
+        content {
+          name       = volume.value.name
+          mount_path = volume.value.mount_path
+          empty_dir  = true
+        }
+      }
+    }
+  }
+
+  # Observability sidecars: datadog-agent (default); fluent-bit + dsv-fetch refresher with log_pipeline =
+  # fluent_bit_direct. Values only - the Agent's DD_API_KEY is an ENC[dsv://...] reference.
   dynamic "container" {
-    for_each = local.sidecar == null ? [] : [local.sidecar.container]
+    for_each = try(local.sidecar.containers, []) # tuple: Agent, Fluent Bit and refresher shapes differ
     content {
       name                  = container.value.name
       image                 = container.value.image
@@ -139,30 +166,17 @@ resource "azurerm_container_group" "this" {
           mount_path = volume.value.mount_path
           empty_dir  = volume.value.empty_dir ? true : null
           secret     = volume.value.secret
-          read_only  = volume.value.empty_dir ? false : true
+          read_only  = volume.value.read_only
         }
       }
-    }
-  }
 
-  # dsv-fetch refresher (ACI init containers have no managed identity): writes /dsv-secrets/fluentbit-env.yaml from
-  # DSV with the group's identity (IMDS), re-fetches hourly; Fluent Bit restarts until the file exists.
-  dynamic "container" {
-    for_each = local.fetcher == null ? [] : [local.fetcher]
-    content {
-      name                  = container.value.name
-      image                 = container.value.image
-      cpu                   = container.value.cpu
-      memory                = container.value.memory
-      commands              = container.value.commands
-      environment_variables = container.value.environment_variables
-
-      dynamic "volume" {
-        for_each = container.value.volumes
+      dynamic "liveness_probe" {
+        for_each = container.value.liveness_exec == null ? [] : [container.value.liveness_exec]
         content {
-          name       = volume.value.name
-          mount_path = volume.value.mount_path
-          empty_dir  = true
+          exec                  = liveness_probe.value
+          initial_delay_seconds = 60
+          period_seconds        = 30
+          failure_threshold     = 5
         }
       }
     }

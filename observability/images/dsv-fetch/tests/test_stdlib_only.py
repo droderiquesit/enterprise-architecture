@@ -4,9 +4,32 @@ embedded Python run it as secret_backend_command)."""
 from __future__ import annotations
 
 import ast
+import re
 import sys
 
-from conftest import SCRIPT
+import pytest
+from conftest import IMAGE_DIR, IMPL, SCRIPT
+
+
+@pytest.fixture(autouse=True)
+def _only_matching_impl(impl, request):
+    want = "go" if "go_" in request.node.name else "python"
+    if impl.name != want:
+        pytest.skip(f"static check of the {want} implementation")
+
+
+def test_go_module_is_stdlib_only():
+    """go.mod has no require/replace directives: the binary is built from the Go standard library only."""
+    mod = (IMAGE_DIR / "go.mod").read_text()
+    assert not re.search(r"(?m)^\s*(require|replace)\b", mod), mod
+    assert not (IMAGE_DIR / "go.sum").exists()
+    imports = set()
+    for f in IMAGE_DIR.rglob("*.go"):
+        for block in re.findall(r"(?s)^import \((.*?)\)|^import (\"[^\"]+\")", f.read_text(), re.M):
+            for imp in re.findall(r'"([^"]+)"', " ".join(block)):
+                imports.add(imp)
+    third_party = sorted(i for i in imports if "." in i.split("/")[0] and not i.startswith("github.com/lab/enterprise-architecture/observability/images/dsv-fetch/"))
+    assert third_party == [], third_party
 
 
 def _imports(tree: ast.AST) -> set[str]:

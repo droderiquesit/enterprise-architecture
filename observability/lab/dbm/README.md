@@ -1,22 +1,29 @@
 # lab/dbm (component `obs-dbm`)
 
 **Owner:** observability. **Purpose:** Datadog Database Monitoring for the lab databases through `modules/dbm`.
-The checks run as an ACI Agent in the delegated `aci` subnet by default, or as AKS cluster checks.
+`settings.hosting = auto` (default) chooses: when the platform-aks contract is present (a cluster exists) the checks run
+as **cluster checks** of the Datadog Cluster Agent - obs-kubernetes renders them from the same platform-db contracts
+(`modules/dbm/contracts`) and this root deploys nothing; without a cluster an **ACI Agent** in the delegated `aci` subnet
+runs them.
 
 * **Consumes:**
   * `obs_telemetry_transport.datadog_site`
   * `foundation_network.subnets[settings.subnet_key]`
   * `foundation_identity` v2 (`identities["obs-dbm"]`, `secrets.base_path`), `obs_telemetry_transport` v2 (`api_key_ref`, `secrets`)
+  * optional: `platform_aks` (presence only: selects cluster checks), `artifacts["img-dsv-fetch"]` (ACI init
+    container copying the static dsv-fetch binary; else the transport contract's `secrets.fetch_image`)
   * optional: `platform_db_{postgresql,mysql,sql,sqlmi,sqlvm}`. Only their `dbm` block is read: supported,
     engine, deployment_type, auth_mode, identity_client_id, host, port, databases, password_secret_id.
     `self_hosted_azure_vm` maps to Datadog's `virtual_machine`.
-* **Produces:** no contract. Outputs: `configured`, `cluster_check_confd` (copy to obs-kubernetes
-  `settings.dbm_cluster_checks`), `agent_container_group_id`.
+* **Produces:** no contract. Outputs: `configured`, `hosting` (effective), `cluster_check_confd` (evidence),
+  `agent_container_group_id`.
 
 ## Settings
-* `hosting` (aci | cluster_checks | none)
+* `hosting` (`auto` default | `cluster_checks` | `aci` | `none`). An explicit `aci` with a cluster present also needs
+  obs-kubernetes `settings.dbm = off` (otherwise both would run the checks).
 * `subnet_key` (default `aci`)
-* `identity_key` (`obs-dbm`), `api_key_secret_name`, `cpu`, `memory_gb`
+* `identity_key` (`obs-dbm`), `cpu`, `memory_gb`
+* ACI Agent image: the fleet policy `<agent.image>:<agent.version>` (single pin; no fallback)
 
 ## Prerequisites
 * ACI container groups need a subnet delegated to `Microsoft.ContainerInstance/containerGroups`. The default
@@ -28,7 +35,7 @@ The checks run as an ACI Agent in the delegated `aci` subnet by default, or as A
 * Server parameters (pg_stat_statements, performance_schema) are platform-owned.
 
 ## Cost at defaults
-ACI with 1 vCPU / 2 GB running always: about $45/month. Datadog DBM is billed per host.
+ACI (no cluster only) with 1 vCPU / 2 GB running always: about $45/month; cluster checks use the existing runner. Datadog DBM is billed per host.
 
 ## Teardown
 Destroy removes the container group and its resource group. Database users and grants stay. Drop them with

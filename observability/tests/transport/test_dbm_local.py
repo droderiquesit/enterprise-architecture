@@ -1,7 +1,9 @@
 """Local (docker) proof of modules/dbm: the SQL setup scripts run against real PostgreSQL 17 / MySQL 8.4,
 and the Datadog Agent 7.84.2 runs the RENDERED postgres.d / mysql.d DBM configs (dbm: true) and the RENDERED ACI
-datadog.yaml: API key and passwords are ENC[dsv://...] references resolved by dsv-fetch agent-backend (installed in
-the Agent container exactly like the ACI start command) against a mock Delinea DSV - no literal password or key.
+datadog.yaml: API key and passwords are ENC[dsv://...] references resolved by the static dsv-fetch binary
+(`agent-backend`) against a mock Delinea DSV - no literal password or key. The binary reaches the Agent exactly like in
+the ACI container group: the dsv-fetch IMAGE (init container) runs `install --dest /eh/bin/dsv-fetch` into a shared
+directory (emptyDir stand-in), then the RENDERED ACI start command re-installs it root-owned 0500 and starts the Agent.
 Auth to the mock uses DSV_AUTH=client_credentials (ACI uses the group's managed identity via IMDS).
 Deviations from Azure (documented): no TLS on the local servers (ssl settings relaxed by this test) and
 no Azure metadata endpoint. Requires docker and terraform (TERRAFORM_BIN to override).
@@ -18,7 +20,7 @@ import time
 import pytest
 import yaml
 
-from dockerutil import HERE, PACKAGE, PYTHON_IMAGE, REPO, Stack, wait_for
+from dockerutil import HERE, PACKAGE, PYTHON_IMAGE, REPO, Stack, ensure_dsv_fetch_image, sh, wait_for
 
 AGENT_IMAGE = "datadog/agent:7.84.2"
 PG_IMAGE = os.environ.get("PG_IMAGE", "postgres:17-alpine")
@@ -54,6 +56,8 @@ def test_dbm_setup_sql_and_agent_checks(tmp_path):
     assert pgi["dbm"] is True and pgi["azure"]["deployment_type"] == "flexible_server" and pgi["password"] == "ENC[dsv://eh/test/dbm-pg-password#value]"
     assert myi["dbm"] is True and myi["password"] == "ENC[dsv://eh/test/dbm-mysql-password#value]"
     dd_yaml = yaml.safe_load(_render("local.aci_datadog_yaml"))
+    start = _render("local.aci_start_command")
+    assert start.startswith("/eh/bin/dsv-fetch install --dest /opt/dsv-fetch/dsv-fetch && ") and "python" not in start
     assert dd_yaml["api_key"] == "ENC[dsv://eh/test/datadog-api-key#value]" and dd_yaml["secret_backend_command"] == "/opt/dsv-fetch/dsv-fetch"
     # local servers have no TLS: relax only here
     pgi["ssl"] = "disable"
@@ -83,11 +87,7 @@ def test_dbm_setup_sql_and_agent_checks(tmp_path):
             assert r.returncode == 0, r.stderr
 
         cfg = tmp_path / "agent"
-        (cfg / "postgres").mkdir(parents=True)
-        (cfg / "mysql").mkdir()
-        (cfg / "secrets").mkdir()
-        (cfg / "postgres" / "conf.yaml").write_text(yaml.safe_dump(pg_conf))
-        (cfg / "mysql" / "conf.yaml").write_text(yaml.safe_dump(my_conf))
+        cfg.mkdir(parents=True)
         # mock Delinea DSV on the stack network holding the API key + DB passwords
         dsv_cfg = {
             "clients": {"dbm-test": {"secret": "dbm-test-secret", "identity": "obs-dbm-test"}},
@@ -99,31 +99,40 @@ def test_dbm_setup_sql_and_agent_checks(tmp_path):
         (cfg / "dsvmock" / "cfg.json").write_text(json.dumps(dsv_cfg))
         stack.run("dsv", PYTHON_IMAGE, volumes=[f"{REPO / 'tools' / 'secrets'}:/m:ro", f"{cfg / 'dsvmock'}:/c:ro"],
                   cmd=["python", "-u", "/m/mock_dsv.py", "--config", "/c/cfg.json", "--host", "0.0.0.0", "--port", "8200"])
-        # the ACI container group's /eh/agent (rendered datadog.yaml) and /eh/dsv (dsv_fetch.py + dsv.json) volumes
+        # the ACI container group's /eh/agent (rendered datadog.yaml) and /eh/dsv (dsv.json) volumes
         (cfg / "eh-agent").mkdir()
         (cfg / "eh-agent" / "datadog.yaml").write_text(yaml.safe_dump(dd_yaml))
         (cfg / "eh-dsv").mkdir()
-        shutil.copy(PACKAGE / "images" / "dsv-fetch" / "dsv_fetch.py", cfg / "eh-dsv" / "dsv_fetch.py")
         (cfg / "eh-dsv" / "dsv.json").write_text(json.dumps({
             "DSV_AUTH": "client_credentials", "DSV_CLIENT_ID": "dbm-test", "DSV_CLIENT_SECRET": "dbm-test-secret",
             "DSV_BASE_URL": "http://dsv:8200/v1", "DSV_ALLOW_INSECURE_HTTP": "true"}))
         for p in cfg.rglob("*"):
             p.chmod(0o755 if p.is_dir() else 0o644)
-        # same start sequence as modules/dbm azurerm_container_group.dbm (install backend 0500 root, copy config)
-        start = ("python3 -I /eh/dsv/dsv_fetch.py install --dest /opt/dsv-fetch/dsv-fetch --python /opt/datadog-agent/embedded/bin/python3"
-                 " && cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml && exec /bin/entrypoint.sh")
+        # init container dsv-fetch-install: the dsv-fetch image (non-root) copies its binary into the shared emptyDir
+        (cfg / "eh-bin").mkdir()
+        (cfg / "eh-bin").chmod(0o777)
+        sh("docker", "run", "--rm", "--read-only", "--cap-drop", "ALL", "-v", f"{cfg / 'eh-bin'}:/eh/bin",
+           ensure_dsv_fetch_image(), "install", "--dest", "/eh/bin/dsv-fetch")
+        # /eh/confd as in the container group (one file per check, named after the check)
+        (cfg / "eh-confd").mkdir()
+        (cfg / "eh-confd" / "postgres").write_text(yaml.safe_dump(pg_conf))
+        (cfg / "eh-confd" / "mysql").write_text(yaml.safe_dump(my_conf))
+        for p in (cfg / "eh-confd").iterdir():
+            p.chmod(0o644)
+        # the rendered ACI start command: re-install root-owned 0500 for the Agent, copy configs, entrypoint
         agent = stack.run(
             "agent", AGENT_IMAGE,
             env={"DD_API_KEY": "ENC[dsv://eh/test/datadog-api-key#value]", "DD_HOSTNAME": "dbm-test", "DD_SITE": "datadoghq.com",
                  "DD_LOGS_ENABLED": "false",
                  "DD_APM_ENABLED": "false", "DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED": "false"},
-            volumes=[f"{cfg / 'postgres'}:/etc/datadog-agent/conf.d/postgres.d:ro",
-                     f"{cfg / 'mysql'}:/etc/datadog-agent/conf.d/mysql.d:ro",
-                     f"{cfg / 'eh-agent'}:/eh/agent:ro", f"{cfg / 'eh-dsv'}:/eh/dsv:ro"],
+            volumes=[f"{cfg / 'eh-confd'}:/eh/confd:ro",
+                     f"{cfg / 'eh-agent'}:/eh/agent:ro", f"{cfg / 'eh-dsv'}:/eh/dsv:ro", f"{cfg / 'eh-bin'}:/eh/bin:ro"],
             entrypoint="/bin/sh", cmd=["-c", start],
         )
         time.sleep(20)
         sec = _exec(agent, "agent", "secret")
+        if sec.returncode != 0:
+            print(stack.logs(agent)[-4000:])
         print(sec.stdout[-2000:])
         assert "Executable permissions: OK" in sec.stdout, sec.stdout[-2000:]
         assert "Number of secrets resolved: 3" in sec.stdout or "Number of secrets decrypted: 3" in sec.stdout, sec.stdout[-2000:]

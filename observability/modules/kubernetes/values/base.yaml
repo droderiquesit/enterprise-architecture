@@ -1,0 +1,67 @@
+# Layer 1 of 3 of the Datadog Helm chart values (modules/kubernetes): static, reviewed defaults.
+#   1. values/base.yaml          (this file)  - chart-wide defaults, sizing, the dsv-fetch volume wiring
+#   2. fleet layer (main.tf)                  - computed from the fleet / tag policies and the Terraform inputs only:
+#                                               site, cluster name, tags, log collector, SSI targets, versions, OP
+#                                               Worker URL, DSV references + workload identity, feature flags
+#   3. var.values_overrides                   - per-cluster YAML, applied last (cannot touch the secret path)
+# Chart: datadog 3.253.2 (helm.datadoghq.com). Rendered with `helm template` by
+# observability/tests/kubernetes/test_datadog_chart.py - change this file and that test together.
+# Nothing in any layer is secret: the API key is the reference ENC[dsv://...] resolved at run time.
+datadog:
+  # OTLP ingest on the node (hostPort): apps use http://$(DD_AGENT_HOST):4317 / :4318; OTLP logs stay off
+  otlp:
+    receiver:
+      protocols:
+        grpc: {enabled: true, endpoint: "0.0.0.0:4317", useHostPort: true}
+        http: {enabled: true, endpoint: "0.0.0.0:4318", useHostPort: true}
+    logs: {enabled: false}
+  processAgent:
+    containerCollection: true
+  # DBM and other endpoint checks are dispatched by the Cluster Agent to the cluster-checks runners
+  clusterChecks:
+    enabled: true
+  # chart 3.25x bundles the Datadog Operator sub-chart and enables system-probe service discovery by default for
+  # Agent >= 7.78; both stay off unless features.operator_subchart / features.service_discovery
+  operator:
+    enabled: false
+  discovery:
+    enabled: false
+
+agents:
+  containers:
+    agent:
+      resources: {requests: {cpu: 200m, memory: 256Mi}, limits: {memory: 512Mi}}
+    traceAgent:
+      resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 256Mi}}
+    processAgent:
+      resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 256Mi}}
+    systemProbe:
+      resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 256Mi}}
+  # dsv-fetch secret backend: the init container `dsv-fetch-install` (added by postrender/dsv-fetch-init.sh, the
+  # chart has no extra-initContainers hook) copies the static binary into this in-memory emptyDir (root, 0500);
+  # every Agent container runs it as secret_backend_command /opt/dsv-fetch/dsv-fetch
+  volumes:
+    - {name: dsv-fetch, emptyDir: {medium: Memory, sizeLimit: 32Mi}}
+  volumeMounts:
+    - {name: dsv-fetch, mountPath: /opt/dsv-fetch, readOnly: true}
+
+clusterAgent:
+  enabled: true
+  replicas: 1
+  resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {memory: 256Mi}}
+  volumes:
+    - {name: dsv-fetch, emptyDir: {medium: Memory, sizeLimit: 32Mi}}
+  volumeMounts:
+    - {name: dsv-fetch, mountPath: /opt/dsv-fetch, readOnly: true}
+
+clusterChecksRunner:
+  enabled: true
+  replicas: 1
+  resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 512Mi}}
+  # dedicated service account "datadog-cluster-checks": its own workload identity (DBM: DSV DB passwords + Entra)
+  rbac:
+    dedicated: true
+  volumes:
+    - {name: dsv-fetch, emptyDir: {medium: Memory, sizeLimit: 32Mi}}
+  volumeMounts:
+    - {name: dsv-fetch, mountPath: /opt/dsv-fetch, readOnly: true}

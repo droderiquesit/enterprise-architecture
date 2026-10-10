@@ -1,5 +1,12 @@
 # modules/fluent-bit
 
+> **Fallback only (observability 4.0.0).** Datadog collects application logs natively on every platform: the Datadog
+> Agent on AKS nodes, Linux and Windows VMs / VMSS and as a sidecar in ACI container groups, serverless-init on Container
+> Apps, diagnostic settings -> Event Hubs -> Observability Pipelines Worker for App Service / Functions / Logic Apps
+> (`config/fleet-policy.yaml` `logs.collector`). The configs rendered here are used only with
+> `log_pipeline = fluent_bit_direct` (sidecar / DaemonSet / host service / Event Hubs aggregator) and on Batch nodes,
+> where no Agent runs.
+
 A pure function module with no providers and no resources. For each role, it renders the **validated** Fluent
 Bit configs from `observability/config/fluent-bit/`:
 `sidecar | sidecar-forward | aggregator | aggregator-forward | k8s-daemonset | linux-host | windows-host`.

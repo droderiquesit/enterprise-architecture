@@ -5,8 +5,10 @@
 
 * **Consumes:**
   * `obs_telemetry_transport` v2 (`datadog_site`, `api_key_ref`, `secrets`)
-  * `foundation_identity` v2 (`identities["obs-collector"]`: workload identity of the Agents / Fluent Bit)
-  * `artifacts["img-dsv-fetch"]` (dsv-fetch image for the Fluent Bit init container)
+  * `foundation_identity` v2 (`identities["obs-collector"]`: Agents / Cluster Agent / Fluent Bit;
+    `identities["obs-dbm"]`: cluster-checks runners when DBM runs here; `secrets.base_path`)
+  * `artifacts["img-dsv-fetch"]` (dsv-fetch image >= 2.0.0: secret-backend binary of all Agents, Fluent Bit init)
+  * optional `platform_db_*` contracts (`dbm` blocks) -> DBM cluster checks
   * `platform_aks` (resource_group_name, cluster_id, cluster_name, oidc_issuer_url, access.private_cluster/entra_server_app_id)
 * **Produces:** `obs-kubernetes` v1 (`catalog/contracts/obs-kubernetes.v1.schema.json`): the agent local
   service, OTLP ports, `DD_AGENT_HOST` convention, cluster-agent service, Fluent Bit namespace and exclusions,
@@ -25,30 +27,38 @@
   **plan** pipeline identities' principal ids (bootstrap contract `identities.{apply,plan}.principal_id`).
 
 ## API key
-No API key input any more (1.x `TF_VAR_datadog_api_key` removed). Default `settings.api_key_mode = dsv_secret_backend`:
-the Agents resolve `ENC[<obs_telemetry_transport.api_key_ref>]` with dsv-fetch and Fluent Bit reads it via a dsv-fetch
-init container (image = `artifacts["img-dsv-fetch"]`, else the transport contract's `secrets.fetch_image`), both with
-AKS workload identity of `obs-collector`. This root federates that identity with `datadog/datadog`,
-`datadog/datadog-cluster-checks` and `fluent-bit/fluent-bit` (`azurerm_federated_identity_credential`; the apply
-identity needs write access to federated credentials of the identity). Cluster Agent: no Python in its image -
-`settings.cluster_agent_secret_name` (dsv-k8s syncer Secret) or degraded (see the module README).
-Fallback `api_key_mode = existing`: Secret `synced_secret_name` maintained by the Delinea dsv-k8s syncer.
-**To verify on a real cluster**: DSV accepting AKS workload-identity tokens (users are mapped by `xms_mirid`).
+No API key input. The node Agents, the Cluster Agent and the cluster-checks runners resolve
+`ENC[<obs_telemetry_transport.api_key_ref>]` with the static dsv-fetch binary (secret backend, copied by the init
+container `dsv-fetch-install` from `artifacts["img-dsv-fetch"]`, else the transport contract's `secrets.fetch_image`);
+the Fluent Bit fallback reads it through a dsv-fetch init container. All with AKS workload identity: this root
+federates `obs-collector` with `datadog/datadog`, `datadog/datadog-cluster-agent`, `fluent-bit/fluent-bit` and - when
+no DBM checks run here - `datadog/datadog-cluster-checks` (`azurerm_federated_identity_credential`; the apply identity
+needs write access to federated credentials of the identities). There is no synced-Secret / existing-Secret mode any
+more (observability 4.0.0). **To verify on a real cluster**: DSV accepting AKS workload-identity tokens (`xms_mirid`).
+
+## DBM (settings.dbm = auto)
+The optional platform-db contracts are rendered by `modules/dbm/contracts` + `modules/dbm` (`hosting =
+cluster_checks`) into `clusterAgent.confd`: the Cluster Agent dispatches them to the cluster-checks runners, which run
+as the `obs-dbm` identity (federated here with `datadog/datadog-cluster-checks`): DSV read on the DB password paths
+(`ENC[dsv://...]`) and the Entra database login. obs-dbm (`settings.hosting = auto`) sees the same platform-aks contract
+and creates no ACI Agent. `settings.dbm = off` leaves DBM to obs-dbm (`hosting = aci`).
 
 ## Settings
 * `kubelogin_mode`, `kubelet_tls_mode` (aks_rotation)
-* `process_collection`, `cluster_checks_runner`
+* `process_collection`, `cluster_checks_runner` (required for DBM)
 * chart versions, `exclude_namespaces`
 * `ssi_namespaces` (default `["hello"]`): Single Step Instrumentation target namespaces when the fleet policy
   `apm.mode` is `datadog`
-* `dbm_cluster_checks` (from obs-dbm `cluster_check_confd` when obs-dbm hosting = cluster_checks)
+* `dbm` (`auto` | `off`), `dbm_identity_key` (`obs-dbm`), `collector_identity_key` (`obs-collector`)
+* `values_overrides`: per-cluster Datadog chart values (YAML documents), the last values layer (the module rejects
+  changes to the secret path)
 
 ## Cost
 In-cluster only (node capacity). Requests: agent about 0.3 vCPU / 0.5 GiB per node, Fluent Bit 0.1 vCPU /
 128 MiB per node, cluster agent + runner about 0.2 vCPU / 0.4 GiB.
 
 ## Teardown
-Destroy uninstalls both Helm releases, deletes the Secrets and ConfigMap, and deletes the namespaces it
+Destroy uninstalls the Helm releases, deletes the ConfigMap, the federated credentials and the namespaces it
 created. The tail position database on the node hostPath (`/var/fluent-bit/state`) stays until the node is
 recycled.
 

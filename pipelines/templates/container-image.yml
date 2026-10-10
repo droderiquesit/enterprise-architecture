@@ -1,6 +1,8 @@
 # Container image build + push by digest (steps template).
 # Build context = applications/ and Dockerfile = <componentPath>/Dockerfile (the convention used by
-# the application Dockerfiles). docker buildx attaches BuildKit provenance (mode=max) and an SBOM
+# the application Dockerfiles); components outside applications/ (platform images such as img-dsv-fetch,
+# observability/images/*) use their own directory as the build context.
+# docker buildx attaches BuildKit provenance (mode=max) and an SBOM
 # attestation; syft (when installable) also writes an SPDX SBOM file next to the build metadata.
 # Agents without Docker: set settings.useAcrBuild to 'true' (az acr build; with public network access
 # disabled on the registry, ACR Tasks need a dedicated agent pool - see pipelines/README.md).
@@ -36,6 +38,10 @@ steps:
         tag="$(python3 tools/deploy/artifacts.py tag --component '${{ parameters.component }}' --selection "$SELECTION_FILE")"
         repo="${CONTAINER_REGISTRY}.azurecr.io/${{ parameters.artifactName }}"
         dockerfile="${{ parameters.componentPath }}/Dockerfile"
+        context=applications
+        [[ "${{ parameters.componentPath }}" == applications/* ]] || context="${{ parameters.componentPath }}"
+        platforms=()   # img-dsv-fetch: multi-arch index (static Go binary cross-compiled in the builder stage, no QEMU)
+        [[ "${{ parameters.component }}" != img-dsv-fetch ]] || platforms=(--platform linux/amd64,linux/arm64)
         build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         version="$(python3 tools/deploy/versioning.py version --component '${{ parameters.component }}')"
         vtag="$(python3 tools/deploy/versioning.py docker-tag --component '${{ parameters.component }}')"
@@ -43,19 +49,19 @@ steps:
           az acr build --registry "$CONTAINER_REGISTRY" --image "${{ parameters.artifactName }}:${tag}" \
             --image "${{ parameters.artifactName }}:${vtag}" \
             --file "$dockerfile" --build-arg "GIT_COMMIT=$(Build.SourceVersion)" \
-            --build-arg "VERSION=${tag}" --build-arg "BUILD_TIME=${build_time}" applications
+            --build-arg "VERSION=${tag}" --build-arg "BUILD_TIME=${build_time}" "$context"
           digest="$(az acr manifest show-metadata --registry "$CONTAINER_REGISTRY" --name "${{ parameters.artifactName }}:${tag}" --query digest -o tsv)"
         else
           az acr login --name "$CONTAINER_REGISTRY"
           docker buildx create --use --name labbuilder >/dev/null 2>&1 || docker buildx use labbuilder
-          docker buildx build --file "$dockerfile" \
+          docker buildx build --file "$dockerfile" "${platforms[@]}" \
             --build-arg "GIT_COMMIT=$(Build.SourceVersion)" --build-arg "VERSION=${tag}" --build-arg "BUILD_TIME=${build_time}" \
             --label "org.opencontainers.image.revision=$(Build.SourceVersion)" \
             --label "org.opencontainers.image.version=${version}" \
             --cache-from "type=registry,ref=${repo}:buildcache" \
             --cache-to "type=registry,ref=${repo}:buildcache,mode=max,ignore-error=true" \
             --provenance=mode=max --sbom=true --metadata-file "$BUILD_OUT/buildx-metadata.json" \
-            --tag "${repo}:${tag}" --tag "${repo}:${vtag}" --push applications
+            --tag "${repo}:${tag}" --tag "${repo}:${vtag}" --push "$context"
           digest="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['containerimage.digest'])" "$BUILD_OUT/buildx-metadata.json")"
         fi
         if command -v syft >/dev/null; then

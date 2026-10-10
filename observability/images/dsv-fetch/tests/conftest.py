@@ -1,9 +1,18 @@
-"""Fixtures: tools/secrets/mock_dsv.py (DSV API) + a fake Azure identity server (IMDS, IDENTITY_ENDPOINT, Entra token)."""
+"""Fixtures: tools/secrets/mock_dsv.py (DSV API) + a fake Azure identity server (IMDS, IDENTITY_ENDPOINT, Entra token).
+
+Black-box conformance suite for BOTH implementations: every CLI test runs once per implementation
+(test id suffix [go] / [python]):
+  go      the static binary: $DSV_FETCH_BIN when set, else built once per session with ../build.sh --toolchain local
+          (skipped when neither a binary nor Go is available)
+  python  the legacy 1.x dsv_fetch.py (skipped once the file is removed)
+DSV_FETCH_IMPL=go|python|both (default both) restricts the run.
+"""
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -60,5 +69,55 @@ def base_env(**extra: str) -> dict[str, str]:
     return env
 
 
+VERSION = (IMAGE_DIR / "VERSION").read_text().strip()
+_IMPLS = [i for i in ("go", "python") if os.environ.get("DSV_FETCH_IMPL", "both") in ("both", i)]
+
+
+class Impl:
+    """The implementation under test: `argv` prefix, `name` ("go" | "python") and the version it reports."""
+
+    name = "python"
+    argv: list[str] = [sys.executable, "-I", str(SCRIPT)]
+    version = "1.0.0"
+
+
+IMPL = Impl()
+
+
+def _go_binary(tmp_root: Path) -> str | None:
+    if os.environ.get("DSV_FETCH_BIN"):
+        return os.environ["DSV_FETCH_BIN"]
+    go = shutil.which("go") or ("/usr/local/go/bin/go" if Path("/usr/local/go/bin/go").exists() else None)
+    if not go:
+        return None
+    out = tmp_root / ("dsv-fetch.exe" if os.name == "nt" else "dsv-fetch")
+    env = {**os.environ, "PATH": f"{Path(go).parent}{os.pathsep}{os.environ.get('PATH', '')}"}
+    subprocess.run(
+        ["bash", str(IMAGE_DIR / "build.sh"), "--toolchain", "local", "--target", f"{'windows' if os.name == 'nt' else 'linux'}/amd64", "--binary", str(out)],
+        check=True, env=env, capture_output=True, timeout=600,
+    )
+    return str(out)
+
+
+@pytest.fixture(scope="session")
+def go_binary(tmp_path_factory) -> str | None:
+    return _go_binary(tmp_path_factory.mktemp("dsv-fetch-bin"))
+
+
+@pytest.fixture(params=_IMPLS, autouse=True)
+def impl(request) -> Impl:
+    """Selects the implementation every `run()` in the test uses."""
+    if request.param == "go":
+        binary = request.getfixturevalue("go_binary")
+        if not binary:
+            pytest.skip("no dsv-fetch binary (set DSV_FETCH_BIN or install Go)")
+        IMPL.name, IMPL.argv, IMPL.version = "go", [binary], VERSION
+    else:
+        if not SCRIPT.exists():
+            pytest.skip("dsv_fetch.py (1.x) removed")
+        IMPL.name, IMPL.argv, IMPL.version = "python", [sys.executable, "-I", str(SCRIPT)], "1.0.0"
+    return IMPL
+
+
 def run(args: list[str], env: dict[str, str], stdin: str | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "-I", str(SCRIPT), *args], env=env, input=stdin, capture_output=True, text=True, timeout=60)
+    return subprocess.run([*IMPL.argv, *args], env=env, input=stdin, capture_output=True, text=True, timeout=60)

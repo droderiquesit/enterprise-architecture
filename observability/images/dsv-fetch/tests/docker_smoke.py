@@ -14,7 +14,8 @@ Everything runs on an --internal docker network (no egress): tools/secrets/mock_
   otel-collector  dsv-fetch as uid 10001 -> collector-contrib 0.162.0 `api.key: ${file:/dsv-secrets/DD_API_KEY}` (datadog
                   exporter series reach the intake with that key)
   agent-backend   protocol round trip through `docker run -i dsv-fetch:dev agent-backend`
-  datadog-agent   `dsv-fetch install` (root, 0500) -> Datadog Agent 7.84.2 secret_backend_command with
+  datadog-agent   `dsv-fetch install` (root, 0500: the static binary copies itself into a plain volume) -> Datadog Agent
+                  7.84.2 (Ubuntu-based image, no shared libraries needed) secret_backend_command with
                   DD_API_KEY=ENC[dsv://eh/dev/datadog-api-key#value]; the Agent's requests to the intake carry the key
 
 Prints one JSON document (no secret values) and exits non-zero when a check fails.
@@ -240,7 +241,7 @@ service:
         (conf / "config.yaml").chmod(0o644)
         self.reset_intake()
         c = self.daemon("otel", "--read-only", "-v", f"{vol}:/dsv-secrets:ro", "-v", f"{conf}:/c:ro", OTEL, "--config=/c/config.yaml")
-        reqs = self.wait_for_key(lambda r: any("series" in x["path"] for x in r), timeout=40)
+        reqs = self.wait_for_key(lambda r: any("series" in x["path"] for x in r), timeout=75)
         series = [x for x in reqs if "series" in x["path"] or "sketches" in x["path"]]
         logs = sh("docker", "logs", c, check=False)
         ok = p.returncode == 0 and bool(series) and all(x["api_key_sha256"] == KEY_SHA for x in series) and KEY not in logs.stdout + logs.stderr

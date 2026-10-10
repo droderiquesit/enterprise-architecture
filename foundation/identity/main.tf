@@ -45,8 +45,11 @@ locals {
     "hello-frontend"      = { purpose = "frontend hosting (SWA/nginx); RUM client token is injected at deploy time", secrets = [] }
     "obs-collector"       = { purpose = "Fluent Bit / OTel gateway", secrets = ["datadog-api-key", "fluentbit-shared-key", "eventhub-fluentbit-listen"] }
     "obs-dbm"             = { purpose = "Datadog Agent DBM checks", secrets = concat(["datadog-api-key"], local.dbm_secret_names) }
-    "aks-control-plane"   = { purpose = "AKS cluster (control plane) identity", secrets = [] }
-    "aks-kubelet"         = { purpose = "AKS kubelet identity (AcrPull granted by platform-aks)", secrets = [] }
+    # Datadog Agent on VMs / VMSS (observability 4.0.0): the obs-hosts Azure Policy attaches this ONE identity to every
+    # host tagged datadog:enabled; dsv-fetch (Agent secret backend) reads ONLY the ingest-only API key with it.
+    "obs-host-agent"    = { purpose = "Datadog Agent on policy-enrolled VMs / VMSS (DSV reader: ingest-only API key)", secrets = ["datadog-api-key"] }
+    "aks-control-plane" = { purpose = "AKS cluster (control plane) identity", secrets = [] }
+    "aks-kubelet"       = { purpose = "AKS kubelet identity (AcrPull granted by platform-aks)", secrets = [] }
     # Pipeline: reads pipeline secrets (Datadog provider keys, smoke fault token, RUM token) and the platform apply
     # inputs (tools/secrets/fetch.py), and publishes Azure-generated values (tools/secrets/publish.py).
     "deploy-agent" = { purpose = "self-hosted pipeline agents (VMSS / MDP)", secrets = local.pipeline_secrets }

@@ -27,7 +27,7 @@ architectures:
     deployment: [deploy-core-aca, deploy-dbadapters]
     artifact: container-image
     runtime_config: container app env + dsv:// secret references (Delinea DSV, resolved at start-up) + user-assigned identity
-    telemetry: {logs: fluent-bit-sidecar (shared EmptyDir file), traces: otel-gateway (ACA internal), metrics: azure-integration + otel}
+    telemetry: {logs: serverless-init sidecar (shared EmptyDir file) -> OP Worker (fallback fluent-bit-sidecar), traces: Datadog library -> serverless-init sidecar (localhost:8126), metrics: azure-integration + DogStatsD -> serverless-init}
     smoke: GET /readyz on revision FQDN
     rollback: shift traffic to previous revision (multiple revision mode)
   container-apps-dedicated:
@@ -57,7 +57,7 @@ architectures:
     workloads: [hello-partner-sim]
     deployment: deploy-partner-sim
     artifact: container-image
-    telemetry: {logs: fluent-bit-sidecar (shared emptyDir volume), traces: otel-gateway}
+    telemetry: {logs: datadog-agent sidecar (shared emptyDir file) -> OP Worker (fallback fluent-bit-sidecar), traces: Datadog library -> datadog-agent sidecar (localhost:8126), metrics: azure-integration + DogStatsD -> datadog-agent sidecar (localhost:8125)}
     smoke: GET /readyz from VNet (private IP)
     rollback: recreate container group with previous digest
   app-service-linux-code:

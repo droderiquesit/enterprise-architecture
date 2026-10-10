@@ -42,7 +42,7 @@ run "defaults" {
     condition = alltrue([for k in [
       "hello-bff", "hello-orders-api", "hello-inventory-api", "hello-catalog-api", "hello-dbadapter", "hello-worker",
       "hello-durable", "hello-functions", "hello-jobs", "hello-partner-sim", "hello-traffic", "hello-frontend",
-      "obs-collector", "obs-dbm", "aks-control-plane", "aks-kubelet", "deploy-agent"
+      "obs-collector", "obs-dbm", "obs-host-agent", "aks-control-plane", "aks-kubelet", "deploy-agent"
     ] : contains(keys(azurerm_user_assigned_identity.this), k)])
     error_message = "all catalogue identities must exist"
   }
@@ -71,7 +71,7 @@ run "defaults" {
     error_message = "datadog-app-key is pipeline-only"
   }
   assert {
-    condition     = length(output.contract.identities["aks-kubelet"].secrets) == 0 && length(output.contract.identities["hello-frontend"].secrets) == 0
+    condition     = length(output.contract.identities["aks-kubelet"].secrets) == 0 && jsonencode(output.contract.identities["obs-host-agent"].secrets) == jsonencode(["datadog-api-key"]) && length(output.contract.identities["hello-frontend"].secrets) == 0
     error_message = "identities without runtime secrets"
   }
   assert {

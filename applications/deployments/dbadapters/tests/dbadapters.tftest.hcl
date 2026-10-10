@@ -656,3 +656,33 @@ run "fallback_and_overrides" {
     error_message = "No App Service plan => mysql falls back to ACA; settings override hosting / disable families."
   }
 }
+
+run "observability_pipelines_serverless_init_every_profile" {
+  # observability 4.0.0 default (lab contract switches): serverless-init collects traces, DogStatsD and the app log
+  # file; its key is read by the dsv-fetch binary, installed by an identity-free init container - so the Dedicated
+  # workload profile needs no refresher container any more.
+  command = plan
+  variables {
+    obs_telemetry_transport = {
+      datadog_site = "datadoghq.com"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets = {
+        tenant      = "contoso"
+        base_url    = "https://contoso.secretsvaultcloud.com/v1"
+        fetch_image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+      otlp       = { grpc_endpoint = "http://gw:4317", http_endpoint = "https://gw" }
+      fluentbit  = { forward_host = "opw", forward_port = 24224, sidecar_mode = "forward" }
+      aggregator = { kind = "observability_pipelines", agent_logs_url = "http://opw:8282" }
+      env        = { fleet = { EH_APM_MODE = "datadog", EH_LOG_PIPELINE = "observability_pipelines" } }
+    }
+  }
+  assert {
+    condition     = alltrue([for k, a in module.aca : jsonencode(a.container_names) == jsonencode([local.svc, "datadog"]) && jsonencode(a.init_container_names) == jsonencode(["dsv-fetch-install"]) && a.dsv_fetch_mode == "init"])
+    error_message = "Every ACA adapter (Consumption and Dedicated): serverless-init only, binary installer init container, no refresher, no Fluent Bit."
+  }
+  assert {
+    condition     = alltrue([for k, a in module.aca : module.env[k].log_collector == "serverless-init"]) && module.env["mysql"].log_collector == "diagnostic-settings"
+    error_message = "ACA adapters: serverless-init log collection; App Service adapter: diagnostic settings."
+  }
+}

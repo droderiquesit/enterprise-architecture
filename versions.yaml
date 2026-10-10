@@ -28,3 +28,8 @@ images:
   datadog_agent: "gcr.io/datadoghq/agent:7.84.2"
   ddot_collector: "datadog/ddot-collector:7.84.2"
   otel_collector_contrib: "otel/opentelemetry-collector-contrib:0.162.0"
+  # img-dsv-fetch (observability/images/dsv-fetch, static Go binary; deployed by recorded digest, never by tag).
+  # Kept equal to its VERSION / Dockerfile / build.sh by observability/images/dsv-fetch/tests/test_pins.py.
+  dsv_fetch: "dsv-fetch:2.0.0"
+  dsv_fetch_builder: "golang:1.24.13-bookworm@sha256:1a6d4452c65dea36aac2e2d606b01b4a029ec90cc1ae53890540ce6173ea77ac"
+  dsv_fetch_base: "gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3"

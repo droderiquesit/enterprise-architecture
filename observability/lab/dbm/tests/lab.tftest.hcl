@@ -26,6 +26,9 @@ variables {
     api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
     secrets      = { tenant = "contoso", tld = "com", base_url = "https://contoso.secretsvaultcloud.com/v1" }
   }
+  artifacts = {
+    "img-dsv-fetch" = { image = "ehacrdev.azurecr.io/dsv-fetch@sha256:4444444444444444444444444444444444444444444444444444444444444444" }
+  }
   foundation_network = {
     subnets = {
       observability = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet/subnets/observability", name = "observability" }
@@ -67,8 +70,12 @@ run "lab_dbm_from_contracts" {
     error_message = "One instance per Azure SQL database; VM deployment type mapped."
   }
   assert {
-    condition     = output.agent_container_group_id != null && var.settings.subnet_key == "aci"
-    error_message = "ACI Agent in the ContainerInstance-delegated aci subnet."
+    condition     = output.agent_container_group_id != null && var.settings.subnet_key == "aci" && output.hosting == "aci"
+    error_message = "No cluster (platform-aks absent): auto -> ACI Agent in the ContainerInstance-delegated aci subnet."
+  }
+  assert {
+    condition     = module.dbm.configured["mysql"].hosting == "aci" && length(azurerm_resource_group.this) == 1
+    error_message = "ACI hosting resources only without a cluster."
   }
 }
 
@@ -86,14 +93,30 @@ run "unsupported_and_absent_contracts" {
   }
 }
 
-run "cluster_checks_hosting" {
+run "cluster_present_auto_cluster_checks" {
   command = plan
   variables {
-    settings = { hosting = "cluster_checks" }
+    platform_aks = { cluster_name = "eh-aks-dev-sec", cluster_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-aks-dev-sec/providers/Microsoft.ContainerService/managedClusters/eh-aks-dev-sec" }
   }
   assert {
-    condition     = output.agent_container_group_id == null && strcontains(output.cluster_check_confd["postgres.yaml"], "cluster_check")
-    error_message = "Cluster-check rendering for obs-kubernetes."
+    condition     = output.hosting == "cluster_checks" && output.agent_container_group_id == null && length(azurerm_resource_group.this) == 0
+    error_message = "Cluster present: auto -> no ACI Agent (the Cluster Agent runs the checks)."
+  }
+  assert {
+    condition     = strcontains(output.cluster_check_confd["postgres.yaml"], "cluster_check") && strcontains(output.cluster_check_confd["mysql.yaml"], "ENC[dsv://eh/dev/dbm-mysql-password#value]")
+    error_message = "Cluster checks with ENC[dsv://] password references (binary secret backend of the runners)."
+  }
+}
+
+run "explicit_aci_with_cluster" {
+  command = plan
+  variables {
+    platform_aks = { cluster_name = "eh-aks-dev-sec" }
+    settings     = { hosting = "aci" }
+  }
+  assert {
+    condition     = output.hosting == "aci" && output.agent_container_group_id != null
+    error_message = "Explicit hosting = aci still creates the ACI Agent (then set obs-kubernetes settings.dbm = off)."
   }
 }
 

@@ -1,23 +1,26 @@
 # One Container App with: user-assigned identity (ACR pull + Delinea DSV reads), digest-pinned image, env (secret
 # settings carry dsv:// references the app resolves at start-up - ADR-0001 §14), /healthz + /readyz probes, HTTP
-# scale rule, optional Fluent Bit sidecar tailing a shared EmptyDir (ADR-0001 §10) whose Datadog key is written by
-# a dsv-fetch init container into an EmptyDir, multiple-revision traffic weights for rollback.
-# No Key Vault references, no secret values: Container Apps "secrets" carry only the (non-secret) sidecar config files.
+# scale rule, the observability sidecar patch (modules/instrumentation container_app_patch): by default the Datadog
+# serverless-init sidecar (traces, DogStatsD, the app log file on a shared EmptyDir) whose Datadog key is read from
+# DSV by the dsv-fetch binary an init container installs; with log_pipeline = fluent_bit_direct a Fluent Bit sidecar
+# whose key a dsv-fetch init / refresher container writes. Multiple-revision traffic weights for rollback.
+# No Key Vault references, no secret values: Container Apps "secrets" carry only the (non-secret) Fluent Bit config files.
 locals {
   patch       = var.sidecar_patch
   has_sidecar = local.patch != null && try(length(local.patch.sidecars), 0) > 0
 
   secrets = local.has_sidecar ? { for s in local.patch.secrets : s.name => s.value } : {}
-  # dsv-fetch: init container on the Consumption profile (managed identity available to init containers there);
-  # elsewhere (Dedicated profiles) as a refresher container next to the sidecar (Microsoft Learn: init containers
-  # cannot use managed identities in consumption-only environments or on dedicated workload profiles)
+  # dsv-fetch init containers: the binary installer (needs_identity = false) runs on every workload profile; a DSV
+  # fetch (needs_identity = true, Fluent Bit fallback) runs as an init container on the Consumption profile only
+  # (managed identity available to init containers there) and as a refresher container elsewhere (Microsoft Learn:
+  # init containers cannot use managed identities in consumption-only environments or on dedicated workload profiles)
   init_mode  = var.workload_profile_name == "Consumption"
-  inits      = local.has_sidecar && local.init_mode ? try(local.patch.init_containers, []) : []
+  inits      = local.has_sidecar ? [for c in try(local.patch.init_containers, []) : c if !try(c.needs_identity, true) || local.init_mode] : []
   refreshers = local.has_sidecar && !local.init_mode ? try(local.patch.refresher_containers, []) : []
 
   volumes    = local.has_sidecar ? local.patch.volumes : []
   app_mounts = local.has_sidecar ? local.patch.app_container.volume_mounts : []
-  # for-expression, not a conditional: the Fluent Bit and serverless-init sidecars have different shapes (tuple)
+  # for-expression, not a conditional: the serverless-init and Fluent Bit sidecars have different shapes (tuple)
   sidecars   = [for s in try(local.patch.sidecars, []) : s if local.has_sidecar]
   sorted_env = sort(keys(var.env))
   extra_containers = concat(
@@ -174,9 +177,9 @@ resource "azurerm_container_app" "this" {
       }
     }
 
-    # dsv-fetch (ADR-0001 §14): writes the sidecar's Datadog key from DSV into the dsv-secrets EmptyDir before the
-    # containers start, with the app's managed identity (init containers get managed identity on the Consumption
-    # profile of a workload-profiles environment only - see the precondition).
+    # dsv-fetch (ADR-0001 §14): installs the binary into the dsv-bin EmptyDir for the serverless-init sidecar (no
+    # identity needed) or, Fluent Bit fallback, writes its key into the dsv-secrets EmptyDir with the app's managed
+    # identity (init containers get managed identity on the Consumption profile of a workload-profiles environment only).
     dynamic "init_container" {
       for_each = local.inits
       content {
@@ -205,7 +208,8 @@ resource "azurerm_container_app" "this" {
       }
     }
 
-    # Fluent Bit sidecar (ADR-0001 §10): tails LOG_FILE_PATH on the shared EmptyDir volume.
+    # Observability sidecars: serverless-init (default) or Fluent Bit (fluent_bit_direct) tail LOG_FILE_PATH on the
+    # shared EmptyDir volume; dsv-fetch refresher containers (Fluent Bit fallback on Dedicated profiles).
     dynamic "container" {
       for_each = local.extra_containers
       content {

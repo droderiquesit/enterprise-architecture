@@ -1,0 +1,36 @@
+# dsv-fetch release files (component img-dsv-fetch, format zip-package; steps template). Builds the static binaries
+# with observability/images/dsv-fetch/build.sh (CGO_ENABLED=0, -trimpath, pinned Go toolchain image by digest, no
+# network inside the build container) and packages them deterministically as $BUILD_OUT/package.zip:
+#   dsv-fetch-linux-amd64  dsv-fetch-linux-arm64  dsv-fetch-windows-amd64.exe  SHA256SUMS
+# finalize uploads it to the packages store and records package_url / package_sha256 in the artifact record, so
+# consumers (VM Application package of the host installer) read artifacts["img-dsv-fetch"].package_url by its
+# sha256 like any other zip-package. The image (container-image.yml) is built from the same sources and toolchain, so
+# its /opt/dsv-fetch/dsv-fetch is byte-identical to dsv-fetch-linux-<arch>; this step verifies that for linux/amd64
+# when the agent has Docker (pulls the image just pushed by digest; the ACR login of the image step is reused).
+# Toolchain: the pinned golang image via Docker; agents without Docker need Go 1.24.13 on PATH (build.sh --toolchain auto).
+parameters:
+  - name: componentPath
+    type: string
+
+steps:
+  - script: |
+      set -euo pipefail
+      rel="$(Agent.TempDirectory)/dsv-fetch-release"
+      rm -rf "$rel"; mkdir -p "$rel" "$BUILD_OUT"
+      bash "${{ parameters.componentPath }}/build.sh" --out "$rel"
+      (cd "$rel" && sha256sum --check SHA256SUMS)
+      python3 tools/deploy/artifacts.py zip --src "$rel" --out "$BUILD_OUT/package.zip"
+      cp "$rel/SHA256SUMS" "$BUILD_OUT/dsv-fetch-SHA256SUMS"
+      img="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['image'])" "$BUILD_OUT/container-image.json" 2>/dev/null || true)"
+      if [[ -n "$img" ]] && command -v docker >/dev/null && docker pull -q --platform linux/amd64 "$img" >/dev/null 2>&1; then
+        c="$(docker create --platform linux/amd64 "$img")"
+        docker cp "$c:/opt/dsv-fetch/dsv-fetch" "$(Agent.TempDirectory)/dsv-fetch-from-image"; docker rm "$c" >/dev/null
+        want="$(awk '$2=="dsv-fetch-linux-amd64"{print $1}' "$rel/SHA256SUMS")"
+        got="$(sha256sum "$(Agent.TempDirectory)/dsv-fetch-from-image" | cut -d' ' -f1)"
+        [[ "$want" == "$got" ]] || { echo "##vso[task.logissue type=error]image binary ${got} != release dsv-fetch-linux-amd64 ${want}"; exit 1; }
+        echo "image /opt/dsv-fetch/dsv-fetch == release dsv-fetch-linux-amd64 (${want})"
+      else
+        echo "##vso[task.logissue type=warning]image binary not compared with the release file (no Docker or image not pullable)"
+      fi
+    displayName: Build dsv-fetch release binaries (linux/amd64, linux/arm64, windows/amd64) + SHA256SUMS
+    condition: and(succeeded(), ne(variables['ARTIFACT_EXISTS'], 'true'))

@@ -27,12 +27,13 @@ output "otlp_target" {
 }
 
 output "container_app_patch" {
-  description = "Fluent Bit sidecar, volumes and sidecar secrets for Container Apps (from the instrumentation hook)."
+  description = "Container Apps additions from the instrumentation hook: serverless-init sidecar (default) or Fluent Bit sidecar (fluent_bit_direct), dsv-fetch init/refresher containers, volumes, config-file secrets."
   value       = module.instrumentation.container_app_patch
 }
 
 output "aci_sidecar" {
-  value = module.instrumentation.aci_sidecar
+  description = "azurerm_container_group additions: init_containers (dsv-fetch-install), containers (Datadog Agent sidecar; Fluent Bit + refresher with fluent_bit_direct), app_volume_mounts. Null when nothing is added."
+  value       = module.instrumentation.aci_sidecar
 }
 
 output "k8s_patch_object" {
@@ -79,7 +80,7 @@ output "profiling" {
 }
 
 output "log_collector" {
-  description = "datadog-agent | fluent-bit | fluent-bit-sidecar | diagnostic-settings."
+  description = "datadog-agent | datadog-agent-sidecar | serverless-init | diagnostic-settings | fluent-bit | fluent-bit-sidecar | none."
   value       = module.instrumentation.log_collector
 }
 

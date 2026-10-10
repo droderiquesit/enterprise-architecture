@@ -4,11 +4,9 @@ variable "databases" {
       engine          : postgres | mysql | sqlserver   (DBM-supported engines only)
       deployment_type : postgres/mysql -> flexible_server ; sqlserver -> sql_database | managed_instance | virtual_machine
       auth            : password (password_ref required) | managed_identity (postgres + sqlserver only)
-      password_ref    : how the Agent resolves the password - NEVER a literal:
-                          dsv        name=dsv://<path>#<element> -> ENC[dsv://...] (secret backend dsv-fetch agent-backend)
-                          k8s_secret name=<ns>/<secret>/<key>     -> ENC[k8s_secret@...]
-                          file       name=<absolute path>         -> ENC[file@...]
-                          env        name=<ENV_VAR>               -> %%env_<ENV_VAR>%% (cluster checks / autodiscovery)
+      password_ref    : the password as a Delinea DSV reference - NEVER a literal, one secret path everywhere:
+                          {kind = "dsv", name = "dsv://<path>#<element>"} -> ENC[dsv://...], resolved by the Agent's
+                          secret_backend_command = dsv-fetch agent-backend (ACI Agent, cluster-checks runners, host Agent)
   EOT
   type = map(object({
     engine                     = string
@@ -43,8 +41,8 @@ variable "databases" {
     error_message = "auth must be password or managed_identity; MySQL DBM does not support Entra managed identity authentication."
   }
   validation {
-    condition     = alltrue([for d in values(var.databases) : d.auth == "managed_identity" ? d.managed_identity_client_id != null : (d.password_ref != null && contains(["dsv", "k8s_secret", "file", "env"], try(d.password_ref.kind, "")))])
-    error_message = "auth = password needs password_ref {kind = dsv|k8s_secret|file|env, name}; auth = managed_identity needs managed_identity_client_id."
+    condition     = alltrue([for d in values(var.databases) : d.auth == "managed_identity" ? d.managed_identity_client_id != null : (d.password_ref != null && try(d.password_ref.kind, "") == "dsv")])
+    error_message = "auth = password needs password_ref {kind = \"dsv\", name = \"dsv://...\"} (Delinea DSV is the only secret source); auth = managed_identity needs managed_identity_client_id."
   }
   validation {
     condition     = alltrue([for d in values(var.databases) : try(d.password_ref.kind, "") != "dsv" || can(regex("^dsv://[A-Za-z0-9._/-]+(#[A-Za-z0-9._-]+)?$", d.password_ref.name))])
@@ -59,20 +57,24 @@ variable "databases" {
 variable "hosting" {
   description = <<-EOT
     Where the DBM checks run (always from inside the VNet):
-      aci          : a Datadog Agent container group in the observability subnet (this module creates it)
-      cluster_checks : rendered as cluster checks for an existing Datadog Cluster Agent (modules/kubernetes cluster_checks input)
-      none         : only render configs (e.g. drop them into an existing host Agent's conf.d)
+      cluster_checks : whenever a Kubernetes cluster with the Datadog Cluster Agent exists - cluster_check_confd feeds
+                       modules/kubernetes (cluster_checks input); the Cluster Agent dispatches the checks to the
+                       cluster-checks runners, whose dsv-fetch secret backend resolves the ENC[dsv://...] passwords and
+                       whose workload identity logs in to Entra-enabled databases
+      aci            : only when there is no cluster - a Datadog Agent container group in the observability subnet
+                       (created by this module)
+      none           : only render configs (e.g. drop confd into an existing host Agent's conf.d)
   EOT
   type        = string
-  default     = "aci"
+  default     = "cluster_checks"
   validation {
     condition     = contains(["aci", "cluster_checks", "none"], var.hosting)
-    error_message = "hosting must be aci, cluster_checks or none."
+    error_message = "hosting must be cluster_checks, aci or none."
   }
 }
 
 variable "aci" {
-  description = "ACI hosting: existing subnet (delegated to Microsoft.ContainerInstance/containerGroups), RG, user-assigned identity mapped to a DSV user with read on the API key / DB password paths, DSV endpoint."
+  description = "ACI hosting (hosting = aci): existing subnet (delegated to Microsoft.ContainerInstance/containerGroups), RG, user-assigned identity mapped to a DSV user with read on the API key / DB password paths, DSV endpoint, the digest-pinned dsv-fetch image (registry artifact img-dsv-fetch >= 2.0.0, static binary at /opt/dsv-fetch/dsv-fetch). image: null = the fleet policy <agent.image>:<agent.version>."
   type = object({
     name                = string
     resource_group_name = string
@@ -81,17 +83,27 @@ variable "aci" {
     identity_id         = string
     identity_client_id  = string
     api_key_ref         = string
+    fetch_image         = string
     dsv = object({
       tenant   = optional(string)
       tld      = optional(string, "com")
       base_url = optional(string)
     })
-    dsv_fetch_source = optional(string)
-    image            = optional(string, "datadog/agent:7.84.2")
-    cpu              = optional(number, 1)
-    memory_gb        = optional(number, 2)
+    image     = optional(string)
+    cpu       = optional(number, 1)
+    memory_gb = optional(number, 2)
   })
   default = null
+  validation {
+    condition     = var.aci == null || can(regex("^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$", var.aci.fetch_image))
+    error_message = "aci.fetch_image must be the digest-pinned dsv-fetch image (<registry>/<repo>@sha256:<64 hex>)."
+  }
+}
+
+variable "fleet_policy" {
+  description = "Decoded fleet policy (null = package default): the ACI Agent image is <agent.image>:<agent.version> (single pin)."
+  type        = any
+  default     = null
 }
 
 variable "datadog" {

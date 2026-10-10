@@ -1,12 +1,22 @@
 # Datadog Agent (Helm chart, DaemonSet + Cluster Agent + cluster-checks runners) on an EXISTING cluster - the fleet
 # collector of the node: metrics, APM (Single Step Instrumentation of the Datadog libraries, profiler), OTLP for
 # otel-mode workloads, DBM cluster checks and, with the fleet policy defaults (log_pipeline = observability_pipelines,
-# logs.node_collector = agent), container logs shipped to the Observability Pipelines Worker. One log collector per
-# node: the Fluent Bit DaemonSet is installed only when the policy selects it (node_collector = fluent_bit or
-# log_pipeline = fluent_bit_direct), and then the Agent's log collection is off (README-transport.md).
-# Secrets (ADR-0001 section 14): nothing secret passes through Terraform. Default api_key.mode = dsv_secret_backend:
-# the Agents resolve api_key ENC[dsv://...] with dsv-fetch agent-backend (workload identity -> Delinea DSV), and the
-# Fluent Bit DaemonSet gets its key from a dsv-fetch init container (env-yaml file on an in-memory emptyDir).
+# Agent log collection), container logs shipped to the Observability Pipelines Worker. One log collector per node: the
+# Fluent Bit DaemonSet is installed only for the fallback (node collector fluent_bit / log_pipeline =
+# fluent_bit_direct), and then the Agent's log collection is off (README-transport.md).
+#
+# Chart values are layered YAML (values = [base, fleet, overrides...], later wins):
+#   values/base.yaml       static, reviewed defaults (sizing, OTLP, dsv-fetch volume wiring)
+#   local.fleet_values     computed here from the fleet / tag policies and the inputs only (site, cluster name, tags,
+#                          log collector, SSI targets, versions, OP Worker URL, DSV references, feature flags)
+#   var.values_overrides   per-cluster YAML documents (validated: they cannot change the secret path)
+#
+# Secrets (ADR-0001 section 14): ONE path, nothing secret passes through Terraform or a Kubernetes Secret. The node
+# Agent, the Cluster Agent and the cluster-checks runners resolve api_key ENC[dsv://...] (and DB passwords of cluster
+# checks) with secret_backend_command = the static dsv-fetch binary (`agent-backend`), copied by the init container
+# dsv-fetch-install (postrender/dsv-fetch-init.sh) into an in-memory emptyDir, authenticating to Delinea DSV with AKS
+# workload identity. The Fluent Bit fallback and the optional in-cluster OP Worker get the key from a dsv-fetch `init`
+# container (in-memory emptyDir); the chart Secrets hold only the ENC[] reference.
 module "fleet" {
   source       = "../fleet-policy"
   policy       = var.fleet_policy
@@ -33,6 +43,10 @@ locals {
   apm_datadog    = try(module.fleet.sections.apm.mode, "datadog") == "datadog"
   libs           = module.fleet.apm.library_versions
   agent_cfg      = module.fleet.agent
+  # single Agent pin: fleet policy agent.version (versions.yaml images.datadog_agent carries the same version); no
+  # fallback - a policy without it fails the plan (precondition on helm_release.datadog)
+  agent_version  = try(tostring(module.fleet.agent.version), null)
+  agent_registry = try(regex("^(.+)/agent$", module.fleet.agent.image)[0], null)
   # SSI library versions: chart format "v<major>" (datadog chart values example)
   dd_trace_versions = { for lang, v in local.libs : lang => startswith(v, "v") ? v : "v${v}" }
   profiling_on      = try(module.fleet.sections.profiling.enabled, true)
@@ -57,9 +71,7 @@ locals {
     seccompProfile           = { type = "RuntimeDefault" }
   })
 
-  dsv_mode      = var.api_key.mode == "dsv_secret_backend"
-  script_source = coalesce(var.dsv.script_source, "${path.module}/../../images/dsv-fetch/dsv_fetch.py")
-  dsv_base_url  = coalesce(var.dsv.base_url, "https://${coalesce(var.dsv.tenant, "unset")}.secretsvaultcloud.${coalesce(var.dsv.tld, "com")}/v1")
+  dsv_base_url = coalesce(var.dsv.base_url, "https://${coalesce(var.dsv.tenant, "unset")}.secretsvaultcloud.${coalesce(var.dsv.tld, "com")}/v1")
   dsv_env = concat(
     var.dsv.tenant == null ? [] : [{ name = "DSV_TENANT", value = var.dsv.tenant }],
     var.dsv.tld == null ? [] : [{ name = "DSV_TLD", value = var.dsv.tld }],
@@ -69,32 +81,31 @@ locals {
       { name = "DSV_TIMEOUT_SECONDS", value = "10" },
     ],
   )
-  wi_labels      = { "azure.workload.identity/use" = "true" }
-  wi_annotations = var.dsv.identity_client_id == null ? {} : { "azure.workload.identity/client-id" = var.dsv.identity_client_id }
-  fetch_cm       = "dsv-fetch"
-  # ConfigMap file mode 0500 (decimal 320): owner (root in the Agent containers) read+execute, no group/other -
-  # the Datadog Agent refuses a secret_backend_command with group/other rights.
-  backend_volume = { name = "dsv-fetch", configMap = { name = local.fetch_cm, defaultMode = 320, items = [{ key = "dsv-fetch", path = "dsv-fetch" }] } }
-  backend_mount  = { name = "dsv-fetch", mountPath = "/opt/dsv-fetch", readOnly = true }
+  wi_labels = { "azure.workload.identity/use" = "true" }
+  wi_annotations = {
+    "azure.workload.identity/client-id" = var.dsv.identity_client_id
+  }
+  # cluster-checks runners: their own identity when given (DBM: DSV DB passwords + Entra database login)
+  ccr_wi_annotations = {
+    "azure.workload.identity/client-id" = coalesce(var.dsv.cluster_checks_identity_client_id, var.dsv.identity_client_id)
+  }
 
   # Agent log shipping to the Observability Pipelines Worker (Datadog Agent source) - Datadog-documented env
   agent_log_env = local.agent_logs && local.op_mode ? [
     { name = "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED", value = "true" },
     { name = "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL", value = local.op_logs_url },
   ] : []
-
   # trace-agent drops health-probe resources (fleet policy apm.ignore_resources)
-  agent_tag = coalesce(var.charts.agent_tag, try(module.fleet.agent.version, null), "7.84.2")
   apm_ignore_env = length(module.fleet.agent_apm_ignore_resources) == 0 ? [] : [
     { name = "DD_APM_IGNORE_RESOURCES", value = join(",", module.fleet.agent_apm_ignore_resources) },
   ]
 
-  release   = "datadog"
-  dd_ns     = var.namespaces.datadog
-  fb_ns     = var.namespaces.fluent_bit
-  all_tags  = module.tags.tags
-  dd_tags   = module.tags.dd_tags_list
-  secret_ns = toset([local.dd_ns, local.fb_ns])
+  release    = "datadog"
+  dd_ns      = var.namespaces.datadog
+  fb_ns      = var.namespaces.fluent_bit
+  all_tags   = module.tags.tags
+  dd_tags    = module.tags.dd_tags_list
+  managed_ns = toset(concat([local.dd_ns], local.fluent_bit_on ? [local.fb_ns] : []))
 
   kubelet = {
     aks_rotation = {}
@@ -105,109 +116,78 @@ locals {
     insecure = { tlsVerify = false }
   }[var.features.kubelet_tls_mode]
 
-  datadog_values = {
-    datadog = merge({
-      site        = var.datadog.site
-      clusterName = var.cluster_name
-      tags        = local.dd_tags
-      # one log collector per node: the Agent (-> Observability Pipelines Worker) or the Fluent Bit DaemonSet
-      logs = { enabled = local.agent_logs, containerCollectAll = local.agent_logs }
-      # the collectors' own namespaces are never collected (no feedback loops / duplicates)
-      containerExcludeLogs = local.agent_logs ? join(" ", [for ns in var.fluent_bit.exclude_namespaces : "kube_namespace:${ns}"]) : null
-      # pod label -> tag mapping of the tag policy (team, domain, tier, ...); every value is also in ad.datadoghq.com/tags
-      podLabelsAsTags = module.tags.pod_labels_as_tags
-      apm = merge(
-        { socketEnabled = var.features.apm, portEnabled = var.features.apm },
-        local.apm_datadog ? {
-          instrumentation = merge({
-            enabled = true
-            targets = local.ssi_targets
-          }, var.apm.injection_mode == "" ? {} : { injectionMode = var.apm.injection_mode })
-        } : {},
-      )
-      networkMonitoring = { enabled = try(local.agent_cfg.network_monitoring, false) }
-      serviceMonitoring = { enabled = try(local.agent_cfg.universal_service_monitoring, false) }
-      otlp = {
-        receiver = {
-          protocols = {
-            grpc = { enabled = true, endpoint = "0.0.0.0:4317", useHostPort = true }
-            http = { enabled = true, endpoint = "0.0.0.0:4318", useHostPort = true }
-          }
-        }
-        logs = { enabled = false }
-      }
-      processAgent  = { processCollection = var.features.process_collection || try(local.agent_cfg.process_collection, false), containerCollection = true }
-      clusterChecks = { enabled = true }
-      # chart 3.25x bundles the Datadog Operator sub-chart and enables system-probe service discovery
-      # by default for Agent >= 7.78; both are opt-in here to keep the footprint minimal
-      operator  = { enabled = var.features.operator_subchart }
-      discovery = { enabled = var.features.service_discovery }
-      }, length(local.kubelet) > 0 ? { kubelet = local.kubelet } : {},
-      # dsv mode: the chart-created Secret holds only the ENC[] reference (not a secret); existing: synced Secret
-      jsondecode(local.dsv_mode ? jsonencode({
+  # ---------------------------------------------------------------- layer 2: fleet (computed bits only)
+  fleet_values = {
+    datadog = merge(
+      {
+        site        = var.datadog.site
+        clusterName = var.cluster_name
+        tags        = local.dd_tags
+        # one log collector per node: the Agent (-> Observability Pipelines Worker) or the Fluent Bit DaemonSet
+        logs = { enabled = local.agent_logs, containerCollectAll = local.agent_logs }
+        # pod label -> tag mapping of the tag policy (team, domain, tier, ...); every value is also in ad.datadoghq.com/tags
+        podLabelsAsTags = module.tags.pod_labels_as_tags
+        apm = merge(
+          { socketEnabled = var.features.apm, portEnabled = var.features.apm },
+          local.apm_datadog ? {
+            instrumentation = merge({
+              enabled = true
+              targets = local.ssi_targets
+            }, var.apm.injection_mode == "" ? {} : { injectionMode = var.apm.injection_mode })
+          } : {},
+        )
+        networkMonitoring = { enabled = try(local.agent_cfg.network_monitoring, false) }
+        serviceMonitoring = { enabled = try(local.agent_cfg.universal_service_monitoring, false) }
+        processAgent      = { processCollection = var.features.process_collection || try(local.agent_cfg.process_collection, false) }
+        operator          = { enabled = var.features.operator_subchart }
+        discovery         = { enabled = var.features.service_discovery }
+        # --- secret path (not overridable): the chart Secret holds only the reference, never the key
         apiKey = "ENC[${var.dsv.api_key_ref}]"
         secretBackend = {
           command   = "/opt/dsv-fetch/dsv-fetch"
           arguments = "agent-backend"
           timeout   = 30
         }
+        # datadog.env reaches the node Agent containers only (helm template verified); the Cluster Agent and the
+        # runners get the DSV env through their own env lists below
         env = concat(local.dsv_env, local.agent_log_env, local.apm_ignore_env)
-      }) : jsonencode({ apiKeyExistingSecret = var.api_key.secret_name, env = concat(local.agent_log_env, local.apm_ignore_env) })),
+      },
+      # the collectors' own namespaces are never collected (no feedback loops / duplicates)
+      local.agent_logs ? { containerExcludeLogs = join(" ", [for ns in var.fluent_bit.exclude_namespaces : "kube_namespace:${ns}"]) } : {},
+      length(local.kubelet) > 0 ? { kubelet = local.kubelet } : {},
     )
     # Remote Configuration (Fleet Automation, APM sampling / SSI policies); preferred top-level key of the chart
     remoteConfiguration = { enabled = try(local.agent_cfg.remote_configuration, true) }
     providers           = { aks = { enabled = var.features.is_aks } }
-    agents = merge({
-      image = { tag = local.agent_tag }
-      containers = {
-        agent        = { resources = { requests = { cpu = var.resources.agent_cpu_request, memory = var.resources.agent_memory_request }, limits = { memory = var.resources.agent_memory_limit } } }
-        traceAgent   = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = var.resources.trace_memory_limit } } }
-        processAgent = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = var.resources.process_memory_limit } } }
-        systemProbe  = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = var.resources.process_memory_limit } } }
-      }
-      }, jsondecode(local.dsv_mode ? jsonencode({
-        # workload identity for dsv-fetch (service account "datadog", shared with the cluster-checks runners)
-        rbac             = { serviceAccountAnnotations = local.wi_annotations }
-        additionalLabels = local.wi_labels
-        volumes          = [local.backend_volume]
-        volumeMounts     = [local.backend_mount]
-    }) : "{}"))
+    agents = {
+      image = { tag = local.agent_version }
+      # workload identity for dsv-fetch (service account "datadog")
+      rbac             = { serviceAccountAnnotations = local.wi_annotations }
+      additionalLabels = local.wi_labels
+    }
     clusterAgent = {
-      enabled   = true
-      replicas  = var.features.cluster_agent_replicas
-      image     = { tag = local.agent_tag }
-      resources = { requests = { cpu = "100m", memory = "128Mi" }, limits = { memory = var.resources.cluster_agent_memory } }
-      confd     = var.cluster_checks
-      # No Python in the Cluster Agent image -> it cannot run dsv-fetch. These entries come after the chart's own
-      # DD_API_KEY / DD_SECRET_BACKEND_COMMAND (helm template verified) and the last duplicate env entry wins:
-      #   cluster_agent_secret_name set : DD_API_KEY from that (dsv-k8s syncer managed) Secret
-      #   unset                         : secret backend disabled for the DCA so the ENC[] string cannot block its
-      #                                   start; DCA features that need a valid key stay unauthenticated (README)
-      env = concat(local.ssi_dca_env, jsondecode(!local.dsv_mode ? "[]" : (var.api_key.cluster_agent_secret_name != null ? jsonencode([
-        { name = "DD_API_KEY", valueFrom = { secretKeyRef = { name = var.api_key.cluster_agent_secret_name, key = "api-key" } } },
-        ]) : jsonencode([
-        { name = "DD_SECRET_BACKEND_COMMAND", value = "" },
-      ]))))
+      image            = { tag = local.agent_version }
+      confd            = var.cluster_checks
+      env              = concat(local.dsv_env, local.ssi_dca_env)
+      rbac             = { serviceAccountAnnotations = local.wi_annotations }
+      additionalLabels = local.wi_labels
     }
     clusterChecksRunner = {
-      enabled   = var.features.cluster_checks_runner
-      replicas  = 1
-      image     = { tag = local.agent_tag }
-      resources = { requests = { cpu = "100m", memory = "256Mi" }, limits = { memory = var.resources.runner_memory_limit } }
-      env = concat(
-        local.dsv_mode ? local.dsv_env : [],
-        [for k in sort(keys(var.cluster_check_env)) : {
-          name      = k
-          valueFrom = { secretKeyRef = { name = var.cluster_check_env[k].secret_name, key = var.cluster_check_env[k].secret_key } }
-        }],
-      )
-      additionalLabels = local.dsv_mode ? local.wi_labels : {}
-      # dedicated service account "datadog-cluster-checks" (federated with the same identity)
-      rbac         = { dedicated = local.dsv_mode, serviceAccountAnnotations = local.dsv_mode ? local.wi_annotations : {} }
-      volumes      = local.dsv_mode ? [local.backend_volume] : []
-      volumeMounts = local.dsv_mode ? [local.backend_mount] : []
+      enabled          = var.features.cluster_checks_runner
+      image            = { tag = local.agent_version }
+      env              = local.dsv_env
+      rbac             = { dedicated = true, serviceAccountAnnotations = local.ccr_wi_annotations }
+      additionalLabels = local.wi_labels
     }
   }
+
+  datadog_values = concat(
+    # Agent registry from the fleet policy agent.image (<registry>/agent); the chart default otherwise
+    [file("${path.module}/values/base.yaml"), yamlencode(merge(local.fleet_values, local.agent_registry == null ? {} : { registry = local.agent_registry }))],
+    var.values_overrides,
+  )
+  # workloads that receive the dsv-fetch-install init container (postrender/dsv-fetch-init.sh --expect)
+  backend_workloads = var.features.cluster_checks_runner ? 3 : 2
 }
 
 module "flb" {
@@ -224,6 +204,11 @@ module "flb" {
 
 locals {
   flb_cm_name = "fluent-bit-obs-config"
+  # dsv-fetch `init` containers (Fluent Bit fallback, OP Worker): non-root, read-only rootfs, no capabilities
+  fetch_security_context = { runAsNonRoot = true, allowPrivilegeEscalation = false, readOnlyRootFilesystem = true, capabilities = { drop = ["ALL"] } }
+  # Fluent Bit fallback DaemonSet. Direct mode: dsv-fetch writes /dsv-secrets/fluentbit-env.yaml (DD_API_KEY) from DSV
+  # with workload identity; observability_pipelines: no key on the edge -> no dsv-fetch.
+  fb_needs_key = !local.op_mode
   fluent_bit_values = {
     kind              = "DaemonSet"
     image             = { repository = var.charts.fluent_bit_image, tag = var.charts.fluent_bit_tag }
@@ -233,25 +218,18 @@ locals {
       # must precede FLB_OTLP_HOST=$(DD_AGENT_HOST) (Kubernetes dependent env expansion)
       [{ name = "DD_AGENT_HOST", valueFrom = { fieldRef = { fieldPath = "status.hostIP" } } }],
       [for k in sort(keys(module.flb.env)) : { name = k, value = module.flb.env[k] }],
-      # existing mode only: the key from the synced Secret (the included env file is then an empty placeholder)
-      local.dsv_mode || local.op_mode ? [] : [{ name = "DD_API_KEY", valueFrom = { secretKeyRef = { name = var.api_key.secret_name, key = "api-key" } } }],
     )
-    # dsv mode: dsv-fetch writes /dsv-secrets/fluentbit-env.yaml (DD_API_KEY) from DSV with workload identity
-    # (observability_pipelines: no key on the edge -> no dsv-fetch)
-    initContainers = local.dsv_mode && !local.op_mode ? [{
-      name  = "dsv-fetch"
-      image = var.dsv.fetch_image
-      args  = ["init", "--out", "/dsv-secrets", "--format", "env-yaml", "--env-yaml-name", "fluentbit-env.yaml", "--map", "DD_API_KEY=${var.dsv.api_key_ref}"]
-      env   = local.dsv_env
-      resources = {
-        requests = { cpu = "10m", memory = "32Mi" }
-        limits   = { memory = "64Mi" }
-      }
-      securityContext = { runAsNonRoot = true, allowPrivilegeEscalation = false, readOnlyRootFilesystem = true, capabilities = { drop = ["ALL"] } }
+    initContainers = local.fb_needs_key ? [{
+      name            = "dsv-fetch"
+      image           = var.dsv.fetch_image
+      args            = ["init", "--out", "/dsv-secrets", "--format", "env-yaml", "--env-yaml-name", "fluentbit-env.yaml", "--map", "DD_API_KEY=${var.dsv.api_key_ref}"]
+      env             = local.dsv_env
+      resources       = { requests = { cpu = "10m", memory = "32Mi" }, limits = { memory = "64Mi" } }
+      securityContext = local.fetch_security_context
       volumeMounts    = [{ name = "dsv-secrets", mountPath = "/dsv-secrets" }]
     }] : []
-    podLabels      = local.dsv_mode && !local.op_mode ? local.wi_labels : {}
-    serviceAccount = { create = true, annotations = local.dsv_mode && !local.op_mode ? local.wi_annotations : {} }
+    podLabels      = local.fb_needs_key ? local.wi_labels : {}
+    serviceAccount = { create = true, annotations = local.fb_needs_key ? local.wi_annotations : {} }
     extraVolumes = [
       {
         name = "obs-config"
@@ -264,7 +242,7 @@ locals {
           ]
         }
       },
-      jsondecode(local.dsv_mode || local.op_mode ? jsonencode({ name = "dsv-secrets", emptyDir = { medium = "Memory", sizeLimit = "1Mi" } }) : jsonencode({ name = "dsv-secrets", configMap = { name = "fluent-bit-env-placeholder" } })),
+      { name = "dsv-secrets", emptyDir = { medium = "Memory", sizeLimit = "1Mi" } },
     ]
     extraVolumeMounts = [
       { name = "obs-config", mountPath = "/fluent-bit/etc/eh", readOnly = true },
@@ -280,7 +258,7 @@ locals {
       { name = "flbstate", mountPath = "/var/fluent-bit/state" },
       { name = "etcmachineid", mountPath = "/etc/machine-id", readOnly = true },
     ]
-    resources   = { requests = { cpu = var.resources.fluent_bit_cpu, memory = var.resources.fluent_bit_memory }, limits = { memory = var.resources.fluent_bit_mem_limit } }
+    resources   = { requests = { cpu = var.fluent_bit.cpu_request, memory = var.fluent_bit.memory_request }, limits = { memory = var.fluent_bit.memory_limit } }
     tolerations = var.fluent_bit.tolerations
     podAnnotations = {
       # roll pods when config changes. Fluent Bit self-metrics are pushed over OTLP to the node Agent
@@ -293,34 +271,11 @@ locals {
 }
 
 resource "kubernetes_namespace_v1" "this" {
-  for_each = var.namespaces.create ? local.secret_ns : toset([])
+  for_each = var.namespaces.create ? local.managed_ns : toset([])
   metadata {
     name   = each.value
     labels = { "app.kubernetes.io/managed-by" = "terraform", "observability/component" = "collection" }
   }
-}
-
-# Agent secret backend: the stdlib dsv-fetch script (observability/images/dsv-fetch) as a ConfigMap, mounted 0500.
-resource "kubernetes_config_map_v1" "dsv_fetch" {
-  count = local.dsv_mode ? 1 : 0
-  metadata {
-    name      = local.fetch_cm
-    namespace = local.dd_ns
-  }
-  data       = { "dsv-fetch" = file(local.script_source) }
-  depends_on = [kubernetes_namespace_v1.this]
-}
-
-# existing mode: Fluent Bit's config always includes /dsv-secrets/fluentbit-env.yaml; an empty env section lets
-# ${DD_API_KEY} fall back to the container env from the synced Secret (verified with Fluent Bit 5.1.3).
-resource "kubernetes_config_map_v1" "fluent_bit_env_placeholder" {
-  count = local.fluent_bit_on && !local.dsv_mode && !local.op_mode ? 1 : 0
-  metadata {
-    name      = "fluent-bit-env-placeholder"
-    namespace = local.fb_ns
-  }
-  data       = { "fluentbit-env.yaml" = "# DD_API_KEY comes from the container env (api_key.mode = existing)\nenv: {}\n" }
-  depends_on = [kubernetes_namespace_v1.this]
 }
 
 resource "kubernetes_config_map_v1" "fluent_bit" {
@@ -348,17 +303,27 @@ resource "helm_release" "datadog" {
   cleanup_on_fail  = true
   timeout          = 900
   max_history      = 5
-  values           = [yamlencode(local.datadog_values)]
-  depends_on       = [kubernetes_config_map_v1.dsv_fetch, kubernetes_namespace_v1.this]
+  values           = local.datadog_values
+  # adds the dsv-fetch-install init container (the chart has no hook for extra init containers); POSIX sh + awk on
+  # the deploy agent. Relative path: the helm provider runs it from the root module's directory.
+  postrender = {
+    binary_path = "/bin/sh"
+    args        = ["${path.module}/postrender/dsv-fetch-init.sh", "--image", var.dsv.fetch_image, "--expect", tostring(local.backend_workloads)]
+  }
+  depends_on = [kubernetes_namespace_v1.this]
 
   lifecycle {
     precondition {
-      condition     = !local.dsv_mode || var.dsv.identity_client_id != null
-      error_message = "api_key.mode = dsv_secret_backend needs dsv.identity_client_id (workload identity of the service account datadog)."
+      condition     = local.agent_version != null && can(regex("^7\\.[0-9]+\\.[0-9]+$", coalesce(local.agent_version, "unset")))
+      error_message = "The fleet policy has no Datadog Agent version: set agent.version (7.x.y, the single pin of versions.yaml images.datadog_agent) in the fleet policy. There is no built-in fallback."
     }
     precondition {
       condition     = !(local.op_mode && local.agent_logs) || var.op_worker.enabled || var.op_logs_url != null
       error_message = "log_pipeline = observability_pipelines with Agent log collection needs op_logs_url (transport contract aggregator.agent_logs_url) or op_worker.enabled."
+    }
+    precondition {
+      condition     = length(var.cluster_checks) == 0 || var.features.cluster_checks_runner
+      error_message = "cluster_checks (e.g. DBM) need features.cluster_checks_runner = true: only the runners carry the cluster-checks identity (DSV DB passwords, Entra database login)."
     }
   }
 }
@@ -376,26 +341,22 @@ resource "helm_release" "fluent_bit" {
   timeout          = 600
   max_history      = 5
   values           = [yamlencode(local.fluent_bit_values)]
-  depends_on       = [kubernetes_config_map_v1.fluent_bit, kubernetes_config_map_v1.fluent_bit_env_placeholder]
-
-  lifecycle {
-    precondition {
-      condition     = !local.dsv_mode || (var.dsv.fetch_image != null && var.dsv.identity_client_id != null)
-      error_message = "api_key.mode = dsv_secret_backend needs dsv.fetch_image (dsv-fetch init container) and dsv.identity_client_id."
-    }
-  }
+  depends_on       = [kubernetes_config_map_v1.fluent_bit]
 }
 
 # ------------------------------------------------------------------ optional Observability Pipelines Worker on AKS
 locals {
   # chart-managed keys (pipeline id, site, API key, data dir, listen addresses) are not overridable through env
-  opw_extra_env = { for k, v in var.op_worker.env : k => v if !contains(["DD_OP_PIPELINE_ID", "DD_SITE", "DD_API_KEY", "DD_OP_DATA_DIR", "DD_OP_DATA_DIR_BASE", "DD_OP_API_ENABLED", "DD_OP_API_ADDRESS", "DD_OP_SOURCE_DATADOG_AGENT_ADDRESS", "DD_OP_SOURCE_FLUENT_ADDRESS", "DD_OP_TAGS", "DD_OP_LOG_FORMAT"], k) }
+  opw_reserved  = ["DD_OP_PIPELINE_ID", "DD_SITE", "DD_API_KEY", "DD_OP_DATA_DIR", "DD_OP_DATA_DIR_BASE", "DD_OP_API_ENABLED", "DD_OP_API_ADDRESS", "DD_OP_SOURCE_DATADOG_AGENT_ADDRESS", "DD_OP_SOURCE_FLUENT_ADDRESS", "DD_OP_TAGS", "DD_OP_LOG_FORMAT"]
+  opw_extra_env = { for k, v in var.op_worker.env : k => v if !contains(local.opw_reserved, k) }
+  opw_secrets   = merge({ for k, v in var.op_worker.secret_env : k => v if !contains(local.opw_reserved, k) }, { DD_API_KEY = var.dsv.api_key_ref })
   opw_values = {
     image = { tag = var.op_worker.image_tag }
     datadog = {
-      apiKeyExistingSecret = var.op_worker.api_key_secret_name
-      pipelineId           = coalesce(var.op_worker.pipeline_id, "unset")
-      site                 = var.datadog.site
+      # the chart Secret holds only the reference; the real values come from the dsv-fetch env file below
+      apiKey     = "ENC[${var.dsv.api_key_ref}]"
+      pipelineId = coalesce(var.op_worker.pipeline_id, "unset")
+      site       = var.datadog.site
     }
     replicas = var.op_worker.replicas
     autoscaling = {
@@ -409,6 +370,23 @@ locals {
       requests = { cpu = var.op_worker.cpu_request, memory = var.op_worker.memory_request }
       limits   = { memory = var.op_worker.memory_limit }
     }
+    # DSV values (API key, e.g. the Event Hubs SASL password) from a dsv-fetch dotenv file on an in-memory emptyDir,
+    # exported by the start command (the Worker image has /bin/sh; verified with 2.22.0) - no Kubernetes Secret
+    serviceAccount = { create = true, annotations = local.wi_annotations }
+    podLabels      = local.wi_labels
+    initContainers = [{
+      name            = "dsv-fetch"
+      image           = var.dsv.fetch_image
+      args            = concat(["init", "--out", "/dsv-secrets", "--format", "dotenv", "--dotenv-name", "opw.env"], flatten([for k in sort(keys(local.opw_secrets)) : ["--map", "${k}=${local.opw_secrets[k]}"]]))
+      env             = local.dsv_env
+      resources       = { requests = { cpu = "10m", memory = "32Mi" }, limits = { memory = "64Mi" } }
+      securityContext = local.fetch_security_context
+      volumeMounts    = [{ name = "dsv-secrets", mountPath = "/dsv-secrets" }]
+    }]
+    command           = ["/bin/sh", "-c", "set -a && . /dsv-secrets/opw.env && set +a && exec /usr/bin/observability-pipelines-worker \"$@\"", "opw"]
+    args              = ["run"]
+    extraVolumes      = [{ name = "dsv-secrets", emptyDir = { medium = "Memory", sizeLimit = "1Mi" } }]
+    extraVolumeMounts = [{ name = "dsv-secrets", mountPath = "/dsv-secrets", readOnly = true }]
     env = concat([
       { name = "DD_OP_SOURCE_DATADOG_AGENT_ADDRESS", value = "0.0.0.0:8282" },
       { name = "DD_OP_SOURCE_FLUENT_ADDRESS", value = "0.0.0.0:24224" },
@@ -418,7 +396,6 @@ locals {
       { name = "DD_OP_LOG_FORMAT", value = "json" },
       ],
       [for k in sort(keys(local.opw_extra_env)) : { name = k, value = local.opw_extra_env[k] }],
-      [for k in sort(keys(var.op_worker.secret_env)) : { name = k, valueFrom = { secretKeyRef = { name = var.op_worker.secret_env[k].secret_name, key = var.op_worker.secret_env[k].key } } }],
     )
     service = {
       enabled = true

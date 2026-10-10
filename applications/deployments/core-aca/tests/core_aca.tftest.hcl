@@ -481,8 +481,9 @@ run "traffic_split_requires_previous_revision" {
 }
 
 run "datadog_fleet_serverless_init" {
-  # transport contract switches the lab to Datadog tracers: Container Apps get the serverless-init sidecar
-  # (DogStatsD + traces on localhost), its API key written from Delinea DSV by a second dsv-fetch run
+  # transport contract switches the lab to Datadog tracers + Observability Pipelines: Container Apps get ONLY the
+  # serverless-init sidecar (traces + DogStatsD on localhost, the app log file -> OP Worker); its API key is read from
+  # Delinea DSV by the dsv-fetch binary an identity-free init container installs. No Fluent Bit.
   command = plan
   variables {
     platform_db_redis = null
@@ -525,6 +526,7 @@ run "datadog_fleet_serverless_init" {
         sidecar_mode           = "datadog"
         logs_intake_host       = "http-intake.logs.datadoghq.com"
       }
+      aggregator = { kind = "observability_pipelines", agent_logs_url = "http://eh-ca-opw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:8282" }
       env = {
         fleet = {
           EH_APM_MODE     = "datadog"
@@ -548,11 +550,15 @@ run "datadog_fleet_serverless_init" {
     error_message = "datadog mode on Container Apps: serverless-init path (tracer + DogStatsD to localhost)."
   }
   assert {
-    condition     = alltrue([for k, a in module.app : a.container_names == [k, "fluent-bit", "datadog"] && a.init_container_names == ["dsv-fetch", "dsv-fetch-datadog"]])
-    error_message = "Fluent Bit + serverless-init sidecars; dsv-fetch for the Fluent Bit key and for the serverless-init dotenv file."
+    condition     = alltrue([for k, a in module.app : jsonencode(a.container_names) == jsonencode([k, "datadog"]) && jsonencode(a.init_container_names) == jsonencode(["dsv-fetch-install"])])
+    error_message = "serverless-init is the only sidecar (no Fluent Bit); one init container installs the dsv-fetch binary."
   }
   assert {
-    condition     = alltrue([for k, e in module.env : one([for c in e.container_app_patch.sidecars : c.command if c.name == "datadog"])[0] == "/bin/sh" && length([for c in e.container_app_patch.sidecars : c if c.name == "datadog" && anytrue([for x in c.env : x.name == "DD_API_KEY"])]) == 0])
-    error_message = "serverless-init sources the DSV dotenv file; no DD_API_KEY value or Container Apps secret in its env."
+    condition     = alltrue([for k, e in module.env : e.log_collector == "serverless-init" && e.env["LOG_FILE_PATH"] == "/var/log/app/app.log" && one([for c in e.container_app_patch.sidecars : [for x in c.env : x.value if x.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL"][0] if c.name == "datadog"]) == "http://eh-ca-opw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:8282"])
+    error_message = "serverless-init tails the shared log file and ships to the OP Worker."
+  }
+  assert {
+    condition     = alltrue([for k, e in module.env : one([for c in e.container_app_patch.sidecars : c.command if c.name == "datadog"])[0] == "/bin/sh" && length([for c in e.container_app_patch.sidecars : c if c.name == "datadog" && anytrue([for x in c.env : x.name == "DD_API_KEY"])]) == 0 && length(e.container_app_patch.secrets) == 0])
+    error_message = "serverless-init resolves its key with dsv-fetch at start; no DD_API_KEY value or Container Apps secret in its env."
   }
 }

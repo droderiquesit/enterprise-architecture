@@ -1,4 +1,6 @@
-"""dsv-fetch CLI end-to-end (subprocess, `python -I`) against tools/secrets/mock_dsv.py and a fake Azure identity server."""
+"""dsv-fetch CLI end-to-end (subprocess) against tools/secrets/mock_dsv.py and a fake Azure identity server.
+
+Conformance suite: each test runs against the Go binary and the legacy Python implementation (conftest `impl`)."""
 
 from __future__ import annotations
 
@@ -8,7 +10,7 @@ import stat
 
 import pytest
 import yaml
-from conftest import ALL_VALUES, API_VALUE, APP_VALUE, CLIENT_ID, CLIENT_SECRET, MIRID, ODD_VALUE, IdentityServer, base_env, run
+from conftest import ALL_VALUES, API_VALUE, APP_VALUE, CLIENT_ID, CLIENT_SECRET, IMPL, MIRID, ODD_VALUE, IdentityServer, base_env, run
 
 
 def _imds_env(dsv_url: str, identity: IdentityServer, **extra: str) -> dict[str, str]:
@@ -260,7 +262,7 @@ def test_usage_errors_exit_2(args, env_extra, message, tmp_path):
 def test_argparse_usage_exit_2(tmp_path):
     assert run(["init"], base_env()).returncode == 2
     assert run(["bogus"], base_env()).returncode == 2
-    assert run(["version"], base_env()).stdout.strip() == "1.0.0"
+    assert run(["version"], base_env()).stdout.strip() == IMPL.version
 
 
 # ------------------------------------------------------------------------------------------ agent backend
@@ -312,14 +314,7 @@ def test_agent_backend_malformed_request_exits_1(stdin):
 
 
 # ---------------------------------------------------------------------------------------------- install
-def test_install_writes_0500_copy_with_interpreter(tmp_path, dsv, identity):
-    import sys as _sys
-
-    dest = tmp_path / "bin" / "dsv-fetch"
-    p = run(["install", "--dest", str(dest), "--python", _sys.executable], base_env())
-    assert p.returncode == 0, p.stderr
-    assert _mode(dest) == 0o500
-    assert dest.read_text().splitlines()[0] == f"#!{_sys.executable} -I"
+def _agent_backend_via(dest, dsv, identity) -> None:
     import subprocess
 
     url, _ = dsv
@@ -332,4 +327,170 @@ def test_install_writes_0500_copy_with_interpreter(tmp_path, dsv, identity):
         timeout=30,
     )
     assert out.returncode == 0 and json.loads(out.stdout)["dsv://eh/dev/datadog-api-key"]["value"] == API_VALUE
-    assert run(["install", "--dest", str(dest), "--python", "python3"], base_env()).returncode == 2
+
+
+def test_install_writes_0500_copy(tmp_path, dsv, identity):
+    import sys as _sys
+
+    dest = tmp_path / "bin" / "dsv-fetch"
+    p = run(["install", "--dest", str(dest), "--python", _sys.executable], base_env())
+    assert p.returncode == 0, p.stderr
+    assert _mode(dest) == 0o500
+    summary = json.loads(p.stderr.strip().splitlines()[-1])
+    assert summary["dsv_fetch"] == "install" and summary["dest"] == str(dest) and summary["mode"] == "0500"
+    if IMPL.name == "python":
+        assert dest.read_text().splitlines()[0] == f"#!{_sys.executable} -I"
+        assert run(["install", "--dest", str(dest), "--python", "python3"], base_env()).returncode == 2
+    else:
+        # the binary installs a byte-identical copy of itself; --python is accepted and ignored (1.x compatibility)
+        assert dest.read_bytes() == open(IMPL.argv[0], "rb").read()
+        assert run(["install", "--dest", str(dest), "--python", "python3"], base_env()).returncode == 0
+        assert run(["install", "--dest", str(dest)], base_env()).returncode == 0  # re-install replaces the 0500 file
+        assert _mode(dest) == 0o500
+    _agent_backend_via(dest, dsv, identity)
+
+
+def test_install_unknown_owner_exit_2(tmp_path):
+    p = run(["install", "--dest", str(tmp_path / "x"), "--owner", "no-such-user-dsvfetch"], base_env())
+    assert p.returncode == 2 and "unknown user 'no-such-user-dsvfetch'" in p.stderr
+    assert not (tmp_path / "x").exists()
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason="chown needs root")
+def test_install_owner_as_root(tmp_path):
+    import pwd
+
+    user = pwd.getpwuid(65534).pw_name if any(e.pw_uid == 65534 for e in pwd.getpwall()) else None
+    if not user:
+        pytest.skip("no uid 65534 user")
+    dest = tmp_path / "dsv-fetch"
+    p = run(["install", "--dest", str(dest), "--owner", user], base_env())
+    assert p.returncode == 0, p.stderr
+    st = os.stat(dest)
+    assert st.st_uid == 65534 and _mode(dest) == 0o500
+    assert json.loads(p.stderr.strip().splitlines()[-1])["owner"] == user
+
+
+# ------------------------------------------------------------------------------- additional conformance
+def test_non_string_element_is_json_dumped(dsv, tmp_path):
+    url, state = dsv
+    state.secrets["eh/dev/datadog-structured"] = {"data": {"value": {"b": [1, 2.5, 1e-05, True, None], "a": "ü"}, "n": 10}, "attributes": {}, "version": 1}
+    env = base_env(DSV_AUTH="client_credentials", DSV_BASE_URL=url, DSV_CLIENT_ID="local-client", DSV_CLIENT_SECRET=CLIENT_SECRET)
+    p = run(["init", "--out", str(tmp_path), "--format", "files", "--map", "S=dsv://eh/dev/datadog-structured", "--map", "N=dsv://eh/dev/datadog-structured#n"], env)
+    assert p.returncode == 0, p.stderr
+    assert (tmp_path / "S").read_text() == '{"b": [1, 2.5, 1e-05, true, null], "a": "\\u00fc"}'
+    assert (tmp_path / "N").read_text() == "10"
+
+
+def test_missing_element_and_malformed_ref(dsv, identity):
+    url, _ = dsv
+    req = {"version": "1.0", "secrets": ["dsv://eh/dev/datadog-api-key#nope", "dsv://eh/../x", "dsv://", "dsv://eh/dev/datadog-api-key#bad element"]}
+    p = run(["agent-backend"], _imds_env(url, identity), stdin=json.dumps(req))
+    assert p.returncode == 0, p.stderr
+    out = json.loads(p.stdout)
+    assert out["dsv://eh/dev/datadog-api-key#nope"] == {"value": None, "error": "element missing in DSV secret"}
+    for h in req["secrets"][1:]:
+        assert out[h] == {"value": None, "error": "malformed dsv:// reference"}
+
+
+def test_agent_backend_output_is_python_json_dumps(dsv, identity):
+    """Byte-identical stdout across implementations (json.dumps default separators, ensure_ascii)."""
+    url, _ = dsv
+    p = run(["agent-backend"], _imds_env(url, identity), stdin='{"version": 1.0, "secrets": ["dsv://eh/dev/odd", "x"]}')
+    assert p.returncode == 0, p.stderr
+    assert p.stdout == (
+        '{"dsv://eh/dev/odd": {"value": "we\\"ird $HOME `x` \\\\ \\u00fcn\\u00ef ${DD_API_KEY}", "error": null}, '
+        '"x": {"value": null, "error": "not a dsv:// reference"}}'
+    )
+
+
+def test_config_file_errors_exit_2(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text("[1]")
+    p = run(["init", "--out", str(tmp_path / "o"), "--format", "files", "--map", "K=dsv://a/b", "--config", str(tmp_path / "missing.json")], base_env())
+    assert p.returncode == 2 and "cannot read --config file (FileNotFoundError)" in p.stderr
+    p = run(["init", "--out", str(tmp_path / "o"), "--format", "files", "--map", "K=dsv://a/b", "--config", str(bad)], base_env())
+    assert p.returncode == 2 and "--config must be a JSON object" in p.stderr
+
+
+def test_environment_wins_over_config_and_timeout_validation(tmp_path):
+    cfg = tmp_path / "c.json"
+    cfg.write_text(json.dumps({"DSV_BASE_URL": "http://dsv.example/v1", "DSV_TIMEOUT_SECONDS": 5}))
+    args = ["init", "--out", str(tmp_path / "o"), "--format", "files", "--map", "K=dsv://a/b", "--config", str(cfg)]
+    assert "must use https" in run(args, base_env()).stderr
+    p = run(args, base_env(DSV_BASE_URL="https://dsv.example/v1", DSV_TIMEOUT_SECONDS="0.01"))
+    assert p.returncode == 2 and "DSV_TIMEOUT_SECONDS must be >= 0.1" in p.stderr
+    p = run(args, base_env(DSV_BASE_URL="https://dsv.example/v1", DSV_MAX_ATTEMPTS="x"))
+    assert p.returncode == 2 and "DSV_MAX_ATTEMPTS must be a number" in p.stderr
+
+
+def test_workload_identity_needs_tenant_exit_2(tmp_path):
+    tok = tmp_path / "t"
+    tok.write_text("x")
+    env = base_env(DSV_BASE_URL="https://dsv.example/v1", AZURE_FEDERATED_TOKEN_FILE=str(tok), AZURE_CLIENT_ID=CLIENT_ID)
+    p = run(["agent-backend"], env, stdin='{"version":"1.0","secrets":["dsv://eh/dev/a"]}')
+    assert p.returncode == 2 and "workload identity needs AZURE_TENANT_ID and AZURE_CLIENT_ID" in p.stderr and p.stdout == ""
+
+
+def test_federated_token_file_missing(dsv, identity, tmp_path):
+    url, _ = dsv
+    env = base_env(DSV_BASE_URL=url, AZURE_CLIENT_ID=CLIENT_ID, AZURE_TENANT_ID="t", AZURE_AUTHORITY_HOST=identity.url, AZURE_FEDERATED_TOKEN_FILE=str(tmp_path / "none"))
+    p = run(["init", "--out", str(tmp_path / "o"), "--format", "files", "--map", "K=dsv://eh/dev/datadog-api-key"], env)
+    assert p.returncode == 1
+    assert "K: managed identity token unavailable (federated token file unreadable (FileNotFoundError))" in p.stderr
+
+
+def test_dsv_5xx_is_retried_then_reported(tmp_path):
+    from fake_identity import IdentityServer as _S  # noqa: F401 - same helpers
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    hits = []
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+        def do_POST(self):
+            hits.append(self.path)
+            self.send_response(503)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        env = base_env(DSV_AUTH="client_credentials", DSV_CLIENT_ID="c", DSV_CLIENT_SECRET="s", DSV_BASE_URL=f"http://127.0.0.1:{srv.server_address[1]}/v1", DSV_MAX_ATTEMPTS="2")
+        p = run(["init", "--out", str(tmp_path / "o"), "--format", "files", "--map", "K=dsv://a/b"], env)
+        assert p.returncode == 1 and "K: DSV authentication failed (HTTP 503 after 2 attempts)" in p.stderr
+        assert len(hits) == 2
+    finally:
+        srv.shutdown()
+
+
+@pytest.mark.parametrize("argv", [["--help"], ["init", "--help"], ["agent-backend", "-h"]])
+def test_help_exit_0(argv):
+    p = run(argv, base_env())
+    assert p.returncode == 0 and p.stdout.startswith("usage: dsv-fetch")
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        (["init", "--out", "o", "--format", "xml"], "argument --format: invalid choice: 'xml'"),
+        (["init", "--out", "o", "--format", "files", "--f", "x"], "ambiguous option: --f could match"),
+        (["init", "--out", "o", "--format", "files", "--from-env=1"], "ignored explicit argument '1'"),
+        (["version", "extra"], "unrecognized arguments: extra"),
+        (["init", "--out"], "argument --out: expected one argument"),
+    ],
+)
+def test_argparse_messages(argv, message):
+    p = run(argv, base_env())
+    assert p.returncode == 2 and message in p.stderr
+
+
+def test_abbreviated_options_and_equals_form(dsv, identity, tmp_path):
+    url, _ = dsv
+    p = run(["init", f"--out={tmp_path}", "--form", "files", "--map=K=dsv://eh/dev/datadog-api-key"], _imds_env(url, identity))
+    assert p.returncode == 0, p.stderr
+    assert (tmp_path / "K").read_text() == API_VALUE

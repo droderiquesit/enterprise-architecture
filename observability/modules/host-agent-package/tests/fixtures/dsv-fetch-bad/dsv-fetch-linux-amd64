@@ -1,0 +1,14 @@
+#!/bin/sh
+# FAKE dsv-fetch (linux-amd64) for tests: implements only 'install --dest <path> [--owner <user>]' and 'version'.
+set -eu
+case "${1:-}" in
+  version) echo "dsv-fetch fake-linux-amd64"; exit 0 ;;
+  install) shift ;;
+  *) echo "fake dsv-fetch: unsupported ${1:-}" >&2; exit 2 ;;
+esac
+dest=""; owner=""
+while [ $# -gt 0 ]; do case "$1" in --dest) dest=$2; shift 2 ;; --owner) owner=$2; shift 2 ;; *) shift ;; esac; done
+cp "$0" "$dest.tmp"; chmod 0500 "$dest.tmp"
+if [ -n "$owner" ]; then chown "$owner" "$dest.tmp"; fi
+mv "$dest.tmp" "$dest"
+# tampered

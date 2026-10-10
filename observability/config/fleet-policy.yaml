@@ -11,31 +11,42 @@ apiVersion: observability/fleet-policy/v1
 kind: FleetPolicy
 metadata:
   name: package-default
-  description: Datadog-native collection everywhere the Datadog Agent / tracers can run; Fluent Bit at the edge where they cannot.
+  description: One Datadog collection path per platform - Datadog Agent (nodes, hosts, ACI sidecar), serverless-init (Container Apps), Azure diagnostic settings (App Service / Functions / Logic Apps); Fluent Bit only as the fluent_bit_direct fallback and on Batch nodes.
 
 # Central log pipeline.
 #   observability_pipelines: every log source (Datadog Agents, Fluent Bit edge collectors, Azure Event Hubs) goes to
 #                            the Datadog Observability Pipelines Worker (parse, tag policy, redaction, dedupe, quotas)
 #                            and from there to Datadog Logs (+ optional Azure Storage archive).
-#   fluent_bit_direct:       2.x behaviour - Fluent Bit ships to the Datadog intake (aggregator for Event Hubs).
+#   fluent_bit_direct:       fallback (2.x behaviour) - Fluent Bit collects and ships to the Datadog intake (aggregator
+#                            for Event Hubs, sidecars on ACA / ACI, DaemonSet / host service where the Agent runs).
 log_pipeline: observability_pipelines
 
-logs:
-  # Where the Datadog Agent runs (AKS nodes, VMs/VMSS): agent = the Agent collects application logs and sends them to
-  # the OP Worker (Fluent Bit DaemonSet / host service not installed); fluent_bit = Fluent Bit collects (2.x).
-  # fluent_bit_direct implies fluent_bit.
-  node_collector: agent
+# Application-log collector. ONE Datadog collection path per platform (observability 4.0.0); the per-architecture
+# defaults are set under `architectures` below (modules/fleet-policy falls back to the same table when a custom
+# policy omits them):
+#   agent           AKS nodes, Linux and Windows VMs / VMSS: the Datadog Agent collects (container stdout / log files)
+#   agent_sidecar   ACI: a Datadog Agent sidecar in the container group tails the app's log file on a shared emptyDir
+#   serverless_init Container Apps: the Datadog serverless-init sidecar tails the app's log file (DD_SERVERLESS_LOG_PATH)
+#   azure           App Service, Functions, Logic Apps (and Container Apps jobs): diagnostic settings -> Event Hubs
+#   fluent_bit      Batch nodes only (no Agent there); everywhere else Fluent Bit runs ONLY with
+#                   log_pipeline = fluent_bit_direct (fallback: Fluent Bit sidecar / DaemonSet / host service)
+# In observability_pipelines mode every collector ships to the Observability Pipelines Worker.
+# `node_collector` (agent | fluent_bit) is the 3.x key; still honoured on aks / vm / vmss.
+logs: {}
 
 apm:
   # datadog: Datadog tracing libraries (Single Step Instrumentation on AKS and Linux VMs; library in the image +
-  #          Datadog Agent APM gateway for Container Apps / ACI / App Service / Functions).
+  #          serverless-init sidecar on Container Apps, Datadog Agent sidecar on ACI, Datadog Agent APM gateway for
+  #          App Service per-workload opt-in).
   # otel:    OpenTelemetry SDKs -> OTLP -> node Agent / OTel gateway (2.x behaviour).
   # none:    no traces.
   mode: datadog
   # Managed runtimes (no node Agent): agent_gateway = tracer -> the in-VNet Datadog Agent APM gateway of the
   # telemetry transport (TCP only: no DogStatsD, so no custom/runtime metrics); serverless_init = Datadog
-  # serverless-init sidecar (Container Apps only; traces + DogStatsD on localhost; its DD_API_KEY is read from Delinea
-  # DSV by a dsv-fetch init container). Default here: agent_gateway; architectures.aca selects serverless_init.
+  # serverless-init sidecar (Container Apps only; traces + DogStatsD on localhost); agent_sidecar = Datadog Agent
+  # sidecar in the container group (ACI only; traces localhost:8126, DogStatsD udp://localhost:8125). Both sidecars
+  # read the Datadog API key from Delinea DSV with the dsv-fetch binary. Default here: agent_gateway;
+  # architectures.aca selects serverless_init, architectures.aci agent_sidecar.
   managed_runtime_path: agent_gateway
   # null: sampling decided by the Agent (adaptive / remote configuration); 0..1: DD_TRACE_SAMPLE_RATE.
   sample_rate: null
@@ -74,7 +85,20 @@ profiling:
   otel_mode: unavailable
 
 agent:
+  # Single pin of the Datadog Agent (versions.yaml images.datadog_agent carries the same version); every Agent of the
+  # fleet (Helm, VM Application, ACI sidecar, APM gateway) uses <image>:<version>.
   version: "7.84.2"
+  image: gcr.io/datadoghq/agent
+  # ACI Agent sidecar sizing (per container group; ACI bills vCPU + GB per second - docs/guides/datadog-fleet-collection.md)
+  sidecar:
+    cpu: 0.25
+    memory_gb: 0.5
+  # Container Apps serverless-init sidecar
+  serverless_init:
+    image: datadog/serverless-init
+    version: "1.10.4"
+    cpu: 0.25
+    memory: 0.5Gi
   remote_configuration: true
   # Fleet Automation remote Agent upgrades (DD_REMOTE_UPDATES on the installer). Off: versions are pinned by this policy.
   remote_updates: false
@@ -110,23 +134,41 @@ rum:
 
 # Per hosting architecture (aks | aca | aci | appservice | functions | logicapp | vm | vmss | swa).
 architectures:
+  aks:
+    logs: {collector: agent}
+  vm:
+    logs: {collector: agent}          # Linux and Windows hosts
+  vmss:
+    logs: {collector: agent}
+  batch:
+    logs: {collector: fluent_bit}     # Batch nodes: Fluent Bit (job preparation task) - no Agent on Batch pools
   aca:
-    # Container Apps: serverless-init sidecar by default (DogStatsD for hello.* custom metrics and runtime metrics;
-    # the APM gateway path has no UDP). Per workload: apm = {managed_runtime_path = "agent_gateway"} to opt out.
+    # Container Apps: serverless-init sidecar by default - traces, DogStatsD (hello.* custom metrics, runtime metrics;
+    # the APM gateway path has no UDP) and the app log file. Per workload: apm = {managed_runtime_path =
+    # "agent_gateway"} for traces without a sidecar; logs = {collector = "azure"} for console logs via diagnostic
+    # settings (Container Apps jobs).
     apm: {managed_runtime_path: serverless_init}
+    logs: {collector: serverless_init}
+  aci:
+    # ACI: Datadog Agent sidecar in every instrumented container group (traces, DogStatsD, app log file).
+    apm: {managed_runtime_path: agent_sidecar}
+    logs: {collector: agent_sidecar}
   appservice:
     # App Service: the package has no Datadog App Service sidecar integration yet and the APM gateway path carries no
     # DogStatsD, so App Service workloads default to OpenTelemetry (OTLP metrics + traces via the OTel gateway).
     # Per workload: apm = {mode = "datadog"} uses the Datadog tracer -> APM gateway (traces/profiles, no DogStatsD).
     apm: {mode: otel}
+    logs: {collector: azure}          # AppServiceConsoleLogs / AppServiceAppLogs -> Event Hubs -> OP Worker
   functions:
     # Exception: Azure Functions (incl. Durable Functions) stay on OpenTelemetry - Datadog documents neither the
     # Functions host spans nor Durable Functions V2 orchestration spans for its tracers in this setup.
     apm: {mode: otel}
     profiling: {enabled: false}       # .NET profiler: Function Apps not supported; Python: preview only
+    logs: {collector: azure}          # FunctionAppLogs -> Event Hubs -> OP Worker
   logicapp:
     apm: {mode: none}                 # workflow runtime; no tracer to configure
     profiling: {enabled: false}
+    logs: {collector: azure}          # WorkflowRuntime -> Event Hubs -> OP Worker
 
 # Per environment, e.g. prod: {apm: {sample_rate: 0.2}}.
 environments: {}

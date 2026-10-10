@@ -42,7 +42,7 @@ Consumption apps scale to zero (≈ $0 idle). dedicated-d4 profile is billed by 
 ## Limitations
 - sqlvm adapter on VMSS has no load balancer ⇒ `url = null` (monitoring presence_ref `adapters.sqlvm.url` stays absent).
 - The adapter on the VMSS needs the scale set identity (`hello-dbadapter`) to be a DSV user with read on `sqlvm-dbadapter-password`.
-- The dbadapter Container Apps run on a Dedicated workload profile: the Fluent Bit key is written by a dsv-fetch **refresher** container (init containers get no managed identity there).
+- Observability (4.0.0): every ACA adapter runs the Datadog serverless-init sidecar (traces, DogStatsD, the app log file -> OP Worker). Its key is read from DSV by the dsv-fetch binary that an identity-free init container installs, so the Dedicated workload profile needs no refresher any more. Only with `log_pipeline = fluent_bit_direct` (fallback) the Fluent Bit key is written by a dsv-fetch **refresher** container on the Dedicated profile (init containers get no managed identity there).
 - The mysql App Service startup builds a venv from the wheelhouse on first start (slow cold start).
 
 Docs: https://learn.microsoft.com/azure/container-apps/workload-profiles-overview , https://learn.microsoft.com/azure/virtual-machines/extensions/custom-script-linux

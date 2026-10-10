@@ -67,6 +67,14 @@ variable "telemetry" {
       logs_intake_host       = optional(string)
       forward_shared_key_ref = optional(string)
     })
+    # Observability Pipelines Worker (Datadog Agent source URL for the ACI Agent / serverless-init sidecars)
+    aggregator = optional(object({
+      kind           = optional(string)
+      fqdn           = optional(string)
+      pipeline_id    = optional(string)
+      agent_logs_url = optional(string)
+      log_pipeline   = optional(string)
+    }))
     env = optional(map(map(string)), {})
   })
 }
@@ -161,8 +169,25 @@ variable "apm" {
   default     = null
 }
 
+variable "logs" {
+  description = "Per-workload log overrides (fleet policy logs section shape), e.g. { collector = \"azure\" } (Container Apps jobs: console logs via diagnostic settings). Null = policy."
+  type        = any
+  default     = null
+}
+
+variable "agent_sidecar" {
+  description = "ACI Datadog Agent sidecar overrides (image, cpu, memory_gb, hostname); null fields = fleet policy (pinned Agent image, 0.25 vCPU / 0.5 GB)."
+  type = object({
+    image     = optional(string)
+    cpu       = optional(number)
+    memory_gb = optional(number)
+    hostname  = optional(string)
+  })
+  default = {}
+}
+
 variable "serverless_init" {
-  description = "Container Apps serverless-init sidecar (fleet policy default for aca in datadog mode): Azure context (subscription_id, resource_group) and optional image/sizing. The Datadog API key is read from Delinea DSV by dsv-fetch."
+  description = "Container Apps serverless-init sidecar (fleet policy default for aca: traces, DogStatsD, app log file): Azure context (subscription_id, resource_group) and optional image/sizing. The Datadog API key is read from Delinea DSV by the dsv-fetch binary in the sidecar."
   type        = any
   default     = {}
 }

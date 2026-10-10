@@ -9,8 +9,13 @@
 - **Produced contract**: `deploy-core-aca` (`catalog/contracts/deploy-core-aca.v1.schema.json`): `apps.<svc>.{id,url,...}`,
   `public_api.origin` (consumed by deploy-frontend/deploy-jobs), `endpoints`, `idle_behavior`, `apps.<svc>.revision_suffix`.
 - **Resources**: resource group, 3 × `azurerm_container_app` (module `container-app`), each with user-assigned
-  identity, ACR pull by identity, Delinea DSV references (`FAULT_TOKEN` env value resolved by the app; the sidecar's Datadog API key written by a dsv-fetch init container into an EmptyDir, image `artifacts["img-dsv-fetch"]`), Fluent Bit
-  sidecar + EmptyDir, startup/liveness `/healthz`, readiness `/readyz`, HTTP concurrency scale rule.
+  identity, ACR pull by identity, Delinea DSV references (`FAULT_TOKEN` env value resolved by the app), the
+  observability sidecar from `modules/instrumentation` (observability 4.0.0): the **Datadog serverless-init sidecar**
+  (traces `localhost:8126`, DogStatsD `udp://localhost:8125`, tails `LOG_FILE_PATH` on the `app-logs` EmptyDir and
+  ships to the Observability Pipelines Worker); its Datadog API key is read from DSV at start by the dsv-fetch binary
+  that the `dsv-fetch-install` init container (image `artifacts["img-dsv-fetch"]`, no identity needed) copies into the
+  `dsv-bin` EmptyDir. With `log_pipeline = fluent_bit_direct` (fallback) a Fluent Bit sidecar collects the logs
+  instead. Startup/liveness `/healthz`, readiness `/readyz`, HTTP concurrency scale rule.
 
 ## App settings (owned here)
 | Service | Settings |
@@ -40,14 +45,14 @@ inside the environment/VNet); `tools/smoke/smoke.py` uses `endpoints`.
 
 ## Cost (defaults, approx.)
 Consumption profile, scale to zero: idle ≈ $0; active ≈ $0.000024/vCPU-s + $0.000003/GiB-s ⇒ ~3 apps × (0.75 vCPU incl.
-sidecar) at 10% duty ≈ $15–20/month. No extra cost for revisions.
+serverless-init sidecar, 0.25 vCPU / 0.5 GiB) at 10% duty ≈ $15–20/month. No extra cost for revisions.
 
 ## Teardown / data
 `terraform destroy` removes the apps and resource group; no data is stored here (data lives in platform databases).
 
 ## Networking
 Apps live in the VNet-injected environment; only hello-bff may be external (environment `external` mode).
-OTLP and Fluent Bit forward stay internal (gateway/aggregator internal ingress).
+OTLP and the Observability Pipelines Worker (Datadog Agent source, 8282) stay internal (internal ingress).
 
 ## Limitations
 - Container Apps CORS needs explicit origins (no wildcards here).

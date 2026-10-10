@@ -101,6 +101,14 @@ variable "obs_telemetry_transport" {
       identity_env       = optional(string, "EH_IDENTITY_CLIENT_ID")
       log_paths_env      = optional(string, "EH_LOG_PATHS")
     }))
+    # Observability Pipelines Worker: Datadog Agent source URL for the Datadog sidecars (ACI Agent, serverless-init)
+    aggregator = optional(object({
+      kind           = optional(string)
+      fqdn           = optional(string)
+      pipeline_id    = optional(string)
+      agent_logs_url = optional(string)
+      log_pipeline   = optional(string)
+    }))
     env = optional(map(map(string)), {})
   })
 }

@@ -12,6 +12,7 @@ variables {
     identity_id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-dbm"
     identity_client_id  = "22222222-2222-2222-2222-222222222222"
     api_key_ref         = "dsv://eh/dev/datadog-api-key#value"
+    fetch_image         = "ehacr.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555"
     dsv                 = { tenant = "contoso" }
   }
   databases = {
@@ -41,6 +42,9 @@ variables {
 
 run "aci_hosting" {
   command = plan
+  variables {
+    hosting = "aci"
+  }
   assert {
     condition     = yamldecode(output.confd["postgres.d"]).instances[0].password == "ENC[dsv://eh/dev/dbm-postgres-password#value]" && yamldecode(output.confd["postgres.d"]).instances[0].azure.deployment_type == "flexible_server"
     error_message = "Postgres: ENC[] DSV reference + Azure metadata."
@@ -66,12 +70,22 @@ run "aci_hosting" {
     error_message = "Agent resolves API key + passwords from DSV with dsv-fetch agent-backend."
   }
   assert {
-    condition     = jsondecode(base64decode(azurerm_container_group.dbm[0].container[0].volume[1].secret["dsv.json"])).AZURE_CLIENT_ID == "22222222-2222-2222-2222-222222222222" && strcontains(base64decode(azurerm_container_group.dbm[0].container[0].volume[1].secret["dsv_fetch.py"]), "def cmd_agent_backend") && strcontains(azurerm_container_group.dbm[0].container[0].commands[2], "dsv_fetch.py install --dest /opt/dsv-fetch/dsv-fetch")
-    error_message = "dsv-fetch + non-secret DSV config mounted; installed as the root-owned 0500 backend at start."
+    condition = (jsondecode(base64decode(azurerm_container_group.dbm[0].container[0].volume[2].secret["dsv.json"])).AZURE_CLIENT_ID == "22222222-2222-2222-2222-222222222222"
+      && !contains(keys(azurerm_container_group.dbm[0].container[0].volume[2].secret), "dsv_fetch.py")
+      && startswith(azurerm_container_group.dbm[0].container[0].commands[2], "/eh/bin/dsv-fetch install --dest /opt/dsv-fetch/dsv-fetch && ")
+    && !strcontains(azurerm_container_group.dbm[0].container[0].commands[2], "python"))
+    error_message = "Non-secret DSV config mounted; the static dsv-fetch binary is installed as the root-owned 0500 backend at start (no Python)."
   }
   assert {
-    condition     = azurerm_container_group.dbm[0].container[0].environment_variables["DD_API_KEY"] == "ENC[dsv://eh/dev/datadog-api-key#value]" && try(length(azurerm_container_group.dbm[0].container[0].secure_environment_variables), 0) == 0 && length(azurerm_container_group.dbm[0].init_container) == 0
-    error_message = "No secret values in the container group definition (and no init container: ACI init containers have no managed identity)."
+    condition = (azurerm_container_group.dbm[0].init_container[0].image == "ehacr.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      && jsonencode(azurerm_container_group.dbm[0].init_container[0].commands) == jsonencode(["/opt/dsv-fetch/dsv-fetch", "install", "--dest", "/eh/bin/dsv-fetch"])
+      && azurerm_container_group.dbm[0].init_container[0].volume[0].empty_dir
+    && azurerm_container_group.dbm[0].container[0].volume[1].name == "dsv-bin" && azurerm_container_group.dbm[0].container[0].volume[1].empty_dir)
+    error_message = "Init container copies the dsv-fetch binary from its image into the shared emptyDir (no identity needed)."
+  }
+  assert {
+    condition     = azurerm_container_group.dbm[0].container[0].image == "gcr.io/datadoghq/agent:7.84.2"
+    error_message = "ACI Agent image = fleet policy <agent.image>:<agent.version> (single pin)."
   }
   assert {
     condition     = output.configured["orders"].setup_sql == "${path.module}/sql/sqlserver-sql-database-entra.sql" || endswith(output.configured["orders"].setup_sql, "sql/sqlserver-sql-database-entra.sql")
@@ -143,17 +157,54 @@ run "reject_password_without_reference" {
   expect_failures = [var.databases]
 }
 
-run "reject_env_password_on_aci" {
+run "reject_non_dsv_password" {
   command = plan
   variables {
+    hosting = "none"
     databases = {
       p = {
         engine          = "postgres"
         deployment_type = "flexible_server"
         host            = "p"
-        password_ref    = { kind = "env", name = "PG_PW" }
+        password_ref    = { kind = "k8s_secret", name = "datadog/db/password" }
       }
     }
+  }
+  expect_failures = [var.databases]
+}
+
+run "default_hosting_is_cluster_checks" {
+  command = plan
+  assert {
+    condition     = length(azurerm_container_group.dbm) == 0 && output.agent_container_group_id == null && length(output.cluster_check_confd) == 3
+    error_message = "Default: cluster checks for the Cluster Agent; no ACI Agent."
+  }
+}
+
+run "reject_aci_tag_pinned_fetch_image" {
+  command = plan
+  variables {
+    hosting = "aci"
+    aci = {
+      name                = "ci-dbm-eh-dev"
+      resource_group_name = "rg-obs"
+      location            = "swedencentral"
+      subnet_id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet/subnets/aci"
+      identity_id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-dbm"
+      identity_client_id  = "22222222-2222-2222-2222-222222222222"
+      api_key_ref         = "dsv://eh/dev/datadog-api-key#value"
+      fetch_image         = "ehacr.azurecr.io/dsv-fetch:2.0.0"
+      dsv                 = { tenant = "contoso" }
+    }
+  }
+  expect_failures = [var.aci]
+}
+
+run "reject_aci_without_agent_version" {
+  command = plan
+  variables {
+    hosting      = "aci"
+    fleet_policy = { apiVersion = "observability/fleet-policy/v1", kind = "FleetPolicy", agent = { remote_configuration = true } }
   }
   expect_failures = [azurerm_container_group.dbm]
 }

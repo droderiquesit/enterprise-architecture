@@ -6,7 +6,8 @@
 # (hello_common / Hello.Common) with its user-assigned managed identity, using the DSV runtime env published here
 # (DSV_TENANT, DSV_TLD, DSV_BASE_URL, DSV_AUTH, AZURE_CLIENT_ID). The same map works on every platform:
 #   Container Apps / ACI env, App Service / Functions / Logic Apps app settings, Kubernetes env (Helm values), VM env.
-# Third-party sidecars (Fluent Bit) get their keys through the dsv-fetch helper (instrumentation patch).
+# The Datadog sidecars (ACI Agent, Container Apps serverless-init) read the Datadog API key from DSV with the dsv-fetch
+# binary (instrumentation patch); Fluent Bit (fallback, fluent_bit_direct) gets an env-yaml file from dsv-fetch.
 module "instrumentation" {
   source = "../../../../observability/modules/instrumentation"
 
@@ -29,6 +30,8 @@ module "instrumentation" {
   fleet_policy              = var.fleet_policy
   apm                       = var.apm
   serverless_init           = var.serverless_init
+  agent_sidecar             = var.agent_sidecar
+  logs                      = var.logs
   profiling                 = var.profiling
   os_type                   = var.os_type
   runtime                   = var.runtime

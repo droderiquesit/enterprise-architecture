@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# Datadog Agent setup for Linux VMs / VMSS instances, delivered as the CONFIGURATION file of the Azure VM Application
+# `${application_name}` (portable Datadog package, modules/host-agent-package). The VM Application's PACKAGE file is
+# the dsv-fetch static binary (`dsv-fetch` in the current directory). Run by the VM Application manager as root:
+#   install / update : bash ./datadog-agent-setup.sh install|update   (idempotent)
+#   remove           : bash ./datadog-agent-setup.sh remove
+# Nothing secret is rendered here, in the VM Application version or in Terraform state (ADR-0001 section 14): the
+# Agent resolves `api_key: ENC[<dsv ref>]` at start-up through its secret backend (dsv-fetch agent-backend), which
+# reads Delinea DSV with the environment's DSV-reader user-assigned identity (IMDS). That identity can read ONLY the
+# ingest-only Datadog API key.
+# Package release ${package_version} / Agent ${agent_version} / environment ${env_name}
+set -euo pipefail
+umask 022
+ACTION="$${1:-install}"
+AGENT_VERSION='${agent_version}'
+DD_SITE_VALUE='${site}'
+API_KEY_REF='${api_key_ref}'
+ENV_NAME='${env_name}'
+DSV_SHA256='${dsv_fetch_sha256}'
+TAG_PREFIX='${tag_prefix}'
+DEFAULT_SERVICE='${default_service}'
+DEFAULT_SOURCE='${default_source}'
+SSI='${apm_ssi}'
+SSI_LIBRARIES='${ssi_libraries}'
+REMOTE_UPDATES='${remote_updates}'
+DSV_DIR=/opt/datadog-dsv
+DSV_BIN=$DSV_DIR/dsv-fetch
+DSV_CONF_DIR=/etc/datadog-dsv
+DSV_CONF=$DSV_CONF_DIR/dsv.json
+DD_DIR=/etc/datadog-agent
+LOGS_CONF=$DD_DIR/conf.d/eh-host-logs.d/conf.yaml
+HERE=$(pwd)
+log() { echo "[datadog-vmapp] $*"; }
+
+if [ "$(id -u)" -ne 0 ]; then log "must run as root (VM Application manager)"; exit 2; fi
+
+remove_all() {
+  systemctl stop datadog-agent >/dev/null 2>&1 || true
+  if command -v dd-host-install >/dev/null 2>&1; then dd-host-install --uninstall >/dev/null 2>&1 || true; fi
+  if command -v apt-get >/dev/null 2>&1 && dpkg -s datadog-agent >/dev/null 2>&1; then
+    apt-mark unhold datadog-agent >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get purge -y -q datadog-agent || true
+  elif command -v rpm >/dev/null 2>&1 && rpm -q datadog-agent >/dev/null 2>&1; then
+    (command -v dnf >/dev/null && dnf remove -y datadog-agent) || yum remove -y datadog-agent || true
+  fi
+  rm -rf "$DSV_DIR" "$DSV_CONF_DIR" /etc/systemd/system/datadog-agent.service.d/eh-vmapp.conf
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  log "datadog-agent, dsv-fetch and their configuration removed"
+}
+
+case "$ACTION" in
+  install | update) ;;
+  remove) remove_all; exit 0 ;;
+  *) log "usage: $0 install|update|remove"; exit 2 ;;
+esac
+
+# ------------------------------------------------------------------ dsv-fetch binary (VM Application package)
+if [ ! -f "$HERE/dsv-fetch" ]; then log "package file dsv-fetch missing in $HERE"; exit 3; fi
+if ! echo "$DSV_SHA256  $HERE/dsv-fetch" | sha256sum -c --status; then log "dsv-fetch checksum mismatch (expected $DSV_SHA256)"; exit 3; fi
+chmod 0500 "$HERE/dsv-fetch"
+
+# ------------------------------------------------------------------ Azure instance tags -> Datadog host tags
+# IMDS text format is "k1:v1;k2:v2"; keys may contain ':' (datadog:*), so only KNOWN keys are matched as prefixes.
+# Values are normalised like Datadog normalises tags (tag policy normalize: datadog).
+normalize() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -e 's#[^a-z0-9_:./-]#_#g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//' | cut -c1-200; }
+IMDS_TAGS=$(curl -fsS --noproxy '*' -H Metadata:true --max-time 5 --retry 3 \
+  'http://169.254.169.254/metadata/instance/compute/tags?api-version=2021-02-01&format=text' 2>/dev/null || true)
+# Azure tag key (lower case) | Datadog tag key (tag policy azure_tag_keys)
+TAG_MAP='%{ for t in tag_pairs ~}
+${t.az}|${t.dd}
+%{ endfor ~}
+'
+declare -A HOST_TAGS=()
+EXTRA_LOG_PATHS=""
+LOG_SOURCE="$DEFAULT_SOURCE"
+IFS=';' read -ra PAIRS <<< "$IMDS_TAGS"
+for pair in "$${PAIRS[@]}"; do
+  lpair=$(printf '%s' "$pair" | tr '[:upper:]' '[:lower:]')
+  while IFS='|' read -r az dd; do
+    [ -n "$az" ] || continue
+    case "$lpair" in
+      "$az":*) if [ -z "$${HOST_TAGS[$dd]:-}" ]; then HOST_TAGS[$dd]=$(normalize "$${pair:$(( $${#az} + 1 ))}"); fi ;;
+    esac
+  done <<< "$TAG_MAP"
+  case "$lpair" in
+    "$${TAG_PREFIX}log_paths":*) EXTRA_LOG_PATHS="$${pair:$(( $${#TAG_PREFIX} + 10 ))}" ;;
+    "$${TAG_PREFIX}source":*) LOG_SOURCE=$(normalize "$${pair:$(( $${#TAG_PREFIX} + 7 ))}") ;;
+  esac
+done
+HOST_SERVICE="$${HOST_TAGS[service]:-$DEFAULT_SERVICE}"
+HOST_ENV="$${HOST_TAGS[env]:-$ENV_NAME}"
+
+render_tags() {
+  local k
+%{ for k, v in static_tags ~}
+  [ -n "$${HOST_TAGS[${k}]:-}" ] || echo '  - "${k}:${v}"'
+%{ endfor ~}
+  for k in $(printf '%s\n' "$${!HOST_TAGS[@]}" | sort); do
+    case "$k" in env | service | version) continue ;; esac # Agent `env` / per-log service, never host tags
+    if [ -n "$${HOST_TAGS[$k]}" ]; then echo "  - \"$k:$${HOST_TAGS[$k]}\""; fi
+  done
+  return 0
+}
+
+# ------------------------------------------------------------------ configuration files (staged, then compared)
+changed=0
+put() { # put <mode> <path>  (content on stdin); sets changed=1 when the file differs
+  local tmp; tmp=$(mktemp)
+  cat > "$tmp"
+  install -d -m 0755 "$(dirname "$2")"
+  if ! cmp -s "$tmp" "$2"; then install -m "$1" "$tmp" "$2"; changed=1; fi
+  rm -f "$tmp"
+}
+
+# non-secret DSV settings for dsv-fetch (same keys as its environment); the identity is the environment's DSV reader
+put 0644 "$DSV_CONF" <<'DSVJSON'
+${dsv_config_json}
+DSVJSON
+
+put 0640 "$DD_DIR/datadog.yaml" <<DDYAML
+# Managed by the Datadog VM Application ${application_name} ${package_version} (modules/host-agent-package).
+# The API key is a Delinea DSV reference resolved by the secret backend; no key is stored on this host.
+api_key: ENC[$API_KEY_REF]
+site: $DD_SITE_VALUE
+env: $HOST_ENV
+tags:
+$(render_tags)
+secret_backend_command: $DSV_BIN
+secret_backend_arguments:
+  - agent-backend
+  - --config
+  - $DSV_CONF
+secret_backend_timeout: 30
+logs_enabled: ${logs_enabled}
+%{ if op_logs_url != "" ~}
+observability_pipelines_worker:
+  logs:
+    enabled: true
+    url: "${op_logs_url}"
+%{ endif ~}
+otlp_config:
+  receiver:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+      http:
+        endpoint: localhost:4318
+  logs:
+    enabled: false
+apm_config:
+  enabled: true
+%{ if length(apm_ignore_resources) > 0 ~}
+  ignore_resources:
+%{ for r in apm_ignore_resources ~}
+    - "${r}"
+%{ endfor ~}
+%{ endif ~}
+process_config:
+  process_collection:
+    enabled: ${process_collection}
+remote_configuration:
+  enabled: ${remote_configuration}
+remote_updates: ${remote_updates}
+DDYAML
+
+# Agent log collection (fleet policy logs.collector = agent): policy files + the host's ${tag_prefix}log_paths tag
+render_logs() {
+  local p
+  echo "logs:"
+%{ for f in log_files ~}
+  printf '  - type: file\n    path: "%s"\n    service: "%s"\n    source: "%s"\n' '${f.path}' "${f.service == null ? "$HOST_SERVICE" : f.service}" "${f.source == null ? "$LOG_SOURCE" : f.source}"
+%{ endfor ~}
+  IFS=',' read -ra extra <<< "$EXTRA_LOG_PATHS"
+  for p in "$${extra[@]}"; do
+    p=$(printf '%s' "$p" | sed -e 's/^ *//' -e 's/ *$//')
+    case "$p" in /*) ;; *) continue ;; esac
+    case "$p" in *'"'* | *'\'*) log "ignoring log path with quotes/backslashes: $p"; continue ;; esac
+    printf '  - type: file\n    path: "%s"\n    service: "%s"\n    source: "%s"\n' "$p" "$HOST_SERVICE" "$LOG_SOURCE"
+  done
+}
+put 0644 "$LOGS_CONF" < <(render_logs)
+
+# Keep retrying while the DSV-reader identity is not yet attached / DSV is unreachable (the Agent exits when the
+# secret backend fails); the policy attaches identity and application in the same model update.
+put 0644 /etc/systemd/system/datadog-agent.service.d/eh-vmapp.conf <<'UNIT'
+[Unit]
+StartLimitIntervalSec=0
+[Service]
+Restart=always
+RestartSec=30
+UNIT
+
+# ------------------------------------------------------------------ Datadog Agent package (pinned)
+agent_installed() {
+  local v=""
+  if command -v dpkg-query >/dev/null 2>&1; then v=$(dpkg-query -W -f='$${Version}' datadog-agent 2>/dev/null || true); fi
+  if [ -z "$v" ] && command -v rpm >/dev/null 2>&1; then v=$(rpm -q --qf '%%{VERSION}' datadog-agent 2>/dev/null || true); fi
+  case "$v" in *"$AGENT_VERSION"*) return 0 ;; *) return 1 ;; esac
+}
+ssi_missing=0
+if [ "$SSI" = "true" ] && [ ! -d /opt/datadog-packages/datadog-apm-inject ]; then ssi_missing=1; fi
+if ! agent_installed || [ "$ssi_missing" -eq 1 ]; then
+  # the official install script keeps the datadog.yaml written above (DD_INSTALL_ONLY: no DD_API_KEY needed)
+  curl -fsSL --retry 5 -o /tmp/eh-dd-install.sh https://install.datadoghq.com/scripts/install_script_agent7.sh
+  extra=()
+  if [ "$SSI" = "true" ]; then extra+=(DD_APM_INSTRUMENTATION_ENABLED=host "DD_APM_INSTRUMENTATION_LIBRARIES=$SSI_LIBRARIES"); fi
+  if [ "$REMOTE_UPDATES" = "true" ]; then extra+=(DD_REMOTE_UPDATES=true); fi
+  env DD_INSTALL_ONLY=true DD_AGENT_MAJOR_VERSION=7 DD_AGENT_MINOR_VERSION="$${AGENT_VERSION#7.}" DD_SITE="$DD_SITE_VALUE" "$${extra[@]}" bash /tmp/eh-dd-install.sh
+  rm -f /tmp/eh-dd-install.sh
+  if command -v apt-mark >/dev/null 2>&1; then apt-mark hold datadog-agent >/dev/null 2>&1 || true; fi
+  changed=1
+  log "datadog-agent $AGENT_VERSION installed (install-only; SSI=$SSI)"
+fi
+if ! getent passwd dd-agent >/dev/null; then log "user dd-agent missing after the Agent install"; exit 4; fi
+chown root:dd-agent "$DD_DIR/datadog.yaml"
+chown -R dd-agent:dd-agent "$(dirname "$LOGS_CONF")"
+
+# ------------------------------------------------------------------ dsv-fetch as the Agent secret backend
+# owner dd-agent, mode 0500, no group/other rights (Agent secret_backend_command requirements)
+install -d -m 0755 "$DSV_DIR"
+before=$(sha256sum "$DSV_BIN" 2>/dev/null | cut -d' ' -f1 || true)
+"$HERE/dsv-fetch" install --dest "$DSV_BIN" --owner dd-agent
+if [ "$before" != "$DSV_SHA256" ]; then changed=1; fi
+
+systemctl daemon-reload
+systemctl enable datadog-agent >/dev/null 2>&1 || true
+if [ "$changed" -eq 1 ] || ! systemctl is-active --quiet datadog-agent; then
+  systemctl restart datadog-agent || log "datadog-agent restart failed (check: datadog-agent secret; the unit keeps retrying)"
+  log "datadog-agent (re)configured: secret backend dsv-fetch, OTLP localhost:4317/4318, logs=${logs_enabled}, env=$HOST_ENV, service=$HOST_SERVICE"
+else
+  log "datadog-agent unchanged"
+fi

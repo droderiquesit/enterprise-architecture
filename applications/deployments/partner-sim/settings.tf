@@ -9,6 +9,12 @@ variable "settings" {
     latency_ms_mean      = optional(number, 120)
     partner_failure_rate = optional(number, 0) # lab only; > 0 makes /payments decline/fail randomly
     dns_record_name      = optional(string, "partner-sim")
+    # Datadog Agent sidecar sizing / image override (null = fleet policy: pinned Agent image, 0.25 vCPU / 0.5 GB)
+    agent_sidecar = optional(object({
+      image     = optional(string)
+      cpu       = optional(number)
+      memory_gb = optional(number)
+    }), {})
   })
   default = {}
 

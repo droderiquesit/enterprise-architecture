@@ -9,13 +9,16 @@
   "$defs": {
     "logs": {
       "type": "object", "additionalProperties": false,
-      "properties": {"node_collector": {"enum": ["agent", "fluent_bit"]}}
+      "properties": {
+        "collector": {"enum": ["agent", "agent_sidecar", "serverless_init", "azure", "fluent_bit"], "description": "application-log collector (observability 4.0.0): agent (aks / vm / vmss), agent_sidecar (aci), serverless_init (aca), azure (diagnostic settings -> Event Hubs: appservice / functions / logicapp / Container Apps jobs), fluent_bit (batch). log_pipeline = fluent_bit_direct replaces every collector except azure by Fluent Bit"},
+        "node_collector": {"enum": ["agent", "fluent_bit"], "description": "3.x key, still honoured on aks / vm / vmss"}
+      }
     },
     "apm": {
       "type": "object", "additionalProperties": false,
       "properties": {
         "mode": {"enum": ["datadog", "otel", "none"]},
-        "managed_runtime_path": {"enum": ["agent_gateway", "serverless_init"]},
+        "managed_runtime_path": {"enum": ["agent_gateway", "serverless_init", "agent_sidecar"]},
         "sample_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
         "logs_injection": {"type": "boolean"},
         "dbm_propagation": {"enum": ["full", "service", "disabled"]},
@@ -40,6 +43,15 @@
       "type": "object", "additionalProperties": false,
       "properties": {
         "version": {"type": "string", "pattern": "^7\\.[0-9]+\\.[0-9]+$"},
+        "image": {"type": "string", "pattern": "^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+$", "description": "Agent image repository (no tag): <image>:<version>"},
+        "sidecar": {"type": "object", "additionalProperties": false, "description": "ACI Datadog Agent sidecar sizing", "properties": {
+          "cpu": {"type": "number", "exclusiveMinimum": 0, "maximum": 4},
+          "memory_gb": {"type": "number", "exclusiveMinimum": 0, "maximum": 16}}},
+        "serverless_init": {"type": "object", "additionalProperties": false, "description": "Container Apps serverless-init sidecar", "properties": {
+          "image": {"type": "string", "pattern": "^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+$"},
+          "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+          "cpu": {"type": "number", "exclusiveMinimum": 0},
+          "memory": {"type": "string", "pattern": "^[0-9.]+(Gi|Mi)$"}}},
         "remote_configuration": {"type": "boolean"},
         "remote_updates": {"type": "boolean"},
         "process_collection": {"type": "boolean"},

@@ -1,3 +1,19 @@
+# Datadog Agent on the lab VMs / VMSS (observability 4.0.0) through modules/host-agents:
+#   VM Applications datadog-agent-linux / datadog-agent-windows in this environment's Compute Gallery, enforced by an
+#   Azure Policy initiative on every VM / VMSS tagged datadog:enabled = true (platform roots set the tag). No
+#   per-host Terraform, no run commands, no CustomScript. settings.mode = direct is the escape hatch for
+#   environments without Azure Policy rights.
+# No secret passes through this root: the Agent on each host resolves api_key: ENC[dsv://...] with the dsv-fetch
+# binary (secret backend) and the per-environment DSV-reader identity foundation-identity identities["obs-host-agent"].
+module "naming" {
+  source          = "../../../foundation/modules/naming"
+  prefix          = var.environment.name_prefix
+  environment     = var.environment.name
+  location        = var.environment.location
+  subscription_id = var.environment.subscription_id
+  workload        = "obshosts"
+}
+
 module "tags" {
   source      = "../../../foundation/modules/tags"
   environment = var.environment
@@ -8,16 +24,8 @@ module "tags" {
 }
 
 locals {
-  base_tags = {
-    env    = var.environment.name, team = var.environment.team, application = "enterprise-hello", owner = var.environment.owner,
-    domain = "platform", tier = "infrastructure", managed_by = "terraform"
-  }
-  # canonical tags of onboarded services (onboarding/rendered/<env>) win over the lab defaults for their hosts
-  rendered_dir  = "${path.module}/../../onboarding/rendered/${var.environment.name}"
-  rendered_tags = { for f in fileset(local.rendered_dir, "*.json") : jsondecode(file("${local.rendered_dir}/${f}")).service => jsondecode(file("${local.rendered_dir}/${f}")).tags }
-
-  # Package 3.0.0 fleet switches published by obs-telemetry-transport (contract env.fleet). A transport contract
-  # without them (package 2.x) keeps this root on the 2.x path: Fluent Bit direct + OpenTelemetry.
+  # Package 3.0.0+ fleet switches published by obs-telemetry-transport (contract env.fleet). A transport contract
+  # without them (package 2.x) keeps the 2.x switches; on hosts the Agent collects the logs either way.
   fleet_env     = try(var.obs_telemetry_transport.env.fleet, null)
   fleet_default = yamldecode(file("${path.module}/../../config/fleet-policy.yaml"))
   fleet_policy = merge(local.fleet_default, {
@@ -27,76 +35,74 @@ locals {
       profiling    = { enabled = try(tobool(local.fleet_env.EH_PROFILING_ENABLED), false) }
     } })
   })
-  op_logs_url = try(var.obs_telemetry_transport.aggregator.agent_logs_url, null)
-  op_host     = try(var.obs_telemetry_transport.aggregator.kind, "") == "observability_pipelines" ? try(var.obs_telemetry_transport.aggregator.fqdn, null) : null
+  op_logs_url = try(var.obs_telemetry_transport.aggregator.kind, "") == "observability_pipelines" ? try(var.obs_telemetry_transport.aggregator.agent_logs_url, null) : null
 
-  vm_hosts = var.platform_vm == null ? {} : { for k, v in var.platform_vm.vms : "vm-${k}" => {
-    resource_id        = v.id
-    os_type            = lower(v.os_type)
-    kind               = "vm"
-    location           = coalesce(var.platform_vm.location, var.environment.location)
-    identity_client_id = v.identity_client_id
-    log_dir            = coalesce(v.log_dir, lower(v.os_type) == "windows" ? var.settings.default_windows_log_dir : var.settings.default_linux_log_dir)
-    service            = coalesce(v.workload, v.name)
-    install_fluent_bit = true
-  } }
-  vmss_hosts = var.platform_vmss == null ? {} : { for k, v in var.platform_vmss.scale_sets : "vmss-${k}" => {
-    resource_id        = v.id
-    os_type            = lower(v.os_type)
-    kind               = "vmss"
-    location           = coalesce(var.platform_vmss.location, var.environment.location)
-    identity_client_id = v.identity_client_id
-    log_dir            = coalesce(v.log_dir, var.settings.default_linux_log_dir)
-    service            = coalesce(v.workload, v.name)
-    install_fluent_bit = true
-  } }
-  # The SQL Server VM gets the Agent only; it needs a user-assigned identity mapped to DSV (contract field
-  # vm.identity_client_id, else settings.sqlvm_identity_client_id) - without one it is skipped.
-  sqlvm_identity = try(coalesce(try(var.platform_db_sqlvm.vm.identity_client_id, null), var.settings.sqlvm_identity_client_id), null)
-  sqlvm_hosts = var.platform_db_sqlvm == null || local.sqlvm_identity == null ? {} : { "sqlvm" = {
-    resource_id        = var.platform_db_sqlvm.vm.id
-    os_type            = var.settings.sqlvm_os_type
-    kind               = "vm"
-    location           = var.environment.location
-    identity_client_id = local.sqlvm_identity
-    log_dir            = ""
-    service            = "sql-server"
-    install_fluent_bit = false
-  } }
-  all = merge(local.vm_hosts, local.vmss_hosts, local.sqlvm_hosts)
+  agent_identity = var.foundation_identity.identities[var.settings.agent_identity_key]
+  region         = module.naming.region_short
+  prefix         = var.environment.name_prefix
+  env            = var.environment.name
 
-  hosts = { for k, h in local.all : k => {
-    resource_id        = h.resource_id
-    os_type            = h.os_type
-    kind               = h.kind
-    location           = h.location
-    identity_client_id = h.identity_client_id
-    service_tags       = merge(local.base_tags, { region = h.location }, lookup(local.rendered_tags, h.service, {}), { service = h.service, source = h.os_type == "windows" ? "csharp" : "python" }, lookup(var.settings.service_tags, k, {}))
-    log_paths = !h.install_fluent_bit ? [] : lookup(var.settings.workload_log_paths, h.service,
-    [h.os_type == "windows" ? "${h.log_dir}\\${var.settings.linux_log_glob}" : "${h.log_dir}/${var.settings.linux_log_glob}"])
-    install_fluent_bit = h.install_fluent_bit
-  } }
+  # direct mode only: hosts from the platform contracts
+  direct_hosts = var.settings.mode != "direct" ? {} : merge(
+    var.platform_vm == null ? {} : { for k, v in var.platform_vm.vms : "vm-${k}" => { resource_id = v.id, os_type = lower(v.os_type), kind = "vm" } },
+    var.platform_vmss == null ? {} : { for k, v in var.platform_vmss.scale_sets : "vmss-${k}" => { resource_id = v.id, os_type = lower(v.os_type), kind = "vmss" } },
+    var.platform_db_sqlvm == null ? {} : { "sqlvm" = { resource_id = var.platform_db_sqlvm.vm.id, os_type = var.settings.sqlvm_os_type, kind = "vm" } },
+  )
+  dsv_fetch = lookup(var.artifacts, "img-dsv-fetch", null)
+}
+
+resource "azurerm_resource_group" "hosts" {
+  name     = module.naming.names.resource_group
+  location = var.environment.location
+  tags     = module.tags.tags
 }
 
 module "hosts" {
   source = "../../modules/host-agents"
-  hosts  = local.hosts
-  # every host reads the key from Delinea DSV itself (Agent secret backend / Fluent Bit ExecStartPre); no data
-  # source, nothing secret in this root's state
-  datadog = {
-    site          = var.obs_telemetry_transport.datadog_site
-    agent_version = var.settings.agent_version
-    api_key_ref   = var.obs_telemetry_transport.api_key_ref
+  mode   = var.settings.mode
+  env    = local.env
+
+  package = {
+    resource_group_id = azurerm_resource_group.hosts.id
+    location          = var.environment.location
+    names = {
+      gallery            = replace("${local.prefix}-gal-obshosts-${local.env}-${local.region}", "-", "_")
+      storage_account    = module.naming.unique.storage
+      publisher_identity = "${local.prefix}-id-obs-gallery-${local.env}-${local.region}"
+    }
+    version                 = var.settings.package_version
+    retained_versions       = var.settings.retained_versions
+    applications            = var.settings.applications
+    dsv_fetch_release_dir   = "${path.module}/${var.settings.dsv_fetch_release_dir}"
+    replica_regions         = var.settings.replica_regions
+    publisher_principal_ids = var.settings.publisher_principal_ids
+    network                 = var.settings.package_network
   }
-  secrets = {
+
+  datadog = {
+    site        = var.obs_telemetry_transport.datadog_site
+    api_key_ref = var.obs_telemetry_transport.api_key_ref
+  }
+  dsv = {
     tenant   = var.obs_telemetry_transport.secrets.tenant
     tld      = var.obs_telemetry_transport.secrets.tld
     base_url = var.obs_telemetry_transport.secrets.base_url
   }
-  setup_revision     = var.settings.setup_revision
-  fluent_bit_version = var.settings.fluent_bit_version
-  tags               = module.tags.tags
-  # package 3.0.0: fleet policy from the transport contract; Agents / Fluent Bit send logs to the OP Worker
-  fleet_policy = local.fleet_policy
-  op_endpoint  = { host = local.op_host, agent_logs_url = local.op_logs_url }
+  agent_identity = { id = local.agent_identity.id, client_id = local.agent_identity.client_id }
+
+  policy = var.settings.mode != "policy" ? null : {
+    name_prefix                  = "${local.prefix}-dd-hosts-${local.env}"
+    scope                        = coalesce(var.settings.scope, { type = "subscription", id = "/subscriptions/${var.environment.subscription_id}", not_scopes = [] })
+    identity_resource_group_name = azurerm_resource_group.hosts.name
+    enrollment_tag               = var.settings.enrollment_tag
+    effect                       = var.settings.effect
+    targets                      = var.settings.targets
+    remediation                  = var.settings.remediation
+  }
+  hosts = local.direct_hosts
+
+  fleet_policy      = local.fleet_policy
+  op_agent_logs_url = local.op_logs_url
+  host_logs         = var.settings.host_logs
+  tags              = merge(module.tags.tags, local.dsv_fetch == null ? {} : { "dsv-fetch-version" = coalesce(local.dsv_fetch.version, "unknown") })
 }

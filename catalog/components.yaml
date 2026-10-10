@@ -374,15 +374,19 @@ components:
     path: observability/lab/kubernetes
     consumes: [obs-telemetry-transport, platform-aks, foundation-identity]
     produces: [obs-kubernetes]
-    artifacts: [img-dsv-fetch]  # Datadog Agent secret_backend_command + Fluent Bit init container on AKS
+    artifacts: [img-dsv-fetch]  # dsv-fetch binary: secret_backend_command of node Agent / Cluster Agent / runners (init container)
+    # DBM: the platform-db contracts become cluster checks of the Cluster Agent (settings.dbm = auto)
+    optional_consumes: [platform-db-postgresql, platform-db-mysql, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm]
     inputs: [observability/images/dsv-fetch/**, observability/config/fleet-policy.yaml]
   - id: obs-dbm
     layer: observability
     kind: terraform
     path: observability/lab/dbm
     consumes: [obs-telemetry-transport, foundation-network, foundation-identity]
-    artifacts: [img-dsv-fetch]  # Datadog Agent secret backend (ENC[dsv://...]) for DBM passwords
-    optional_consumes: [platform-db-postgresql, platform-db-mysql, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm]
+    artifacts: [img-dsv-fetch]  # ACI DBM Agent (no cluster): init container copying the dsv-fetch binary (secret backend)
+    # platform-aks present = a cluster runs DBM as cluster checks (obs-kubernetes); settings.hosting = auto -> no ACI Agent
+    optional_consumes: [platform-aks, platform-db-postgresql, platform-db-mysql, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm]
+    inputs: [observability/config/fleet-policy.yaml]
   - id: obs-monitoring
     layer: observability
     kind: terraform
@@ -403,7 +407,10 @@ components:
     kind: artifact
     path: observability/images/dsv-fetch
     scope: platform             # built by the platform pipeline; applications roots consume its recorded digest
-    artifact: {type: container-image, name: dsv-fetch}
+    # 2.x: static Go binary. container-image = distroless image (/opt/dsv-fetch/dsv-fetch, linux/amd64+arm64);
+    # zip-package = release files dsv-fetch-linux-amd64, -linux-arm64, -windows-amd64.exe + SHA256SUMS
+    # (pipelines/templates/build-dsv-fetch.yml; artifacts["img-dsv-fetch"].package_url / package_sha256)
+    artifact: {type: container-image, name: dsv-fetch, also: [zip-package]}
 
   # ------------------------------------------------------ application builds
   - id: svc-frontend

@@ -1,21 +1,62 @@
 variable "settings" {
-  description = "obs-hosts settings."
+  description = "obs-hosts settings (environments/<env>/environment.yaml components.obs-hosts)."
   type = object({
-    agent_version            = optional(string) # null = fleet policy agent.version
-    fluent_bit_version       = optional(string, "5.1.3")
-    setup_revision           = optional(number, 1) # bump to re-run the installers (e.g. once after the 2.0 upgrade)
-    linux_log_glob           = optional(string, "*.log")
-    default_linux_log_dir    = optional(string, "/var/log/enterprise-hello")
-    default_windows_log_dir  = optional(string, "C:\\ProgramData\\enterprise-hello\\logs")
-    sqlvm_os_type            = optional(string, "windows")
-    sqlvm_identity_client_id = optional(string) # user-assigned identity on the SQL VM (DSV reader) when the contract has none
-    # per-workload application log files (as written by the app deployment, LOG_FILE_PATH); wins over log_dir
-    workload_log_paths = optional(map(list(string)), {
-      "hello-worker" = ["/var/log/hello-worker/*.log"]
+    # policy (default): Azure Policy enrols every VM / VMSS tagged enrollment_tag; direct: one gallery application
+    # assignment per platform-vm VM (environments without Azure Policy rights)
+    mode = optional(string, "policy")
+    # VM Application version of THIS environment. The pipeline bumps it when the Agent pin / installer / dsv-fetch
+    # release changes and promotes the same value dev -> test -> prod; retained_versions keeps rollback targets.
+    package_version   = optional(string, "1.0.0")
+    retained_versions = optional(list(string), [])
+    applications      = optional(map(object({ name = optional(string) })), { linux = {}, windows = {} })
+    # staged by the pipeline from the img-dsv-fetch zip-package (dsv-fetch-* binaries + SHA256SUMS); relative to
+    # this root
+    dsv_fetch_release_dir = optional(string, ".dsv-fetch-release")
+    replica_regions = optional(list(object({
+      name                 = string
+      regional_replicas    = optional(number, 1)
+      storage_account_type = optional(string, "Standard_ZRS")
+    })), [])
+    publisher_principal_ids = optional(list(string), []) # e.g. the apply identity (upload with Entra ID)
+    package_network = optional(object({
+      public_network_access_enabled = optional(bool, true)
+      ip_rules                      = optional(list(string), [])
+      subnet_ids                    = optional(list(string), [])
+    }), {})
+    # policy scope: null = the environment subscription; management_group: /providers/Microsoft.Management/managementGroups/<name>
+    scope = optional(object({
+      type       = string
+      id         = string
+      not_scopes = optional(list(string), [])
+    }))
+    enrollment_tag = optional(object({
+      name  = optional(string, "datadog:enabled")
+      value = optional(string, "true")
+    }), {})
+    effect      = optional(string, "DeployIfNotExists")
+    targets     = optional(set(string), ["vm", "vmss"])
+    remediation = optional(any, {})
+    # Agent log collection on the hosts (files per OS + Windows Event Log channels); hosts add files with the
+    # Azure tag datadog:log_paths
+    host_logs = optional(any, {
+      linux = { files = [
+        { path = "/var/log/hello-worker/*.log" },
+        { path = "/var/log/enterprise-hello/*.log" },
+      ] }
+      windows = {
+        files          = [{ path = "C:\\ProgramData\\enterprise-hello\\logs\\*.log" }]
+        event_channels = [{ channel = "System" }, { channel = "Application" }]
+      }
     })
-    service_tags = optional(map(map(string)), {}) # host key -> extra tags (service, version, source ...)
+    agent_identity_key = optional(string, "obs-host-agent")
+    # direct mode: the SQL Server VM of platform-db-sqlvm (Agent only) and its OS
+    sqlvm_os_type = optional(string, "windows")
   })
   default = {}
+  validation {
+    condition     = contains(["policy", "direct"], var.settings.mode)
+    error_message = "settings.mode must be policy or direct."
+  }
 }
 
 variable "obs_telemetry_transport" {
@@ -39,45 +80,57 @@ variable "obs_telemetry_transport" {
   })
 }
 
-variable "platform_vm" {
-  description = "platform-vm contract (optional)."
+variable "foundation_identity" {
+  description = "foundation-identity contract v2 (fields used): the per-environment DSV-reader identity of the host Agents (identities[\"obs-host-agent\"])."
   type = object({
-    location = optional(string)
+    identities = map(object({
+      id        = string
+      client_id = string
+    }))
+  })
+}
+
+variable "artifacts" {
+  description = "Immutable build outputs (tools/deploy/artifacts.py tfvars); img-dsv-fetch version / package_sha256 are recorded on the package for traceability."
+  type = map(object({
+    name           = optional(string)
+    version        = optional(string)
+    package_url    = optional(string)
+    package_sha256 = optional(string)
+    commit         = optional(string)
+  }))
+  default = {}
+}
+
+# direct mode only (settings.mode = direct): the hosts to assign. In policy mode these contracts are not needed - the
+# platform roots tag their VMs / VMSS with datadog:enabled = true.
+variable "platform_vm" {
+  description = "platform-vm contract (optional; direct mode)."
+  type = object({
     vms = map(object({
-      id                 = string
-      name               = string
-      os_type            = string
-      workload           = optional(string)
-      identity_client_id = optional(string)
-      log_dir            = optional(string)
+      id      = string
+      os_type = string
     }))
   })
   default = null
 }
 
 variable "platform_vmss" {
-  description = "platform-vmss contract (optional)."
+  description = "platform-vmss contract (optional; direct mode: output vmss_gallery_applications for the platform root)."
   type = object({
-    location = optional(string)
     scale_sets = map(object({
-      id                 = string
-      name               = string
-      os_type            = string
-      workload           = optional(string)
-      identity_client_id = optional(string)
-      log_dir            = optional(string)
+      id      = string
+      os_type = string
     }))
   })
   default = null
 }
 
 variable "platform_db_sqlvm" {
-  description = "platform-db-sqlvm contract (optional): the SQL Server VM gets the Agent only (no app logs)."
+  description = "platform-db-sqlvm contract (optional; direct mode): the SQL Server VM gets the Agent."
   type = object({
     vm = object({
-      id                 = string
-      name               = string
-      identity_client_id = optional(string)
+      id = string
     })
   })
   default = null

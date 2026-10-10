@@ -2,8 +2,9 @@
 #   seed (manual) | reconcile-trigger (schedule) | traffic (schedule, bounded) | process-batch-items (event-driven,
 #   KEDA azure-servicebus scaler on queue batch-items, authenticated with the job's user-assigned identity).
 # Azure Batch daily-aggregate is a runtime submission (scripts/submit-batch-job.sh), not Terraform.
-# Logs: jobs are run-to-completion, so no Fluent Bit sidecar (it would keep executions alive); stdout is
-# collected through the environment's ContainerAppConsoleLogs diagnostic setting (obs-diagnostics -> Event Hubs).
+# Logs: jobs are run-to-completion, so no sidecar (serverless-init / Fluent Bit would keep executions alive); stdout is
+# collected through the environment's ContainerAppConsoleLogs diagnostic setting (obs-diagnostics -> Event Hubs ->
+# Observability Pipelines Worker): fleet policy logs.collector = azure for these workloads.
 module "meta" {
   source = "../modules/service-meta"
 }
@@ -89,8 +90,10 @@ module "env" {
   runtime      = "python"
   architecture = "aca"
   # run-to-completion jobs have no sidecar (it would keep executions alive): Datadog tracer -> APM gateway instead of
-  # the Container Apps default serverless-init (no DogStatsD for jobs - docs/known-limitations.md)
+  # the Container Apps default serverless-init (no DogStatsD for jobs - docs/known-limitations.md), console logs via
+  # diagnostic settings instead of the serverless-init file tail
   apm                = { managed_runtime_path = "agent_gateway" }
+  logs               = { collector = "azure" }
   telemetry          = local.telemetry
   identity_client_id = local.ids[each.value.svc].client_id
   faults             = { enabled = false }
@@ -101,7 +104,7 @@ module "env" {
 }
 
 locals {
-  # Jobs log to stdout only (see header); drop the sidecar file sink the ACA hook would add.
+  # Jobs log to stdout only (see header); defensive: never pass a sidecar file sink to a job.
   job_env = { for k in keys(local.jobs) : k => { for n, v in module.env[k].env : n => v if n != "LOG_FILE_PATH" } }
 }
 

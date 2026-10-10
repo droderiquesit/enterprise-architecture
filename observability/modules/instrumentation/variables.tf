@@ -49,8 +49,11 @@ variable "telemetry" {
     The obs-telemetry-transport contract v3 (catalog/contracts/obs-telemetry-transport.v3.schema.json) or an
     equivalent object built by hand for an existing environment. Only non-secret values and Delinea DSV
     references (dsv://<path>#<element>) are read; secret VALUES never pass through this module.
-      secrets : DSV runtime env for workloads (DSV_TENANT/DSV_TLD/DSV_BASE_URL/DSV_AUTH) and the dsv-fetch
-                helper image used as init container (ACA) / refresher container (ACI) for third-party sidecars.
+      secrets    : DSV runtime env for workloads (DSV_TENANT/DSV_TLD/DSV_BASE_URL/DSV_AUTH) and the dsv-fetch image
+                   (2.0.0: static binary /opt/dsv-fetch/dsv-fetch) whose init container installs the binary for the
+                   Datadog sidecars (ACI Agent, Container Apps serverless-init).
+      aggregator : the Observability Pipelines Worker (agent_logs_url = its Datadog Agent source, e.g.
+                   http://<worker>:8282) the Datadog sidecars send logs to in observability_pipelines mode.
   EOT
   type = object({
     datadog_site = string
@@ -85,6 +88,13 @@ variable "telemetry" {
       logs_intake_host       = optional(string)
       forward_shared_key_ref = optional(string)
     })
+    aggregator = optional(object({
+      kind           = optional(string)
+      fqdn           = optional(string)
+      pipeline_id    = optional(string)
+      agent_logs_url = optional(string)
+      log_pipeline   = optional(string)
+    }))
     env = optional(map(map(string)), {})
   })
   validation {
@@ -108,6 +118,10 @@ variable "telemetry" {
     condition     = !contains(["aca", "aci"], var.architecture) || var.runtime == "browser" || var.telemetry.secrets.fetch_image != null
     error_message = "ACA/ACI sidecars read their keys with the dsv-fetch helper: telemetry.secrets.fetch_image is required (digest-pinned dsv-fetch image)."
   }
+  validation {
+    condition     = try(var.telemetry.aggregator.agent_logs_url, null) == null || can(regex("^https?://", coalesce(try(var.telemetry.aggregator.agent_logs_url, null), "x")))
+    error_message = "telemetry.aggregator.agent_logs_url must be an http(s) URL (the Observability Pipelines Worker Datadog Agent source)."
+  }
 }
 
 variable "container_name" {
@@ -117,7 +131,7 @@ variable "container_name" {
 }
 
 variable "log_file_path" {
-  description = "Shared-volume log file for the sidecar route (ACA/ACI). The app writes JSON lines here when LOG_FILE_PATH is set."
+  description = "Shared-volume log file for the sidecar route (ACA/ACI: tailed by the Agent sidecar / serverless-init, or Fluent Bit in fluent_bit_direct mode). The app writes JSON lines here when LOG_FILE_PATH is set."
   type        = string
   default     = "/var/log/app/app.log"
   validation {
@@ -159,7 +173,7 @@ variable "extra_resource_attributes" {
 }
 
 variable "sidecar_resources" {
-  description = "CPU/memory for the Fluent Bit sidecar (Container Apps requires valid cpu/memory pairs, e.g. 0.25/0.5Gi)."
+  description = "CPU/memory for the Fluent Bit sidecar (fallback, log_pipeline = fluent_bit_direct; Container Apps requires valid cpu/memory pairs, e.g. 0.25/0.5Gi)."
   type = object({
     cpu    = optional(number, 0.25)
     memory = optional(string, "0.5Gi")
@@ -168,7 +182,7 @@ variable "sidecar_resources" {
 }
 
 variable "fetch_resources" {
-  description = "CPU/memory of the dsv-fetch init container (ACA) / refresher container (ACI)."
+  description = "CPU/memory of the dsv-fetch init containers (ACA cpu/memory, ACI aci_cpu/aci_mem) and the refresh interval of the Fluent Bit fallback's refresher container (`dsv-fetch init --refresh`)."
   type = object({
     cpu       = optional(number, 0.25)
     memory    = optional(string, "0.5Gi")
@@ -225,12 +239,39 @@ variable "dotnet_tracer_home" {
   default     = null
 }
 
-variable "serverless_init" {
-  description = "apm.managed_runtime_path = serverless_init (Container Apps only; the fleet policy default for aca in datadog mode): sidecar image, sizing and Azure context. The Datadog API key is read from Delinea DSV (telemetry.api_key_ref) by a dsv-fetch init/refresher container; api_key_secret_name is ignored (kept for compatibility)."
+variable "logs" {
+  description = "Per-workload log overrides (fleet policy logs section shape), e.g. { collector = \"azure\" } for Container Apps jobs (console logs via diagnostic settings). Null = policy."
+  type        = any
+  default     = null
+}
+
+variable "agent_sidecar" {
+  description = <<-EOT
+    ACI Datadog Agent sidecar (fleet policy default for aci: logs.collector = agent_sidecar, apm.managed_runtime_path =
+    agent_sidecar). Null fields = fleet policy: image = agent.image:agent.version (single pin), cpu = agent.sidecar.cpu
+    (0.25 vCPU), memory_gb = agent.sidecar.memory_gb (0.5 GB). hostname defaults to <service>-<env> (one Datadog host
+    per container group). Cost: the sidecar adds its vCPU/GB-seconds to the container group's ACI bill and each group
+    reports as one Datadog infrastructure (and APM) host - docs/guides/datadog-fleet-collection.md.
+  EOT
   type = object({
-    image               = optional(string, "datadog/serverless-init:1.10.4")
-    cpu                 = optional(number, 0.25)
-    memory              = optional(string, "0.5Gi")
+    image     = optional(string)
+    cpu       = optional(number)
+    memory_gb = optional(number)
+    hostname  = optional(string)
+  })
+  default = {}
+  validation {
+    condition     = (var.agent_sidecar.cpu == null || try(var.agent_sidecar.cpu > 0 && var.agent_sidecar.cpu <= 4, false)) && (var.agent_sidecar.memory_gb == null || try(var.agent_sidecar.memory_gb > 0 && var.agent_sidecar.memory_gb <= 16, false))
+    error_message = "agent_sidecar: 0 < cpu <= 4, 0 < memory_gb <= 16."
+  }
+}
+
+variable "serverless_init" {
+  description = "Container Apps serverless-init sidecar (fleet policy default for aca: traces, DogStatsD, app log file): Azure context and optional image/sizing overrides (null = fleet policy agent.serverless_init). The Datadog API key is read from Delinea DSV (telemetry.api_key_ref) by the dsv-fetch binary in the sidecar's start command; api_key_secret_name is ignored (kept for compatibility)."
+  type = object({
+    image               = optional(string)
+    cpu                 = optional(number)
+    memory              = optional(string)
     api_key_secret_name = optional(string) # ignored: the key comes from DSV (no Container Apps secret)
     subscription_id     = optional(string)
     resource_group      = optional(string)

@@ -49,7 +49,9 @@ variables {
   foundation_identity = {
     identities = {
       "obs-collector" = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-obs-collector-dev-sec", principal_id = "11111111-1111-1111-1111-111111111111", client_id = "22222222-2222-2222-2222-222222222222", name = "eh-id-obs-collector-dev-sec" }
+      "obs-dbm"       = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-obs-dbm-dev-sec", principal_id = "33333333-3333-3333-3333-333333333330", client_id = "33333333-3333-3333-3333-333333333333", name = "eh-id-obs-dbm-dev-sec" }
     }
+    secrets = { base_path = "eh/dev" }
   }
   platform_aks = {
     resource_group_name = "eh-rg-aks-dev-sec"
@@ -71,27 +73,65 @@ run "lab_kubernetes" {
     error_message = "kubelogin exec with the AKS Entra server app id."
   }
   assert {
-    condition     = yamldecode(module.kubernetes.datadog_values).datadog.tags[0] == "application:enterprise-hello"
+    condition     = yamldecode(module.kubernetes.datadog_values[1]).datadog.tags[0] == "application:enterprise-hello"
     error_message = "Lab tags reach the Agent."
   }
   assert {
-    condition     = length(azurerm_federated_identity_credential.collector) == 3 && azurerm_federated_identity_credential.collector["fluent-bit"].subject == "system:serviceaccount:fluent-bit:fluent-bit" && azurerm_federated_identity_credential.collector["datadog-agent"].subject == "system:serviceaccount:datadog:datadog"
-    error_message = "Workload identity federation for the Agent, cluster-checks runner and Fluent Bit service accounts."
+    condition     = length(azurerm_federated_identity_credential.collector) == 4 && azurerm_federated_identity_credential.collector["fluent-bit"].subject == "system:serviceaccount:fluent-bit:fluent-bit" && azurerm_federated_identity_credential.collector["datadog-agent"].subject == "system:serviceaccount:datadog:datadog" && azurerm_federated_identity_credential.collector["datadog-cluster-agent"].subject == "system:serviceaccount:datadog:datadog-cluster-agent" && length(azurerm_federated_identity_credential.dbm) == 0
+    error_message = "Workload identity federation for the Agent, Cluster Agent, cluster-checks runner and Fluent Bit service accounts (no DBM contracts -> runners as obs-collector)."
   }
   assert {
-    condition     = yamldecode(module.kubernetes.datadog_values).datadog.apiKey == "ENC[dsv://eh/dev/datadog-api-key#value]" && yamldecode(module.kubernetes.fluent_bit_values).initContainers[0].image == "ehacrdev.azurecr.io/dsv-fetch@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    condition     = yamldecode(module.kubernetes.datadog_values[1]).datadog.apiKey == "ENC[dsv://eh/dev/datadog-api-key#value]" && yamldecode(module.kubernetes.fluent_bit_values).initContainers[0].image == "ehacrdev.azurecr.io/dsv-fetch@sha256:4444444444444444444444444444444444444444444444444444444444444444"
     error_message = "DSV reference; dsv-fetch image from this root's artifacts (img-dsv-fetch); no API key input exists."
   }
 }
 
-run "syncer_fallback" {
+run "dbm_cluster_checks_from_platform_contracts" {
   command = plan
   variables {
-    settings = { api_key_mode = "existing" }
+    platform_db_postgresql = {
+      dbm = { supported = true, engine = "postgres", deployment_type = "flexible_server", auth_mode = "entra-managed-identity", identity_name = "obs-dbm", host = "eh-psql-dev.postgres.database.azure.com", port = 5432, databases = ["catalog"] }
+    }
+    platform_db_mysql = {
+      dbm = { supported = true, engine = "mysql", deployment_type = "flexible_server", auth_mode = "native-password", host = "eh-mysql-dev.mysql.database.azure.com", port = 3306, databases = ["adapter"], password_secret_name = "dbm-mysql-password" }
+    }
   }
   assert {
-    condition     = length(azurerm_federated_identity_credential.collector) == 0 && yamldecode(module.kubernetes.datadog_values).datadog.apiKeyExistingSecret == "datadog-api-key"
-    error_message = "Fallback: Secret maintained by the Delinea dsv-k8s syncer; no workload identity needed."
+    condition = (strcontains(yamldecode(module.kubernetes.datadog_values[1]).clusterAgent.confd["mysql.yaml"], "ENC[dsv://eh/dev/dbm-mysql-password#value]")
+      && yamldecode(yamldecode(module.kubernetes.datadog_values[1]).clusterAgent.confd["postgres.yaml"]).cluster_check
+    && yamldecode(yamldecode(module.kubernetes.datadog_values[1]).clusterAgent.confd["postgres.yaml"]).instances[0].azure.managed_authentication.client_id == "33333333-3333-3333-3333-333333333333")
+    error_message = "DBM runs as cluster checks of the Cluster Agent: ENC[dsv://] passwords, Entra login as obs-dbm."
+  }
+  assert {
+    condition = (yamldecode(module.kubernetes.datadog_values[1]).clusterChecksRunner.rbac.serviceAccountAnnotations["azure.workload.identity/client-id"] == "33333333-3333-3333-3333-333333333333"
+      && azurerm_federated_identity_credential.dbm[0].subject == "system:serviceaccount:datadog:datadog-cluster-checks"
+    && !contains(keys(azurerm_federated_identity_credential.collector), "datadog-cluster-checks"))
+    error_message = "Cluster-checks runners use the obs-dbm identity (DSV DB password paths + Entra), federated by this root."
+  }
+}
+
+run "dbm_off" {
+  command = plan
+  variables {
+    settings = { dbm = "off" }
+    platform_db_mysql = {
+      dbm = { supported = true, engine = "mysql", deployment_type = "flexible_server", auth_mode = "native-password", host = "eh-mysql-dev.mysql.database.azure.com", port = 3306, databases = ["adapter"] }
+    }
+  }
+  assert {
+    condition     = length(yamldecode(module.kubernetes.datadog_values[1]).clusterAgent.confd) == 0 && length(azurerm_federated_identity_credential.dbm) == 0
+    error_message = "settings.dbm = off: no DBM cluster checks (obs-dbm hosting = aci then runs them)."
+  }
+}
+
+run "values_overrides_last" {
+  command = plan
+  variables {
+    settings = { values_overrides = ["clusterAgent:\n  replicas: 2\n"] }
+  }
+  assert {
+    condition     = length(module.kubernetes.datadog_values) == 3 && yamldecode(module.kubernetes.datadog_values[2]).clusterAgent.replicas == 2
+    error_message = "Per-cluster overrides are the last values layer."
   }
 }
 
@@ -115,11 +155,11 @@ run "fleet_from_transport_contract" {
     }
   }
   assert {
-    condition     = anytrue([for e in yamldecode(module.kubernetes.datadog_values).datadog.env : e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL" && e.value == "http://eh-obs-dev-opw.internal.example.io:8282"])
+    condition     = anytrue([for e in yamldecode(module.kubernetes.datadog_values[1]).datadog.env : e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL" && e.value == "http://eh-obs-dev-opw.internal.example.io:8282"])
     error_message = "Package 3.0.0 transport: the node Agents send logs to the OP Worker of the contract."
   }
   assert {
-    condition     = yamldecode(module.kubernetes.datadog_values).datadog.apm.instrumentation.enabled && yamldecode(module.kubernetes.datadog_values).datadog.apm.instrumentation.targets[0].namespaceSelector.matchNames[0] == "hello" && output.contract.log_collector == "datadog-agent"
+    condition     = yamldecode(module.kubernetes.datadog_values[1]).datadog.apm.instrumentation.enabled && yamldecode(module.kubernetes.datadog_values[1]).datadog.apm.instrumentation.targets[0].namespaceSelector.matchNames[0] == "hello" && output.contract.log_collector == "datadog-agent"
     error_message = "Single Step Instrumentation of the hello namespace; the Agent collects the logs."
   }
 }
@@ -127,7 +167,7 @@ run "fleet_from_transport_contract" {
 run "transport_2x_contract_keeps_fluent_bit" {
   command = plan
   assert {
-    condition     = output.contract.log_collector != "datadog-agent" && !try(yamldecode(module.kubernetes.datadog_values).datadog.apm.instrumentation.enabled, false)
+    condition     = output.contract.log_collector != "datadog-agent" && !try(yamldecode(module.kubernetes.datadog_values[1]).datadog.apm.instrumentation.enabled, false)
     error_message = "Without env.fleet in the contract the root stays on Fluent Bit + OpenTelemetry (2.x path)."
   }
 }

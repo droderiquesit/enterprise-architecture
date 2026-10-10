@@ -11,18 +11,23 @@ variable "settings" {
     fluent_bit_chart_version = optional(string, "0.58.3")
     exclude_namespaces       = optional(list(string), ["kube-system", "datadog", "fluent-bit", "gatekeeper-system", "calico-system", "tigera-operator"])
     ssi_namespaces           = optional(list(string), ["hello"]) # Single Step Instrumentation targets (fleet apm.mode = datadog)
-    dbm_cluster_checks       = optional(map(string), {})         # from obs-dbm (hosting = cluster_checks): file -> conf
-    # dsv_secret_backend (default): Agents + Fluent Bit read the key from DSV with workload identity;
-    # existing: documented fallback, Secret <synced_secret_name> maintained by the Delinea dsv-k8s syncer
-    api_key_mode              = optional(string, "dsv_secret_backend")
-    synced_secret_name        = optional(string, "datadog-api-key")
-    cluster_agent_secret_name = optional(string) # dsv-k8s syncer Secret for the Cluster Agent (no Python -> no dsv-fetch)
-    collector_identity_key    = optional(string, "obs-collector")
+    # DBM: auto = the platform-db contracts become cluster checks of the Cluster Agent (runners as the obs-dbm
+    # identity); off = none here (obs-dbm settings.hosting = aci runs them on ACI instead)
+    dbm                    = optional(string, "auto")
+    dbm_identity_key       = optional(string, "obs-dbm")
+    collector_identity_key = optional(string, "obs-collector")
+    # per-cluster Datadog chart values, YAML documents applied last (sizing, tolerations, *.envDict, ...); the
+    # module rejects overrides of the secret path
+    values_overrides = optional(list(string), [])
   })
   default = {}
   validation {
     condition     = contains(["azurecli", "workloadidentity", "msi"], var.settings.kubelogin_mode)
     error_message = "settings.kubelogin_mode must be azurecli, workloadidentity or msi."
+  }
+  validation {
+    condition     = contains(["auto", "off"], var.settings.dbm)
+    error_message = "settings.dbm must be auto or off."
   }
 }
 
@@ -49,7 +54,7 @@ variable "obs_telemetry_transport" {
 }
 
 variable "foundation_identity" {
-  description = "foundation-identity contract v2 (fields used): the obs-collector identity federated with the Datadog / Fluent Bit service accounts."
+  description = "foundation-identity contract v2 (fields used): the obs-collector identity (Agents, Cluster Agent, Fluent Bit service accounts), the obs-dbm identity (cluster-checks runners for DBM) and the DSV base path."
   type = object({
     identities = map(object({
       id           = string
@@ -57,7 +62,33 @@ variable "foundation_identity" {
       client_id    = string
       name         = string
     }))
+    secrets = optional(object({
+      base_path = string
+    }))
   })
+}
+
+# Optional database contracts (obs-kubernetes optional_consumes): only their `dbm` block is read
+# (platform-db-*.v1 $defs/dbm) - same mapping as obs-dbm (modules/dbm/contracts).
+variable "platform_db_postgresql" {
+  type    = any
+  default = null
+}
+variable "platform_db_mysql" {
+  type    = any
+  default = null
+}
+variable "platform_db_sql" {
+  type    = any
+  default = null
+}
+variable "platform_db_sqlmi" {
+  type    = any
+  default = null
+}
+variable "platform_db_sqlvm" {
+  type    = any
+  default = null
 }
 
 variable "platform_aks" {

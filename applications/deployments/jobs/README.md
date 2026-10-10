@@ -17,9 +17,11 @@
 - **Produced contract**: `deploy-jobs`: `jobs.<name>.{id,trigger,schedule,...}` (monitoring uses `jobs.seed.id`), `batch`, `deploy_steps[batch-job]`.
 
 ## Logs
-Jobs run to completion, so **no Fluent Bit sidecar** (it would keep executions running until timeout); stdout JSON logs
+Jobs run to completion, so **no sidecar** (neither the Container Apps default serverless-init nor Fluent Bit: it would
+keep executions running until timeout). The jobs set `logs = { collector = "azure" }` (fleet policy): stdout JSON logs
 are collected through the environment's `ContainerAppConsoleLogs` diagnostic setting (obs-diagnostics → Event Hubs →
-Fluent Bit aggregator, allow-list `aca_console_allow`).
+Observability Pipelines Worker; with `log_pipeline = fluent_bit_direct` the Fluent Bit aggregator, allow-list
+`aca_console_allow`). Traces: Datadog tracer → APM gateway (no DogStatsD for jobs).
 
 Batch (ADR-0001 §13): the contract's `batch.job_preparation` carries the observability-published Fluent Bit setup
 (`obs-telemetry-transport` `batch_log_setup`) plus `EH_IDENTITY_CLIENT_ID` (pool identity, mapped to a DSV user with read

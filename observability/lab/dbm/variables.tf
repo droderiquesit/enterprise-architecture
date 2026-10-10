@@ -1,7 +1,9 @@
 variable "settings" {
   description = "obs-dbm settings."
   type = object({
-    hosting      = optional(string, "aci") # aci | cluster_checks (render for obs-kubernetes settings.dbm_cluster_checks) | none
+    # auto (default): cluster_checks when the platform-aks contract is present (obs-kubernetes runs the checks on the
+    # Cluster Agent from the same platform-db contracts), else aci. Explicit: cluster_checks | aci | none (render only)
+    hosting      = optional(string, "auto")
     subnet_key   = optional(string, "aci") # ACI needs a Microsoft.ContainerInstance/containerGroups-delegated subnet (foundation-network `aci`)
     identity_key = optional(string, "obs-dbm")
     cpu          = optional(number, 1)
@@ -9,8 +11,8 @@ variable "settings" {
   })
   default = {}
   validation {
-    condition     = contains(["aci", "cluster_checks", "none"], var.settings.hosting)
-    error_message = "settings.hosting must be aci, cluster_checks or none."
+    condition     = contains(["auto", "aci", "cluster_checks", "none"], var.settings.hosting)
+    error_message = "settings.hosting must be auto, aci, cluster_checks or none."
   }
 }
 
@@ -20,11 +22,18 @@ variable "obs_telemetry_transport" {
     datadog_site = string
     api_key_ref  = string
     secrets = object({
-      tenant   = optional(string)
-      tld      = optional(string)
-      base_url = string
+      tenant      = optional(string)
+      tld         = optional(string)
+      base_url    = string
+      fetch_image = optional(string)
     })
   })
+}
+
+variable "platform_aks" {
+  description = "Optional platform-aks contract: present = a cluster exists, so settings.hosting = auto runs DBM as cluster checks (obs-kubernetes) and creates no ACI Agent."
+  type        = any
+  default     = null
 }
 
 variable "foundation_network" {
@@ -74,7 +83,7 @@ variable "platform_db_sqlvm" {
 }
 
 variable "artifacts" {
-  description = "Immutable build outputs keyed by artifact component id (tools/deploy/artifacts.py tfvars); declared for img-dsv-fetch (registry input); the ACI Agent runs dsv_fetch.py as its own secret backend, so the image is not deployed by this root."
+  description = "Immutable build outputs keyed by artifact component id (tools/deploy/artifacts.py tfvars); this root uses img-dsv-fetch (digest-pinned): the ACI Agent's init container copies the static dsv-fetch binary (secret backend) out of it."
   type = map(object({
     name    = optional(string)
     image   = optional(string)

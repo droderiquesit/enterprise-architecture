@@ -4,8 +4,13 @@ output "configured" {
 }
 
 output "cluster_check_confd" {
-  description = "Copy into obs-kubernetes settings.dbm_cluster_checks when settings.hosting = cluster_checks."
+  description = "The DBM cluster checks (evidence; obs-kubernetes renders the same from the platform-db contracts)."
   value       = module.dbm.cluster_check_confd
+}
+
+output "hosting" {
+  description = "Effective DBM hosting: cluster_checks (cluster present) | aci | none."
+  value       = length(local.module_databases) == 0 ? "none" : local.hosting
 }
 
 output "agent_container_group_id" {

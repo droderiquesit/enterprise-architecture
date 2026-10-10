@@ -1,0 +1,203 @@
+# Datadog Agent setup for Windows VMs / VMSS instances, delivered as the CONFIGURATION file of the Azure VM Application
+# `${application_name}` (portable Datadog package, modules/host-agent-package). The VM Application's PACKAGE file is
+# the dsv-fetch static binary (`dsv-fetch.exe` in the current directory). Run by the VM Application manager as SYSTEM:
+#   install / update : powershell -File .\datadog-agent-setup.ps1 -Action install|update   (idempotent)
+#   remove           : powershell -File .\datadog-agent-setup.ps1 -Action remove
+# Nothing secret is rendered here, in the VM Application version or in Terraform state (ADR-0001 section 14): the
+# Agent resolves `api_key: ENC[<dsv ref>]` at start-up through its secret backend `dsv-fetch.exe agent-backend` (a
+# Win32 executable, ACL: ddagentuser + Administrators + SYSTEM only), which reads Delinea DSV with the environment's
+# DSV-reader user-assigned identity (IMDS). The key is never written to datadog.yaml.
+# Logs: the Agent tails the policy log files and the Windows Event Log channels (no Fluent Bit).
+# Package release ${package_version} / Agent ${agent_version} / environment ${env_name}
+param([ValidateSet('install', 'update', 'remove')][string]$Action = 'install')
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$AgentVersion = '${agent_version}'
+$AgentMsiSha256 = '${agent_msi_sha256}'
+$DdSite = '${site}'
+$ApiKeyRef = '${api_key_ref}'
+$EnvName = '${env_name}'
+$DsvSha256 = '${dsv_fetch_sha256}'
+$TagPrefix = '${tag_prefix}'
+$DefaultService = '${default_service}'
+$DefaultSource = '${default_source}'
+$DdDir = 'C:\ProgramData\Datadog'
+$DsvConfDir = Join-Path $DdDir 'dsv'
+$DsvConf = Join-Path $DsvConfDir 'dsv.json'
+$DsvDir = 'C:\Program Files\Datadog\dsv-fetch'
+$DsvBin = "$DsvDir\dsv-fetch.exe"
+$LogsConf = Join-Path $DdDir 'conf.d\eh-host-logs.d\conf.yaml'
+$AgentExe = 'C:\Program Files\Datadog\Datadog Agent\bin\agent.exe'
+$Here = (Get-Location).Path
+function Log($m) { Write-Output "[datadog-vmapp] $m" }
+
+function Get-AgentProductCode {
+  $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+  $p = Get-ItemProperty $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'Datadog Agent' } | Select-Object -First 1
+  if ($p) { return $p.PSChildName } else { return $null }
+}
+
+if ($Action -eq 'remove') {
+  Stop-Service datadogagent -Force -ErrorAction SilentlyContinue
+  $code = Get-AgentProductCode
+  if ($code) {
+    $p = Start-Process msiexec.exe -ArgumentList "/x $code /qn /norestart" -Wait -PassThru
+    if ($p.ExitCode -ne 0) { throw "datadog agent uninstall failed: $($p.ExitCode)" }
+  }
+  Remove-Item -Recurse -Force $DsvDir, $DsvConfDir, (Split-Path $LogsConf) -ErrorAction SilentlyContinue
+  Log 'datadog-agent, dsv-fetch and their configuration removed'
+  exit 0
+}
+
+# ------------------------------------------------------------------ dsv-fetch binary (VM Application package)
+$pkg = Join-Path $Here 'dsv-fetch.exe'
+if (-not (Test-Path $pkg)) { throw "package file dsv-fetch.exe missing in $Here" }
+if ((Get-FileHash $pkg -Algorithm SHA256).Hash.ToLower() -ne $DsvSha256.ToLower()) { throw "dsv-fetch.exe checksum mismatch (expected $DsvSha256)" }
+
+# ------------------------------------------------------------------ Azure instance tags -> Datadog host tags
+function ConvertTo-DdValue([string]$v) {
+  $v = $v.ToLowerInvariant() -replace '[^a-z0-9_:./-]', '_' -replace '_+', '_'
+  $v = $v.Trim('_')
+  if ($v.Length -gt 200) { $v = $v.Substring(0, 200) }
+  return $v
+}
+# Azure tag key (lower case) -> Datadog tag keys (tag policy azure_tag_keys)
+$TagMap = @(
+%{ for t in tag_pairs ~}
+  ,@('${t.az}', '${t.dd}')
+%{ endfor ~}
+)
+$StaticTags = [ordered]@{
+%{ for k, v in static_tags ~}
+  '${k}' = '${v}'
+%{ endfor ~}
+}
+$hostTags = @{}
+$extraLogPaths = @()
+$logSource = $DefaultSource
+try {
+  $imds = Invoke-RestMethod -Headers @{ Metadata = 'true' } -NoProxy -TimeoutSec 5 `
+    -Uri 'http://169.254.169.254/metadata/instance/compute/tagsList?api-version=2021-02-01'
+} catch { $imds = @(); Log 'IMDS tags unavailable; static tags only' }
+foreach ($t in @($imds)) {
+  $k = ([string]$t.name).ToLowerInvariant()
+  foreach ($m in $TagMap) {
+    if ($m[0] -eq $k -and -not $hostTags.ContainsKey($m[1])) { $hostTags[$m[1]] = ConvertTo-DdValue ([string]$t.value) }
+  }
+  if ($k -eq "$${TagPrefix}log_paths") { $extraLogPaths = ([string]$t.value).Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[A-Za-z]:\\' -and $_ -notmatch '"' } }
+  if ($k -eq "$${TagPrefix}source") { $logSource = ConvertTo-DdValue ([string]$t.value) }
+}
+$hostService = if ($hostTags.ContainsKey('service')) { $hostTags['service'] } else { $DefaultService }
+$hostEnv = if ($hostTags.ContainsKey('env')) { $hostTags['env'] } else { $EnvName }
+$tagLines = @()
+foreach ($k in $StaticTags.Keys) { if (-not $hostTags.ContainsKey($k)) { $tagLines += "  - `"$${k}:$($StaticTags[$k])`"" } }
+foreach ($k in ($hostTags.Keys | Sort-Object)) { if ($hostTags[$k] -and @('env', 'service', 'version') -notcontains $k) { $tagLines += "  - `"$${k}:$($hostTags[$k])`"" } }
+
+# ------------------------------------------------------------------ configuration files
+$script:changed = $false
+function Set-Content-IfChanged([string]$path, [string]$content) {
+  New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
+  if (-not (Test-Path $path) -or (Get-Content -Raw $path) -ne $content) {
+    [IO.File]::WriteAllText($path, $content, (New-Object Text.UTF8Encoding($false)))
+    $script:changed = $true
+  }
+}
+function Protect-Path([string]$path, [string[]]$extra = @()) {
+  $grants = @('*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F') + $extra   # SYSTEM, Administrators
+  icacls $path /inheritance:r /grant:r @grants | Out-Null
+}
+
+$dsvJson = @'
+${dsv_config_json}
+'@
+Set-Content-IfChanged $DsvConf ($dsvJson.Trim() + "`n")
+
+$ignore = @(
+%{ for r in apm_ignore_resources ~}
+  '    - "${r}"'
+%{ endfor ~}
+)
+$ddYaml = @"
+# Managed by the Datadog VM Application ${application_name} ${package_version} (modules/host-agent-package).
+# The API key is a Delinea DSV reference resolved by the secret backend; no key is stored on this host.
+api_key: ENC[$ApiKeyRef]
+site: $DdSite
+env: $hostEnv
+tags:
+$($tagLines -join "`n")
+secret_backend_command: $DsvBin
+secret_backend_arguments:
+  - agent-backend
+  - --config
+  - $DsvConf
+secret_backend_timeout: 30
+logs_enabled: ${logs_enabled}
+%{ if op_logs_url != "" ~}
+observability_pipelines_worker:
+  logs:
+    enabled: true
+    url: "${op_logs_url}"
+%{ endif ~}
+otlp_config:
+  receiver:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+      http:
+        endpoint: localhost:4318
+  logs:
+    enabled: false
+apm_config:
+  enabled: true
+$(if ($ignore.Count -gt 0) { "  ignore_resources:`n" + ($ignore -join "`n") })
+process_config:
+  process_collection:
+    enabled: ${process_collection}
+remote_configuration:
+  enabled: ${remote_configuration}
+remote_updates: ${remote_updates}
+"@
+Set-Content-IfChanged (Join-Path $DdDir 'datadog.yaml') ($ddYaml.Replace("`r`n", "`n") + "`n")
+
+# Agent log collection: policy files, the host's ${tag_prefix}log_paths tag and Windows Event Log channels
+$logs = @('logs:')
+%{ for f in log_files ~}
+$logs += "  - type: file`n    path: '${f.path}'`n    service: `"${f.service == null ? "$hostService" : f.service}`"`n    source: `"${f.source == null ? "$logSource" : f.source}`""
+%{ endfor ~}
+foreach ($p in $extraLogPaths) { $logs += "  - type: file`n    path: '$p'`n    service: `"$hostService`"`n    source: `"$logSource`"" }
+%{ for c in event_channels ~}
+$logs += "  - type: windows_event`n    channel_path: '${c.channel}'`n    source: '${c.source}'`n    service: `"$hostService`""
+%{ endfor ~}
+Set-Content-IfChanged $LogsConf (($logs -join "`n") + "`n")
+
+# ------------------------------------------------------------------ Datadog Agent MSI (pinned version + SHA256)
+$current = if (Test-Path $AgentExe) { (& $AgentExe version 2>$null | Select-Object -First 1) } else { '' }
+if ($current -notmatch [regex]::Escape($AgentVersion)) {
+  $msi = Join-Path $env:TEMP "ddagent-$AgentVersion.msi"
+  Invoke-WebRequest -UseBasicParsing -Uri "https://windows-agent.datadoghq.com/ddagent-cli-$AgentVersion.msi" -OutFile $msi
+  if ((Get-FileHash $msi -Algorithm SHA256).Hash.ToLower() -ne $AgentMsiSha256.ToLower()) { throw "checksum mismatch for the Datadog Agent $AgentVersion MSI" }
+  # no APIKEY on the command line: the MSI keeps the datadog.yaml written above
+  $p = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart SITE=$DdSite" -Wait -PassThru
+  Remove-Item $msi -Force -ErrorAction SilentlyContinue
+  if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "datadog agent msiexec failed: $($p.ExitCode)" }
+  $script:changed = $true
+  Log "datadog-agent $AgentVersion installed"
+}
+Protect-Path (Join-Path $DdDir 'datadog.yaml') @('ddagentuser:R')
+
+# ------------------------------------------------------------------ dsv-fetch.exe as the Agent secret backend
+$before = if (Test-Path $DsvBin) { (Get-FileHash $DsvBin -Algorithm SHA256).Hash.ToLower() } else { '' }
+New-Item -ItemType Directory -Force -Path $DsvDir | Out-Null
+& $pkg install --dest $DsvBin --owner ddagentuser
+if ($LASTEXITCODE -ne 0) { throw "dsv-fetch install failed: $LASTEXITCODE" }
+if ($before -ne $DsvSha256.ToLower()) { $script:changed = $true }
+
+# keep retrying while the DSV-reader identity is not yet attached / DSV is unreachable
+sc.exe failure datadogagent reset= 0 actions= restart/30000/restart/30000/restart/30000 | Out-Null
+Set-Service datadogagent -StartupType Automatic
+if ($script:changed -or (Get-Service datadogagent).Status -ne 'Running') {
+  Restart-Service datadogagent -Force -ErrorAction Continue
+  Log "datadogagent (re)configured: secret backend dsv-fetch.exe, OTLP localhost:4317/4318, logs=${logs_enabled}, env=$hostEnv, service=$hostService"
+} else {
+  Log 'datadogagent unchanged'
+}

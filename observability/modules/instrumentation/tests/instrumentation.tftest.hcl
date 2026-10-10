@@ -35,6 +35,7 @@ variables {
       sidecar_parsers = "parsers: []\n"
       sidecar_lua     = "-- lua\n"
     }
+    aggregator = { kind = "observability_pipelines", agent_logs_url = "http://opw.internal.example:8282" }
     env = {
       common = { OTEL_BSP_MAX_EXPORT_BATCH_SIZE = "512", OTEL_EXPORTER_OTLP_PROTOCOL = "overridden-by-module" }
       dotnet = { DOTNET_EXTRA = "1" }
@@ -78,12 +79,29 @@ run "aks_dotnet_uses_node_agent_and_daemonset" {
   }
 }
 
-run "aca_python_sidecar_direct_to_datadog" {
+run "aca_python_fluent_bit_direct_fallback" {
   command = plan
   variables {
     runtime            = "python"
     architecture       = "aca"
     identity_client_id = "33333333-3333-3333-3333-333333333333"
+    telemetry = {
+      datadog_site = "datadoghq.eu"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { tenant = "contoso", base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+      otlp = {
+        grpc_endpoint = "http://ca-otelgw.internal.example.swedencentral.azurecontainerapps.io:4317"
+        http_endpoint = "https://ca-otelgw.internal.example.swedencentral.azurecontainerapps.io"
+        headers_ref   = "dsv://eh/dev/otlp-headers#value"
+      }
+      fluentbit = { forward_host = "ca-flb", forward_port = 24224, sidecar_config = "service: {}\n", sidecar_parsers = "parsers: []\n", sidecar_lua = "-- lua\n" }
+      # lab seam: the transport contract's fleet switch selects the fallback
+      env = { fleet = { EH_LOG_PIPELINE = "fluent_bit_direct" } }
+    }
+  }
+  assert {
+    condition     = output.log_collector == "fluent-bit-sidecar" && output.log_collector_reason != null && length([for c in output.container_app_patch.sidecars : c if c.name == "datadog"]) == 0
+    error_message = "fluent_bit_direct: Fluent Bit sidecar replaces serverless-init as the log collector (otel mode: no serverless-init)"
   }
   assert {
     condition     = output.log_route == "sidecar" && output.env["LOG_FILE_PATH"] == "/var/log/app/app.log"
@@ -104,6 +122,8 @@ run "aca_python_sidecar_direct_to_datadog" {
   assert {
     condition = (length(output.container_app_patch.init_containers) == 1
       && output.container_app_patch.init_containers[0].name == "dsv-fetch"
+      && output.container_app_patch.init_containers[0].needs_identity
+      && join(" ", output.container_app_patch.refresher_containers[0].args) == "init --out /dsv-secrets --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value --refresh 3600"
       && startswith(output.container_app_patch.init_containers[0].image, "ehacr.azurecr.io/dsv-fetch@sha256:")
       && join(" ", output.container_app_patch.init_containers[0].args) == "init --out /dsv-secrets --format env-yaml --env-yaml-name fluentbit-env.yaml --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value"
     && anytrue([for e in output.container_app_patch.init_containers[0].env : e.name == "AZURE_CLIENT_ID" && e.value == "33333333-3333-3333-3333-333333333333"]))
@@ -156,6 +176,7 @@ run "aca_sidecar_forward_mode" {
         sidecar_lua            = "-- lua\n"
         forward_shared_key_ref = "dsv://eh/dev/fluentbit-shared-key#value"
       }
+      env = { fleet = { EH_LOG_PIPELINE = "fluent_bit_direct" } }
     }
   }
   assert {
@@ -194,23 +215,154 @@ run "functions_enable_host_otel" {
   }
 }
 
-run "aci_sidecar_spec" {
+run "aci_agent_sidecar_otel_mode_collects_logs" {
   command = plan
   variables {
+    architecture       = "aci"
+    runtime            = "python"
+    identity_client_id = "44444444-4444-4444-4444-444444444444"
+  }
+  assert {
+    condition     = output.log_collector == "datadog-agent-sidecar" && output.log_route == "sidecar" && output.env["LOG_FILE_PATH"] == "/var/log/app/app.log" && output.apm.method == "otlp_gateway"
+    error_message = "ACI default: the Agent sidecar tails the app log file (apm.mode = otel here: traces still OTLP -> gateway)"
+  }
+  assert {
+    condition     = jsonencode([for c in output.aci_sidecar.containers : c.name]) == jsonencode(["datadog-agent"]) && jsonencode([for c in output.aci_sidecar.init_containers : c.name]) == jsonencode(["dsv-fetch-install"])
+    error_message = "ACI: one Agent sidecar + the dsv-fetch binary installer init container; no Fluent Bit, no refresher"
+  }
+  assert {
+    condition     = yamldecode(output.aci_agent_files["datadog.yaml"]).logs_enabled && !yamldecode(output.aci_agent_files["datadog.yaml"]).apm_config.enabled
+    error_message = "otel mode: the Agent sidecar collects logs only (its trace-agent is off)"
+  }
+  assert {
+    condition     = output.aci_sidecar.containers[0].environment_variables["DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED"] == "true" && output.aci_sidecar.containers[0].environment_variables["DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL"] == "http://opw.internal.example:8282"
+    error_message = "observability_pipelines mode: the Agent ships logs to the OP Worker Datadog Agent source"
+  }
+  assert {
+    condition     = jsondecode(output.aci_agent_files["dsv.json"]).AZURE_CLIENT_ID == "44444444-4444-4444-4444-444444444444" && jsondecode(output.aci_agent_files["dsv.json"]).DSV_AUTH == "azure"
+    error_message = "the secret backend authenticates to DSV with the container group identity"
+  }
+}
+
+run "datadog_mode_aci_agent_sidecar" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "aci"
+    runtime      = "dotnet"
+  }
+  assert {
+    condition     = output.apm.method == "agent_sidecar" && output.env["DD_DOGSTATSD_URL"] == "udp://localhost:8125" && output.env["DD_RUNTIME_METRICS_ENABLED"] == "true" && !contains(keys(output.env), "DD_TRACE_AGENT_URL")
+    error_message = "ACI datadog mode: tracer -> localhost:8126 (default), DogStatsD + runtime metrics to the sidecar (gap closed)"
+  }
+  assert {
+    condition     = output.env["CORECLR_ENABLE_PROFILING"] == "1" && output.env["DD_PROFILING_ENABLED"] == "true"
+    error_message = ".NET tracer + profiler from the image on the agent_sidecar path"
+  }
+  assert {
+    condition = alltrue([
+      output.aci_sidecar.containers[0].image == "gcr.io/datadoghq/agent:7.84.2",
+      output.aci_sidecar.containers[0].cpu == 0.25,
+      output.aci_sidecar.containers[0].memory == 0.5,
+      length(output.aci_sidecar.containers[0].secure_environment_variables) == 0,
+      output.aci_sidecar.containers[0].environment_variables["DD_API_KEY"] == "ENC[dsv://eh/dev/datadog-api-key#value]",
+      jsonencode(output.aci_sidecar.containers[0].liveness_exec) == jsonencode(["agent", "health"]),
+    ])
+    error_message = "pinned Agent image (fleet policy), 0.25 vCPU / 0.5 GB, only an ENC[] reference as DD_API_KEY"
+  }
+  assert {
+    condition = alltrue([
+      yamldecode(output.aci_agent_files["datadog.yaml"]).api_key == "ENC[dsv://eh/dev/datadog-api-key#value]",
+      yamldecode(output.aci_agent_files["datadog.yaml"]).secret_backend_command == "/opt/dsv-fetch/dsv-fetch",
+      jsonencode(yamldecode(output.aci_agent_files["datadog.yaml"]).secret_backend_arguments) == jsonencode(["agent-backend", "--config", "/eh/agent/dsv.json"]),
+      yamldecode(output.aci_agent_files["datadog.yaml"]).apm_config.enabled,
+      !yamldecode(output.aci_agent_files["datadog.yaml"]).apm_config.apm_non_local_traffic,
+      !yamldecode(output.aci_agent_files["datadog.yaml"]).dogstatsd_non_local_traffic,
+      yamldecode(output.aci_agent_files["datadog.yaml"]).remote_configuration.enabled,
+      contains(yamldecode(output.aci_agent_files["datadog.yaml"]).apm_config.ignore_resources, "GET /healthz"),
+      yamldecode(output.aci_agent_files["datadog.yaml"]).hostname == "hello-orders-api-dev",
+    ])
+    error_message = "datadog.yaml: key via the dsv-fetch secret backend, APM + DogStatsD on localhost only, Remote Configuration on"
+  }
+  assert {
+    condition     = yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].path == "/var/log/app/app.log" && yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].source == "csharp" && yamldecode(output.aci_agent_files["app-logs.yaml"]).logs[0].service == "hello-orders-api"
+    error_message = "the Agent tails LOG_FILE_PATH with source/service"
+  }
+  assert {
+    condition     = jsonencode(output.aci_sidecar.init_containers[0].commands) == jsonencode(["/opt/dsv-fetch/dsv-fetch", "install", "--dest", "/eh/dsv-bin/dsv-fetch"]) && startswith(output.aci_agent_files.start, "/eh/dsv-bin/dsv-fetch install --dest /opt/dsv-fetch/dsv-fetch && ") && endswith(output.aci_agent_files.start, "exec /bin/entrypoint.sh") && !strcontains(jsonencode(output.aci_sidecar), "python")
+    error_message = "init container installs the binary (no identity needed); the Agent re-installs it root-owned 0500 and execs the entrypoint; no Python anywhere"
+  }
+  assert {
+    condition     = jsonencode(output.aci_sidecar.app_volume_mounts) == jsonencode([{ mount_path = "/var/log/app", name = "app-logs" }]) && anytrue([for v in output.aci_sidecar.containers[0].volumes : v.name == "app-logs" && v.empty_dir])
+    error_message = "app and Agent share the app-logs emptyDir"
+  }
+}
+
+run "aci_agent_sidecar_sizing_override" {
+  command = plan
+  variables {
+    apm           = null
+    architecture  = "aci"
+    runtime       = "python"
+    agent_sidecar = { cpu = 0.5, memory_gb = 1, hostname = "ci-partner-sim-dev", image = "ehacr.azurecr.io/datadog/agent:7.84.2" }
+  }
+  assert {
+    condition     = output.aci_sidecar.containers[0].cpu == 0.5 && output.aci_sidecar.containers[0].memory == 1 && output.aci_sidecar.containers[0].image == "ehacr.azurecr.io/datadog/agent:7.84.2" && output.aci_sidecar.containers[0].environment_variables["DD_HOSTNAME"] == "ci-partner-sim-dev"
+    error_message = "agent_sidecar overrides sizing, image (e.g. an ACR mirror) and hostname"
+  }
+}
+
+run "aci_fluent_bit_direct_fallback" {
+  command = plan
+  variables {
+    apm          = null
     architecture = "aci"
     runtime      = "python"
+    telemetry = {
+      datadog_site = "datadoghq.eu"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+      otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
+      fluentbit    = { forward_host = "x", forward_port = 24224, sidecar_config = "service: {}\n", sidecar_parsers = "p", sidecar_lua = "l" }
+      env          = { fleet = { EH_LOG_PIPELINE = "fluent_bit_direct" } }
+    }
   }
   assert {
-    condition     = length(output.aci_sidecar.container.secure_environment_variables) == 0 && output.aci_sidecar.fetcher.name == "dsv-fetch" && contains(output.aci_sidecar.fetcher.commands, "DD_API_KEY=dsv://eh/dev/datadog-api-key#value") && output.aci_sidecar.fetcher.commands[0] == "/usr/bin/python3.13"
-    error_message = "ACI: no secure env values; a dsv-fetch refresher container (ACI init containers have no managed identity) writes the env file."
+    condition     = jsonencode([for c in output.aci_sidecar.containers : c.name]) == jsonencode(["datadog-agent", "fluent-bit", "dsv-fetch"]) && output.log_collector == "fluent-bit-sidecar"
+    error_message = "fallback: Fluent Bit collects the logs; the Agent sidecar keeps traces / DogStatsD; dsv-fetch refresher writes the Fluent Bit key"
   }
   assert {
-    condition     = anytrue([for v in output.aci_sidecar.container.volumes : v.name == "dsv-secrets" && v.empty_dir && v.mount_path == "/dsv-secrets"])
-    error_message = "ACI: Fluent Bit mounts the shared emptyDir with the env file."
+    condition     = !yamldecode(output.aci_agent_files["datadog.yaml"]).logs_enabled && output.aci_agent_files.env["DD_LOGS_ENABLED"] == "false" && !strcontains(output.aci_agent_files.start, "app-logs.yaml")
+    error_message = "one collector per log source: Agent log collection off when Fluent Bit collects"
   }
   assert {
-    condition     = output.aci_sidecar.container.volumes[1].secret["fluent-bit.yaml"] == base64encode("service: {}\n")
-    error_message = "ACI secret volume carries the config files."
+    condition     = jsonencode(output.aci_sidecar.containers[2].commands) == jsonencode(["/opt/dsv-fetch/dsv-fetch", "init", "--out", "/dsv-secrets", "--format", "env-yaml", "--env-yaml-name", "fluentbit-env.yaml", "--map", "DD_API_KEY=dsv://eh/dev/datadog-api-key#value", "--refresh", "3600"])
+    error_message = "the refresher is the dsv-fetch binary in loop mode (ACI init containers have no managed identity)"
+  }
+  assert {
+    condition     = output.aci_sidecar.containers[1].volumes[1].secret["fluent-bit.yaml"] == base64encode("service: {}\n")
+    error_message = "ACI secret volume carries the Fluent Bit config files"
+  }
+}
+
+run "aci_op_mode_without_worker_url_warns" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "aci"
+    runtime      = "python"
+    telemetry = {
+      datadog_site = "datadoghq.eu"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+      otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
+      fluentbit    = { forward_host = "x", forward_port = 24224 }
+    }
+  }
+  expect_failures = [check.datadog_sidecar_inputs]
+  assert {
+    condition     = !yamldecode(output.aci_agent_files["datadog.yaml"]).logs_enabled && output.apm.method == "agent_sidecar"
+    error_message = "no OP Worker URL: no direct-to-intake bypass (logs off + plan warning); traces / DogStatsD still work"
   }
 }
 
@@ -288,8 +440,8 @@ run "tag_policy_on_every_path" {
     error_message = "OTEL_RESOURCE_ATTRIBUTES from the policy + cloud attributes"
   }
   assert {
-    condition     = one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "FLB_DD_TAGS"]) == "application:enterprise-hello,business_unit:retail,env:dev,environment:dev,owning_team:orders,service:hello-orders-api,version:1.4.2"
-    error_message = "Fluent Bit sidecar ddtags = the full policy tag set"
+    condition     = one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_TAGS"]) == "application:enterprise-hello,business_unit:retail,environment:dev,owning_team:orders" && one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_ENV"]) == "dev"
+    error_message = "serverless-init sidecar tags = the policy tag set (unified + DD_TAGS)"
   }
   assert {
     condition     = output.azure_tags["owning_team"] == "orders" && output.azure_tags["env"] == "dev"
@@ -339,8 +491,9 @@ run "datadog_mode_aks_ssi" {
 run "datadog_mode_aca_dotnet_agent_gateway" {
   command = plan
   variables {
-    # per-workload opt-out of the aca default (serverless_init)
+    # per-workload opt-out of the aca default (serverless_init) for traces and logs (Container Apps jobs pattern)
     apm          = { managed_runtime_path = "agent_gateway" }
+    logs         = { collector = "azure" }
     architecture = "aca"
     telemetry = {
       datadog_site = "datadoghq.eu"
@@ -360,17 +513,18 @@ run "datadog_mode_aca_dotnet_agent_gateway" {
     error_message = ".NET CLR profiler env for the image-installed tracer; profiler enabled"
   }
   assert {
-    condition     = length([for c in output.container_app_patch.sidecars : c if c.name == "datadog"]) == 0 && length(output.app_requirements) > 0
-    error_message = "no serverless-init sidecar on the agent_gateway path; app requirements reported"
+    condition     = length(output.container_app_patch.sidecars) == 0 && length(output.container_app_patch.init_containers) == 0 && length(output.app_requirements) > 0 && output.log_route == "eventhub" && output.log_collector == "diagnostic-settings" && !contains(keys(output.env), "LOG_FILE_PATH")
+    error_message = "no sidecar on the agent_gateway + azure logs path (console logs -> diagnostic settings); app requirements reported"
   }
 }
 
 run "datadog_mode_aca_default_serverless_init" {
   command = plan
   variables {
-    apm             = null
-    architecture    = "aca"
-    serverless_init = { subscription_id = "00000000-0000-0000-0000-000000000000", resource_group = "rg-app" }
+    apm                = null
+    architecture       = "aca"
+    identity_client_id = "33333333-3333-3333-3333-333333333333"
+    serverless_init    = { subscription_id = "00000000-0000-0000-0000-000000000000", resource_group = "rg-app" }
   }
   assert {
     condition     = output.apm.mode == "datadog" && output.apm.method == "serverless_init" && !contains(keys(output.env), "DD_TRACE_AGENT_URL")
@@ -381,28 +535,43 @@ run "datadog_mode_aca_default_serverless_init" {
     error_message = "DogStatsD (custom + runtime metrics) to the serverless-init sidecar on localhost"
   }
   assert {
-    condition     = one([for c in output.container_app_patch.sidecars : c.image if c.name == "datadog"]) == "datadog/serverless-init:1.10.4"
-    error_message = "serverless-init sidecar pinned"
+    condition     = jsonencode([for c in output.container_app_patch.sidecars : c.name]) == jsonencode(["datadog"]) && output.container_app_patch.sidecars[0].image == "datadog/serverless-init:1.10.4" && output.log_collector == "serverless-init"
+    error_message = "one pinned serverless-init sidecar; no Fluent Bit sidecar"
   }
   assert {
-    condition     = length(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e if e.name == "DD_API_KEY" || e.secret_name != null]])) == 0 && one(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e.value if e.name == "DD_LOGS_ENABLED"] if c.name == "datadog"])) == "false"
-    error_message = "no API key value or Container Apps secret reference in any sidecar env; serverless-init logs off (Fluent Bit sidecar collects)"
+    condition     = length(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e if e.name == "DD_API_KEY" || e.secret_name != null]])) == 0 && length(output.container_app_patch.secrets) == 0
+    error_message = "no API key value or Container Apps secret anywhere"
   }
   assert {
-    condition     = jsonencode(one([for c in output.container_app_patch.sidecars : c.command if c.name == "datadog"])) == jsonencode(["/bin/sh", "-c", "set -a; . /dsv-secrets/serverless-init.env; set +a; exec /datadog-init"]) && contains(flatten([for c in output.container_app_patch.sidecars : [for m in c.volume_mounts : m.name] if c.name == "datadog"]), "dsv-secrets")
-    error_message = "the sidecar sources the dsv-fetch dotenv file from the in-memory volume, then execs /datadog-init"
+    condition = alltrue([
+      one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_LOGS_ENABLED"]) == "true",
+      one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_SERVERLESS_LOG_PATH"]) == "/var/log/app/app.log",
+      one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_SOURCE"]) == "csharp",
+      one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_SERVICE"]) == "hello-orders-api",
+      one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED"]) == "true",
+      one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL"]) == "http://opw.internal.example:8282",
+      one([for e in output.container_app_patch.sidecars[0].env : e.value if e.name == "AZURE_CLIENT_ID"]) == "33333333-3333-3333-3333-333333333333",
+      contains([for m in output.container_app_patch.sidecars[0].volume_mounts : m.name], "app-logs"),
+      contains([for m in output.container_app_patch.app_container.volume_mounts : m.name], "app-logs"),
+      output.env["LOG_FILE_PATH"] == "/var/log/app/app.log",
+    ])
+    error_message = "serverless-init tails the shared app log file and ships it to the OP Worker; DSV env for its dsv-fetch run"
   }
   assert {
-    condition     = one([for c in output.container_app_patch.init_containers : join(" ", c.args) if c.name == "dsv-fetch-datadog"]) == "init --out /dsv-secrets --format dotenv --dotenv-name serverless-init.env --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value" && length(output.container_app_patch.refresher_containers) == length(output.container_app_patch.init_containers)
-    error_message = "dsv-fetch writes DD_API_KEY from Delinea DSV (reference only) for serverless-init; refresher variant for Dedicated profiles"
+    condition     = jsonencode(output.container_app_patch.sidecars[0].command) == jsonencode(["/bin/sh", "-c", "/eh/dsv-bin/dsv-fetch init --out /tmp/dsv-fetch --format dotenv --dotenv-name serverless-init.env --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value && set -a && . /tmp/dsv-fetch/serverless-init.env && set +a && : > /tmp/dsv-fetch/serverless-init.env && exec /datadog-init"])
+    error_message = "the sidecar resolves DD_API_KEY with the dsv-fetch binary into its own /tmp, sources and truncates the dotenv, then execs /datadog-init"
   }
   assert {
-    condition     = length([for v in output.container_app_patch.volumes : v if v.name == "dsv-secrets" && v.storage_type == "EmptyDir"]) == 1
-    error_message = "one in-memory dsv-secrets volume shared by both dsv-fetch runs"
+    condition     = jsonencode([for c in output.container_app_patch.init_containers : c.name]) == jsonencode(["dsv-fetch-install"]) && join(" ", output.container_app_patch.init_containers[0].args) == "install --dest /eh/dsv-bin/dsv-fetch" && !output.container_app_patch.init_containers[0].needs_identity && length(output.container_app_patch.refresher_containers) == 0
+    error_message = "one identity-free init container installs the binary (every workload profile); no refresher"
+  }
+  assert {
+    condition     = jsonencode(sort([for v in output.container_app_patch.volumes : v.name])) == jsonencode(["app-logs", "dsv-bin"]) && !strcontains(jsonencode(output.container_app_patch), "python")
+    error_message = "EmptyDir app-logs + dsv-bin only; no dsv-secrets volume; no Python"
   }
 }
 
-run "datadog_mode_aca_serverless_init_forward_sidecar" {
+run "datadog_mode_aca_serverless_init_replaces_fluent_bit_in_op_mode" {
   command = plan
   variables {
     apm          = null
@@ -413,12 +582,13 @@ run "datadog_mode_aca_serverless_init_forward_sidecar" {
       secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
       otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
       fluentbit    = { forward_host = "opw.internal", forward_port = 24224, sidecar_mode = "forward", sidecar_forward_config = "service: {}\n", sidecar_parsers = "p", sidecar_lua = "l" }
+      aggregator   = { kind = "observability_pipelines", agent_logs_url = "http://opw.internal:8282" }
       env          = {}
     }
   }
   assert {
-    condition     = [for c in output.container_app_patch.init_containers : c.name] == ["dsv-fetch-datadog"] && length([for v in output.container_app_patch.volumes : v if v.name == "dsv-secrets"]) == 1
-    error_message = "Observability Pipelines forward sidecar needs no key; serverless-init still gets its DSV dotenv file"
+    condition     = jsonencode([for c in output.container_app_patch.init_containers : c.name]) == jsonencode(["dsv-fetch-install"]) && jsonencode([for c in output.container_app_patch.sidecars : c.name]) == jsonencode(["datadog"]) && length(output.sidecar_secret_refs) == 0
+    error_message = "Observability Pipelines mode: no Fluent Bit sidecar (even with a forward config in the contract); serverless-init collects"
   }
 }
 
@@ -521,6 +691,7 @@ run "contract_datadog_switch_aca_serverless_init" {
       secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
       otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
       fluentbit    = { forward_host = "x", forward_port = 24224, sidecar_mode = "forward", sidecar_forward_config = "service: {}\n", sidecar_parsers = "p", sidecar_lua = "l" }
+      aggregator   = { kind = "observability_pipelines", agent_logs_url = "http://opw:8282" }
       env          = { fleet = { EH_APM_MODE = "datadog" } }
     }
   }

@@ -60,7 +60,7 @@ variable "env" {
 }
 
 variable "sidecar_patch" {
-  description = "app-env output `container_app_patch` (Fluent Bit sidecar, dsv-fetch init container, volumes, config-file secrets). Null = no sidecar."
+  description = "app-env output `container_app_patch` (serverless-init or Fluent Bit sidecar, dsv-fetch init / refresher containers, volumes, config-file secrets). Null = no sidecar."
   type        = any
   default     = null
 }

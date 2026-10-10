@@ -37,6 +37,7 @@ References are not secrets (ADR-0001 section 14) and may appear in contracts, st
 | hello-frontend | — |
 | obs-collector (Fluent Bit aggregator / OTel gateway) | `datadog-api-key`, `fluentbit-shared-key` (aggregator forward input), `eventhub-fluentbit-listen` (kafka input) |
 | obs-dbm (Datadog Agent DBM) | `datadog-api-key`, `dbm-<engine>-password` |
+| obs-host-agent (Datadog Agent on VMs / VMSS, attached by the obs-hosts Azure Policy to every host tagged `datadog:enabled`) | `datadog-api-key` only (the Agent's dsv-fetch secret backend; any process on an enrolled host can use the identity - accepted risk, ingest-only key) |
 | deploy-agent (pipelines) | pipeline secrets `datadog-api-key`, `datadog-app-key`, `datadog-client-token`, `fault-token` and the platform apply inputs (`sqlvm-admin-password`, `sqlvm-dbadapter-password`, `documentdb-admin-password`, `cassandra-mi-admin-password`, `mysql-admin-password`, `appgw-tls-pfx`, `aro-pull-secret`); also publishes generated values (create/update on `eventhub-fluentbit-listen`) and lists paths for `check.py` |
 | aks-control-plane, aks-kubelet, hello-logicapps, hello-frontend | — |
 

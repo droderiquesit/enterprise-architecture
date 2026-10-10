@@ -1,8 +1,19 @@
-# Datadog Database Monitoring check configs for Azure databases + optional ACI Agent host.
+# Datadog Database Monitoring check configs for Azure databases + where they run:
+#   cluster_checks (whenever a cluster exists): cluster_check_confd for modules/kubernetes - the Cluster Agent dispatches
+#                  the checks to the cluster-checks runners, whose dsv-fetch secret backend resolves ENC[dsv://...]
+#   aci            (no cluster): a Datadog Agent container group created here (same dsv-fetch binary backend)
+#   none           render only
 # Docs (2026-10): https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/ ,
 # .../setup_mysql/azure/ , .../setup_sql_server/azure/ , .../guide/managed_authentication/
 # instance tags from the tag policy (env / team / owner / region / ... + service of the owning application, so DBM
 # matches APM's database spans and the org's existing monitors); db_key + per-database tags as extras
+module "fleet" {
+  source       = "../fleet-policy"
+  policy       = var.fleet_policy
+  architecture = "aci"
+  env          = var.datadog.env
+}
+
 module "db_tags" {
   source           = "../tagging"
   for_each         = var.databases
@@ -16,14 +27,8 @@ locals {
   default_port = { postgres = 5432, mysql = 3306, sqlserver = 1433 }
   check_dir    = { postgres = "postgres.d", mysql = "mysql.d", sqlserver = "sqlserver.d" }
 
-  password_value = {
-    for k, d in var.databases : k => d.password_ref == null ? null : (
-      d.password_ref.kind == "dsv" ? "ENC[${d.password_ref.name}]" :
-      d.password_ref.kind == "k8s_secret" ? "ENC[k8s_secret@${d.password_ref.name}]" :
-      d.password_ref.kind == "file" ? "ENC[file@${d.password_ref.name}]" :
-      "%%env_${d.password_ref.name}%%"
-    )
-  }
+  # one secret path: the Agent's secret_backend_command (dsv-fetch agent-backend) resolves ENC[dsv://...]
+  password_value = { for k, d in var.databases : k => d.password_ref == null ? null : "ENC[${d.password_ref.name}]" }
 
   instance = {
     for k, d in var.databases : k => merge(
@@ -87,17 +92,26 @@ locals {
     })
   }
 
-  # ACI host: the Agent resolves every ENC[dsv://...] (API key, DB passwords) itself with dsv-fetch agent-backend,
-  # authenticating to Delinea DSV with the container group's user-assigned identity (IMDS). No secret values in
-  # this config, the container group definition or Terraform state. (ACI init containers cannot use managed
-  # identities - Microsoft Learn - so the reader runs inside the Agent container as its secret backend.)
-  dsv_fetch_source = coalesce(try(var.aci.dsv_fetch_source, null), "${path.module}/../../images/dsv-fetch/dsv_fetch.py")
+  # ACI host: the Agent resolves every ENC[dsv://...] (API key, DB passwords) itself with the static dsv-fetch binary
+  # (`agent-backend`), authenticating to Delinea DSV with the container group's user-assigned identity (IMDS). The
+  # init container only copies the binary out of the dsv-fetch image (no identity needed - ACI init containers cannot
+  # use managed identities); the Agent container re-installs it as root, mode 0500 (owner = the Agent user). No
+  # secret values in this config, the container group definition or Terraform state.
+  # single Agent pin: fleet policy <agent.image>:<agent.version> (no fallback)
+  agent_version = try(tostring(module.fleet.agent.version), null)
+  aci_image     = try(coalesce(try(var.aci.image, null), "${module.fleet.agent.image}:${module.fleet.agent.version}"), null)
   aci_dsv_config = var.aci == null ? null : jsonencode(merge(
     var.aci.dsv.tenant == null ? {} : { DSV_TENANT = var.aci.dsv.tenant },
     var.aci.dsv.tld == null ? {} : { DSV_TLD = var.aci.dsv.tld },
     var.aci.dsv.base_url == null ? {} : { DSV_BASE_URL = var.aci.dsv.base_url },
     { DSV_AUTH = "azure", AZURE_CLIENT_ID = var.aci.identity_client_id, DSV_TIMEOUT_SECONDS = "10" },
   ))
+  aci_start_command = join(" && ", [
+    "/eh/bin/dsv-fetch install --dest /opt/dsv-fetch/dsv-fetch",
+    "cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml",
+    "for d in /eh/confd/*; do n=$(basename $d); mkdir -p /etc/datadog-agent/conf.d/$n.d && cp $d /etc/datadog-agent/conf.d/$n.d/conf.yaml; done",
+    "exec /bin/entrypoint.sh",
+  ])
   aci_datadog_yaml = var.aci == null ? null : yamlencode({
     api_key                    = "ENC[${var.aci.api_key_ref}]"
     site                       = var.datadog.site
@@ -129,14 +143,27 @@ resource "azurerm_container_group" "dbm" {
     identity_ids = [var.aci.identity_id]
   }
 
+  # copies the static dsv-fetch binary out of its image into the shared emptyDir (no shell / Python involved)
+  init_container {
+    name     = "dsv-fetch-install"
+    image    = var.aci.fetch_image
+    commands = ["/opt/dsv-fetch/dsv-fetch", "install", "--dest", "/eh/bin/dsv-fetch"]
+
+    volume {
+      name       = "dsv-bin"
+      mount_path = "/eh/bin"
+      empty_dir  = true
+    }
+  }
+
   container {
     name   = "datadog-agent"
-    image  = var.aci.image
+    image  = local.aci_image
     cpu    = var.aci.cpu
     memory = var.aci.memory_gb
-    # install dsv-fetch as the secret backend (root-owned, 0500, embedded python3 - what the Agent requires), place
-    # the rendered datadog.yaml + check configs, then hand over to the image entrypoint
-    commands = ["/bin/sh", "-c", "python3 -I /eh/dsv/dsv_fetch.py install --dest /opt/dsv-fetch/dsv-fetch --python /opt/datadog-agent/embedded/bin/python3 && cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml && for d in /eh/confd/*; do n=$(basename $d); mkdir -p /etc/datadog-agent/conf.d/$n.d && cp $d /etc/datadog-agent/conf.d/$n.d/conf.yaml; done && exec /bin/entrypoint.sh"]
+    # install the dsv-fetch binary (copied by the init container) as the secret backend (root-owned, 0500 - what the
+    # Agent requires), place the rendered datadog.yaml + check configs, then hand over to the image entrypoint
+    commands = ["/bin/sh", "-c", local.aci_start_command]
     environment_variables = {
       DD_SITE     = var.datadog.site
       DD_HOSTNAME = var.aci.name
@@ -158,13 +185,18 @@ resource "azurerm_container_group" "dbm" {
     }
 
     volume {
+      name       = "dsv-bin"
+      mount_path = "/eh/bin"
+      read_only  = true
+      empty_dir  = true
+    }
+
+    # ACI secret volume used as a file mount; dsv.json holds only the DSV endpoint and the identity client id
+    volume {
       name       = "dsv"
       mount_path = "/eh/dsv"
       read_only  = true
-      secret = {
-        "dsv_fetch.py" = base64encode(file(local.dsv_fetch_source))
-        "dsv.json"     = base64encode(local.aci_dsv_config)
-      }
+      secret     = { "dsv.json" = base64encode(local.aci_dsv_config) }
     }
 
     volume {
@@ -188,8 +220,8 @@ resource "azurerm_container_group" "dbm" {
       error_message = "hosting = aci requires var.aci (subnet, identity, DSV reference of the API key)."
     }
     precondition {
-      condition     = alltrue([for d in values(var.databases) : d.auth != "password" || contains(["dsv", "file"], d.password_ref.kind)])
-      error_message = "On ACI, DB passwords must come from Delinea DSV (password_ref.kind = dsv, name = dsv://...)."
+      condition     = local.aci_image != null && local.agent_version != null
+      error_message = "The fleet policy has no Datadog Agent version/image: set agent.version (7.x.y, the single pin of versions.yaml images.datadog_agent) and agent.image. There is no built-in fallback."
     }
   }
 }

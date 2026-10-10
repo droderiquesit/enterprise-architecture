@@ -1,16 +1,24 @@
-# The Datadog API key never passes through this root: the Agents resolve api_key ENC[dsv://...] at run time with
-# the dsv-fetch secret backend, and Fluent Bit reads it through a dsv-fetch init container - both with AKS workload
-# identity of the obs-collector identity, which this root federates with the three service accounts below
+# The Datadog API key never passes through this root: the node Agents, the Cluster Agent and the cluster-checks runners
+# resolve api_key ENC[dsv://...] at run time with the static dsv-fetch binary as secret backend (init container
+# dsv-fetch-install, image = registry artifact img-dsv-fetch), and the Fluent Bit fallback reads it through a dsv-fetch
+# init container - all with AKS workload identity, which this root federates with the service accounts below
 # (platform-aks federates only one service account per identity). ADR-0001 section 14.
 locals {
   collector = var.foundation_identity.identities[var.settings.collector_identity_key]
-  # Datadog chart release "datadog": agents (DaemonSet) -> SA datadog, cluster-checks runners -> SA
-  # datadog-cluster-checks (dedicated); fluent-bit chart release "fluent-bit" -> SA fluent-bit
-  workload_service_accounts = var.settings.api_key_mode == "dsv_secret_backend" ? {
-    "datadog-agent"          = { namespace = "datadog", service_account = "datadog" }
+  # DBM (settings.dbm = auto): the platform-db contracts of this environment become cluster checks of the Cluster
+  # Agent (obs-dbm then creates no ACI Agent - its settings.hosting = auto sees the same platform-aks contract)
+  dbm_identity = try(var.foundation_identity.identities[var.settings.dbm_identity_key], null)
+  dbm_on       = var.settings.dbm == "auto" && local.dbm_identity != null && length(module.dbm_contracts.databases) > 0
+  # Datadog chart release "datadog": agents (DaemonSet) -> SA datadog, Cluster Agent -> SA datadog-cluster-agent,
+  # cluster-checks runners -> SA datadog-cluster-checks (dedicated; the obs-dbm identity when DBM checks run there);
+  # fluent-bit chart release "fluent-bit" (fallback collector) -> SA fluent-bit
+  collector_service_accounts = merge({
+    "datadog-agent"         = { namespace = "datadog", service_account = "datadog" }
+    "datadog-cluster-agent" = { namespace = "datadog", service_account = "datadog-cluster-agent" }
+    "fluent-bit"            = { namespace = "fluent-bit", service_account = "fluent-bit" }
+    }, local.dbm_on ? {} : {
     "datadog-cluster-checks" = { namespace = "datadog", service_account = "datadog-cluster-checks" }
-    "fluent-bit"             = { namespace = "fluent-bit", service_account = "fluent-bit" }
-  } : {}
+  })
 
   # Package 3.0.0 fleet switches published by obs-telemetry-transport (contract env.fleet). A transport contract
   # without them (package 2.x) keeps this root on the 2.x path: Fluent Bit direct + OpenTelemetry.
@@ -28,12 +36,51 @@ locals {
 }
 
 resource "azurerm_federated_identity_credential" "collector" {
-  for_each                  = local.workload_service_accounts
+  for_each                  = local.collector_service_accounts
   name                      = "aks-${var.platform_aks.cluster_name}-${each.value.namespace}-${each.value.service_account}"
   user_assigned_identity_id = local.collector.id
   issuer                    = var.platform_aks.oidc_issuer_url
   subject                   = "system:serviceaccount:${each.value.namespace}:${each.value.service_account}"
   audience                  = ["api://AzureADTokenExchange"]
+}
+
+# cluster-checks runners as the obs-dbm identity: DSV read on the DB password paths + Entra database login
+resource "azurerm_federated_identity_credential" "dbm" {
+  count                     = local.dbm_on ? 1 : 0
+  name                      = "aks-${var.platform_aks.cluster_name}-datadog-datadog-cluster-checks"
+  user_assigned_identity_id = local.dbm_identity.id
+  issuer                    = var.platform_aks.oidc_issuer_url
+  subject                   = "system:serviceaccount:datadog:datadog-cluster-checks"
+  audience                  = ["api://AzureADTokenExchange"]
+}
+
+module "dbm_contracts" {
+  source = "../../modules/dbm/contracts"
+  contracts = {
+    postgresql = var.platform_db_postgresql
+    mysql      = var.platform_db_mysql
+    sql        = var.platform_db_sql
+    sqlmi      = var.platform_db_sqlmi
+    sqlvm      = var.platform_db_sqlvm
+  }
+  base_path          = try(var.foundation_identity.secrets.base_path, "unset")
+  identity_client_id = try(local.dbm_identity.client_id, "unset")
+}
+
+module "dbm" {
+  source    = "../../modules/dbm"
+  databases = local.dbm_on ? module.dbm_contracts.databases : {}
+  hosting   = local.dbm_on ? "cluster_checks" : "none"
+  datadog   = { site = var.obs_telemetry_transport.datadog_site, env = var.environment.name }
+  identity = {
+    team        = var.environment.team
+    owner       = var.environment.owner
+    application = "enterprise-hello"
+    domain      = "data"
+    tier        = "infrastructure"
+    region      = var.environment.location
+    managed_by  = "terraform"
+  }
 }
 
 module "kubernetes" {
@@ -44,11 +91,6 @@ module "kubernetes" {
     env        = var.environment.name
     extra_tags = { team = var.environment.team, application = "enterprise-hello", region = var.environment.location }
   }
-  api_key = {
-    mode                      = var.settings.api_key_mode
-    secret_name               = var.settings.synced_secret_name
-    cluster_agent_secret_name = var.settings.cluster_agent_secret_name
-  }
   dsv = {
     api_key_ref = var.obs_telemetry_transport.api_key_ref
     tenant      = var.obs_telemetry_transport.secrets.tenant
@@ -57,6 +99,8 @@ module "kubernetes" {
     # registry artifact img-dsv-fetch (digest-pinned) of this root; the transport contract's image as fallback
     fetch_image        = try(coalesce(try(var.artifacts["img-dsv-fetch"].image, null), var.obs_telemetry_transport.secrets.fetch_image), null)
     identity_client_id = local.collector.client_id
+    # DBM cluster checks: the runners read the DB passwords / log in to Entra as obs-dbm
+    cluster_checks_identity_client_id = local.dbm_on ? local.dbm_identity.client_id : null
   }
   charts = {
     datadog_version    = var.settings.datadog_chart_version
@@ -68,7 +112,9 @@ module "kubernetes" {
     kubelet_tls_mode      = var.settings.kubelet_tls_mode
     is_aks                = true
   }
-  cluster_checks = var.settings.dbm_cluster_checks
+  cluster_checks = module.dbm.cluster_check_confd
+  # per-cluster chart values (YAML documents), applied after the module's base + fleet layers
+  values_overrides = var.settings.values_overrides
   # package 3.0.0: fleet policy (log pipeline / SSI / profiling) from the transport contract, canonical tags of the
   # cluster infrastructure (modules/tagging)
   fleet_policy = local.fleet_policy
@@ -86,5 +132,5 @@ module "kubernetes" {
   apm        = { namespaces = var.settings.ssi_namespaces }
   fluent_bit = { exclude_namespaces = var.settings.exclude_namespaces }
 
-  depends_on = [azurerm_federated_identity_credential.collector]
+  depends_on = [azurerm_federated_identity_credential.collector, azurerm_federated_identity_credential.dbm]
 }

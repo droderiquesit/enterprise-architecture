@@ -83,7 +83,11 @@ jobs:
                 componentPath: ${{ parameters.componentPath }}
                 artifactName: ${{ parameters.artifactName }}
                 settings: ${{ parameters.settings }}
-          - ${{ if eq(format, 'zip-package') }}:
+          - ${{ if and(eq(format, 'zip-package'), eq(parameters.component, 'img-dsv-fetch')) }}:
+            - template: build-dsv-fetch.yml   # release binaries + SHA256SUMS, not a source zip
+              parameters:
+                componentPath: ${{ parameters.componentPath }}
+          - ${{ if and(eq(format, 'zip-package'), ne(parameters.component, 'img-dsv-fetch')) }}:
             - ${{ if eq(parameters.language, 'dotnet') }}:
               - template: build-dotnet.yml
                 parameters:

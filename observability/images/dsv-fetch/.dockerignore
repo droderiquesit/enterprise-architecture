@@ -1,2 +1,7 @@
 *
-!dsv_fetch.py
+!go.mod
+!VERSION
+!build.sh
+!cmd/**
+!internal/**
+internal/**/*_test.go

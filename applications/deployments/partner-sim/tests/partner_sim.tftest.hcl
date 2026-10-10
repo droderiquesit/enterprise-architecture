@@ -351,7 +351,7 @@ run "defaults" {
   }
   assert {
     condition     = jsonencode([for c in azurerm_container_group.this.container : c.name]) == jsonencode(["hello-partner-sim", "fluent-bit", "dsv-fetch"]) && length(azurerm_container_group.this.init_container) == 0
-    error_message = "ACI group: app, Fluent Bit sidecar and the dsv-fetch refresher (no init container: ACI init containers have no managed identity)."
+    error_message = "fluent_bit_direct fallback (mock contract without fleet switches): app, Fluent Bit sidecar and the dsv-fetch refresher (no init container: ACI init containers have no managed identity)."
   }
   assert {
     condition     = azurerm_container_group.this.image_registry_credential[0].user_assigned_identity_id == var.foundation_identity.identities["hello-partner-sim"].id
@@ -384,6 +384,60 @@ run "defaults" {
   assert {
     condition     = output.contract.container_group.id != null && output.contract.apps["hello-partner-sim"].app_log_route == "sidecar"
     error_message = "Contract exposes container_group.id and log route."
+  }
+}
+
+run "datadog_agent_sidecar_observability_pipelines" {
+  # observability 4.0.0 default (lab contract switches datadog + observability_pipelines): Datadog Agent sidecar,
+  # no Fluent Bit; the Agent resolves its key with the dsv-fetch binary the init container installs.
+  command = plan
+  variables {
+    obs_telemetry_transport = {
+      datadog_site = "datadoghq.com"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets = {
+        tenant      = "contoso"
+        base_url    = "https://contoso.secretsvaultcloud.com/v1"
+        fetch_image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+      otlp       = { grpc_endpoint = "http://gw:4317", http_endpoint = "https://gw" }
+      fluentbit  = { forward_host = "opw", forward_port = 24224, sidecar_mode = "forward" }
+      aggregator = { kind = "observability_pipelines", agent_logs_url = "http://eh-ca-opw.internal.example:8282" }
+      env        = { fleet = { EH_APM_MODE = "datadog", EH_LOG_PIPELINE = "observability_pipelines" } }
+    }
+    settings = { agent_sidecar = { cpu = 0.5 } }
+  }
+  assert {
+    condition     = jsonencode([for c in azurerm_container_group.this.container : c.name]) == jsonencode(["hello-partner-sim", "datadog-agent"]) && jsonencode([for c in azurerm_container_group.this.init_container : c.name]) == jsonencode(["dsv-fetch-install"])
+    error_message = "ACI group: app + Datadog Agent sidecar; one init container installs the dsv-fetch binary."
+  }
+  assert {
+    condition     = azurerm_container_group.this.init_container[0].image == "ehcrshareddevabcde.azurecr.io/dsv-fetch@sha256:5555555555555555555555555555555555555555555555555555555555555555" && jsonencode(azurerm_container_group.this.init_container[0].commands) == jsonencode(["/opt/dsv-fetch/dsv-fetch", "install", "--dest", "/eh/dsv-bin/dsv-fetch"])
+    error_message = "dsv-fetch-install uses this root's img-dsv-fetch artifact (static binary)."
+  }
+  assert {
+    condition = alltrue([
+      azurerm_container_group.this.container[1].image == "gcr.io/datadoghq/agent:7.84.2",
+      azurerm_container_group.this.container[1].cpu == 0.5,
+      azurerm_container_group.this.container[1].memory == 0.5,
+      azurerm_container_group.this.container[1].environment_variables["DD_API_KEY"] == "ENC[dsv://eh/dev/datadog-api-key#value]",
+      azurerm_container_group.this.container[1].environment_variables["DD_HOSTNAME"] == azurerm_container_group.this.name,
+      azurerm_container_group.this.container[1].environment_variables["DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL"] == "http://eh-ca-opw.internal.example:8282",
+      jsonencode(azurerm_container_group.this.container[1].liveness_probe[0].exec) == jsonencode(["agent", "health"]),
+    ])
+    error_message = "Pinned Agent image, sizing override, ENC[] reference only, hostname = group name, logs -> OP Worker, health probe."
+  }
+  assert {
+    condition     = azurerm_container_group.this.container[0].environment_variables["DD_DOGSTATSD_URL"] == "udp://localhost:8125" && azurerm_container_group.this.container[0].environment_variables["TELEMETRY_SDK"] == "datadog" && azurerm_container_group.this.container[0].environment_variables["LOG_FILE_PATH"] == "/var/log/app/app.log"
+    error_message = "App: Datadog tracer -> localhost, DogStatsD to the sidecar, JSON log file on the shared emptyDir."
+  }
+  assert {
+    condition     = anytrue([for v in azurerm_container_group.this.container[1].volume : v.name == "app-logs" && v.mount_path == "/var/log/app"]) && anytrue([for v in azurerm_container_group.this.container[1].volume : v.name == "agent-config" && v.read_only])
+    error_message = "Agent tails the app-logs emptyDir; config from a read-only secret volume (non-secret files)."
+  }
+  assert {
+    condition     = alltrue([for c in azurerm_container_group.this.container : try(length(c.secure_environment_variables), 0) == 0]) && output.contract.apps["hello-partner-sim"].sidecar
+    error_message = "No secret values in the container group."
   }
 }
 

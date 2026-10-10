@@ -4,12 +4,47 @@ output "log_pipeline" {
 }
 
 output "node_collector" {
-  description = "Where the Datadog Agent runs (AKS nodes, VMs): agent (Agent collects logs -> OP Worker) | fluent_bit. fluent_bit_direct implies fluent_bit."
-  value       = local.log_pipeline == "fluent_bit_direct" ? "fluent_bit" : try(local.section.logs.node_collector, "agent")
+  description = "Where the Datadog Agent runs (AKS nodes, VMs): agent (Agent collects logs -> OP Worker) | fluent_bit. fluent_bit_direct implies fluent_bit. (3.x output; log_collector is the per-architecture decision.)"
+  value = local.fb_direct ? "fluent_bit" : (
+    local.node_arch ? (local.log_collector == "agent" ? "agent" : "fluent_bit") : (local.legacy_node == "fluent_bit" ? "fluent_bit" : "agent")
+  )
+}
+
+output "log_collector" {
+  description = "Effective application-log collector: agent | agent_sidecar (ACI) | serverless_init (Container Apps) | azure (diagnostic settings -> Event Hubs) | fluent_bit | fluent_bit_sidecar (fluent_bit_direct on ACA / ACI) | none."
+  value       = local.log_collector
+}
+
+output "log_collector_reason" {
+  description = "Why log_collector differs from the requested logs.collector (unsupported for the architecture, or fluent_bit_direct); null otherwise."
+  value       = local.log_collector_reason
+}
+
+output "agent_image" {
+  description = "Pinned Datadog Agent image <agent.image>:<agent.version> (null when the policy has no agent.image / agent.version)."
+  value       = local.agent_image
+}
+
+output "agent_sidecar" {
+  description = "ACI Datadog Agent sidecar: image (single pin) and sizing (agent.sidecar)."
+  value = {
+    image     = local.agent_image
+    cpu       = try(local.agent_s.sidecar.cpu, 0.25)
+    memory_gb = try(local.agent_s.sidecar.memory_gb, 0.5)
+  }
+}
+
+output "serverless_init" {
+  description = "Container Apps serverless-init sidecar: image <agent.serverless_init.image>:<version> and sizing."
+  value = {
+    image  = try("${local.si.image}:${local.si.version}", null)
+    cpu    = try(local.si.cpu, 0.25)
+    memory = try(local.si.memory, "0.5Gi")
+  }
 }
 
 output "apm" {
-  description = "Effective APM decision: requested/effective mode, method (ssi_kubernetes | ssi_host | agent_gateway | serverless_init | otlp_agent | otlp_gateway | none), fallback reason, library versions, sample rate."
+  description = "Effective APM decision: requested/effective mode, method (ssi_kubernetes | ssi_host | agent_sidecar | serverless_init | agent_gateway | otlp_agent | otlp_gateway | none), fallback reason, library versions, sample rate."
   value = {
     requested_mode   = local.requested
     mode             = local.effective_mode

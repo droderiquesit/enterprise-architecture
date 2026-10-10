@@ -1,121 +1,95 @@
 mock_provider "azurerm" {
-  override_during = plan
+  mock_resource "azurerm_storage_container" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/ehstvmapp/blobServices/default/containers/vm-applications" }
+  }
+  mock_resource "azurerm_gallery_application" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/galleries/g/applications/datadog-agent" }
+  }
+}
+mock_provider "azapi" {
+  mock_resource "azapi_resource" {
+    defaults = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/galleries/g" }
+  }
 }
 
-# File default: 2.x behaviour (fluent_bit_direct, Fluent Bit collects host logs); 3.0 default runs below.
 variables {
-  log_pipeline       = "fluent_bit_direct"
-  enforce_tag_policy = false
-  datadog = {
-    site        = "datadoghq.eu"
-    api_key_ref = "dsv://eh/dev/datadog-api-key#value"
+  env = "dev"
+  package = {
+    resource_group_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg"
+    location              = "swedencentral"
+    names                 = { gallery = "eh_gal_obshosts_dev_sec", storage_account = "ehstvmappdev", publisher_identity = "eh-id-obs-gallery-dev-sec" }
+    version               = "1.0.0"
+    dsv_fetch_release_dir = "../host-agent-package/tests/fixtures/dsv-fetch"
   }
-  secrets = {
-    tenant = "contoso"
-  }
-  hosts = {
-    worker = {
-      resource_id        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-worker"
-      os_type            = "linux"
-      location           = "swedencentral"
-      service_tags       = { env = "dev", service = "hello-worker", version = "1.0.0", source = "python" }
-      log_paths          = ["/var/log/enterprise-hello/*.log"]
-      identity_client_id = "22222222-2222-2222-2222-222222222222"
-    }
-    inventory_win = {
-      resource_id        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-inv"
-      os_type            = "windows"
-      location           = "swedencentral"
-      service_tags       = { env = "dev", service = "hello-inventory-api", version = "1.0.0", source = "csharp" }
-      log_paths          = ["C:\\ProgramData\\enterprise-hello\\logs\\*.log"]
-      identity_client_id = "22222222-2222-2222-2222-222222222222"
-      windows_event_log  = true
-    }
-    worker_vmss = {
-      resource_id        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachineScaleSets/vmss-worker"
-      os_type            = "linux"
-      kind               = "vmss"
-      location           = "swedencentral"
-      service_tags       = { env = "dev", service = "hello-worker", version = "1.0.0" }
-      log_paths          = ["/var/log/enterprise-hello/*.log"]
-      identity_client_id = "22222222-2222-2222-2222-222222222222"
-    }
+  datadog           = { site = "datadoghq.eu", api_key_ref = "dsv://eh/dev/datadog-api-key#value" }
+  dsv               = { tenant = "contoso" }
+  agent_identity    = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/id/providers/Microsoft.ManagedIdentity/userAssignedIdentities/eh-id-obs-host-agent-dev-sec", client_id = "33333333-3333-3333-3333-333333333333" }
+  op_agent_logs_url = "http://eh-obs-dev-opw.internal:8282"
+  policy = {
+    name_prefix                  = "eh-dd-hosts-dev"
+    scope                        = { type = "subscription", id = "/subscriptions/00000000-0000-0000-0000-000000000000" }
+    identity_resource_group_name = "rg"
   }
 }
 
-run "vm_and_vmss" {
+run "policy_mode_default" {
   command = plan
 
   assert {
-    condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "DD_LOGS_ENABLED=false") && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "localhost:4317")
-    error_message = "Agent configured with OTLP on localhost and log collection disabled."
+    condition     = length(module.policy) == 1 && length(azurerm_virtual_machine_gallery_application_assignment.direct) == 0 && output.enrollment_tag.name == "datadog:enabled"
+    error_message = "Default: Azure Policy enrolment, no per-host resources."
   }
   assert {
-    condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "FB_VERSION='5.1.3'") && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "AGENT_VERSION='7.84.2'") && length(azurerm_virtual_machine_run_command.setup["worker"].protected_parameter) == 0
-    error_message = "Pinned Fluent Bit + Agent; no protected parameters."
+    condition     = output.applications["linux"].version == "1.0.0" && output.agent_version == "7.84.2" && strcontains(output.installers["windows"], "33333333-3333-3333-3333-333333333333")
+    error_message = "Package pinned; the DSV-reader identity client id reaches dsv-fetch on the hosts."
   }
   assert {
-    condition = (strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "api_key: ENC[$API_KEY_REF]")
-      && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "API_KEY_REF='dsv://eh/dev/datadog-api-key#value'")
-      && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "secret_backend_command: $DSV_DIR/agent/dsv-fetch")
-    && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "--owner dd-agent"))
-    error_message = "Linux Agent: api_key is an ENC[] DSV reference resolved by dsv-fetch agent-backend owned by dd-agent."
-  }
-  assert {
-    condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "ExecStartPre=$DSV_DIR/dsv-fetch init --config $DSV_CONF --out /run/fluent-bit-eh --format env-yaml") && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "RuntimeDirectory=fluent-bit-eh")
-    error_message = "Fluent Bit: dsv-fetch writes the env-yaml into the tmpfs RuntimeDirectory at service start."
-  }
-  assert {
-    condition     = strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "\"DSV_TENANT\":\"contoso\"") && strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "IDENTITY_CLIENT_ID='22222222-2222-2222-2222-222222222222'")
-    error_message = "Non-secret DSV settings + host identity rendered for the on-host reader."
-  }
-  assert {
-    condition     = !strcontains(azurerm_virtual_machine_run_command.setup["worker"].source[0].script, "vault.azure.net") && !strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "vault.azure.net")
-    error_message = "No Key Vault anywhere."
-  }
-  assert {
-    condition     = strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "fluent-bit-eh") && strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "msiexec") && strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "grant_type = 'azure'") && strcontains(azurerm_virtual_machine_run_command.setup["inventory_win"].source[0].script, "334685284bfd830a61d04161406473bf2174dd1ac14df9f459e26819ab874944")
-    error_message = "Windows installer reads DSV with the managed identity and verifies pinned MSI hashes."
-  }
-  assert {
-    condition     = azurerm_virtual_machine_scale_set_extension.setup["worker_vmss"].type == "CustomScript" && length(coalesce(azurerm_virtual_machine_scale_set_extension.setup["worker_vmss"].provision_after_extensions, [])) == 0
-    error_message = "VMSS: CustomScript installs Agent + Fluent Bit (no Datadog VM extension)."
-  }
-  assert {
-    condition     = length(azurerm_virtual_machine_run_command.setup) == 2 && length(azurerm_virtual_machine_scale_set_extension.setup) == 1
-    error_message = "Run command for VMs only; CustomScript for VMSS."
-  }
-  assert {
-    condition     = output.scripts_sha256["worker"] == sha256(output.installer_scripts["worker"])
-    error_message = "Script hash output."
+    condition     = length(output.vmss_gallery_applications) == 0 && output.policy != null
+    error_message = "Policy mode publishes no per-VMSS blocks."
   }
 }
 
-run "setup_revision_changes_script" {
+run "direct_mode_escape_hatch" {
   command = plan
   variables {
-    setup_revision = 2
-  }
-  assert {
-    condition     = strcontains(output.installer_scripts["worker"], "# setup revision: 2")
-    error_message = "Bumping setup_revision re-renders the installer (re-run)."
-  }
-}
-
-run "reject_host_without_identity" {
-  command = plan
-  variables {
+    mode   = "direct"
+    policy = null
     hosts = {
-      w = {
-        resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachineScaleSets/vmss"
-        os_type     = "linux"
-        kind        = "vmss"
-        location    = "swedencentral"
-        log_paths   = ["/var/log/app/*.log"]
-      }
+      worker = { resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-worker", os_type = "linux" }
+      inv    = { resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-inv", os_type = "windows" }
+      ss     = { resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachineScaleSets/vmss-worker", os_type = "linux", kind = "vmss" }
     }
   }
-  expect_failures = [azurerm_virtual_machine_scale_set_extension.setup["w"]]
+  assert {
+    condition     = length(module.policy) == 0 && length(azurerm_virtual_machine_gallery_application_assignment.direct) == 2 && output.policy == null
+    error_message = "direct: one gallery application assignment per VM, no policy."
+  }
+  assert {
+    condition     = keys(output.vmss_gallery_applications) == ["ss"] && output.vmss_gallery_applications["ss"].order == 10
+    error_message = "direct: VMSS get the gallery_application block for their platform root."
+  }
+}
+
+run "direct_arm64_needs_arm64_application" {
+  command = plan
+  variables {
+    mode = "direct"
+    hosts = {
+      a = { resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-a", os_type = "linux", arch = "arm64" }
+    }
+  }
+  expect_failures = [azurerm_virtual_machine_gallery_application_assignment.direct["a"]]
+}
+
+run "reject_kind_mismatch" {
+  command = plan
+  variables {
+    mode = "direct"
+    hosts = {
+      w = { resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachineScaleSets/vmss", os_type = "linux", kind = "vm" }
+    }
+  }
+  expect_failures = [var.hosts]
 }
 
 run "reject_literal_api_key" {
@@ -124,60 +98,4 @@ run "reject_literal_api_key" {
     datadog = { site = "datadoghq.com", api_key_ref = "0123456789abcdef0123456789abcdef" }
   }
   expect_failures = [var.datadog]
-}
-
-run "reject_kind_mismatch" {
-  command = plan
-  variables {
-    hosts = {
-      w = {
-        resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachineScaleSets/vmss"
-        os_type     = "linux"
-        kind        = "vm"
-        location    = "swedencentral"
-        log_paths   = ["/var/log/app/*.log"]
-      }
-    }
-  }
-  expect_failures = [var.hosts]
-}
-
-run "reject_latest_agent" {
-  command = plan
-  variables {
-    datadog = { site = "datadoghq.com", agent_version = "latest", api_key_ref = "dsv://eh/dev/datadog-api-key" }
-  }
-  expect_failures = [var.datadog]
-}
-
-run "fleet_default_agent_logs_ssi_op" {
-  command = plan
-  variables {
-    log_pipeline = null
-    op_endpoint  = { host = "eh-obs-dev-opw.internal", agent_logs_url = "http://eh-obs-dev-opw.internal:8282" }
-  }
-  assert {
-    condition     = length(output.installer_scripts) == 3 && strcontains(output.installer_scripts["worker"], "if [ \"false\" != \"true\" ]; then log \"agent-only host")
-    error_message = "Linux VM: the Agent collects the log files - no Fluent Bit installed"
-  }
-  assert {
-    condition     = strcontains(output.installer_scripts["worker"], "Environment=DD_LOGS_ENABLED=true") && strcontains(output.installer_scripts["worker"], "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL=http://eh-obs-dev-opw.internal:8282")
-    error_message = "Agent logs -> Observability Pipelines Worker"
-  }
-  assert {
-    condition     = strcontains(output.installer_scripts["worker"], "DD_APM_INSTRUMENTATION_ENABLED=host") && strcontains(output.installer_scripts["worker"], "DD_APM_INSTRUMENTATION_LIBRARIES='dotnet:3,java:1,js:5,python:4'")
-    error_message = "host Single Step Instrumentation with pinned library majors"
-  }
-  assert {
-    condition     = strcontains(base64decode(regex("echo '([A-Za-z0-9+/=]+)' \\| base64 -d > \"\\$tmp\"", output.installer_scripts["worker"])[0]), "/var/log/enterprise-hello/*.log")
-    error_message = "Agent logs conf tails the application log files"
-  }
-  assert {
-    condition     = strcontains(output.installer_scripts["worker"], "service:hello-worker") && strcontains(output.installer_scripts["worker"], "Environment=DD_REMOTE_CONFIGURATION_ENABLED=true")
-    error_message = "policy tags in DD_TAGS; Remote Configuration on"
-  }
-  assert {
-    condition     = strcontains(output.installer_scripts["inventory_win"], "fluent-bit-eh") && !strcontains(output.installer_scripts["inventory_win"], "DD_APM_INSTRUMENTATION_ENABLED")
-    error_message = "Windows host keeps Fluent Bit (forward to the Worker) and has no SSI"
-  }
 }

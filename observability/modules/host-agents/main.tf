@@ -1,185 +1,92 @@
-# Datadog Agent + Fluent Bit on EXISTING VMs and VM scale sets, with every secret read from Delinea DSV ON THE HOST
-# by the host's user-assigned managed identity (ADR-0001 §14). No API key in Terraform variables, state, VM extension
-# protected settings or run-command parameters:
-#   Linux  : Agent installed by the managed run command / CustomScript (official install script, DD_INSTALL_ONLY,
-#            pinned version) with api_key: ENC[dsv://...] and secret_backend_command = dsv-fetch agent-backend
-#            (owned by dd-agent, 0500); Fluent Bit reads the key from a tmpfs env-yaml file written by dsv-fetch in
-#            the unit's ExecStartPre.
-#   Windows: pinned MSIs; the installer reads the key from DSV (PowerShell, IMDS) and writes it into datadog.yaml /
-#            the Fluent Bit env-yaml include (ACL-restricted files). The Agent cannot run a script as secret backend
-#            on Windows (Win32 executable required), so the key refreshes when the installer re-runs.
-# App logs on hosts (fleet policy): Linux + logs.node_collector = agent -> the Agent tails the files and ships to the
-# Observability Pipelines Worker (no Fluent Bit installed); otherwise Fluent Bit (to the Worker without any key in
-# observability_pipelines mode, to the Datadog intake in fluent_bit_direct mode). Never both. APM: Single Step
-# Instrumentation on Linux (apm.mode = datadog); OTLP receiver on localhost for otel-mode services.
-# VM   -> azurerm_virtual_machine_run_command (managed run command)
-# VMSS -> CustomScript extension running the same installer on every instance, including later autoscaled ones.
+# Datadog Agent on VMs and VM scale sets (observability 4.0.0): Azure VM Applications + Azure Policy, no per-host
+# Terraform, no run commands, no CustomScript extensions.
+#   modules/host-agent-package : Azure Compute Gallery, VM Applications datadog-agent-linux / datadog-agent-windows,
+#                                versions = dsv-fetch binary (package) + rendered setup script (configuration)
+#   modules/host-agent-policy  : (mode = policy) DeployIfNotExists initiative on VMs / VMSS tagged datadog:enabled:
+#                                attaches the per-environment DSV-reader identity and the pinned application version
+#   mode = direct              : escape hatch without Azure Policy rights - one gallery application assignment per VM
+#                                (same application, same version); VMSS models are set by their platform root
+# Secrets: the Agent on the host resolves api_key: ENC[dsv://...] with the dsv-fetch binary as secret backend
+# (Linux and Windows); nothing secret in Terraform state, the gallery, the policy or the VM model (ADR-0001 §14).
+module "package" {
+  source = "../host-agent-package"
+
+  resource_group_id       = var.package.resource_group_id
+  location                = var.package.location
+  names                   = var.package.names
+  package_version         = var.package.version
+  retained_versions       = var.package.retained_versions
+  applications            = var.package.applications
+  dsv_fetch_release_dir   = var.package.dsv_fetch_release_dir
+  replica_regions         = var.package.replica_regions
+  publisher_principal_ids = var.package.publisher_principal_ids
+  network                 = var.package.network
+  agent_msi_sha256        = var.package.agent_msi_sha256
+
+  env                 = var.env
+  datadog             = var.datadog
+  dsv                 = merge(var.dsv, { identity_client_id = var.agent_identity.client_id })
+  fleet_policy        = var.fleet_policy
+  tag_policy          = var.tag_policy
+  extra_tags          = var.extra_tags
+  log_pipeline        = var.log_pipeline
+  op_agent_logs_url   = var.op_agent_logs_url
+  host_logs           = var.host_logs
+  default_service     = var.default_service
+  metadata_tag_prefix = var.metadata_tag_prefix
+  tags                = var.tags
+}
+
+module "policy" {
+  source = "../host-agent-policy"
+  count  = var.mode == "policy" ? 1 : 0
+
+  name_prefix                  = var.policy.name_prefix
+  scope                        = var.policy.scope
+  location                     = var.package.location
+  identity_resource_group_name = var.policy.identity_resource_group_name
+  enrollment_tag               = var.policy.enrollment_tag
+  arch_tag_name                = var.policy.arch_tag_name
+  agent_identity               = { id = var.agent_identity.id }
+  gallery_id                   = module.package.gallery.id
+  applications                 = { for k, a in module.package.applications : k => { id = a.id, version = a.version, os = a.os } }
+  targets                      = var.policy.targets
+  effect                       = var.policy.effect
+  application_order            = var.policy.application_order
+  remediation                  = var.policy.remediation
+  extra_role_actions           = var.policy.extra_role_actions
+  tags                         = var.tags
+
+  # the versions must exist (replicated) before the assignment can remediate anything
+  depends_on = [module.package]
+}
+
+# ---------------------------------------------------------------------------------------------- mode = direct
 locals {
-  dsv_fetch_source = coalesce(var.dsv_fetch_source, "${path.module}/../../images/dsv-fetch/dsv_fetch.py")
-  dsv_fetch_gz     = base64gzip(file(local.dsv_fetch_source))
-  dsv_base_url     = coalesce(var.secrets.base_url, "https://${coalesce(var.secrets.tenant, "unset")}.secretsvaultcloud.${coalesce(var.secrets.tld, "com")}/v1")
-  dsv_config = merge(
-    var.secrets.tenant == null ? {} : { DSV_TENANT = var.secrets.tenant },
-    var.secrets.tld == null ? {} : { DSV_TLD = var.secrets.tld },
-    { DSV_BASE_URL = local.dsv_base_url, DSV_AUTH = var.secrets.auth, DSV_TIMEOUT_SECONDS = "10" },
-  )
+  app_key      = { for k, h in var.hosts : k => h.os_type == "windows" ? "windows" : (h.arch == "arm64" ? "linux_arm64" : "linux") }
+  direct       = var.mode == "direct" ? var.hosts : {}
+  direct_vms   = { for k, h in local.direct : k => h if h.kind == "vm" }
+  direct_vmsss = { for k, h in local.direct : k => h if h.kind == "vmss" }
 }
 
-module "fleet" {
-  source    = "../fleet-policy"
-  policy    = var.fleet_policy
-  overrides = var.log_pipeline == null ? {} : { log_pipeline = var.log_pipeline }
-}
-
-# one tag set per host from the tag policy (service_tags = canonical identity values of the host's workload)
-module "host_tags" {
-  source           = "../tagging"
-  for_each         = var.hosts
-  policy           = var.tag_policy
-  identity         = { for k, v in each.value.service_tags : k => v if k != "source" }
-  extra_tags       = var.extra_tags
-  enforce_required = var.enforce_tag_policy
-}
-
-locals {
-  op_mode     = module.fleet.log_pipeline == "observability_pipelines"
-  agent_cfg   = module.fleet.agent
-  apm_datadog = try(module.fleet.sections.apm.mode, "datadog") == "datadog"
-  libs        = module.fleet.apm.library_versions
-  # Linux hosts with the Agent collect their own log files when the policy says so; Windows keeps Fluent Bit
-  agent_logs    = { for k, h in var.hosts : k => h.os_type == "linux" && h.install_agent && module.fleet.node_collector == "agent" && length(h.log_paths) > 0 }
-  fluent_bit    = { for k, h in var.hosts : k => h.install_fluent_bit && !local.agent_logs[k] }
-  ssi           = { for k, h in var.hosts : k => h.os_type == "linux" && h.install_agent && local.apm_datadog && h.apm_ssi }
-  ssi_libraries = join(",", [for lang in sort(keys(local.libs)) : "${lang}:${trimprefix(local.libs[lang], "v")}" if contains(["dotnet", "python", "js", "java"], lang)])
-  agent_logs_conf = { for k, h in var.hosts : k => base64encode(yamlencode({
-    logs = [for p in h.log_paths : {
-      type    = "file"
-      path    = p
-      service = lookup(module.host_tags[k].tags, "service", "unknown")
-      source  = lookup(h.service_tags, "source", "python")
-      tags    = module.host_tags[k].dd_tags_extra == "" ? [] : split(",", module.host_tags[k].dd_tags_extra)
-    }]
-  })) }
-}
-
-module "flb" {
-  source            = "../fluent-bit"
-  for_each          = { for k, h in var.hosts : k => h if local.fluent_bit[k] }
-  role              = each.value.os_type == "linux" ? "linux-host" : "windows-host"
-  datadog_site      = var.datadog.site
-  static_tags       = module.host_tags[each.key].tags
-  dd_source         = lookup(each.value.service_tags, "source", null)
-  dd_service        = lookup(module.host_tags[each.key].tags, "service", null)
-  log_paths         = each.value.log_paths
-  systemd_unit      = each.value.systemd_unit
-  windows_event_log = each.value.windows_event_log
-  log_destination   = local.op_mode ? "observability_pipelines" : "datadog"
-  op_endpoint       = local.op_mode ? { host = coalesce(var.op_endpoint.host, "unset"), port = var.op_endpoint.fluent_port } : null
-}
-
-locals {
-  scripts = {
-    for k, h in var.hosts : k => templatefile(
-      "${path.module}/scripts/${h.os_type == "linux" ? "linux-install.sh.tftpl" : "windows-install.ps1.tftpl"}",
-      {
-        fb_version            = var.fluent_bit_version
-        agent_version         = coalesce(var.datadog.agent_version, try(module.fleet.agent.version, null), "7.84.2")
-        site                  = var.datadog.site
-        api_key_ref           = var.datadog.api_key_ref
-        identity_client_id    = h.identity_client_id == null ? "" : h.identity_client_id
-        dsv_config_json       = jsonencode(local.dsv_config)
-        dsv_fetch_gz          = h.os_type == "linux" ? local.dsv_fetch_gz : ""
-        install_agent         = tostring(h.install_agent)
-        configure_agent       = tostring(h.install_agent)
-        install_fluent_bit    = tostring(local.fluent_bit[k])
-        process_collection    = tostring(var.datadog.process_collection || try(local.agent_cfg.process_collection, false))
-        agent_tags            = module.host_tags[k].dd_tags_space
-        files                 = local.fluent_bit[k] ? { for p, c in module.flb[k].files : p => base64gzip(c) } : {}
-        env                   = local.fluent_bit[k] ? module.flb[k].env : {}
-        secrets_file          = local.fluent_bit[k] ? module.flb[k].secrets_env_file : ""
-        fb_needs_key          = local.fluent_bit[k] ? length(module.flb[k].secret_env_names) > 0 : false
-        agent_logs            = tostring(local.agent_logs[k])
-        agent_logs_conf       = local.agent_logs_conf[k]
-        op_logs_url           = local.agent_logs[k] && local.op_mode ? coalesce(var.op_endpoint.agent_logs_url, "unset") : ""
-        apm_ssi               = tostring(local.ssi[k])
-        ssi_libraries         = local.ssi_libraries
-        remote_updates        = tostring(try(local.agent_cfg.remote_updates, false))
-        remote_configuration  = tostring(try(local.agent_cfg.remote_configuration, true))
-        apm_ignore_resources  = join(",", module.fleet.agent_apm_ignore_resources)
-        agent_msi_sha256      = var.windows_msi_sha256.agent
-        fluent_bit_msi_sha256 = var.windows_msi_sha256.fluent_bit
-        setup_revision        = var.setup_revision
-      }
-    )
-  }
-
-  vms   = { for k, h in var.hosts : k => h if h.kind == "vm" }
-  vmsss = { for k, h in var.hosts : k => h if h.kind == "vmss" }
-}
-
-# ---------------------------------------------------------------------------------------------- VMs
-resource "azurerm_virtual_machine_run_command" "setup" {
-  for_each           = { for k, h in local.vms : k => h if local.fluent_bit[k] || h.install_agent }
-  name               = "observability-setup"
-  location           = each.value.location
-  virtual_machine_id = each.value.resource_id
-  tags               = var.tags
-
-  source {
-    script = local.scripts[each.key]
-  }
+resource "azurerm_virtual_machine_gallery_application_assignment" "direct" {
+  for_each                       = local.direct_vms
+  virtual_machine_id             = each.value.resource_id
+  gallery_application_version_id = module.package.applications[local.app_key[each.key]].version_id
+  order                          = 10
+  depends_on                     = [module.package] # the version must exist before a VM references it
 
   lifecycle {
     precondition {
-      condition     = each.value.identity_client_id != null
-      error_message = "hosts[*].identity_client_id is required: the installer reads the Datadog API key from DSV with the host's user-assigned managed identity."
+      condition     = contains(keys(module.package.applications), local.app_key[each.key])
+      error_message = "hosts[${each.key}] needs the ${local.app_key[each.key]} VM Application (package.applications)."
     }
   }
 }
 
-# ---------------------------------------------------------------------------------------------- VMSS
-locals {
-  windows_cse_command = {
-    # gzip+base64 payload decompressed by a one-line stub (an -EncodedCommand of the full script would
-    # exceed the 32K command-line limit)
-    for k, h in local.vmsss : k => join("", [
-      "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"",
-      "$b='${base64gzip(local.scripts[k])}';",
-      "$i=New-Object IO.MemoryStream(,[Convert]::FromBase64String($b));",
-      "$g=New-Object IO.Compression.GZipStream($i,[IO.Compression.CompressionMode]::Decompress);",
-      "$r=New-Object IO.StreamReader($g);Invoke-Expression $r.ReadToEnd()\"",
-    ])
-    if h.os_type == "windows"
-  }
-}
-
-# A scale set can carry only ONE CustomScript extension; if the app owner already uses one, bake the
-# installer into the image or call the rendered installer (installer_scripts output) from theirs.
-resource "azurerm_virtual_machine_scale_set_extension" "setup" {
-  for_each                     = { for k, h in local.vmsss : k => h if local.fluent_bit[k] || h.install_agent }
-  name                         = "observability-setup"
-  virtual_machine_scale_set_id = each.value.resource_id
-  publisher                    = each.value.os_type == "linux" ? "Microsoft.Azure.Extensions" : "Microsoft.Compute"
-  type                         = each.value.os_type == "linux" ? "CustomScript" : "CustomScriptExtension"
-  type_handler_version         = each.value.os_type == "linux" ? "2.1" : "1.10"
-  auto_upgrade_minor_version   = true
-  # re-run on every instance when the installer (configs included) changes
-  force_update_tag = sha256(local.scripts[each.key])
-  # protected only to keep the (non-secret) script out of the instance view; it contains no secret
-  protected_settings = each.value.os_type == "linux" ? jsonencode({
-    script = base64gzip(local.scripts[each.key])
-    }) : jsonencode({
-    commandToExecute = local.windows_cse_command[each.key]
-  })
-
-  lifecycle {
-    precondition {
-      condition     = each.value.os_type == "linux" || length(local.windows_cse_command[each.key]) < 32000
-      error_message = "Windows CustomScriptExtension command exceeds the Windows command-line limit; trim log paths/config."
-    }
-    precondition {
-      condition     = each.value.identity_client_id != null
-      error_message = "hosts[*].identity_client_id is required: every instance reads the Datadog API key from DSV with the scale set's user-assigned managed identity."
-    }
+check "policy_settings" {
+  assert {
+    condition     = var.mode != "policy" || var.policy != null
+    error_message = "mode = policy needs var.policy (scope, name_prefix, identity_resource_group_name)."
   }
 }

@@ -92,8 +92,9 @@ key fallback) in their READMEs.
 * DSV is a public SaaS endpoint (no Private Link): every reader needs HTTPS egress to `<tenant>.secretsvaultcloud.<tld>`.
 * Windows hosts: the Datadog Agent API key is fetched from DSV by the installer; a rotated key reaches Windows Agents only
   when the installer re-runs (Linux hosts resolve it through the Agent `secret_backend_command` on every Agent restart).
-* Unverified on real Azure: Container Apps init containers authenticating with the app's managed identity, uid 65532
-  write access to ACA/ACI EmptyDir volumes, init containers on Functions-on-Container-Apps, ConfigMap file mode 0500 with
+* Unverified on real Azure: Container Apps init containers authenticating with the app's managed identity (only the
+  Fluent Bit fallback needs it now - the serverless-init sidecar and the ACI Agent sidecar read DSV from regular
+  containers), uid 65532 write access to ACA/ACI EmptyDir volumes, init containers on Functions-on-Container-Apps, ConfigMap file mode 0500 with
   `fsGroup` on AKS, and which of two duplicate env vars wins on the Datadog Cluster Agent.
 * No secondary vault: a DSV outage blocks new starts and pipeline steps that need secrets (running processes keep cached
   values) - by design (no copies of DSV secrets elsewhere).
@@ -193,8 +194,8 @@ key fallback) in their READMEs.
 * Durable telemetry trade-off: full Durable V2 spans need `OTEL_EXPORTER_OTLP_ENDPOINT`, which also makes the host export
   OTLP logs - the OTel gateway drops OTLP logs; worker log lines in FunctionAppLogs are host-formatted, not the ADR JSON
   shape. The platform `durable_storage` account is unused until `host.json` points at another connection.
-* ACA jobs run without a Fluent Bit sidecar (stdout -> ContainerAppConsoleLogs -> Event Hubs -> aggregator, allow-list
-  `aca_console_allow`). Batch task stdout is shipped by a Fluent Bit service that the job preparation task installs
+* ACA jobs run without a sidecar (`logs.collector = azure`: stdout -> ContainerAppConsoleLogs -> Event Hubs ->
+  Observability Pipelines Worker; Fluent Bit aggregator with allow-list `aca_console_allow` only in fluent_bit_direct mode). Batch task stdout is shipped by a Fluent Bit service that the job preparation task installs
   (no Datadog Agent on Batch nodes, so Fluent Bit self-metrics have no local OTLP receiver).
 * Python Entra paths (PostgreSQL token auth, Managed Redis credential provider, Service Bus with managed identity) are
   implemented but not exercised (no Azure); systemd units, PowerShell installers, SF/ARO deploy scripts and the Batch
@@ -204,13 +205,42 @@ key fallback) in their READMEs.
   `servicebus.process`; RUM monitor syntax not validated by the Datadog API; DBM per-node behaviour on PostgreSQL elastic
   clusters unverified; synthetic browser steps limited to simple assertions.
 * `telemetry_verify.py` is tested only against recorded API responses.
-* DogStatsD on managed runtimes (Datadog mode): Container Apps use the serverless-init sidecar by default (DogStatsD on
-  localhost; its API key is fetched from Delinea DSV by dsv-fetch, verified locally with serverless-init 1.10.4 against a
-  mock intake, not on Azure). Residual gaps where the tracer goes through the TCP-only APM gateway and DogStatsD
-  (`hello.*` custom metrics, runtime metrics) is unavailable: ACI (no serverless-init support), Container Apps jobs
-  (run-to-completion, no sidecar), App Service workloads that opt into `apm.mode = datadog` (the package has no Datadog
-  App Service sidecar integration; App Service defaults to OpenTelemetry instead), and Container Apps workloads that opt
-  out with `managed_runtime_path = agent_gateway`. Use `apm.mode = otel` for such a workload when its custom metrics matter.
+* DogStatsD on managed runtimes (Datadog mode, observability 4.0.0): Container Apps use the serverless-init sidecar and
+  ACI container groups a Datadog Agent sidecar (both DogStatsD on `udp://localhost:8125`) - the 3.x ACI DogStatsD gap is
+  closed. Residual gaps where the tracer goes through the TCP-only APM gateway and DogStatsD (`hello.*` custom metrics,
+  runtime metrics) is unavailable: Container Apps jobs (run-to-completion, no sidecar), App Service workloads that opt
+  into `apm.mode = datadog` (the package has no Datadog App Service sidecar integration; App Service defaults to
+  OpenTelemetry instead), and Container Apps / ACI workloads that opt out with `managed_runtime_path = agent_gateway`.
+  Use `apm.mode = otel` for such a workload when its custom metrics matter.
+* ACI Datadog Agent sidecar (default on ACI): Datadog documents no ACI-specific integration; the package runs the
+  standard Agent image as a sidecar without a container runtime socket (no container autodiscovery / live containers /
+  container metrics - only its own checks, APM, DogStatsD and the file log source). Verified locally with Agent 7.84.2
+  and docker (`observability/tests/transport/test_agent_sidecar.py`: traces, DogStatsD, file logs to an OP Worker
+  stand-in, key from a mock DSV through the dsv-fetch secret backend); **not verified on Azure**: the uid 65532 init
+  container writing the binary into an ACI emptyDir, IMDS tokens from inside the Agent container, Agent hostname /
+  metadata detection on ACI. Each container group reports as one Datadog infrastructure host (and one APM host with
+  traces) - Datadog host-based billing; the sidecar adds 0.25 vCPU / 0.5 GB per group to the ACI bill (about USD 11 per
+  group-month at Linux pay-as-you-go rates; check current Azure pricing for the region).
+* Container Apps serverless-init (default on Container Apps): in **sidecar mode** serverless-init tails the app's log
+  file (`DD_SERVERLESS_LOG_PATH` on a shared EmptyDir); it cannot capture another container's stdout/stderr (that needs
+  the in-container wrapper mode, which the package does not use because the images would have to embed
+  `/datadog-init`). The apps therefore keep writing `LOG_FILE_PATH` on Container Apps. Sending these logs to the
+  Observability Pipelines Worker (`DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_*`) is not documented by Datadog for
+  serverless-init; it was verified locally with serverless-init 1.10.4 against the Worker's Datadog Agent source engine
+  (Vector `datadog_agent` source) - not on Azure. Without `aggregator.agent_logs_url` in the transport contract the
+  sidecars do not collect logs in observability_pipelines mode (no direct-to-intake bypass) and the plan warns.
+* Fluent Bit fallback (`log_pipeline = fluent_bit_direct`) on ACI and on Dedicated Container Apps profiles needs the
+  dsv-fetch refresher container in loop mode (`dsv-fetch init --refresh <seconds>`); the dsv-fetch 2.0.0 static binary
+  must provide that flag (the distroless static image has no shell to loop in).
+* Accepted risk - VM / VMSS host identity: the per-environment user-assigned identity that the Azure Policy attaches to
+  tagged VMs / VMSS can be used by **any process on the host** (IMDS is reachable by every local process), not only by
+  the Datadog Agent. It can read exactly one DSV path - the Datadog API key, an ingest-only credential (it can submit
+  telemetry but cannot read data or change the Datadog org). Mitigations: one key per environment, rotation in DSV
+  (Agents re-read it through the secret backend), Datadog usage attribution / audit trail to spot misuse. Hosts that
+  need stronger isolation use a golden image with a host-specific key path (optional, docs/guides/datadog-fleet-collection.md).
+* Remote Configuration stays on for every Agent (required by the OP Worker; used for Fleet Automation inventory and
+  remote sampling). Who may change remote settings is governed in Datadog (RBAC permissions, Audit Trail), not in this
+  repository - see docs/guides/datadog-fleet-collection.md section 7.
 
 ## Documentation and links
 

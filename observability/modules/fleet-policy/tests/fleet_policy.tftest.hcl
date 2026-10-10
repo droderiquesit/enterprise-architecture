@@ -158,14 +158,137 @@ run "appservice_defaults_to_otel" {
   }
 }
 
-run "aci_agent_gateway_no_dogstatsd" {
+run "aci_agent_sidecar_default" {
   command = plan
   variables {
     architecture = "aci"
     runtime      = "python"
   }
   assert {
-    condition     = output.apm.method == "agent_gateway" && output.apm_env["DD_RUNTIME_METRICS_ENABLED"] == "false" && !contains(keys(output.apm_env), "DD_DOGSTATSD_URL")
-    error_message = "ACI: APM gateway only (serverless-init is Container Apps only)"
+    condition     = output.apm.method == "agent_sidecar" && output.apm_env["DD_RUNTIME_METRICS_ENABLED"] == "true" && output.apm_env["DD_DOGSTATSD_URL"] == "udp://localhost:8125"
+    error_message = "ACI (architectures.aci): Datadog Agent sidecar - traces + DogStatsD on localhost (DogStatsD gap closed)"
+  }
+  assert {
+    condition     = output.log_collector == "agent_sidecar" && output.log_collector_reason == null
+    error_message = "ACI logs: the Agent sidecar tails the shared log file"
+  }
+  assert {
+    condition     = output.agent_sidecar.image == "gcr.io/datadoghq/agent:7.84.2" && output.agent_sidecar.cpu == 0.25 && output.agent_sidecar.memory_gb == 0.5 && output.agent_image == output.agent_sidecar.image
+    error_message = "Agent sidecar image = the single fleet-policy pin; default sizing 0.25 vCPU / 0.5 GB"
+  }
+}
+
+run "aci_agent_gateway_opt_out_no_dogstatsd" {
+  command = plan
+  variables {
+    architecture = "aci"
+    runtime      = "python"
+    overrides    = { apm = { managed_runtime_path = "agent_gateway" } }
+  }
+  assert {
+    condition     = output.apm.method == "agent_gateway" && output.apm_env["DD_RUNTIME_METRICS_ENABLED"] == "false" && !contains(keys(output.apm_env), "DD_DOGSTATSD_URL") && output.log_collector == "agent_sidecar"
+    error_message = "ACI opt-out: traces via the APM gateway (no DogStatsD); logs still from the Agent sidecar"
+  }
+}
+
+run "agent_sidecar_is_aci_only" {
+  command = plan
+  variables {
+    architecture = "aca"
+    runtime      = "python"
+    overrides    = { apm = { managed_runtime_path = "agent_sidecar" }, logs = { collector = "agent_sidecar" } }
+  }
+  assert {
+    condition     = output.apm.method == "agent_gateway" && output.log_collector == "serverless_init" && output.log_collector_reason != null
+    error_message = "agent_sidecar on Container Apps is not a path: APM gateway / serverless-init with a reason"
+  }
+}
+
+run "log_collectors_per_architecture" {
+  command = plan
+  variables {
+    architecture = "aca"
+    runtime      = "dotnet"
+  }
+  assert {
+    condition     = output.log_collector == "serverless_init" && output.serverless_init.image == "datadog/serverless-init:1.10.4" && output.serverless_init.memory == "0.5Gi"
+    error_message = "Container Apps: serverless-init collects the app log file (single pin of the image in the fleet policy)"
+  }
+}
+
+run "log_collector_appservice_azure" {
+  command = plan
+  variables {
+    architecture = "appservice"
+    runtime      = "dotnet"
+  }
+  assert {
+    condition     = output.log_collector == "azure" && output.node_collector == "agent"
+    error_message = "App Service: diagnostic settings -> Event Hubs -> OP Worker"
+  }
+}
+
+run "log_collector_vm_windows_agent" {
+  command = plan
+  variables {
+    architecture = "vm"
+    runtime      = "dotnet"
+    os_type      = "windows"
+  }
+  assert {
+    condition     = output.log_collector == "agent" && output.node_collector == "agent"
+    error_message = "Windows hosts: the Agent collects the logs (no Fluent Bit)"
+  }
+}
+
+run "aca_jobs_console_logs_azure" {
+  command = plan
+  variables {
+    architecture = "aca"
+    runtime      = "python"
+    overrides    = { logs = { collector = "azure" } }
+  }
+  assert {
+    condition     = output.log_collector == "azure" && output.log_collector_reason == null
+    error_message = "Container Apps jobs: console logs via diagnostic settings"
+  }
+}
+
+run "fluent_bit_direct_fallback" {
+  command = plan
+  variables {
+    architecture = "aci"
+    runtime      = "python"
+    overrides    = { log_pipeline = "fluent_bit_direct" }
+  }
+  assert {
+    condition     = output.log_collector == "fluent_bit_sidecar" && output.log_collector_reason != null && output.apm.method == "agent_sidecar" && output.node_collector == "fluent_bit"
+    error_message = "fluent_bit_direct: the Fluent Bit sidecar collects the logs; the Agent sidecar keeps traces / DogStatsD"
+  }
+}
+
+run "legacy_node_collector_fluent_bit" {
+  command = plan
+  variables {
+    architecture = "aks"
+    runtime      = "python"
+    overrides    = { logs = { node_collector = "fluent_bit" } }
+  }
+  assert {
+    condition     = output.log_collector == "fluent_bit" && output.node_collector == "fluent_bit"
+    error_message = "3.x logs.node_collector = fluent_bit still selects Fluent Bit on nodes"
+  }
+}
+
+run "custom_policy_without_collectors_uses_defaults" {
+  command = plan
+  variables {
+    architecture = "aci"
+    runtime      = "dotnet"
+    policy       = { apiVersion = "observability/fleet-policy/v1", kind = "FleetPolicy" }
+  }
+  assert {
+    condition     = output.log_collector == "agent_sidecar" && output.apm.method == "agent_gateway" && output.agent_image == null
+    error_message = "custom policies without architectures get the default collector table; no image without agent.image/version"
   }
 }

@@ -32,10 +32,10 @@ locals {
     charts = {
       datadog    = var.charts.datadog_version
       fluent_bit = var.charts.fluent_bit_version
-      agent_tag  = var.charts.agent_tag
+      agent_tag  = local.agent_version
     }
-    # dsv mode: the chart Secret "datadog" holds only the ENC[dsv://...] reference; existing: the synced Secret
-    api_key_secret_name = local.dsv_mode ? local.release : var.api_key.secret_name
+    # the chart Secret "datadog" holds only the ENC[dsv://...] reference (never the key)
+    api_key_secret_name = local.release
   }
 }
 
@@ -45,8 +45,13 @@ output "contract" {
 }
 
 output "datadog_values" {
-  description = "Rendered Datadog chart values (no secrets)."
-  value       = yamlencode(local.datadog_values)
+  description = "Datadog chart values layers exactly as passed to helm_release.datadog (no secrets): [0] values/base.yaml, [1] the computed fleet layer, [2..] values_overrides."
+  value       = local.datadog_values
+}
+
+output "datadog_postrender_args" {
+  description = "Arguments of postrender/dsv-fetch-init.sh (adds the dsv-fetch-install init container); for helm template reproductions."
+  value       = helm_release.datadog.postrender.args
 }
 
 output "fluent_bit_values" {

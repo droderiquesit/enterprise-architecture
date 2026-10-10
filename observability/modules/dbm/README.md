@@ -20,30 +20,39 @@ Every instance has:
   Server)
 * PostgreSQL extras: `database_autodiscovery` and `collect_schemas`
 
-Passwords are **never literal**:
-* `ENC[dsv://<path>#<element>]` (`password_ref.kind = dsv`): resolved by the Agent's `secret_backend_command` =
-  dsv-fetch `agent-backend` (Delinea DSV, managed / workload identity)
-* `ENC[k8s_secret@ns/name/key]`
-* `ENC[file@/path]`
-* `%%env_X%%` (cluster checks only)
+Passwords are **never literal** and have one source: `password_ref = {kind = "dsv", name = "dsv://<path>#<element>"}`
+renders `ENC[dsv://...]`, resolved by the Agent's `secret_backend_command` = the static dsv-fetch binary
+(`agent-backend`, Delinea DSV with the managed / workload identity). `k8s_secret`, `file` and `env` references were
+removed in observability 4.0.0 (they bypass DSV, and `ENC[file@]` / `ENC[k8s_secret@]` do not work with the dsv-fetch
+backend anyway).
 
 ## Hosting
-* `aci`: `azurerm_container_group` running `datadog/agent:7.84.2`, private IP in the given subnet (it must be
-  delegated to `Microsoft.ContainerInstance/containerGroups`), with a user-assigned identity.
-  * The container group holds **no secret values**. A rendered `datadog.yaml` carries
-    `api_key: ENC[<aci.api_key_ref>]`, `secret_backend_command: /opt/dsv-fetch/dsv-fetch` and
-    `secret_backend_arguments: [agent-backend, --config, /eh/dsv/dsv.json]`. `dsv_fetch.py` and the non-secret
-    `dsv.json` (DSV endpoint, identity client id) are mounted from an ACI secret volume; the start command runs
-    `dsv_fetch.py install --dest /opt/dsv-fetch/dsv-fetch --python /opt/datadog-agent/embedded/bin/python3` (root, 0500).
-    No init container: ACI init containers cannot use managed identities (Microsoft Learn), the Agent container can
-    (IMDS).
-  * Check configs are mounted from ACI secret volumes, which contain no secrets, and copied into
-    `/etc/datadog-agent` before `/bin/entrypoint.sh`.
-  * The image's init script requires a non-empty `DD_API_KEY`, so `DD_API_KEY=ENC[...]` is set. The secret
-    backend resolves it.
-* `cluster_checks`: the `cluster_check_confd` and `helm_values_snippet` outputs feed `modules/kubernetes`
-  (`cluster_checks`). The runners must reach the databases.
+* `cluster_checks` (**default**; whenever a cluster exists): `cluster_check_confd` feeds `modules/kubernetes`
+  (`cluster_checks`). The Cluster Agent dispatches the checks to the cluster-checks runners; their dsv-fetch secret
+  backend resolves the `ENC[dsv://...]` passwords. Run the runners as the DBM identity
+  (`modules/kubernetes` `dsv.cluster_checks_identity_client_id`, federated with `datadog/datadog-cluster-checks`): it
+  reads the password paths in DSV and logs in to Entra-enabled databases - the Agent's PostgreSQL and SQL Server
+  checks use `azure.identity.ManagedIdentityCredential(client_id)`, which uses AKS workload identity when
+  `AZURE_FEDERATED_TOKEN_FILE` is set (azure-identity 1.25.3 in Agent 7.84.2, checked in the image; not verified live).
+  The runners must reach the databases.
+* `aci` (only when there is no cluster): `azurerm_container_group` running the fleet policy Agent image
+  (`<agent.image>:<agent.version>`, e.g. `gcr.io/datadoghq/agent:7.84.2`; `aci.image` overrides), private IP in the
+  given subnet (delegated to `Microsoft.ContainerInstance/containerGroups`), user-assigned identity.
+  * Init container `dsv-fetch-install` (`aci.fetch_image`, digest-pinned dsv-fetch image >= 2.0.0) copies the static
+    binary into the shared emptyDir `/eh/bin` (`dsv-fetch install`; no identity needed there - ACI init containers
+    cannot use managed identities). The Agent container's start command re-installs it as root with mode 0500
+    (`/eh/bin/dsv-fetch install --dest /opt/dsv-fetch/dsv-fetch`), copies the rendered `datadog.yaml` and check configs
+    and runs `/bin/entrypoint.sh`. No Python involved.
+  * `datadog.yaml`: `api_key: ENC[<aci.api_key_ref>]`, `secret_backend_command: /opt/dsv-fetch/dsv-fetch`,
+    `secret_backend_arguments: [agent-backend, --config, /eh/dsv/dsv.json]`; `dsv.json` (DSV endpoint, identity client
+    id - not secret) and the check configs come from ACI secret volumes that contain no secrets.
+  * The image's init script requires a non-empty `DD_API_KEY`, so `DD_API_KEY=ENC[...]` is set and resolved.
+  * **To verify on Azure**: that the non-root init container (distroless uid 65532) can write into the ACI emptyDir
+    (Microsoft Learn documents it as writable by every container of the group; not verified for non-root users).
 * `none`: render only (`confd`).
+
+`contracts/` (submodule, pure): platform-db-* contracts (`dbm` blocks) -> `databases`; used by both lab roots so the
+ACI (obs-dbm) and cluster-check (obs-kubernetes) paths render identical instances.
 
 ## SQL setup scripts (`sql/`, idempotent, from Datadog docs)
 | File | Notes |
@@ -59,9 +68,10 @@ Platform prerequisites, owned by the database platform roots: PostgreSQL `azure.
 
 ## Local verification (`observability/tests/transport/test_dbm_local.py`, **locally-verified**)
 1. Real PostgreSQL 17 and MySQL 8.4 containers run the SQL scripts twice, which shows they are idempotent.
-2. Datadog Agent 7.84.2 runs the **rendered** postgres.d / mysql.d configs and the **rendered** ACI `datadog.yaml`
-   with the ACI start command: API key and both passwords are `ENC[dsv://...]`, resolved by dsv-fetch against a mock DSV
-   (`agent secret`: executable permissions OK, 3 secrets resolved).
+2. The dsv-fetch image installs its binary into a shared directory (init container stand-in, non-root, read-only,
+   no capabilities); Datadog Agent 7.84.2 runs the **rendered** ACI start command, `datadog.yaml` and check configs: API
+   key and both passwords are `ENC[dsv://...]`, resolved by the binary against a mock DSV (`agent secret`: executable
+   permissions OK, 3 secrets resolved).
 3. Result: `can_connect` OK, 0 errors, and DBM event-platform payloads such as metadata samples.
 
 Deviations from Azure: no TLS on the local servers; DSV auth with `client_credentials` against the mock instead of the
