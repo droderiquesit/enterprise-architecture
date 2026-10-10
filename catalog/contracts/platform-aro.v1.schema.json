@@ -61,6 +61,14 @@
         "null"
       ]
     },
+    "oidc_issuer_url": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Managed OIDC issuer of the managed-identity cluster (clusterProfile.oidcIssuer): issuer of Entra workload identity federated credentials for in-cluster service accounts. Not a credential. Null when disabled.",
+      "pattern": "^https://"
+    },
     "version": {
       "type": [
         "string",

@@ -10,7 +10,14 @@
 # group/other rights, which is what the Agent requires of secret_backend_command. No capability, no write outside the
 # emptyDir, read-only root filesystem.
 #
+# OpenShift (--distribution openshift): the Cluster Agent runs under the chart's SCC "datadog-cluster-agent" and the
+# cluster-checks runners under restricted-v2 - both MustRunAsRange, so a fixed uid 0 would be rejected. There the init
+# container of those two Deployments sets no runAsUser/runAsGroup (runAsNonRoot: true): the SCC assigns the pod's UID
+# from the namespace range to every container, so the binary is again owned by the user that runs the Agent process
+# (mode 0500). The node Agent DaemonSet keeps uid 0 (SCC "datadog": runAsUser RunAsAny, the Agent runs as root).
+#
 # Usage (helm provider postrender): sh dsv-fetch-init.sh --image <registry>/<repo>@sha256:<digest> --expect <n>
+#                                   [--distribution aks|openshift]
 #   --expect: number of workloads that must receive the init container (fails the render otherwise, e.g. after a
 #             chart change of the initContainers layout).
 # Input/output: the rendered manifests on stdin/stdout (helm post-renderer protocol). POSIX sh + awk only.
@@ -18,11 +25,13 @@ set -eu
 image=""
 expect=""
 volume="dsv-fetch"
+distribution="aks"
 while [ $# -gt 0 ]; do
   case "$1" in
     --image) image="$2"; shift 2 ;;
     --expect) expect="$2"; shift 2 ;;
     --volume) volume="$2"; shift 2 ;;
+    --distribution) distribution="$2"; shift 2 ;;
     *) echo "dsv-fetch-init: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -33,10 +42,17 @@ esac
 case "$expect" in
   ''|*[!0-9]*) echo "dsv-fetch-init: --expect <n> required" >&2; exit 2 ;;
 esac
+case "$distribution" in
+  aks|openshift) ;;
+  *) echo "dsv-fetch-init: --distribution must be aks or openshift" >&2; exit 2 ;;
+esac
 
-exec awk -v image="$image" -v expect="$expect" -v vol="$volume" '
-  /^---/ { target = 0 }
-  /^# Source: / { target = ($3 ~ /\/templates\/(daemonset|cluster-agent-deployment|agent-clusterchecks-deployment)\.yaml$/) }
+exec awk -v image="$image" -v expect="$expect" -v vol="$volume" -v dist="$distribution" '
+  /^---/ { target = 0; deployment = 0 }
+  /^# Source: / {
+    target = ($3 ~ /\/templates\/(daemonset|cluster-agent-deployment|agent-clusterchecks-deployment)\.yaml$/)
+    deployment = ($3 ~ /\/templates\/(cluster-agent-deployment|agent-clusterchecks-deployment)\.yaml$/)
+  }
   { print }
   target && /^      initContainers:[ ]*$/ {
     print "      - name: dsv-fetch-install"
@@ -44,9 +60,13 @@ exec awk -v image="$image" -v expect="$expect" -v vol="$volume" '
     print "        imagePullPolicy: IfNotPresent"
     print "        command: [\"/opt/dsv-fetch/dsv-fetch\", \"install\", \"--dest\", \"/dsv-fetch-out/dsv-fetch\"]"
     print "        securityContext:"
-    print "          runAsUser: 0"
-    print "          runAsGroup: 0"
-    print "          runAsNonRoot: false"
+    if (dist == "openshift" && deployment) {
+      print "          runAsNonRoot: true"
+    } else {
+      print "          runAsUser: 0"
+      print "          runAsGroup: 0"
+      print "          runAsNonRoot: false"
+    }
     print "          allowPrivilegeEscalation: false"
     print "          readOnlyRootFilesystem: true"
     print "          capabilities: {drop: [ALL]}"

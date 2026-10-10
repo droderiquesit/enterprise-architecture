@@ -8,6 +8,12 @@ secret backend env (DD_SECRET_BACKEND_COMMAND=/opt/dsv-fetch/dsv-fetch agent-bac
 the chart's own DD_API_KEY without duplicate entries (none overrides another), the DSV_* env and workload identity; the chart Secret holds only ENC[dsv://...]; the
 Agent version is the fleet-policy pin.
 
+distribution = "openshift" (Azure Red Hat OpenShift, obs-kubernetes-aro): the same checks plus the OpenShift layer
+(values/openshift.yaml after the fleet layer): SecurityContextConstraints for the node Agent and the Cluster Agent (the
+Agent SCC allows the projected workload-identity token volume), CRI-O socket, host ports instead of Unix sockets,
+admission controller hostip mode, worker-node selector, kubelet tlsVerify false, and the post-renderer's OpenShift mode
+(Cluster Agent / runner init containers without a fixed UID - the SCC assigns it).
+
 Layers come from `terraform console` in the module directory (TF_DATA_DIR in a temp dir). Chart: DATADOG_CHART_TGZ
 (path to datadog-<version>.tgz) or `helm pull` from helm.datadoghq.com. Skipped without terraform / helm / chart, or
 with SKIP_TERRAFORM_TESTS=1.
@@ -86,8 +92,7 @@ def tf_env(tmp_path_factory) -> dict:
 def _layers(tf_env: dict, tmp: Path, extra: dict | None = None) -> tuple[list[str], list[str]]:
     varfile = tmp / "vars.tfvars.json"
     varfile.write_text(json.dumps({**BASE_VARS, **(extra or {})}))
-    expr = ('jsonencode({v = local.datadog_values, a = ["${path.module}/postrender/dsv-fetch-init.sh", "--image", '
-            'var.dsv.fetch_image, "--expect", tostring(local.backend_workloads)]})')
+    expr = "jsonencode({v = local.datadog_values, a = local.postrender_args})"
     res = _run([TERRAFORM, "console", f"-var-file={varfile}"], cwd=MODULE, env=tf_env, input=expr)
     assert res.returncode == 0, res.stderr[-3000:]
     out = json.loads(json.loads(res.stdout.strip()))
@@ -113,6 +118,16 @@ def _render(chart: Path, tmp: Path, layers: list[str], args: list[str]) -> list[
 def rendered(chart, tf_env, tmp_path_factory):
     tmp = tmp_path_factory.mktemp("render")
     layers, args = _layers(tf_env, tmp)
+    return {"layers": layers, "args": args, "docs": _render(chart, tmp, layers, args)}
+
+
+OPENSHIFT = {"distribution": "openshift", "cluster_name": "aro-eh-dev"}
+
+
+@pytest.fixture(scope="module")
+def rendered_os(chart, tf_env, tmp_path_factory):
+    tmp = tmp_path_factory.mktemp("render-openshift")
+    layers, args = _layers(tf_env, tmp, OPENSHIFT)
     return {"layers": layers, "args": args, "docs": _render(chart, tmp, layers, args)}
 
 
@@ -148,6 +163,10 @@ def test_every_datadog_workload_gets_the_dsv_fetch_install_init_container(render
 
 
 def test_secret_backend_env_and_mount_in_every_agent_container(rendered):
+    _check_secret_backend(rendered)
+
+
+def _check_secret_backend(rendered):
     wl = _workloads(rendered["docs"])
     checked = []
     for name, d in wl.items():
@@ -182,6 +201,10 @@ def test_chart_secret_holds_only_the_reference(rendered):
 
 
 def test_workload_identity_per_service_account(rendered):
+    _check_workload_identity(rendered)
+
+
+def _check_workload_identity(rendered):
     sas = {d["metadata"]["name"]: d.get("metadata", {}).get("annotations", {}) for d in rendered["docs"] if d["kind"] == "ServiceAccount"}
     assert sas["datadog"]["azure.workload.identity/client-id"] == AGENT_ID
     assert sas["datadog-cluster-agent"]["azure.workload.identity/client-id"] == AGENT_ID
@@ -219,3 +242,100 @@ def test_postrender_fails_closed(rendered, tmp_path):
     assert wrong_count.returncode != 0 and "expected 3" in wrong_count.stderr
     tag_only = _run(["sh", str(POSTRENDER), "--image", "ehacr.azurecr.io/dsv-fetch:2.0.0", "--expect", "1"], input=manifest)
     assert tag_only.returncode == 2
+
+
+# ------------------------------------------------------------------------------ distribution = openshift (ARO)
+def test_openshift_layers_and_no_secret(rendered_os):
+    layers = rendered_os["layers"]
+    assert len(layers) == 3, "[base.yaml, fleet layer, openshift.yaml] (no overrides)"
+    assert layers[0] == (MODULE / "values" / "base.yaml").read_text()
+    assert layers[2] == (MODULE / "values" / "openshift.yaml").read_text(), "layer 2 = values/openshift.yaml verbatim"
+    fleet = yaml.safe_load(layers[1])
+    assert fleet["datadog"]["apiKey"] == f"ENC[{API_REF}]" and fleet["providers"]["aks"]["enabled"] is False
+    assert fleet["datadog"]["apm"]["socketEnabled"] is False and fleet["datadog"]["apm"]["portEnabled"] is True
+    assert fleet["datadog"]["kubelet"] == {"tlsVerify": False}
+    static = yaml.safe_load(layers[2])
+    for key in ("apiKey", "apiKeyExistingSecret", "secretBackend", "env"):
+        assert key not in static.get("datadog", {}), f"openshift.yaml must not touch the secret path ({key})"
+    for comp in ("agents", "clusterAgent", "clusterChecksRunner"):
+        assert not {"volumes", "volumeMounts", "rbac", "env"} & set(static.get(comp, {})), comp
+    assert rendered_os["args"][1:] == ["--image", FETCH_IMAGE, "--expect", "3", "--distribution", "openshift"]
+
+
+def test_openshift_scc_objects(rendered_os, rendered):
+    sccs = {d["metadata"]["name"]: d for d in rendered_os["docs"] if d["kind"] == "SecurityContextConstraints"}
+    assert set(sccs) == {"datadog", "datadog-cluster-agent"}
+    agent, dca = sccs["datadog"], sccs["datadog-cluster-agent"]
+    assert agent["apiVersion"] == "security.openshift.io/v1"
+    assert agent["users"] == ["system:serviceaccount:datadog:datadog"]
+    assert dca["users"] == ["system:serviceaccount:datadog:datadog-cluster-agent"]
+    # the workload identity webhook projects the service account token (dsv-fetch -> Entra -> DSV)
+    assert "projected" in agent["volumes"] and "projected" in dca["volumes"] and "hostPath" in agent["volumes"]
+    assert agent["allowHostPorts"] is True and agent["allowHostDirVolumePlugin"] is True and agent["runAsUser"]["type"] == "RunAsAny"
+    assert agent["seLinuxContext"]["seLinuxOptions"]["type"] == "spc_t"
+    assert "runtime/default" in agent["seccompProfiles"], "the dsv-fetch-install init container uses RuntimeDefault"
+    assert agent["allowPrivilegedContainer"] is False and agent["allowHostNetwork"] is False
+    assert dca["runAsUser"]["type"] == "MustRunAsRange" and dca["allowPrivilegedContainer"] is False
+    aks_kinds = {d["kind"] for d in rendered["docs"]}
+    assert "SecurityContextConstraints" not in aks_kinds, "no SCC objects on AKS"
+
+
+def test_openshift_init_container_in_all_three_workloads(rendered_os):
+    wl = _workloads(rendered_os["docs"])
+    assert set(wl) == {"datadog", "datadog-cluster-agent", "datadog-clusterchecks"}
+    for name, d in wl.items():
+        spec = d["spec"]["template"]["spec"]
+        init = spec["initContainers"][0]
+        assert init["name"] == "dsv-fetch-install" and init["image"] == FETCH_IMAGE, name
+        assert init["command"] == ["/opt/dsv-fetch/dsv-fetch", "install", "--dest", "/dsv-fetch-out/dsv-fetch"], name
+        sc = init["securityContext"]
+        assert sc["readOnlyRootFilesystem"] and not sc["allowPrivilegeEscalation"] and sc["capabilities"]["drop"] == ["ALL"], name
+        assert {v["name"]: v for v in spec["volumes"]}["dsv-fetch"]["emptyDir"]["medium"] == "Memory", name
+        if name == "datadog":
+            # SCC "datadog" (RunAsAny): the node Agent runs as root, so the binary is installed as uid 0
+            assert sc["runAsUser"] == 0 and sc["runAsNonRoot"] is False, name
+        else:
+            # MustRunAsRange (SCC datadog-cluster-agent / restricted-v2): no fixed UID - the SCC assigns the pod's UID
+            assert "runAsUser" not in sc and "runAsGroup" not in sc and sc["runAsNonRoot"] is True, (name, sc)
+            pod_sc = spec.get("securityContext") or {}
+            assert "runAsUser" not in pod_sc, (name, pod_sc)
+
+
+def test_openshift_dsv_env_and_backend_on_all_three_components(rendered_os):
+    _check_secret_backend(rendered_os)
+    _check_workload_identity(rendered_os)
+
+
+def test_openshift_node_agent_settings(rendered_os):
+    wl = _workloads(rendered_os["docs"])
+    ds = wl["datadog"]["spec"]["template"]["spec"]
+    assert ds["nodeSelector"]["node-role.kubernetes.io/worker"] == "", "ARO: node Agent on worker nodes only"
+    assert not ds.get("hostNetwork"), "no host network (optional on OpenShift; IMDS is reachable from the pod network)"
+    assert ds["securityContext"]["seLinuxOptions"]["type"] == "spc_t"
+    host_paths = {v["hostPath"]["path"] for v in ds["volumes"] if "hostPath" in v}
+    assert "/var/run/crio" in host_paths and "/var/log/pods" in host_paths, host_paths
+    assert "/var/run/datadog" not in host_paths, "no APM / DogStatsD Unix socket hostPath on OpenShift"
+    assert "/var/lib/docker/containers" not in host_paths
+    agent = next(c for c in ds["containers"] if c["name"] == "agent")
+    env = {e["name"]: e.get("value") for e in agent["env"]}
+    assert env["DD_CRI_SOCKET_PATH"] == "/host/var/run/crio/crio.sock" and env["DD_KUBELET_TLS_VERIFY"] == "false"
+    assert env["DD_LOGS_ENABLED"] == "true" and env["DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL"] == "true"
+    host_ports = {p["containerPort"] for c in ds["containers"] for p in c.get("ports", []) if p.get("hostPort")}
+    assert {8125, 8126, 4317, 4318} <= host_ports, host_ports
+    dca = next(c for c in wl["datadog-cluster-agent"]["spec"]["template"]["spec"]["containers"] if c["name"] == "cluster-agent")
+    denv = {e["name"]: e.get("value") for e in dca["env"]}
+    assert denv["DD_ADMISSION_CONTROLLER_INJECT_CONFIG_MODE"] == "hostip"
+
+
+def test_openshift_overrides_still_apply_last(chart, tf_env, tmp_path):
+    override = "clusterAgent:\n  replicas: 2\n"
+    layers, args = _layers(tf_env, tmp_path, {**OPENSHIFT, "values_overrides": [override]})
+    assert layers[2] == (MODULE / "values" / "openshift.yaml").read_text() and layers[3] == override
+    wl = _workloads(_render(chart, tmp_path, layers, args))
+    assert wl["datadog-cluster-agent"]["spec"]["replicas"] == 2
+
+
+def test_postrender_rejects_unknown_distribution():
+    manifest = "---\n# Source: datadog/templates/daemonset.yaml\nkind: DaemonSet\n"
+    bad = _run(["sh", str(POSTRENDER), "--image", FETCH_IMAGE, "--expect", "0", "--distribution", "eks"], input=manifest)
+    assert bad.returncode == 2 and "aks or openshift" in bad.stderr

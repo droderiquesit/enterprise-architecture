@@ -15,6 +15,38 @@
 
 ## Version-specific notes
 
+### 4.1.0 (from 4.0.x) - MINOR: Service Fabric managed cluster nodes
+
+Additive; nothing to change for VMs / VMSS / AKS. Not deployed or verified live.
+
+1. `modules/host-agents`: pass `service_fabric_node_types` (node type resource ids from the cluster's owner) to enrol
+   Service Fabric managed cluster node types. The caller's apply identity needs write on the node type
+   (`Microsoft.ServiceFabric/managedClusters/nodeTypes/write`, e.g. *Contributor* on the cluster resource group).
+2. The node type must already carry the DSV-reader identity in `vmManagedIdentity.userAssignedIdentities`, and the
+   cluster's owner must never send `properties.vmApplications` (azapi `ignore_body_changes`), otherwise each of its
+   applies removes - and so uninstalls - the Agent.
+3. Expected plan: one `azapi_update_resource` per node type (create). Applying it starts a node type update that the
+   Service Fabric resource provider rolls out upgrade domain by upgrade domain.
+4. Lab only: `platform-servicefabric` moved from `azurerm_service_fabric_managed_cluster` to azapi resources. A cluster
+   created by an earlier version needs a state migration before its next apply (`terraform state rm
+   'azurerm_service_fabric_managed_cluster.this[0]'`, then `import` blocks for `azapi_resource.cluster[0]` and
+   `azapi_resource.node_type[0]` with their resource ids `?api-version=2026-02-01`; see the root README). Without it the
+   plan destroys and recreates the cluster.
+
+### 4.1.0 (from 4.0.x) - MINOR: Azure Red Hat OpenShift (`modules/kubernetes` `distribution`)
+
+Additive; AKS callers change nothing (`distribution` defaults to `aks`; `features.kubelet_tls_mode = null` resolves to
+`aks_rotation`, the 4.0.0 default - the rendered values are identical). Not deployed or verified live.
+
+1. OpenShift: pass `distribution = "openshift"`; leave `features.kubelet_tls_mode` unset (or `insecure`). The fleet
+   policy must select the Agent as log collector (`log_pipeline = observability_pipelines`, `op_logs_url`); the Fluent
+   Bit fallback and `op_worker.enabled` fail the plan there.
+2. Federate the identity in `dsv.identity_client_id` with the cluster's managed OIDC issuer (managed-identity ARO
+   cluster) for `datadog/datadog`, `datadog/datadog-cluster-agent` and `datadog/datadog-cluster-checks`, exactly as on
+   AKS. A service-principal ARO cluster has no workload identity: not supported (the key path stays DSV-only).
+3. Expected plan on a new cluster: the namespace, the `datadog` release (chart SCCs included). `datadog_values` has a
+   third layer (`values/openshift.yaml`) before `values_overrides`.
+
 ### 4.0.0 (from 3.x) - MAJOR: Datadog Agent deployment v4
 
 Nothing in this release was deployed or verified live; plan carefully and roll out per environment.

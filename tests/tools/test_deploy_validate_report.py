@@ -52,6 +52,16 @@ def test_plan_policy_blocks_protected_deletes_unless_approved(tmp_path):
 
 
 # ------------------------------------------------------------- plan manifest
+def test_plan_policy_protects_azapi_state_bearing_types():
+    def rc(arm, actions):
+        return {"address": "azapi_resource.x", "type": "azapi_resource", "mode": "managed",
+                "change": {"actions": actions, "before": {"type": arm}, "after": None}}
+    plan = {"resource_changes": [rc("Microsoft.ServiceFabric/managedClusters@2026-02-01", ["delete"])]}
+    assert plan_policy.evaluate(plan, "platform-servicefabric", [])["violations"]
+    plan = {"resource_changes": [rc("Microsoft.Web/connections@2016-06-01", ["delete"])]}
+    assert not plan_policy.evaluate(plan, "deploy-logicapps", [])["violations"]
+
+
 def test_plan_manifest_binding_and_stale_plan(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("BUILD_SOURCEVERSION", "c0ffee")
     monkeypatch.setenv("PLAN_MANIFEST_TERRAFORM_VERSION", "1.16.5")

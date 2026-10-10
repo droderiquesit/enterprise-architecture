@@ -4,6 +4,53 @@ All notable changes to the observability package. Format: Keep a Changelog; vers
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-10-10
+
+Minor (additive): **Service Fabric managed cluster nodes** get the Datadog host Agent; **Azure Red Hat OpenShift**
+clusters get the Datadog node Agent, Cluster Agent and cluster-checks runners (`modules/kubernetes`
+`distribution = "openshift"`). Nothing has been deployed or verified live (status: implemented / static validation with
+mock providers; the OpenShift chart output is rendered with `helm template` of datadog 3.253.2).
+
+### Added
+- `modules/host-agents` input `service_fabric_node_types` (key -> node type resource id, `os_type`, `arch`,
+  `enabled`) and output `service_fabric_node_types`: an `azapi_update_resource` per node type sets the node type's own
+  `properties.vmApplications` (`Microsoft.ServiceFabric/managedClusters/nodeTypes@2026-02-01`) to the **same pinned
+  VM Application version** (`datadog-agent-windows` / `-linux`) as every other host - metrics, logs (files incl. the
+  app's `LOG_FILE_PATH` under `C:\ProgramData\enterprise-hello\logs`, Windows Event Log `System` / `Application`),
+  OTLP `localhost:4317/4318` and APM `localhost:8126`, API key `ENC[dsv://...]` through the dsv-fetch secret backend
+  with the node type's `obs-host-agent` identity. Works in `mode = policy` and `direct`; `enabled = false` sends an
+  empty list (the VM Application `remove` action uninstalls the Agent). Node types are VMSS in the Microsoft-managed
+  `SFC_` resource group that only the node type API may change, so the Azure Policy cannot enrol them.
+- `modules/kubernetes` input **`distribution`** (`aks` default | `openshift`): a static distribution layer
+  `values/openshift.yaml` after the fleet layer (chart-created SecurityContextConstraints `datadog` - with the
+  `projected` volume type for the workload-identity token - and `datadog-cluster-agent`, node Agent `spc_t` SELinux
+  type, CRI-O socket `/var/run/crio/crio.sock`, DogStatsD / APM host ports instead of Unix sockets, admission
+  controller `configMode: hostip`, worker-node selector); distribution-aware fleet keys (`providers.aks` off, kubelet
+  `tlsVerify: false` by default, APM `socketEnabled: false`); post-renderer `--distribution openshift` (the Cluster
+  Agent / runner `dsv-fetch-install` init containers take the SCC-assigned UID instead of uid 0). Same single secret
+  path (`ENC[dsv://...]`, dsv-fetch `agent-backend`, Entra workload identity). The Fluent Bit fallback and the
+  in-cluster OP Worker are rejected on OpenShift. Contract output field `distribution` (obs-kubernetes v2, optional).
+- `features.kubelet_tls_mode` default is now `null` = per distribution (`aks_rotation` on AKS - unchanged behaviour).
+
+### Changed (lab, outside the package)
+- `platform-servicefabric` manages the cluster and node type with azapi (azurerm 5.9 cannot set node type identity /
+  VM Applications and re-PUTs node types on every update), attaches the DSV-reader identity (`vmManagedIdentity`),
+  grants the Service Fabric Resource Provider *Managed Identity Operator* on it, never sends `vmApplications`
+  (`ignore_body_changes`), and publishes contract 1.1.0 `node_types` / `datadog`. `deploy-specialized` writes the
+  inventory API log to `C:\ProgramData\enterprise-hello\logs\inventory-api.log` (the Windows host-log default).
+- The `obs-hosts` root: optional contract `platform-servicefabric` (>= 1.1.0 `node_types`), setting
+  `service_fabric.enabled` (default true), output `service_fabric_node_types`.
+- New lab component **`obs-kubernetes-aro`** (profile `specialized`, contract
+  `obs-kubernetes-aro` v1): `modules/kubernetes` with `distribution = "openshift"` on the platform-aro cluster, the
+  `obs-collector` identity federated with the cluster's managed OIDC issuer for `datadog/datadog`,
+  `datadog/datadog-cluster-agent`, `datadog/datadog-cluster-checks`; helm / kubernetes providers authenticate with the
+  admin kubeconfig from an **ephemeral** azapi `listAdminCredentials` (never in plan or state) or a prepared kubeconfig
+  file. Creates nothing while platform-aro is blocked/disabled.
+- `platform-aro` contract v1 gains `oidc_issuer_url` (managed OIDC issuer, read with azapi
+  `Microsoft.RedHatOpenShift/openShiftClusters@2025-07-25`; additive). `deploy-specialized`: the ARO Helm values let
+  the node Agent collect the container's logs (`disableAgentLogCollection` / `agentLogSource` / SSI label follow the
+  fleet log collector, as on AKS).
+
 ## [4.0.0] - 2026-10-10
 
 **BREAKING** (SemVer major): **Datadog Agent deployment v4** - one Datadog collection path per architecture, one

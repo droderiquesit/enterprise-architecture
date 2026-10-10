@@ -54,9 +54,11 @@ module "env" {
 }
 
 # ---------------------------------------------------------------- Service Fabric (rendered manifests)
+# LOG_FILE_PATH: the Windows host-log directory the Datadog host Agent tails on every enrolled host (obs-hosts
+# host_logs / fleet policy logs.hosts.windows), incl. the Service Fabric nodes (observability 4.1.0).
 locals {
   sf_type_version = coalesce(var.settings.sf_app_type_version, replace(local.inv_version, "/[^0-9A-Za-z.]/", "."))
-  sf_env          = local.sf_enabled ? merge(module.env["sf"].env, { PORT = tostring(try(local.sf.app_port, 8080)), LOG_FILE_PATH = "D:\\SvcFab\\Log\\hello\\inventory-api.log" }) : {}
+  sf_env          = local.sf_enabled ? merge(module.env["sf"].env, { PORT = tostring(try(local.sf.app_port, 8080)), LOG_FILE_PATH = "C:\\ProgramData\\enterprise-hello\\logs\\inventory-api.log" }) : {}
   sf_service_manifest = local.sf_enabled ? templatefile("${path.module}/templates/ServiceManifest.xml.tftpl", {
     version = local.sf_type_version
     port    = try(local.sf.app_port, 8080)
@@ -103,8 +105,16 @@ locals {
     dsv               = { auth = "none" }
     secretsMode       = "synced"
     existingSecretEnv = var.settings.aro_secret_env
-    telemetry         = { agentHostFromHostIP = true, disableAgentLogCollection = true }
-    faults            = { enabled = false }
+    # Datadog node Agent on ARO (obs-kubernetes-aro, observability 4.1.0): same rule as core-aks - the Agent collects
+    # the container's stdout when it is the fleet log collector (Fluent Bit fallback: "[]" opt-out); SSI label when
+    # the Datadog library is injected (Cluster Agent admission controller, hostip mode on OpenShift)
+    telemetry = {
+      agentHostFromHostIP       = true
+      disableAgentLogCollection = module.env["aro"].log_collector != "datadog-agent"
+      agentLogSource            = module.env["aro"].log_collector == "datadog-agent" ? module.env["aro"].k8s_patch_object.metadata.labels["logs.datadoghq.com/source"] : ""
+      singleStepInstrumentation = module.env["aro"].apm.method == "ssi_kubernetes"
+    }
+    faults = { enabled = false }
     resources = {
       requests = { cpu = "100m", memory = "192Mi" }
       limits   = { cpu = "500m", memory = "512Mi" }

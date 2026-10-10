@@ -5,21 +5,26 @@
 # Fluent Bit DaemonSet is installed only for the fallback (node collector fluent_bit / log_pipeline =
 # fluent_bit_direct), and then the Agent's log collection is off (README-transport.md).
 #
-# Chart values are layered YAML (values = [base, fleet, overrides...], later wins):
+# Chart values are layered YAML (values = [base, fleet, distribution?, overrides...], later wins):
 #   values/base.yaml       static, reviewed defaults (sizing, OTLP, dsv-fetch volume wiring)
 #   local.fleet_values     computed here from the fleet / tag policies and the inputs only (site, cluster name, tags,
-#                          log collector, SSI targets, versions, OP Worker URL, DSV references, feature flags)
+#                          log collector, SSI targets, versions, OP Worker URL, DSV references, feature flags; the
+#                          distribution-dependent keys: kubelet TLS, providers.aks, APM socket)
+#   values/openshift.yaml  distribution = "openshift" only: static OpenShift / ARO requirements (SCCs, CRI-O socket,
+#                          DogStatsD host port, admission controller hostip mode, worker-node selector)
 #   var.values_overrides   per-cluster YAML documents (validated: they cannot change the secret path)
 #
 # Secrets (ADR-0001 section 14): ONE path, nothing secret passes through Terraform or a Kubernetes Secret. The node
 # Agent, the Cluster Agent and the cluster-checks runners resolve api_key ENC[dsv://...] (and DB passwords of cluster
 # checks) with secret_backend_command = the static dsv-fetch binary (`agent-backend`), copied by the init container
-# dsv-fetch-install (postrender/dsv-fetch-init.sh) into an in-memory emptyDir, authenticating to Delinea DSV with AKS
-# workload identity. The Fluent Bit fallback and the optional in-cluster OP Worker get the key from a dsv-fetch `init`
+# dsv-fetch-install (postrender/dsv-fetch-init.sh) into an in-memory emptyDir, authenticating to Delinea DSV with
+# Microsoft Entra workload identity (AKS, or a managed-identity ARO cluster: same webhook contract). The Fluent Bit fallback and the optional in-cluster OP Worker get the key from a dsv-fetch `init`
 # container (in-memory emptyDir); the chart Secrets hold only the ENC[] reference.
 module "fleet" {
-  source       = "../fleet-policy"
-  policy       = var.fleet_policy
+  source = "../fleet-policy"
+  policy = var.fleet_policy
+  # fleet-policy architecture "aks" = Kubernetes nodes with the Datadog node Agent; OpenShift (ARO) clusters use the
+  # same collection decision (node Agent logs, SSI, profiler) - the distribution only changes chart values
   architecture = "aks"
   env          = var.datadog.env
   overrides    = var.log_pipeline == null ? {} : { log_pipeline = var.log_pipeline }
@@ -34,6 +39,10 @@ module "tags" {
 }
 
 locals {
+  openshift = var.distribution == "openshift"
+  # kubelet TLS: AKS default = serving-certificate rotation (providers.aks); OpenShift = tlsVerify false (Datadog's
+  # documented OpenShift setting: kubelet serving certificates are not signed by a CA mounted in the Agent pod)
+  kubelet_mode   = coalesce(var.features.kubelet_tls_mode, local.openshift ? "insecure" : "aks_rotation")
   op_mode        = module.fleet.log_pipeline == "observability_pipelines"
   agent_logs     = module.fleet.node_collector == "agent"
   fluent_bit_on  = !local.agent_logs
@@ -114,7 +123,7 @@ locals {
       hostCAPath = "/etc/kubernetes/certs/kubeletserver.crt"
     }
     insecure = { tlsVerify = false }
-  }[var.features.kubelet_tls_mode]
+  }[local.kubelet_mode]
 
   # ---------------------------------------------------------------- layer 2: fleet (computed bits only)
   fleet_values = {
@@ -128,7 +137,8 @@ locals {
         # pod label -> tag mapping of the tag policy (team, domain, tier, ...); every value is also in ad.datadoghq.com/tags
         podLabelsAsTags = module.tags.pod_labels_as_tags
         apm = merge(
-          { socketEnabled = var.features.apm, portEnabled = var.features.apm },
+          # OpenShift: no APM Unix socket (it needs a hostPath volume in every application pod) - host port 8126 only
+          { socketEnabled = var.features.apm && !local.openshift, portEnabled = var.features.apm },
           local.apm_datadog ? {
             instrumentation = merge({
               enabled = true
@@ -158,7 +168,7 @@ locals {
     )
     # Remote Configuration (Fleet Automation, APM sampling / SSI policies); preferred top-level key of the chart
     remoteConfiguration = { enabled = try(local.agent_cfg.remote_configuration, true) }
-    providers           = { aks = { enabled = var.features.is_aks } }
+    providers           = { aks = { enabled = var.features.is_aks && !local.openshift } }
     agents = {
       image = { tag = local.agent_version }
       # workload identity for dsv-fetch (service account "datadog")
@@ -184,10 +194,16 @@ locals {
   datadog_values = concat(
     # Agent registry from the fleet policy agent.image (<registry>/agent); the chart default otherwise
     [file("${path.module}/values/base.yaml"), yamlencode(merge(local.fleet_values, local.agent_registry == null ? {} : { registry = local.agent_registry }))],
+    local.openshift ? [file("${path.module}/values/openshift.yaml")] : [],
     var.values_overrides,
   )
   # workloads that receive the dsv-fetch-install init container (postrender/dsv-fetch-init.sh --expect)
   backend_workloads = var.features.cluster_checks_runner ? 3 : 2
+  # OpenShift: --distribution openshift - the Cluster Agent / runner init containers take the SCC-assigned UID
+  postrender_args = concat(
+    ["${path.module}/postrender/dsv-fetch-init.sh", "--image", var.dsv.fetch_image, "--expect", tostring(local.backend_workloads)],
+    local.openshift ? ["--distribution", "openshift"] : [],
+  )
 }
 
 module "flb" {
@@ -308,7 +324,7 @@ resource "helm_release" "datadog" {
   # the deploy agent. Relative path: the helm provider runs it from the root module's directory.
   postrender = {
     binary_path = "/bin/sh"
-    args        = ["${path.module}/postrender/dsv-fetch-init.sh", "--image", var.dsv.fetch_image, "--expect", tostring(local.backend_workloads)]
+    args        = local.postrender_args
   }
   depends_on = [kubernetes_namespace_v1.this]
 
@@ -320,6 +336,14 @@ resource "helm_release" "datadog" {
     precondition {
       condition     = !(local.op_mode && local.agent_logs) || var.op_worker.enabled || var.op_logs_url != null
       error_message = "log_pipeline = observability_pipelines with Agent log collection needs op_logs_url (transport contract aggregator.agent_logs_url) or op_worker.enabled."
+    }
+    precondition {
+      condition     = !local.openshift || local.agent_logs
+      error_message = "distribution = openshift: the Fluent Bit fallback DaemonSet (node collector fluent_bit / log_pipeline = fluent_bit_direct) is not supported on OpenShift (it would need its own hostPath SCC) - use the node Agent log collector (fleet policy default)."
+    }
+    precondition {
+      condition     = !local.openshift || !var.op_worker.enabled
+      error_message = "distribution = openshift: the in-cluster Observability Pipelines Worker (op_worker.enabled) is not supported on OpenShift by this module - use the Container Apps Worker (op_logs_url)."
     }
     precondition {
       condition     = length(var.cluster_checks) == 0 || var.features.cluster_checks_runner

@@ -22,8 +22,11 @@ no per-host Terraform and no run command or CustomScript.
   * `platform_db_sqlvm.vm.id`.
 
   In policy mode these contracts are not read: hosts are enrolled by tag.
+* **Optional (any mode, 4.1.0):** `platform_servicefabric` (contract 1.1.0) `node_types[*].{id, os_type,
+  datadog_enabled}`: every node type of the Service Fabric managed cluster gets the VM Application on its own
+  `vmApplications` (enrolled ones) or an empty list (not enrolled, or `settings.service_fabric.enabled = false`).
 * **Produces:** no contract. Outputs: `mode`, `enrollment_tag`, `applications` (pinned version), `agent_version`,
-  `policy`, `assignments`, `vmss_gallery_applications`, `otlp_endpoint`, `host_log_paths`.
+  `policy`, `assignments`, `vmss_gallery_applications`, `service_fabric_node_types`, `otlp_endpoint`, `host_log_paths`.
 
 ## Before plan (pipeline)
 
@@ -78,6 +81,25 @@ The pipeline apply identity of this root needs at the policy scope (`settings.po
 * **Package details:** `applications` (add `linux_arm64` for arm64 hosts), `dsv_fetch_release_dir`, `replica_regions`,
   `publisher_principal_ids` (apply identity: blob upload with Entra ID), `package_network`.
 * **Other:** `agent_identity_key` (`obs-host-agent`), `sqlvm_os_type` (direct mode).
+
+## Service Fabric managed cluster nodes (4.1.0)
+
+Node types of a managed cluster are VMSS in the Microsoft-managed `SFC_` resource group; Microsoft Learn says to change
+them only through the managed cluster / node type API (deny assignment on the resource group, "manually making changes
+to the resources in a managed cluster isn't supported"). The Azure Policy above therefore does not touch them. Instead:
+
+* `platform-servicefabric` attaches the `obs-host-agent` identity through the node type's `vmManagedIdentity`
+  (SF resource provider: *Managed Identity Operator* on it), tags the node type `datadog:enabled` and lists it in its
+  contract (`node_types`);
+* this root sets the node type's `properties.vmApplications` (`azapi_update_resource`,
+  `Microsoft.ServiceFabric/managedClusters/nodeTypes@2026-02-01`) to the same `datadog-agent-windows` version as every
+  Windows host. The resource provider rolls the change out per upgrade domain.
+
+The nodes then run the same Agent configuration as any Windows host: metrics, the `host_logs` Windows files (the
+inventory API writes `LOG_FILE_PATH = C:\ProgramData\enterprise-hello\logs\inventory-api.log`), the `System` /
+`Application` Event Log channels, OTLP `localhost:4317/4318` and APM `localhost:8126`; the key comes from DSV through
+`dsv-fetch.exe agent-backend`. The apply identity needs write on the node type (Contributor on the cluster resource
+group). Ordering: `platform-servicefabric` (platform pipeline) first, then this root (applications pipeline).
 
 ## Secrets
 

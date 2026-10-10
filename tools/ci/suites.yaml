@@ -109,7 +109,7 @@ suites:
     paths: [observability/tests/kubernetes]
     inputs: [observability/tests/kubernetes/**, observability/modules/kubernetes/**, observability/modules/fleet-policy/**,
              observability/modules/tagging/**, observability/config/**, versions.yaml]
-    covers: [obs-kubernetes]
+    covers: [obs-kubernetes, obs-kubernetes-aro]
   - id: obs-portability
     tier: unit
     kind: pytest

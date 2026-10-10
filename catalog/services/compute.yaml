@@ -1158,8 +1158,15 @@ services:
     notes: bring-your-own subnet 'sfmc'
   iac:
     terraform_resources:
-    - azurerm_service_fabric_managed_cluster
-    azapi: []
+    - azurerm_resource_group
+    - azurerm_role_assignment
+    azapi:
+    - type: Microsoft.ServiceFabric/managedClusters
+      api_version: '2026-02-01'
+      reason: azurerm 5.9.0 gap (node type identity / VM Applications; see catalog/provider-gaps.yaml)
+    - type: Microsoft.ServiceFabric/managedClusters/nodeTypes
+      api_version: '2026-02-01'
+      reason: azurerm 5.9.0 gap (vmManagedIdentity, vmApplications; see catalog/provider-gaps.yaml)
     component: platform-servicefabric
     implemented: true
   workload:
@@ -1175,8 +1182,8 @@ services:
         method: Datadog Agent host metrics + OTel app metrics via Agent OTLP; Azure integration (None) for platform metrics
       logs:
         supported: 'yes'
-        method: Fluent Bit service on the Windows node host tails LOG_FILE_PATH -> Datadog HTTP intake (obs-hosts)
-        notes: Agent log collection disabled
+        method: Datadog host Agent (datadog-agent-windows VM Application on the node type, obs-hosts) tails LOG_FILE_PATH (C:\ProgramData\enterprise-hello\logs\*.log) and the System / Application Event Log channels
+        notes: no Fluent Bit on the nodes (observability 4.0+); API key from Delinea DSV via the dsv-fetch secret backend
       traces: *id001
       dbm: *id002
       rum:
@@ -1184,7 +1191,7 @@ services:
         method: browser RUM applies to hello-frontend only (static-web-apps)
       profiling: *id003
   datadog_limitations:
-  - No Datadog Azure integration metrics namespace for SF managed clusters; rely on Agent on nodes (VMSS extension)
+  - No Datadog Azure integration metrics namespace for SF managed clusters; rely on the Agent on the nodes (node type VM Application; Datadog documents the VMSS extension with a protected API key, which is not used here)
   cost:
     profile: high
     approx_monthly_usd_default: 330
@@ -1243,10 +1250,10 @@ services:
     signals:
       metrics:
         supported: 'yes'
-        method: Datadog Agent via Operator/Helm with OpenShift SCCs + OTel via Agent OTLP
+        method: Datadog Agent via Helm (obs-kubernetes-aro, chart SCCs datadog / datadog-cluster-agent) + OTel via Agent OTLP
       logs:
         supported: 'yes'
-        method: Fluent Bit DaemonSet (privileged SCC) tails /var/log/containers
+        method: Datadog node Agent (obs-kubernetes-aro, Helm, CRI-O, /var/log/pods) -> Observability Pipelines Worker -> Datadog
       traces: *id005
       dbm: *id002
       rum:
@@ -1254,7 +1261,7 @@ services:
         method: browser RUM applies to hello-frontend only (static-web-apps)
       profiling: *id003
   datadog_limitations:
-  - Datadog Agent on OpenShift needs custom SCCs; no Azure integration namespace for ARO itself
+  - Datadog Agent on OpenShift needs SCCs (the chart creates them for the node Agent and the Cluster Agent); no APM / DogStatsD Unix sockets (host ports); no Azure integration namespace for ARO itself
   cost:
     profile: very-high
     approx_monthly_usd_default: 1800

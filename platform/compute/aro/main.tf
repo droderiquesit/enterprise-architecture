@@ -152,3 +152,14 @@ resource "azurerm_redhat_openshift_cluster" "this" {
     azurerm_role_assignment.aro_rp,
   ]
 }
+
+# Managed OIDC issuer of the managed-identity cluster (Learn: "Deploy and configure an application using workload
+# identity on an ARO managed identity cluster" - `az aro show --query clusterProfile.oidcIssuer`). azurerm 5.9 does not
+# expose it, so it is read (GET only) with azapi; consumers federate their user-assigned identities with service
+# accounts of this issuer (e.g. obs-kubernetes-aro: Datadog Agents -> Delinea DSV). Not a credential.
+data "azapi_resource" "cluster" {
+  count                  = local.enabled ? 1 : 0
+  type                   = "Microsoft.RedHatOpenShift/openShiftClusters@2025-07-25"
+  resource_id            = azurerm_redhat_openshift_cluster.this[0].id
+  response_export_values = ["properties.clusterProfile.oidcIssuer"]
+}

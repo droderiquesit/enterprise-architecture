@@ -5,8 +5,8 @@ Version: see `VERSION` (semantic versioning). Release notes: `CHANGELOG.md`. Upg
 A portable, versioned package that **connects Azure resources and workloads to Datadog** and makes every signal carry
 the same tags. Telemetry flows through the most mature Datadog path each resource type supports:
 
-* the Datadog Agent wherever it can run (AKS nodes, VM / VMSS hosts via Azure Policy + VM Applications, a sidecar in
-  ACI container groups) and Datadog serverless-init on Container Apps - one log collector per architecture;
+* the Datadog Agent wherever it can run (AKS nodes, VM / VMSS hosts via Azure Policy + VM Applications, Service Fabric
+  managed cluster node types via the node type's own VM Applications (4.1.0), a sidecar in ACI container groups) and Datadog serverless-init on Container Apps - one log collector per architecture;
 * Datadog tracing libraries with Single Step Instrumentation and the Continuous Profiler;
 * Datadog Observability Pipelines as the central log pipeline;
 * RUM for browsers;
@@ -216,7 +216,8 @@ its start wrapper reads the key with dsv-fetch instead, so there is no Container
   nor Python on Functions (preview).
 * AKS workload-identity tokens with DSV are not verified. 4.0.0 removed the synced-Secret fallback
   (`api_key.mode = existing`); the documented alternative is the node pool's kubelet identity via IMDS.
-* Not verified on Azure: the policy remediation's partial PUT on VMSS, gallery publishing with the publisher identity,
+* Not verified on Azure: the policy remediation's partial PUT on VMSS, the Service Fabric node type
+  `vmApplications` update (GET + PUT by `azapi_update_resource`) and its per-upgrade-domain rollout, gallery publishing with the publisher identity,
   the Windows MSI + `dsv-fetch.exe` ACLs on a real Windows host, the ACI `emptyDir` written by the uid 65532 init
   container, and the Helm post-renderer on the deploy agents (needs `sh` and `awk`). See `docs/known-limitations.md`
   in the source repository.

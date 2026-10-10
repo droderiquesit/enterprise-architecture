@@ -1,4 +1,4 @@
-# Datadog fleet collection: one path per platform (package 4.0.0)
+# Datadog fleet collection: one path per platform (package 4.0.0; Service Fabric nodes and ARO 4.1.0)
 
 This guide shows how every resource type of the fleet sends its telemetry to Datadog with the observability package
 defaults, which Datadog features apply, and which combinations Datadog does not support. Version 4.0.0 has **one
@@ -59,8 +59,10 @@ source for Event Hubs), which applies the tag policy and sends to Datadog Logs.
 | Resource type | Collector (deployed by) | App logs | Traces | Profiles | Custom / runtime metrics | Platform metrics | Platform logs | DBM / RUM |
 |---|---|---|---|---|---|---|---|---|
 | AKS pods | Datadog Agent DaemonSet + Cluster Agent + cluster-checks runners (Datadog Helm chart with layered values `values/base.yaml` -> fleet layer -> `values_overrides`, dsv-fetch post-renderer; `modules/kubernetes`) | Agent (container stdout) -> Worker | SSI (admission controller) -> node Agent | SSI `DD_PROFILING_ENABLED=auto` | DogStatsD -> node Agent | Azure integration | diagnostic settings -> Event Hubs -> Worker | DBM as cluster checks |
+| ARO pods (4.1.0) | the same chart and module as AKS with `distribution = "openshift"` (`obs-kubernetes-aro`; layers base -> fleet -> `values/openshift.yaml` -> `values_overrides`: chart SCCs `datadog` / `datadog-cluster-agent`, CRI-O socket, worker-node selector, kubelet `tlsVerify: false`) | Agent (container stdout, `/var/log/pods`) -> Worker; `openshift-*` namespaces excluded | SSI (admission controller, `configMode: hostip`) -> node Agent hostPort 8126 | SSI `DD_PROFILING_ENABLED=auto` (not verified on OpenShift) | DogStatsD -> node Agent hostPort 8125 | Agent + Cluster Agent (no Azure Monitor namespace) | - | - |
 | Linux VM / VMSS | Datadog Agent installed by an Azure VM Application, assigned by Azure Policy (DeployIfNotExists) to resources tagged `datadog:enabled` (`modules/host-agents`) | Agent file tail (`logs.hosts.linux` + `datadog:log_paths` tag) -> Worker | host SSI -> local Agent | host SSI `auto` | DogStatsD `localhost` | Azure integration + Agent | - | Agent DBM on SQL VMs |
 | Windows VM / VMSS | same (Windows VM Application version) | Agent tails files + Event Log (`System`, `Application`; fleet policy `logs.hosts.windows`) -> Worker (no Fluent Bit) | OpenTelemetry -> Agent OTLP | **no** (see 4) | OTel -> Agent | Azure integration + Agent | - | - |
+| Service Fabric managed cluster nodes (4.1.0) | the same Windows (or Linux) VM Application version on the **node type's own `vmApplications`** (`obs-hosts` -> `modules/host-agents` `service_fabric_node_types`, `azapi_update_resource` on `Microsoft.ServiceFabric/managedClusters/nodeTypes@2026-02-01`); the DSV-reader identity on the node type's `vmManagedIdentity` (`platform-servicefabric`). Not the Azure Policy: node types are VMSS in the Microsoft-managed `SFC_` resource group, changed only through the node type API | Agent tails `LOG_FILE_PATH` (`C:\ProgramData\enterprise-hello\logs\*.log`) + Event Log -> Worker | OpenTelemetry -> Agent OTLP `localhost:4317` | **no** (see 4) | OTel -> Agent | Azure integration + Agent | - | - |
 | Container Apps | **serverless-init sidecar** per replica (`modules/instrumentation` `container_app_patch`) | serverless-init tails `LOG_FILE_PATH` on a shared EmptyDir -> Worker | library in image -> serverless-init (`localhost:8126`) | library -> serverless-init | DogStatsD `udp://localhost:8125` -> serverless-init | Azure integration | system logs -> Worker | - |
 | ACI | **Datadog Agent sidecar** per container group (`modules/instrumentation` `aci_sidecar`) | Agent tails `LOG_FILE_PATH` on a shared emptyDir -> Worker | library in image -> Agent sidecar (`localhost:8126`) | library -> Agent sidecar | DogStatsD `udp://localhost:8125` -> Agent sidecar | Azure integration | - | separate ACI DBM Agent only when no cluster exists |
 | Container Apps jobs | none (run-to-completion) | console -> diagnostic settings -> Event Hubs -> Worker (`logs.collector = azure`) | library -> APM gateway | partial (short runs) | **no DogStatsD** | Azure integration | as Container Apps | - |
@@ -78,8 +80,8 @@ extension settings, run-command parameters, VM Application parameters or IaC-set
 
 | Component | Key path |
 |---|---|
-| AKS node Agent, Cluster Agent, cluster-checks runners | `dsv-fetch agent-backend` as `secret_backend_command` (binary copied by the `dsv-fetch-install` init container that the Helm post-renderer adds; workload identity on the three service accounts) |
-| Linux / Windows VMs, VMSS | the VM Application installs the Agent and `dsv-fetch` / `dsv-fetch.exe` (`secret_backend_command`); the host identity reads the key path |
+| AKS / ARO node Agent, Cluster Agent, cluster-checks runners | `dsv-fetch agent-backend` as `secret_backend_command` (binary copied by the `dsv-fetch-install` init container that the Helm post-renderer adds; Entra workload identity on the three service accounts - on ARO through the managed-identity cluster's OIDC issuer; the OpenShift post-renderer mode lets the SCC assign the Cluster Agent / runner UID) |
+| Linux / Windows VMs, VMSS, Service Fabric managed cluster nodes | the VM Application installs the Agent and `dsv-fetch` / `dsv-fetch.exe` (`secret_backend_command`); the host identity reads the key path (on Service Fabric the node type's `vmManagedIdentity`) |
 | ACI Agent sidecar | init container `dsv-fetch-install` copies the static binary into an emptyDir (ACI init containers have no managed identity, so it makes no DSV call); the Agent's start command installs it root-owned 0500 and the Agent resolves `api_key: ENC[dsv://...]` with the group identity |
 | Container Apps serverless-init | init container `dsv-fetch-install` copies the binary (no identity needed, every workload profile); the sidecar runs `dsv-fetch init --format dotenv` into its own `/tmp`, sources and truncates the file and execs `/datadog-init` (serverless-init has no secret backend) |
 | Observability Pipelines Worker, APM gateway | dsv-fetch dotenv / secret backend (`modules/telemetry-transport`) |
@@ -198,6 +200,8 @@ The `app_requirements` output of `modules/instrumentation` lists them per worklo
 | Sidecars in Container Apps jobs | a sidecar keeps run-to-completion executions alive | `logs.collector = azure`, tracer -> APM gateway |
 | Profiling in otel mode | needs the Datadog library | off (Python preview opt-in) |
 | Event Hubs read twice | the aggregator and the Worker would both consume | the aggregator is not deployed in OP mode |
+| Azure Policy / `az vmss extension set` on Service Fabric managed cluster node VMSS | the node type VMSS live in the Microsoft-managed `SFC_` resource group (deny assignment; Learn: manual changes to managed-cluster resources are not supported) and the resource provider owns their model | the node type API instead: `vmApplications` (Agent, `obs-hosts`) + `vmManagedIdentity` (DSV reader, `platform-servicefabric`); no VMSS extension with a protected API key |
+| Fluent Bit DaemonSet / in-cluster OP Worker on ARO, APM / DogStatsD Unix sockets on OpenShift | the fallback DaemonSet would need its own hostPath SCC; Unix sockets need a hostPath volume in every application pod (Datadog recommends host ports on OpenShift) | `modules/kubernetes` rejects them for `distribution = "openshift"`; the Agent collects logs, apps use `DD_AGENT_HOST` (node IP) host ports |
 | `agent_sidecar` outside ACI, `serverless_init` outside Container Apps | not a collection path there | the fleet policy falls back to the architecture default and reports `log_collector_reason` |
 
 ## 6. Fleet management
@@ -243,7 +247,8 @@ signature (Datadog docs, Remote Configuration). What can change remotely is gove
 
 ## 8. Accepted risk: the VM / VMSS DSV-reader identity
 
-On VMs and VMSS the Azure Policy attaches a per-environment user-assigned identity that can read **one** DSV path: the
+On VMs and VMSS the Azure Policy (on Service Fabric managed cluster node types the platform root, through the node
+type API) attaches a per-environment user-assigned identity that can read **one** DSV path: the
 Datadog API key. IMDS hands tokens for an attached identity to **any process on the host**, so every local process (not
 only the Datadog Agent) could read that key. This is accepted because:
 

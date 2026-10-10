@@ -25,7 +25,7 @@ on 2026-10-09. Each item names its source so it can be re-checked. Status words 
 | Oracle Database@Azure | blocked (cataloged) | Marketplace offer purchase, linked OCI tenancy, My Oracle Support registration, policy exemption for the auto-created OracleSubscription | catalog/services/partner-and-fabric.yaml |
 | SQL Managed Instance | disabled | cost (~700-800/month), first instance in a subnet takes ~4-6 h | platform/data/sqlmi/README.md |
 | Managed Instance for Apache Cassandra | disabled | cost (~1,500+/month); Cosmos DB first-party SP needs Network Contributor on the subnet; keyspace created over CQL from a private agent | platform/data/cassandra-mi/README.md |
-| Service Fabric managed cluster | disabled | cost; requires client certificate thumbprint or Entra apps | platform/compute/servicefabric/README.md |
+| Service Fabric managed cluster | disabled | cost; requires client certificate thumbprint or Entra apps; with the Datadog Agent on (default) also `sf_resource_provider_principal_id` (Managed Identity Operator on the DSV-reader identity) | platform/compute/servicefabric/README.md |
 | Confidential VM, dedicated host, GPU VM, Automation, Azure ML | disabled | quota (DCasv5, NCASv3_T4 often 0), cost | platform/compute/specialized/README.md |
 | App Service Windows container plan, Logic Apps WS1, Functions EP1 / Y1, Durable Task Scheduler | disabled | cost / optional | platform/compute/appservice, functions READMEs |
 | SQL elastic pool, Hyperscale, PostgreSQL elastic cluster, Synapse SQL/Spark, ADX, AI Search | disabled | cost | platform/data READMEs, catalog |
@@ -54,6 +54,30 @@ script); no ARM keyspace for Cassandra MI; Confidential Ledger collections not A
 via `virtual_network_type = "External"` not covered by provider docs; Datadog provider has no DORA/change-event resource
 (script `send_deployment_event.py`).
 
+Service Fabric managed cluster (observability 4.1.0, not verified live): azurerm 5.9 cannot set node type identity /
+VM Applications and re-PUTs node types on update, so `platform-servicefabric` uses azapi
+(`Microsoft.ServiceFabric/managedClusters[/nodeTypes]` @2026-02-01) - a cluster created by an earlier version of the root
+needs a state migration (`state rm` + `import`, root README) or it is recreated. The Datadog Agent reaches the nodes
+through the node type's `vmApplications` (obs-hosts `azapi_update_resource`), not the Azure Policy; whether the
+resource provider propagates node type tags to the node VMSS (so the Agent can read `service` / `datadog:log_paths`
+from IMDS) is undocumented - without them the nodes report `service:platform` host tags and only the default Windows
+host-log paths (where `deploy-specialized` writes `LOG_FILE_PATH`). Each change of the node type's identity or VM
+Application list is a node type update rolled out per upgrade domain.
+
+ARO Datadog collection (`obs-kubernetes-aro`, observability 4.1.0, not verified live - no ARO cluster): rendered with
+`helm template` only. To verify on a real cluster: (1) SCC admission - the node Agent under SCC `datadog` (spc_t,
+`projected` token volume), the Cluster Agent under `datadog-cluster-agent` and the cluster-checks runners under the
+default `restricted-v2` with SCC-assigned UIDs (the Agent image as an arbitrary non-root UID); (2) the OpenShift
+pod-identity webhook (`openshift-cloud-credential-operator`) injecting the Entra token into the three Agent pods and DSV
+accepting it (`xms_mirid`); (3) Single Step Instrumentation on OpenShift (Datadog's SSI compatibility page does not
+list OpenShift; injected init containers use the restricted securityContext); (4) the ARO admin kubeconfig carrying
+`certificate-authority-data` (else `settings.api_ca_certificate`). The kubelet is read with `tlsVerify: false` (Datadog's
+OpenShift setting), OpenShift control-plane checks are off, `openshift-*` namespaces are not collected, the Fluent Bit
+fallback / in-cluster OP Worker are not supported on OpenShift, and only managed-identity ARO clusters (OIDC issuer)
+are supported. The helm / kubernetes providers use the cluster-admin admin kubeconfig (ephemeral, never in plan or
+state, but a long-lived cluster-admin client certificate on the deploy agent during the run); the plan and apply
+identities need `Microsoft.RedHatOpenShift/openShiftClusters/listAdminCredentials/action`.
+
 ## Secrets in Terraform state
 
 All lab keys and secrets live in Delinea DSV (ADR-0001 section 14); Terraform reads no DSV secret with a data source.
@@ -75,8 +99,9 @@ state account; `plans` container readable only by the apply identity):
 | `datadog-azure-client-secret` | `obs-azure-integration` | only when `settings.app_auth = secret` (default `secretless` needs none); `datadog_integration_azure.client_secret` has no write-only variant |
 | AKS `kube_config` computed fields | `obs-kubernetes` | read through `data.azurerm_kubernetes_cluster` to configure the helm/kubernetes providers (local accounts are disabled, so they hold no usable admin credential) |
 
-Never stored: `mysql-admin-password` (`administrator_password_wo`, ephemeral input) and the HorizonDB admin password
-(ephemeral). Observability and application roots document their own remaining items (e.g. Logic Apps Standard storage
+Never stored: `mysql-admin-password` (`administrator_password_wo`, ephemeral input), the HorizonDB admin password
+(ephemeral) and the ARO admin kubeconfig of `obs-kubernetes-aro` (ephemeral `azapi_resource_action`
+`listAdminCredentials`, used only in the helm / kubernetes provider configuration). Observability and application roots document their own remaining items (e.g. Logic Apps Standard storage
 key fallback) in their READMEs.
 
 ## Delinea DSV

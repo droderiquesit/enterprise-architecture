@@ -1,7 +1,8 @@
 # lab/kubernetes (component `obs-kubernetes`)
 
 **Owner:** observability. **Purpose:** Datadog Agent (Helm) + Fluent Bit DaemonSet on the lab AKS cluster through
-`modules/kubernetes`.
+`modules/kubernetes`. The ARO cluster has its own root with the same module: [`../kubernetes-aro`](../kubernetes-aro/README.md)
+(component `obs-kubernetes-aro`, `distribution = "openshift"`).
 
 * **Consumes:**
   * `obs_telemetry_transport` v2 (`datadog_site`, `api_key_ref`, `secrets`)

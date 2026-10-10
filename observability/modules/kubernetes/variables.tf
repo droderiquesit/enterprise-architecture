@@ -7,6 +7,25 @@ variable "cluster_name" {
   }
 }
 
+variable "distribution" {
+  description = <<-EOT
+    Kubernetes distribution of the cluster:
+      aks       Azure Kubernetes Service (default): providers.aks, kubelet TLS per features.kubelet_tls_mode, APM socket + port
+      openshift OpenShift 4 / Azure Red Hat OpenShift: adds values/openshift.yaml (SecurityContextConstraints for the node
+                Agent and the Cluster Agent, CRI-O socket, DogStatsD / APM host ports instead of Unix sockets, admission
+                controller hostip mode, worker-node selector), kubelet tlsVerify false by default, and runs the
+                post-renderer with --distribution openshift (Cluster Agent / runner init containers take the
+                SCC-assigned UID). The Fluent Bit fallback and the in-cluster OP Worker are not supported there.
+    The secret path (DSV + dsv-fetch + workload identity) is the same for both.
+  EOT
+  type        = string
+  default     = "aks"
+  validation {
+    condition     = contains(["aks", "openshift"], var.distribution)
+    error_message = "distribution must be aks or openshift."
+  }
+}
+
 variable "datadog" {
   description = "Datadog site (e.g. datadoghq.eu), environment name (env tag, fleet policy environments.<env>) and extra cluster tags."
   type = object({
@@ -25,7 +44,7 @@ variable "dsv" {
                          /opt/dsv-fetch/dsv-fetch). Init container dsv-fetch-install copies it into an in-memory emptyDir
                          of the node Agent, Cluster Agent and cluster-checks runner pods (secret_backend_command,
                          `agent-backend`); `init` containers of the Fluent Bit fallback / OP Worker run it directly.
-      identity_client_id user-assigned identity (workload identity) of the service accounts datadog/datadog,
+      identity_client_id user-assigned identity (Entra workload identity: AKS, or managed-identity ARO) of the service accounts datadog/datadog,
                          datadog/datadog-cluster-agent (and fluent-bit/fluent-bit, the OP Worker's) - mapped to a DSV
                          user with read on the API key path
       cluster_checks_identity_client_id  optional identity of datadog/datadog-cluster-checks (null = identity_client_id),
@@ -86,7 +105,7 @@ variable "charts" {
 }
 
 variable "features" {
-  description = "Agent feature flags: APM ports, process collection, cluster-checks runners (required by cluster_checks), Operator sub-chart, service discovery, kubelet TLS mode, AKS provider settings."
+  description = "Agent feature flags: APM ports, process collection, cluster-checks runners (required by cluster_checks), Operator sub-chart, service discovery, kubelet TLS mode (null = distribution default), AKS provider settings."
   type = object({
     apm                   = optional(bool, true)
     process_collection    = optional(bool, false)
@@ -95,14 +114,19 @@ variable "features" {
     service_discovery     = optional(bool, false)
     # aks_rotation: AKS with kubelet serving-certificate rotation (default on current AKS) -> providers.aks.enabled
     # aks_hostca  : older AKS without rotation -> kubelet host = spec.nodeName + hostCAPath kubeletserver.crt
-    # insecure    : datadog.kubelet.tlsVerify=false (last resort, documented by Datadog for AKS)
-    kubelet_tls_mode = optional(string, "aks_rotation")
-    is_aks           = optional(bool, true)
+    # insecure    : datadog.kubelet.tlsVerify=false (last resort on AKS, documented by Datadog; the OpenShift setting)
+    # null        : distribution default - aks_rotation on aks, insecure on openshift
+    kubelet_tls_mode = optional(string)
+    is_aks           = optional(bool, true) # ignored on distribution = openshift (providers.aks off)
   })
   default = {}
   validation {
-    condition     = contains(["aks_rotation", "aks_hostca", "insecure"], var.features.kubelet_tls_mode)
-    error_message = "features.kubelet_tls_mode must be aks_rotation, aks_hostca or insecure."
+    condition     = var.features.kubelet_tls_mode == null || contains(["aks_rotation", "aks_hostca", "insecure"], coalesce(var.features.kubelet_tls_mode, "x"))
+    error_message = "features.kubelet_tls_mode must be aks_rotation, aks_hostca or insecure (null = distribution default)."
+  }
+  validation {
+    condition     = var.distribution != "openshift" || var.features.kubelet_tls_mode == null || var.features.kubelet_tls_mode == "insecure"
+    error_message = "distribution = openshift: features.kubelet_tls_mode must be null or insecure (aks_rotation / aks_hostca are AKS settings)."
   }
 }
 

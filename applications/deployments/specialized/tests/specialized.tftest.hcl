@@ -329,6 +329,10 @@ run "all_specialized" {
     error_message = "Service Fabric guest-executable manifests rendered (faults off)."
   }
   assert {
+    condition     = strcontains(output.contract.service_fabric.service_manifest, "Name=\"LOG_FILE_PATH\" Value=\"C:\\ProgramData\\enterprise-hello\\logs\\inventory-api.log\"")
+    error_message = "Service Fabric app logs go to the Windows host-log directory the Datadog host Agent tails (obs-hosts host_logs)."
+  }
+  assert {
     condition     = yamldecode(output.contract.aro.helm.values).openshift.route.enabled && yamldecode(output.contract.aro.helm.values).openshift.enabled && can(regex("^sha256:[a-f0-9]{64}$", yamldecode(output.contract.aro.helm.values).image.digest)) && output.contract.aro.helm.chart_path == "applications/charts/hello-service"
     error_message = "ARO: hello-service chart values with an OpenShift Route and a digest-pinned image."
   }
@@ -339,6 +343,10 @@ run "all_specialized" {
   assert {
     condition     = output.contract.status.aro == "implemented" && yamldecode(output.contract.aro.helm.values).identity.clientId == var.foundation_identity.identities["hello-catalog-api"].client_id && yamldecode(output.contract.aro.helm.values).replicas == 2
     error_message = "ARO ready: identity client id from foundation-identity, 2 replicas."
+  }
+  assert {
+    condition     = yamldecode(output.contract.aro.helm.values).telemetry.disableAgentLogCollection == (module.env["aro"].log_collector != "datadog-agent") && (yamldecode(output.contract.aro.helm.values).telemetry.agentLogSource != "") == (module.env["aro"].log_collector == "datadog-agent")
+    error_message = "ARO (observability 4.1.0): same rule as core-aks - the Datadog node Agent (obs-kubernetes-aro) collects the container logs when it is the fleet log collector; the \"[]\" opt-out only for the Fluent Bit fallback."
   }
   assert {
     condition     = length(azurerm_virtual_machine_run_command.cvm_worker) == 1 && azurerm_automation_runbook.health_probe[0].runbook_type == "Python3" && length(azurerm_automation_job_schedule.health_probe) == 1

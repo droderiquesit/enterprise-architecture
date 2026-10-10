@@ -89,7 +89,7 @@ tests/                          tooling tests (changeset, pipeline, tools, catal
 |---|---:|---:|---:|---:|---:|---|
 | Azure services (`catalog/services/*.yaml`) | 103 | 56 | 14 | 2 | 31 | not-run: 103 |
 
-Components in `catalog/components.yaml`: **73** (15 artifact, 1 docs, 57 terraform; 26 applications, 1 bootstrap, 1 docs, 7 foundation, 9 observability, 29 platform). Non-GA lifecycle entries in the service catalog: 13.
+Components in `catalog/components.yaml`: **74** (15 artifact, 1 docs, 58 terraform; 26 applications, 1 bootstrap, 1 docs, 7 foundation, 10 observability, 29 platform). Non-GA lifecycle entries in the service catalog: 13.
 <!-- END STATUS -->
 
 Live validation: **not-run** for every component and service. Per-requirement status with links to the implementing

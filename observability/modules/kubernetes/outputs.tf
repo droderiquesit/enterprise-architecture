@@ -1,6 +1,7 @@
 locals {
   contract = {
     cluster_name = var.cluster_name
+    distribution = var.distribution
     namespace    = local.dd_ns
     agent = {
       daemonset             = local.release
@@ -45,7 +46,7 @@ output "contract" {
 }
 
 output "datadog_values" {
-  description = "Datadog chart values layers exactly as passed to helm_release.datadog (no secrets): [0] values/base.yaml, [1] the computed fleet layer, [2..] values_overrides."
+  description = "Datadog chart values layers exactly as passed to helm_release.datadog (no secrets): [0] values/base.yaml, [1] the computed fleet layer, then values/openshift.yaml (distribution = openshift only), then values_overrides."
   value       = local.datadog_values
 }
 

@@ -5,7 +5,7 @@
 | Component id | `platform-aro` |
 | Owner | platform team (compute) |
 | Consumes | `foundation-network` (`spoke_vnet_id`, `subnets.aro-master`, `subnets.aro-worker`); pull secret from Delinea DSV (`aro-pull-secret`, pipeline input) |
-| Produces | `platform-aro` v1 (`status = blocked` unless enabled) |
+| Produces | `platform-aro` v1 (`status = blocked` unless enabled; `oidc_issuer_url` = the managed OIDC issuer for workload identity, consumed by `obs-kubernetes-aro`) |
 | Status | **`blocked`** by default — prerequisites below cannot be satisfied by Terraform in this repo |
 
 ## Exact prerequisites (all required before `enabled = true`)
@@ -35,6 +35,11 @@
   scopes from the Learn "create cluster with managed identities" article (role definition GUIDs in `main.tf`),
   plus *ARO Federated Credential* for the cluster identity and the ARO RP network role on the VNet.
 - Private API server and private ingress by default; masters `Standard_D8s_v5`, workers 3 × `Standard_D4s_v5`.
+- Contract `oidc_issuer_url`: the cluster's managed OIDC issuer (`clusterProfile.oidcIssuer`; azurerm 5.9 does not
+  expose it, so a read-only `data "azapi_resource"` GETs `Microsoft.RedHatOpenShift/openShiftClusters@2025-07-25`).
+  Consumers federate their own user-assigned identities with in-cluster service accounts (Learn: "Deploy and configure
+  an application using workload identity on an ARO managed identity cluster"), e.g. `obs-kubernetes-aro` for the
+  Datadog Agents (DSV access). No kubeadmin / admin kubeconfig is ever output.
 
 ## Cost when enabled (approx.)
 
@@ -51,3 +56,4 @@ tools/validate/terraform.sh platform/compute/aro   # fmt, init -backend=false, v
 - https://learn.microsoft.com/azure/openshift/howto-create-openshift-cluster
 - https://learn.microsoft.com/azure/openshift/howto-understand-managed-identities
 - https://learn.microsoft.com/azure/openshift/concepts-networking
+- https://learn.microsoft.com/azure/openshift/howto-deploy-configure-application

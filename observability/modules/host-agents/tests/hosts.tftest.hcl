@@ -99,3 +99,51 @@ run "reject_literal_api_key" {
   }
   expect_failures = [var.datadog]
 }
+
+run "service_fabric_node_type_gets_vm_application" {
+  command = plan
+  variables {
+    service_fabric_node_types = {
+      "sfmc-nt1" = { resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-sfmc-dev-sec/providers/Microsoft.ServiceFabric/managedClusters/eh-sfmc-sfmc-dev-sec/nodeTypes/nt1", os_type = "windows" }
+    }
+  }
+  assert {
+    condition     = azapi_update_resource.service_fabric_node_type["sfmc-nt1"].body.properties.vmApplications[0].packageReferenceId == output.applications["windows"].version_id
+    error_message = "The node type references the same pinned datadog-agent-windows version as every other host."
+  }
+  assert {
+    condition     = azapi_update_resource.service_fabric_node_type["sfmc-nt1"].body.properties.vmApplications[0].enableAutomaticUpgrade == false && azapi_update_resource.service_fabric_node_type["sfmc-nt1"].body.properties.vmApplications[0].treatFailureAsDeploymentFailure == false
+    error_message = "Pinned version (no automatic upgrade); an Agent install failure does not fail the node type upgrade."
+  }
+  assert {
+    condition     = length(module.policy) == 1 && output.service_fabric_node_types["sfmc-nt1"].version_id == output.applications["windows"].version_id
+    error_message = "Independent of the policy (mode = policy stays on for VMs / VMSS)."
+  }
+  assert {
+    condition     = !strcontains(jsonencode(azapi_update_resource.service_fabric_node_type["sfmc-nt1"].body), "api_key") && !strcontains(jsonencode(azapi_update_resource.service_fabric_node_type["sfmc-nt1"].body), "dsv://")
+    error_message = "Nothing secret (not even the reference) in the node type body."
+  }
+}
+
+run "service_fabric_node_type_disabled_removes_agent" {
+  command = plan
+  variables {
+    service_fabric_node_types = {
+      nt = { resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.ServiceFabric/managedClusters/c/nodeTypes/nt1", os_type = "windows", enabled = false }
+    }
+  }
+  assert {
+    condition     = length(azapi_update_resource.service_fabric_node_type["nt"].body.properties.vmApplications) == 0 && output.service_fabric_node_types["nt"].version_id == null
+    error_message = "enabled = false sends an empty vmApplications list."
+  }
+}
+
+run "service_fabric_rejects_vmss_id" {
+  command = plan
+  variables {
+    service_fabric_node_types = {
+      nt = { resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/SFC_x/providers/Microsoft.Compute/virtualMachineScaleSets/nt1", os_type = "windows" }
+    }
+  }
+  expect_failures = [var.service_fabric_node_types]
+}

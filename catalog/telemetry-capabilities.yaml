@@ -1566,16 +1566,15 @@ compute:
     catalog_ref: service-fabric-managed
     signals:
       app_logs:
-        supported: partial
-        method: 'Datadog host Agent (obs-hosts VM Application, fleet policy logs.collector = agent) tails LOG_FILE_PATH (D:\SvcFab\Log\hello\inventory-api.log, host tag datadog:log_paths)
-          -> Observability Pipelines Worker -> Datadog Logs, once the node-type VMSS is enrolled: platform-servicefabric does not tag node types datadog:enabled, so the Azure Policy
-          does not enrol them by default (no collector on Service Fabric nodes until then)'
+        supported: 'yes'
+        method: 'Datadog host Agent (datadog-agent-windows VM Application set on the node type vmApplications by obs-hosts; the obs-host-agent DSV-reader identity on the node type by platform-servicefabric) tails LOG_FILE_PATH (C:\ProgramData\enterprise-hello\logs\inventory-api.log, Windows host_logs default) and the System / Application Event Log channels
+          -> Observability Pipelines Worker -> Datadog Logs; API key ENC[dsv://...] resolved by the dsv-fetch secret backend'
         owner: obs-hosts
         duplicate_prevention: one collector per node (host Agent; no Fluent Bit on hosts since 4.0.0)
-        datadog_limitation: node types live in the Service Fabric managed resource group (tag + policy scope needed)
+        datadog_limitation: node types are VMSS in the managed SFC_ resource group; enrolled through the node type API (not the Azure Policy), rolled out per upgrade domain
       traces:
-        supported: partial
-        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver (needs the enrolled host Agent, see app_logs)
+        supported: 'yes'
+        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver on the node (APM receiver localhost:8126 enabled)
         owner: obs-hosts
         duplicate_prevention: no dd-trace tracer; single exporter
         datadog_limitation: none
@@ -1625,40 +1624,41 @@ compute:
     catalog_ref: aro
     signals:
       app_logs:
-        supported: partial
-        method: 'not provisioned by the lab: obs-kubernetes installs the Datadog node Agent on AKS only (consumes platform-aks); on ARO a Datadog Agent DaemonSet (OpenShift SCCs) would
-          tail /var/log/containers -> Observability Pipelines Worker -> Datadog Logs'
-        owner: obs-kubernetes
-        duplicate_prevention: one node collector (Datadog Agent); no Fluent Bit DaemonSet unless log_pipeline = fluent_bit_direct
-        datadog_limitation: the Agent needs OpenShift SCCs
+        supported: 'yes'
+        method: Datadog Agent DaemonSet on the worker nodes (obs-kubernetes-aro = modules/kubernetes distribution openshift; SCC datadog, spc_t, CRI-O, /var/log/pods; containerCollectAll,
+          per-pod ad.datadoghq.com/<container>.logs source/service) -> Observability Pipelines Worker (datadog_agent source :8282) -> Datadog Logs
+        owner: obs-kubernetes-aro
+        duplicate_prevention: one node collector (Datadog Agent); no Fluent Bit DaemonSet on OpenShift (fluent_bit_direct is rejected there); openshift-* platform namespaces excluded
+        datadog_limitation: 'the Agent needs OpenShift SCCs (created by the chart: datadog, datadog-cluster-agent); not exercised on a live ARO cluster'
       traces:
         supported: 'yes'
-        method: OTel SDK -> OTLP -> Datadog Agent DaemonSet (hostPort 4317 via status.hostIP)
-        owner: obs-kubernetes
-        duplicate_prevention: no dd-trace; no separate collector
-        datadog_limitation: none
+        method: Datadog library injected by Single Step Instrumentation (Cluster Agent admission controller, configMode hostip, targets = settings ssi_namespaces) -> node Agent hostPort
+          8126 (DD_AGENT_HOST = status.hostIP); apm.mode = otel - OTel SDK -> Agent OTLP hostPort 4317
+        owner: obs-kubernetes-aro
+        duplicate_prevention: 'TELEMETRY_SDK=datadog + OTEL_SDK_DISABLED=true: the app never initialises the OpenTelemetry SDK (one tracer per process)'
+        datadog_limitation: 'no APM / DogStatsD Unix sockets on OpenShift (host ports instead, Datadog recommendation); SSI compatibility pages do not list OpenShift explicitly - injected init containers use the restricted securityContext (restricted-v2 SCC compatible), unverified live'
       app_metrics:
-        supported: 'yes'
-        method: OTel SDK metrics -> Agent OTLP
-        owner: obs-kubernetes
-        duplicate_prevention: single exporter
-        datadog_limitation: none
+        supported: partial
+        method: 'custom metrics: DogStatsD to the node Agent hostPort 8125 (apm.mode = datadog) or OTel SDK metrics -> Agent OTLP (apm.mode = otel)'
+        owner: obs-kubernetes-aro
+        duplicate_prevention: single exporter per app (decided by TELEMETRY_SDK)
+        datadog_limitation: OTel metrics SDK is disabled in datadog mode - apps emit custom metrics through DogStatsD
       runtime_metrics:
         supported: 'yes'
-        method: OTel runtime instrumentation -> Agent OTLP
-        owner: obs-kubernetes
-        duplicate_prevention: dd-trace runtime metrics off
+        method: Datadog library runtime metrics (DD_RUNTIME_METRICS_ENABLED) -> node Agent DogStatsD (OTel runtime instrumentation -> Agent OTLP with apm.mode = otel)
+        owner: obs-kubernetes-aro
+        duplicate_prevention: one source per process
         datadog_limitation: none
       platform_metrics:
         supported: 'yes'
-        method: Datadog Agent + Cluster Agent (kubelet, kube-state-metrics)
-        owner: obs-kubernetes
+        method: Datadog node Agent + Cluster Agent (kubelet with tlsVerify false, CRI-O, kube-state-metrics core, cluster checks)
+        owner: obs-kubernetes-aro
         duplicate_prevention: n/a
-        datadog_limitation: no Azure namespace for this platform
+        datadog_limitation: no Azure Monitor namespace for ARO; OpenShift control-plane checks (providers.openshift.controlPlaneMonitoring) off - they need the etcd client certificate copied into the Agent namespace
       platform_logs:
-        supported: partial
-        method: kube-audit / control-plane logs via diagnostic settings (optional)
-        owner: obs-diagnostics
+        supported: 'no'
+        method: not collected by the package (OpenShift platform namespaces are excluded from Agent log collection; ARO service logging stays with Microsoft / Red Hat)
+        owner: null
         duplicate_prevention: not application logs
         datadog_limitation: none
       dbm:
@@ -1674,11 +1674,11 @@ compute:
         duplicate_prevention: n/a
         datadog_limitation: n/a
       profiling:
-        supported: 'no'
-        method: 'not enabled by the package: ARO is not a fleet-policy architecture (stays on OpenTelemetry + Fluent Bit)'
-        owner: null
-        duplicate_prevention: n/a
-        datadog_limitation: apm.mode = otel path
+        supported: partial
+        method: Datadog Continuous Profiler through SSI (DD_PROFILING_ENABLED=auto) -> node Agent -> Datadog (same fleet policy as AKS)
+        owner: obs-kubernetes-aro
+        duplicate_prevention: profiler only inside the Datadog library; no OTel profiling signal
+        datadog_limitation: 'depends on SSI on OpenShift (not verified live); apm.mode = otel: unavailable'
   vm-confidential:
     catalog_ref: vm-confidential
     signals:

@@ -125,6 +125,27 @@ variable "hosts" {
   }
 }
 
+variable "service_fabric_node_types" {
+  description = <<-EOT
+    Service Fabric managed cluster node types (key -> resource_id .../managedClusters/<c>/nodeTypes/<nt>, os_type
+    linux | windows, arch, enabled). Each gets the Datadog Agent VM Application through the node type's own
+    vmApplications (Azure Policy cannot modify node type VMSS). The node type must already carry the DSV-reader
+    identity (agent_identity) in vmManagedIdentity - set by its platform root. Works in both modes.
+  EOT
+  type = map(object({
+    resource_id = string
+    os_type     = string
+    arch        = optional(string, "amd64")
+    enabled     = optional(bool, true)
+  }))
+  default = {}
+  validation {
+    condition = alltrue([for n in values(var.service_fabric_node_types) : contains(["linux", "windows"], n.os_type) && contains(["amd64", "arm64"], n.arch) &&
+    can(regex("(?i)^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.ServiceFabric/managedClusters/[^/]+/nodeTypes/[^/]+$", n.resource_id))])
+    error_message = "service_fabric_node_types[*]: resource_id of a managed cluster node type, os_type linux|windows, arch amd64|arm64."
+  }
+}
+
 variable "fleet_policy" {
   description = "Decoded fleet policy (null = package default)."
   type        = any

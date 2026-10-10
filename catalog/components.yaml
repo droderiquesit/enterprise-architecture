@@ -159,6 +159,7 @@ components:
     layer: platform
     kind: terraform
     path: platform/compute/servicefabric
+    # foundation-identity: the DSV-reader identity obs-host-agent on the node type (vmManagedIdentity; observability 4.1.0)
     consumes: [foundation-network, foundation-identity]
     produces: [platform-servicefabric]
     catalog_refs: [service-fabric-managed]
@@ -368,8 +369,10 @@ components:
     # 4.0.0: Azure VM Applications + Azure Policy (DeployIfNotExists on VMs / VMSS tagged datadog:enabled) - no
     # per-host Terraform. foundation-identity: the per-environment DSV-reader identity obs-host-agent.
     consumes: [obs-telemetry-transport, foundation-identity]
-    # settings.mode = direct only (no Azure Policy rights): the hosts come from these contracts
-    optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm]
+    # settings.mode = direct only (no Azure Policy rights): the hosts come from these contracts.
+    # platform-servicefabric (4.1.0, any mode): node types get the VM Application on their own vmApplications (Azure
+    # Policy cannot modify the node type VMSS in the managed SFC_ resource group)
+    optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm, platform-servicefabric]
     artifacts: [img-dsv-fetch]  # zip-package: the dsv-fetch release files are the VM Application packages (.dsv-fetch-release)
     catalog_refs: [vm-applications]
     inputs: [observability/config/fleet-policy.yaml, observability/config/tag-policy.yaml]
@@ -382,6 +385,16 @@ components:
     artifacts: [img-dsv-fetch]  # dsv-fetch binary: secret_backend_command of node Agent / Cluster Agent / runners (init container)
     # DBM: the platform-db contracts become cluster checks of the Cluster Agent (settings.dbm = auto)
     optional_consumes: [platform-db-postgresql, platform-db-mysql, platform-db-sql, platform-db-sqlmi, platform-db-sqlvm]
+    inputs: [observability/images/dsv-fetch/**, observability/config/fleet-policy.yaml]
+  - id: obs-kubernetes-aro
+    layer: observability
+    kind: terraform
+    path: observability/lab/kubernetes-aro
+    # Datadog Agent on Azure Red Hat OpenShift: the same modules/kubernetes (distribution = openshift); its own root and
+    # state because the helm / kubernetes providers are per cluster. platform-aro blocked/disabled -> creates nothing.
+    consumes: [obs-telemetry-transport, platform-aro, foundation-identity]
+    produces: [obs-kubernetes-aro]
+    artifacts: [img-dsv-fetch]  # dsv-fetch binary: secret_backend_command of node Agent / Cluster Agent / runners (init container)
     inputs: [observability/images/dsv-fetch/**, observability/config/fleet-policy.yaml]
   - id: obs-dbm
     layer: observability

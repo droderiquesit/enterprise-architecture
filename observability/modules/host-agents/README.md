@@ -9,6 +9,7 @@ no `for_each` over hosts.
 | Package | [`host-agent-package`](../host-agent-package/README.md) | Compute Gallery, VM Applications `datadog-agent-linux` / `datadog-agent-windows` (optional `-linux-arm64`), one immutable version per `package.version`, private package storage (managed identity, no SAS) |
 | Enrolment (default `mode = "policy"`) | [`host-agent-policy`](../host-agent-policy/README.md) | DeployIfNotExists initiative on VMs / VMSS tagged `datadog:enabled = true`: attaches the per-environment **DSV-reader identity** and the **pinned version**; least-privilege custom role; remediation tasks |
 | Escape hatch `mode = "direct"` | this module | for environments **without Azure Policy rights**: one `azurerm_virtual_machine_gallery_application_assignment` per VM in `hosts` (same application, same version). Scale sets have no assignment resource in azurerm, so `vmss_gallery_applications` gives each one's `gallery_application {version_id, order}` block for its platform root. In this mode the hosts must already carry the DSV-reader identity. |
+| Service Fabric managed cluster node types (4.1.0, any mode) | this module | one `azapi_update_resource` per entry of `service_fabric_node_types`: sets the node type's own `properties.vmApplications` (`Microsoft.ServiceFabric/managedClusters/nodeTypes@2026-02-01`) to the same pinned version (`order = 10`, no automatic upgrade, an install failure does not fail the node type upgrade); `enabled = false` sends an empty list (Agent removed). Node types are VMSS in the Microsoft-managed `SFC_` resource group that only the node type API may change, so the policy cannot enrol them. The node type must already carry the DSV-reader identity (`vmManagedIdentity`, set by the cluster's owner). |
 
 ## Why VM Applications instead of run command / CustomScript
 
@@ -105,11 +106,12 @@ match. Rebuild images when `package.version` changes, or let the application upd
 * `policy {name_prefix, scope {type, id, not_scopes}, identity_resource_group_name, enrollment_tag, arch_tag_name,
   effect, targets, application_order, remediation, extra_role_actions}`.
 * `hosts` (direct mode).
+* `service_fabric_node_types` (key -> `{resource_id, os_type, arch, enabled}`; any mode).
 * `fleet_policy`, `tag_policy`, `extra_tags`, `log_pipeline`, `op_agent_logs_url`, `host_logs`, `default_service`,
   `metadata_tag_prefix`, `tags`.
 
 Outputs: `mode`, `gallery`, `applications`, `agent_version`, `enrollment_tag`, `policy`, `assignments`,
-`vmss_gallery_applications`, `installers`, `otlp_endpoint`.
+`vmss_gallery_applications`, `service_fabric_node_types`, `installers`, `otlp_endpoint`.
 
 ## Platform owners
 
@@ -121,11 +123,16 @@ Outputs: `mode`, `gallery`, `applications`, `agent_version`, `enrollment_tag`, `
   that the next platform apply does not remove what the policy attached.
 * VMSS: an `Automatic` or `Rolling` upgrade policy rolls the model change out. With `Manual` the change applies on
   instance upgrade or reimage.
+* Service Fabric managed cluster: put the DSV-reader identity in the node type's
+  `vmManagedIdentity.userAssignedIdentities` (the SF resource provider needs *Managed Identity Operator* on it) and
+  never send `properties.vmApplications` from the cluster's root (azapi `ignore_body_changes`; azurerm 5.9
+  `azurerm_service_fabric_managed_cluster` re-PUTs node types without it). The lab's `platform-servicefabric` does both.
 
 ## Tests
 
 * `tests/hosts.tftest.hcl` (mock providers): policy mode by default; direct mode (VM assignments, VMSS blocks);
-  arm64 without an arm64 application; resource-id / kind validation; literal API key.
+  arm64 without an arm64 application; resource-id / kind validation; literal API key; Service Fabric node types
+  (same version id, disabled = empty list, VMSS id rejected).
 * The package and policy modules have their own tests (installer execution in ubuntu:24.04 and pwsh, policy rule and
   RBAC).
 

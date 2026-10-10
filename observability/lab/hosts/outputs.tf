@@ -34,6 +34,11 @@ output "vmss_gallery_applications" {
   value       = module.hosts.vmss_gallery_applications
 }
 
+output "service_fabric_node_types" {
+  description = "Service Fabric managed cluster node types -> {resource_id, version_id} of the Datadog Agent VM Application set on the node type."
+  value       = module.hosts.service_fabric_node_types
+}
+
 output "otlp_endpoint" {
   description = "OTLP endpoint of the host Agents for otel-mode workloads on the hosts."
   value       = module.hosts.otlp_endpoint

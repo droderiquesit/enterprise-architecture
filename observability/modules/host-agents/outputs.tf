@@ -50,6 +50,14 @@ output "vmss_gallery_applications" {
   } }
 }
 
+output "service_fabric_node_types" {
+  description = "Service Fabric node type key -> {resource_id, version_id} of the VM Application set on the node type (null when disabled)."
+  value = { for k, n in var.service_fabric_node_types : k => {
+    resource_id = n.resource_id
+    version_id  = n.enabled ? try(module.package.applications[local.sf_app_key[k]].version_id, null) : null
+  } }
+}
+
 output "installers" {
   description = "Rendered setup scripts per application (no secrets) for golden images."
   value       = module.package.installers

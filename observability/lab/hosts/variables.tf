@@ -49,6 +49,12 @@ variable "settings" {
       }
     })
     agent_identity_key = optional(string, "obs-host-agent")
+    # Service Fabric managed cluster node types (platform-servicefabric contract node_types, any mode): the node
+    # type's own vmApplications gets the Datadog Agent VM Application (Azure Policy cannot modify node type VMSS);
+    # enabled = false empties that list (Agent removed from the nodes)
+    service_fabric = optional(object({
+      enabled = optional(bool, true)
+    }), {})
     # direct mode: the SQL Server VM of platform-db-sqlvm (Agent only) and its OS
     sqlvm_os_type = optional(string, "windows")
   })
@@ -132,6 +138,19 @@ variable "platform_db_sqlvm" {
     vm = object({
       id = string
     })
+  })
+  default = null
+}
+
+variable "platform_servicefabric" {
+  description = "platform-servicefabric contract v1 (optional, >= 1.1.0 fields): node types enrolled for the Datadog Agent (node_types[*].datadog_enabled; the platform root attached the DSV-reader identity)."
+  type = object({
+    enabled = bool
+    node_types = optional(map(object({
+      id              = string
+      os_type         = string
+      datadog_enabled = optional(bool, false)
+    })), {})
   })
   default = null
 }

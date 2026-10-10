@@ -84,6 +84,45 @@ resource "azurerm_virtual_machine_gallery_application_assignment" "direct" {
   }
 }
 
+# ------------------------------------------------------------------- Service Fabric managed cluster node types
+# Node types are VMSS in the Microsoft-managed SFC_ resource group: the RP owns their model and changes to them go
+# through the node type API only (Learn: managed-cluster-deny-assignment, how-to-managed-cluster-configuration), so the
+# Azure Policy above cannot enrol them. The node type's own vmApplications list (Microsoft.ServiceFabric 2026-02-01)
+# gets the SAME VM Application version as every other host, independent of mode. The DSV-reader identity is attached
+# by the platform root (node type vmManagedIdentity); it never sends vmApplications (azapi ignore_body_changes), so
+# this list is owned here (ADR-0001 section 3 rule 3, amended for observability 4.1.0). azapi_update_resource GETs the
+# node type, sets properties.vmApplications and PUTs it back; the RP rolls it out upgrade domain by upgrade domain.
+# enabled = false sends an empty list (the VM Application `remove` action uninstalls the Agent).
+locals {
+  sf_app_key = { for k, n in var.service_fabric_node_types : k => n.os_type == "windows" ? "windows" : (n.arch == "arm64" ? "linux_arm64" : "linux") }
+}
+
+resource "azapi_update_resource" "service_fabric_node_type" {
+  for_each    = var.service_fabric_node_types
+  type        = "Microsoft.ServiceFabric/managedClusters/nodeTypes@2026-02-01"
+  resource_id = each.value.resource_id
+
+  body = {
+    properties = {
+      vmApplications = each.value.enabled ? [{
+        packageReferenceId              = try(module.package.applications[local.sf_app_key[each.key]].version_id, "missing")
+        order                           = 10
+        treatFailureAsDeploymentFailure = false # a failed Agent install must not fail the node type upgrade
+        enableAutomaticUpgrade          = false # versions are pinned and promoted (package.version)
+      }] : []
+    }
+  }
+
+  depends_on = [module.package] # the version must exist (replicated) before the node type references it
+
+  lifecycle {
+    precondition {
+      condition     = contains(keys(module.package.applications), local.sf_app_key[each.key])
+      error_message = "service_fabric_node_types[${each.key}] needs the ${local.sf_app_key[each.key]} VM Application (package.applications)."
+    }
+  }
+}
+
 check "policy_settings" {
   assert {
     condition     = var.mode != "policy" || var.policy != null

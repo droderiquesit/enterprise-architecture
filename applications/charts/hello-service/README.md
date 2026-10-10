@@ -111,7 +111,7 @@ Enforced by `values.schema.json` (draft-07; `additionalProperties: false` everyw
 | File | Workload |
 |---|---|
 | `aks-bff.yaml`, `aks-orders-api.yaml`, `aks-catalog-api.yaml`, `aks-worker.yaml` | exactly what `applications/deployments/core-aks` renders for its test fixture (drift-checked by `tests/charts/test_deploy_roots_values.py`) |
-| `aro-catalog-api.yaml` | hello-catalog-api on ARO (Route, SCC-assigned UID, existing DB Secret) |
+| `aro-catalog-api.yaml` | hello-catalog-api on ARO (Route, SCC-assigned UID, existing DB Secret, Datadog node Agent log collection - observability 4.1.0) |
 | `aks-jobs-cronjob.yaml` | the `cronjob` kind (hello-jobs reconcile trigger) — optional, jobs run on ACA today |
 | `kind-bff.yaml`, `kind-catalog-api.yaml` | local kind smoke |
 

@@ -14,6 +14,15 @@ mock_provider "azurerm" {
   }
 }
 
+mock_provider "azapi" {
+  override_during = plan
+  mock_data "azapi_resource" {
+    defaults = {
+      output = { properties = { clusterProfile = { oidcIssuer = "https://swedencentral.oic.aro.azure.net/00000000-0000-0000-0000-000000000000/11111111-1111-1111-1111-111111111111" } } }
+    }
+  }
+}
+
 # BEGIN FIXTURE (generated): upstream contract shapes with valid Azure IDs.
 variables {
   environment = {
@@ -58,7 +67,7 @@ variables {
 run "blocked_by_default" {
   command = plan
   assert {
-    condition     = length(azurerm_redhat_openshift_cluster.this) == 0 && output.contract.status == "blocked"
+    condition     = length(azurerm_redhat_openshift_cluster.this) == 0 && output.contract.status == "blocked" && output.contract.oidc_issuer_url == null && length(data.azapi_resource.cluster) == 0
     error_message = "ARO is blocked/disabled by default."
   }
 }
@@ -92,6 +101,10 @@ run "enabled_managed_identities" {
   assert {
     condition     = azurerm_redhat_openshift_cluster.this[0].cluster_profile[0].pull_secret == "{\"auths\":{}}"
     error_message = "pull secret is the pipeline input (DSV aro-pull-secret)."
+  }
+  assert {
+    condition     = data.azapi_resource.cluster[0].type == "Microsoft.RedHatOpenShift/openShiftClusters@2025-07-25" && contains(data.azapi_resource.cluster[0].response_export_values, "properties.clusterProfile.oidcIssuer")
+    error_message = "managed OIDC issuer read (GET) from the ARO resource with azapi (azurerm 5.9 does not expose clusterProfile.oidcIssuer)."
   }
 }
 

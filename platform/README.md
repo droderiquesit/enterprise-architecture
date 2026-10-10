@@ -21,7 +21,7 @@ Database roots (`platform/data/**`) are documented separately by their owner.
 | `compute/vm/` | `platform-vm` | enterprise | Ubuntu 24.04 + Windows Server 2025 Azure Edition hosts, no public IP, Entra login, 19:00 UTC auto-shutdown |
 | `compute/vmss/` | `platform-vmss` | enterprise | Flexible (hello-worker) + Uniform (hello-dbadapter, Manual upgrades), autoscale ceilings |
 | `compute/batch/` | `platform-batch` | specialized/full | Batch account (private, Entra-only), no-public-IP simplified pool, identity auto-storage |
-| `compute/servicefabric/` | `platform-servicefabric` | **disabled** | SF managed cluster Basic (3 nodes) |
+| `compute/servicefabric/` | `platform-servicefabric` | **disabled** | SF managed cluster Basic (3 nodes, azapi); node type carries the Datadog DSV-reader identity (Agent VM Application set by obs-hosts) |
 | `compute/aro/` | `platform-aro` | **blocked** | ARO with managed identities (prerequisites in README) |
 | `compute/specialized/` | `platform-specialized-compute` | all **disabled**, AVS **blocked** | confidential/dedicated-host/GPU VMs, Automation, Azure ML |
 

@@ -121,3 +121,42 @@ run "missing_release_fails" {
   }
   expect_failures = [azurerm_resource_group.hosts]
 }
+
+run "service_fabric_node_types_from_platform_contract" {
+  command = plan
+  variables {
+    platform_servicefabric = {
+      enabled = true
+      node_types = {
+        nt1 = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-sfmc-dev-sec/providers/Microsoft.ServiceFabric/managedClusters/eh-sfmc-sfmc-dev-sec/nodeTypes/nt1", os_type = "windows", datadog_enabled = true }
+        nt2 = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/eh-rg-sfmc-dev-sec/providers/Microsoft.ServiceFabric/managedClusters/eh-sfmc-sfmc-dev-sec/nodeTypes/nt2", os_type = "windows", datadog_enabled = false }
+      }
+    }
+  }
+  assert {
+    condition     = output.service_fabric_node_types["sfmc-nt1"].version_id == output.applications["windows"].version_id && output.service_fabric_node_types["sfmc-nt2"].version_id == null
+    error_message = "Node types the platform root enrolled (identity attached) get the pinned datadog-agent-windows version; the others an empty vmApplications list."
+  }
+  assert {
+    condition     = module.hosts.mode == "policy" && module.hosts.policy != null
+    error_message = "The Azure Policy keeps enrolling VMs / VMSS; node types are handled besides it."
+  }
+}
+
+run "service_fabric_opt_out" {
+  command = plan
+  variables {
+    settings = {
+      dsv_fetch_release_dir = "../../modules/host-agent-package/tests/fixtures/dsv-fetch"
+      service_fabric        = { enabled = false }
+    }
+    platform_servicefabric = {
+      enabled    = true
+      node_types = { nt1 = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.ServiceFabric/managedClusters/c/nodeTypes/nt1", os_type = "Windows", datadog_enabled = true } }
+    }
+  }
+  assert {
+    condition     = output.service_fabric_node_types["sfmc-nt1"].version_id == null
+    error_message = "settings.service_fabric.enabled = false empties the node type's vmApplications (Agent removed)."
+  }
+}

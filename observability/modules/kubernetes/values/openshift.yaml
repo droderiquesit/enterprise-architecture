@@ -1,0 +1,57 @@
+# Distribution layer of the Datadog Helm chart values (modules/kubernetes, distribution = "openshift"): static,
+# reviewed OpenShift 4 / Azure Red Hat OpenShift requirements. Inserted AFTER the computed fleet layer and BEFORE
+# var.values_overrides:
+#   [values/base.yaml, fleet layer (main.tf), values/openshift.yaml, values_overrides...]
+# It never touches keys the fleet layer computes (site, tags, logs, apm ports, kubelet TLS, providers.aks, image tags,
+# the secret path, workload identity) - those are distribution-aware in main.tf. Chart: datadog 3.253.2; rendered by
+# observability/tests/kubernetes/test_datadog_chart.py (openshift tests) - change both together.
+# Sources (README "OpenShift"): docs.datadoghq.com/containers/kubernetes/distributions/?tab=helm#Openshift,
+# helm-charts examples/datadog/agent_on_openshift_values.yaml, docs.datadoghq.com/containers/troubleshooting/admission-controller,
+# learn.microsoft.com/azure/openshift/openshift-service-definitions (CRI-O only, DaemonSet node selector).
+datadog:
+  # node Agent pod securityContext: the chart default (runAsUser 0) plus the spc_t SELinux type the SCC "datadog"
+  # allows - required to read the CRI-O socket, /proc, cgroups and /var/log/pods (Datadog: log collection on
+  # OpenShift needs the seLinuxOptions override). With datadog.securityContext set, the chart renders it verbatim.
+  securityContext:
+    runAsUser: 0
+    seLinuxOptions: {user: system_u, role: system_r, type: spc_t, level: s0}
+  # ARO: CRI-O is the only container engine (RHCOS). The chart mounts /var/run/crio (read-only) and sets
+  # DD_CRI_SOCKET_PATH; with criSocketPath set it no longer mounts /var/lib/docker/containers. Container logs are
+  # read from /var/log/pods (chart default datadog.kubelet.podLogsPath).
+  criSocketPath: /var/run/crio/crio.sock
+  # Unix domain sockets need a hostPath volume in the APPLICATION pods (privileged on OpenShift): Datadog recommends
+  # host ports there. APM: socketEnabled = false is computed in the fleet layer (portEnabled = features.apm);
+  # DogStatsD: UDP hostPort 8125 instead of the socket volume.
+  dogstatsd:
+    useSocketVolume: false
+    useHostPort: true
+
+agents:
+  podSecurity:
+    # SecurityContextConstraints "datadog" for service account datadog/datadog (hostPath, host ports, spc_t SELinux
+    # type for the CRI-O socket / proc / cgroups / pod logs, the system-probe seccomp profile, the Agent capabilities)
+    securityContextConstraints:
+      create: true
+    # chart default + projected: the workload identity webhook projects the service account token for dsv-fetch
+    # (azure-identity-token) - without it the SCC rejects the Agent pod once the webhook mutates it
+    volumes:
+      - configMap
+      - downwardAPI
+      - emptyDir
+      - hostPath
+      - projected
+      - secret
+  # ARO support policy: no extra workloads on control plane nodes, none on infrastructure nodes - the Learn
+  # service definition's DaemonSet selector keeps the node Agent on worker nodes
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+
+clusterAgent:
+  podSecurity:
+    # SecurityContextConstraints "datadog-cluster-agent" (restricted-like, MustRunAsRange) for datadog/datadog-cluster-agent
+    securityContextConstraints:
+      create: true
+  admissionController:
+    # Single Step Instrumentation / config injection over the node IP (DD_AGENT_HOST = status.hostIP), never the
+    # socket mode on OpenShift
+    configMode: hostip

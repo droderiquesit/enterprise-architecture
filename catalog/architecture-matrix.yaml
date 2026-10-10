@@ -140,6 +140,7 @@ architectures:
   aro:
     workloads: [hello-catalog-api]
     deployment: deploy-specialized
+    telemetry: {logs: datadog-agent node DaemonSet (obs-kubernetes-aro, Helm, OpenShift SCCs) -> OP Worker, traces: Datadog library (Single Step Instrumentation, hostip) -> node Agent hostPort 8126, metrics: datadog-agent (DogStatsD hostPort) + otel}
   vm-confidential:
     workloads: [hello-worker]
     deployment: deploy-specialized

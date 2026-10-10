@@ -49,6 +49,17 @@ locals {
     var.platform_db_sqlvm == null ? {} : { "sqlvm" = { resource_id = var.platform_db_sqlvm.vm.id, os_type = var.settings.sqlvm_os_type, kind = "vm" } },
   )
   dsv_fetch = lookup(var.artifacts, "img-dsv-fetch", null)
+
+  # Service Fabric managed cluster node types (both modes). obs-hosts owns each node type's vmApplications list:
+  # enrolled node types (platform root attached the DSV-reader identity, datadog_enabled) get the Agent; the others,
+  # or settings.service_fabric.enabled = false, get an empty list (the VM Application remove action uninstalls it).
+  sf_node_types = !try(var.platform_servicefabric.enabled, false) ? {} : {
+    for k, n in try(var.platform_servicefabric.node_types, {}) : "sfmc-${k}" => {
+      resource_id = n.id
+      os_type     = lower(n.os_type)
+      enabled     = var.settings.service_fabric.enabled && n.datadog_enabled
+    }
+  }
 }
 
 resource "azurerm_resource_group" "hosts" {
@@ -111,7 +122,8 @@ module "hosts" {
     targets                      = var.settings.targets
     remediation                  = var.settings.remediation
   }
-  hosts = local.direct_hosts
+  hosts                     = local.direct_hosts
+  service_fabric_node_types = local.sf_node_types
 
   fleet_policy      = local.fleet_policy
   op_agent_logs_url = local.op_logs_url

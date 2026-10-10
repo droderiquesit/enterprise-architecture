@@ -311,3 +311,93 @@ run "agents_drop_health_probe_traces" {
     error_message = "Node Agents drop the health-probe resources of the fleet policy (apm.ignore_resources)"
   }
 }
+
+# ------------------------------------------------------------------ distribution = openshift (Azure Red Hat OpenShift)
+run "openshift_layers_and_secret_path" {
+  command = plan
+  variables {
+    distribution = "openshift"
+    cluster_name = "aro-eh-dev"
+    log_pipeline = null
+    op_logs_url  = "http://eh-obs-dev-opw.internal.example.azurecontainerapps.io:8282"
+  }
+  assert {
+    condition     = length(helm_release.datadog.values) == 3 && helm_release.datadog.values[0] == file("${path.module}/values/base.yaml") && helm_release.datadog.values[2] == file("${path.module}/values/openshift.yaml")
+    error_message = "Layered values on OpenShift: [values/base.yaml, fleet layer, values/openshift.yaml]."
+  }
+  assert {
+    condition = (yamldecode(helm_release.datadog.values[2]).agents.podSecurity.securityContextConstraints.create
+      && yamldecode(helm_release.datadog.values[2]).clusterAgent.podSecurity.securityContextConstraints.create
+      && contains(yamldecode(helm_release.datadog.values[2]).agents.podSecurity.volumes, "projected")
+      && yamldecode(helm_release.datadog.values[2]).datadog.criSocketPath == "/var/run/crio/crio.sock"
+    && yamldecode(helm_release.datadog.values[2]).clusterAgent.admissionController.configMode == "hostip")
+    error_message = "OpenShift layer: SCCs (projected token volume allowed), CRI-O socket, admission controller hostip mode."
+  }
+  assert {
+    condition = (!yamldecode(helm_release.datadog.values[1]).providers.aks.enabled
+      && yamldecode(helm_release.datadog.values[1]).datadog.kubelet.tlsVerify == false
+      && !yamldecode(helm_release.datadog.values[1]).datadog.apm.socketEnabled
+    && yamldecode(helm_release.datadog.values[1]).datadog.apm.portEnabled)
+    error_message = "Fleet layer on OpenShift: no AKS provider, kubelet tlsVerify false (default), APM host port without the Unix socket."
+  }
+  assert {
+    condition = (yamldecode(helm_release.datadog.values[1]).datadog.apiKey == "ENC[dsv://eh/dev/datadog-api-key#value]"
+      && yamldecode(helm_release.datadog.values[1]).datadog.secretBackend.command == "/opt/dsv-fetch/dsv-fetch"
+      && alltrue([for c in ["agents", "clusterAgent", "clusterChecksRunner"] : yamldecode(helm_release.datadog.values[1])[c].rbac.serviceAccountAnnotations["azure.workload.identity/client-id"] == "66666666-6666-6666-6666-666666666666"])
+      && anytrue([for e in yamldecode(helm_release.datadog.values[1]).clusterChecksRunner.env : e.name == "DSV_AUTH" && e.value == "azure"])
+    && !can(yamldecode(helm_release.datadog.values[2]).datadog.apiKey) && !can(yamldecode(helm_release.datadog.values[2]).datadog.env))
+    error_message = "Same single secret path on OpenShift: ENC[dsv://] + dsv-fetch backend + workload identity; the OpenShift layer does not touch it."
+  }
+  assert {
+    condition     = helm_release.datadog.postrender.args[4] == "3" && helm_release.datadog.postrender.args[5] == "--distribution" && helm_release.datadog.postrender.args[6] == "openshift"
+    error_message = "Post-renderer in OpenShift mode (Cluster Agent / runner init containers take the SCC-assigned UID)."
+  }
+  assert {
+    condition     = length(helm_release.fluent_bit) == 0 && output.contract.distribution == "openshift" && output.contract.log_collector == "datadog-agent" && output.contract.cluster_name == "aro-eh-dev"
+    error_message = "Agent log collection on OpenShift; contract carries the distribution."
+  }
+}
+
+run "aks_default_has_no_openshift_layer" {
+  command = plan
+  assert {
+    condition     = length(helm_release.datadog.values) == 2 && output.contract.distribution == "aks" && length(helm_release.datadog.postrender.args) == 5
+    error_message = "distribution defaults to aks: no OpenShift layer, unchanged post-renderer arguments."
+  }
+}
+
+run "reject_openshift_with_aks_kubelet_mode" {
+  command = plan
+  variables {
+    distribution = "openshift"
+    features     = { kubelet_tls_mode = "aks_rotation" }
+  }
+  expect_failures = [var.features]
+}
+
+run "reject_openshift_fluent_bit_fallback" {
+  command = plan
+  variables {
+    distribution = "openshift"
+  }
+  # the file default log_pipeline = fluent_bit_direct selects the Fluent Bit DaemonSet
+  expect_failures = [helm_release.datadog]
+}
+
+run "reject_openshift_op_worker" {
+  command = plan
+  variables {
+    distribution = "openshift"
+    log_pipeline = null
+    op_worker    = { enabled = true, pipeline_id = "00000000-0000-0000-0000-000000000000" }
+  }
+  expect_failures = [helm_release.datadog]
+}
+
+run "reject_unknown_distribution" {
+  command = plan
+  variables {
+    distribution = "eks"
+  }
+  expect_failures = [var.distribution]
+}

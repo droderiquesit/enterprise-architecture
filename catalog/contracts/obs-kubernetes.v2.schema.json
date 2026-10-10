@@ -5,6 +5,7 @@
   "required": ["cluster_name", "namespace", "agent", "fluent_bit", "log_route", "log_pipeline", "log_collector"],
   "properties": {
     "cluster_name": {"type": "string"},
+    "distribution": {"enum": ["aks", "openshift"], "description": "Kubernetes distribution (observability 4.1.0; absent in 4.0.0 contracts = aks)"},
     "cluster_id": {"type": ["string", "null"], "pattern": "^/subscriptions/[^/]+/"},
     "namespace": {"type": "string", "description": "namespace of the Datadog Agent release"},
     "agent": {

@@ -39,6 +39,13 @@ PROTECTED_TYPES = {
     "azurerm_managed_disk", "azurerm_recovery_services_vault", "azurerm_service_fabric_managed_cluster",
     "azurerm_redhat_openshift_cluster", "azurerm_batch_account",
 }
+# azapi resources carry the ARM type in their body ("Microsoft.X/y@api-version"); these state-bearing ARM types get the
+# same protection as their azurerm equivalents (compared case-insensitively, API version ignored).
+PROTECTED_AZAPI_TYPES = {
+    "microsoft.servicefabric/managedclusters", "microsoft.servicefabric/managedclusters/nodetypes",
+    "microsoft.redhatopenshift/openshiftclusters", "microsoft.sql/managedinstances", "microsoft.horizondb/clusters",
+    "microsoft.durabletask/schedulers", "microsoft.durabletask/schedulers/taskhubs",
+}
 COST_CREATE_TYPES = {
     "azurerm_firewall", "azurerm_application_gateway", "azurerm_mssql_managed_instance", "azurerm_kubernetes_cluster",
     "azurerm_kubernetes_cluster_node_pool", "azurerm_managed_redis", "azurerm_cosmosdb_account",
@@ -53,6 +60,19 @@ COST_CREATE_TYPES = {
 COST_ATTRIBUTES = {"sku", "sku_name", "sku_tier", "vm_size", "size", "node_count", "min_count", "max_count",
                    "capacity", "instances", "zone_redundant", "storage_mb", "max_size_gb", "throughput",
                    "max_throughput", "storage_quota_in_gb", "high_availability", "tier", "vcores"}
+
+
+def _is_protected(rc: dict) -> bool:
+    """True when deleting/replacing this resource change loses state (azurerm type or azapi ARM type)."""
+    typ = rc.get("type")
+    if typ in PROTECTED_TYPES:
+        return True
+    if typ == "azapi_resource":
+        change = rc.get("change", {})
+        body = change.get("before") or change.get("after") or {}
+        arm = str(body.get("type", "")).split("@", 1)[0].lower()
+        return arm in PROTECTED_AZAPI_TYPES
+    return False
 
 
 def _actions(rc: dict) -> list[str]:
@@ -110,7 +130,7 @@ def evaluate(plan: dict, component: str, approvals: list[dict]) -> dict:
             continue
         addr, typ = rc.get("address"), rc.get("type")
         changes.append({"address": addr, "type": typ, "action": kind})
-        if kind in ("delete", "replace") and typ in PROTECTED_TYPES:
+        if kind in ("delete", "replace") and _is_protected(rc):
             match = next((a for a in approvals if any(fnmatch.fnmatchcase(addr, p) for p in a.get("addresses", []))), None)
             entry = {"address": addr, "type": typ, "action": kind}
             if match:

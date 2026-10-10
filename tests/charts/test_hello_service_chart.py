@@ -182,7 +182,12 @@ def test_unified_service_tagging_and_env(values, helm_bin):
             if "$(DD_AGENT_HOST)" in (x.get("value") or ""):
                 assert i > 0
         ann = pod_template(w)["metadata"]["annotations"]
-        assert ann[f"ad.datadoghq.com/{w['metadata']['name']}.logs"] == "[]"
+        tel = v.get("telemetry", {})
+        if tel.get("disableAgentLogCollection", True):
+            assert ann[f"ad.datadoghq.com/{w['metadata']['name']}.logs"] == "[]"
+        else:   # the node Datadog Agent collects stdout (aro-catalog-api, observability 4.1.0): source + service
+            assert json.loads(ann[f"ad.datadoghq.com/{w['metadata']['name']}.logs"]) == [
+                {"source": tel["agentLogSource"], "service": v["service"]["name"]}]
     for d in docs:   # every object carries the tags (Datadog Agent / Fluent Bit enrichment, cost views)
         assert expected.items() <= d["metadata"]["labels"].items(), d["kind"]
 

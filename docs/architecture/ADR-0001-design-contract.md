@@ -65,6 +65,10 @@ Rules:
    user-assigned identity (the DSV-reader `obs-host-agent`) on hosts tagged `datadog:enabled = "true"`; platform VM /
    VMSS roots tag their hosts, keep that identity in `identity_ids` (it is a `foundation-identity` contract output) and
    set `lifecycle { ignore_changes = [gallery_application] }`.
+   *Amended 2026-10-10 (observability 4.1.0):* Service Fabric managed cluster node types (VMSS in the Microsoft-managed
+   `SFC_` resource group, changed only through the node type API) are enrolled through the node type resource itself:
+   `platform-servicefabric` owns the node type, puts the `obs-host-agent` identity in `vmManagedIdentity` and never sends
+   `properties.vmApplications` (azapi `ignore_body_changes`); `obs-hosts` owns that list (`azapi_update_resource`).
 4. Diagnostic settings are owned by observability (`obs-diagnostics`) only.
    Platform roots must not create `azurerm_monitor_diagnostic_setting`.
 5. Lab-shared Terraform modules live in `foundation/modules/` (naming, tags, private endpoint).
@@ -324,6 +328,18 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
     / obs-kubernetes, runners' workload identity `obs-dbm`); the separate ACI DBM Agent only when there is none.
   - Contract `obs-kubernetes` is **v2** (actual outputs incl. `logs_enabled` per fleet policy; v1 kept for rollback).
     Nothing here has been deployed or verified live (status: implemented / locally verified).
+- 2026-10-10: **Observability package 4.1.0** (minor): Service Fabric managed cluster nodes run the same pinned Datadog
+  Agent VM Application as VMs / VMSS (metrics, `LOG_FILE_PATH` + Windows Event Log, OTLP / APM on localhost, key from
+  DSV via the dsv-fetch secret backend), set on the node type's `vmApplications` by `obs-hosts` (optional contract
+  `platform-servicefabric` 1.1.0 `node_types`); section 3 rule 3 amended. `platform-servicefabric` manages the cluster
+  and node type with azapi 2026-02-01 (catalog/provider-gaps.yaml `service-fabric-managed`). Not deployed or verified live.
+- 2026-10-10: **Observability package 4.1.0** (minor), amending section 10: **ARO** application logs, traces and
+  metrics follow the AKS path - Datadog node Agent DaemonSet (logs -> Observability Pipelines Worker), Cluster Agent,
+  cluster-checks runners, SSI - installed by the new component `obs-kubernetes-aro` with `modules/kubernetes`
+  `distribution = "openshift"` (chart SCCs, CRI-O, host ports instead of Unix sockets). One secret path (section 14):
+  `ENC[dsv://...]` resolved by dsv-fetch with Entra workload identity through the managed-identity cluster's OIDC issuer
+  (platform-aro contract `oidc_issuer_url`); the cluster's admin kubeconfig is read only as an ephemeral value (never in
+  plan or state). Contract `obs-kubernetes-aro` v1. Not deployed or verified live.
 
 ## 14. Secret management: Delinea DevOps Secrets Vault (DSV)
 

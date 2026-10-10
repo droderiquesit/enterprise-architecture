@@ -55,14 +55,15 @@
 /applications/shared/dotnet/                   @lab/app-team  # svc-bff,svc-orders-api,svc-inventory-api,svc-durable
 /applications/shared/python/                   @lab/app-team @lab/platform-team @lab/security-team  # svc-catalog-api,svc-dbadapter,svc-worker,svc-partner-sim,svc-functions,svc-jobs,svc-pr-reviewer
 /foundation/identity/secrets.yaml              @lab/platform-team @lab/security-team  # foundation-secrets
-/observability/config/fleet-policy.yaml        @lab/observability-team  # obs-hosts,obs-kubernetes,obs-dbm
+/observability/config/fleet-policy.yaml        @lab/observability-team  # obs-hosts,obs-kubernetes,obs-kubernetes-aro,obs-dbm
 /observability/config/tag-policy.yaml          @lab/observability-team  # obs-hosts
 /observability/extras/content/                 @lab/observability-team  # obs-monitoring
-/observability/images/dsv-fetch/               @lab/observability-team  # obs-telemetry-transport,obs-kubernetes,img-dsv-fetch
+/observability/images/dsv-fetch/               @lab/observability-team  # obs-telemetry-transport,obs-kubernetes,obs-kubernetes-aro,img-dsv-fetch
 /observability/lab/azure-integration/          @lab/observability-team  # obs-azure-integration
 /observability/lab/dbm/                        @lab/observability-team  # obs-dbm
 /observability/lab/diagnostics/                @lab/observability-team  # obs-diagnostics
 /observability/lab/hosts/                      @lab/observability-team  # obs-hosts
+/observability/lab/kubernetes-aro/             @lab/observability-team  # obs-kubernetes-aro
 /observability/lab/kubernetes/                 @lab/observability-team  # obs-kubernetes
 /observability/lab/prereqs/                    @lab/observability-team  # obs-prereqs
 /observability/lab/telemetry-transport/        @lab/observability-team  # obs-telemetry-transport

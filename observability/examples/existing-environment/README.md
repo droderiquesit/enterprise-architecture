@@ -1,4 +1,4 @@
-# Example: connect an EXISTING environment to Datadog with a versioned package release (4.0.0)
+# Example: connect an EXISTING environment to Datadog with a versioned package release (4.1.0)
 
 Standalone consumer root. It needs nothing from the source repository except the released tarball. It connects
 existing resources to Datadog with the package tag policy. It creates no monitors, SLOs or dashboards: those already
@@ -23,10 +23,10 @@ platforms or databases are created. Fault injection is disabled and validated.
 1. Pin the release in `package.lock.json` (`version`, `url`, `sha256` from the release `.sha256` file).
 2. `./vendor.sh` downloads the release, verifies the sha256, extracts it to `./.vendor/observability-<version>/`
    (git-ignored) and checks that every module `source` uses that version.
-   Alternative without vendoring: `source = "git::https://dev.azure.com/<org>/<project>/_git/<repo>//observability/modules/<module>?ref=observability-v4.0.0"`.
+   Alternative without vendoring: `source = "git::https://dev.azure.com/<org>/<project>/_git/<repo>//observability/modules/<module>?ref=observability-v4.1.0"`.
 3. Edit `manifests/prod/*.yaml` (manifest v2: identity + tags + resources; resource ids are used **verbatim**), then
-   `python3 .vendor/observability-4.0.0/tools/onboarding/validate.py --manifests manifests/prod --env prod --strict`
-   and `python3 .vendor/observability-4.0.0/tools/onboarding/render.py render --manifests manifests/prod --env prod --out rendered/prod`.
+   `python3 .vendor/observability-4.1.0/tools/onboarding/validate.py --manifests manifests/prod --env prod --strict`
+   and `python3 .vendor/observability-4.1.0/tools/onboarding/render.py render --manifests manifests/prod --env prod --out rendered/prod`.
    Commit `rendered/prod`.
 4. Secrets (one path, package 4.0.0): everything is read from Delinea DSV at runtime with workload identity
    `kubernetes.identity_client_id` (required). Ask your identity team to federate it with the service accounts

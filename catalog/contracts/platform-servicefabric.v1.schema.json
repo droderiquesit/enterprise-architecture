@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "platform-servicefabric contract v1",
-  "description": "Service Fabric managed cluster (disabled by default).",
+  "description": "Service Fabric managed cluster (disabled by default). 1.1.0 (observability 4.1.0): node_types + datadog for obs-hosts (Datadog Agent VM Application on the node type).",
   "type": "object",
   "required": [
     "enabled",
@@ -66,6 +66,60 @@
     },
     "byo_vnet": {
       "type": "boolean"
+    },
+    "node_types": {
+      "description": "Node type name -> node type resource (Microsoft.ServiceFabric/managedClusters/nodeTypes). datadog_enabled = the DSV-reader identity is attached (obs-hosts then sets the Datadog Agent VM Application).",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "os_type",
+          "datadog_enabled"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.ServiceFabric/managedClusters/[^/]+/nodeTypes/[^/]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "os_type": {
+            "enum": [
+              "windows",
+              "linux"
+            ]
+          },
+          "primary": {
+            "type": "boolean"
+          },
+          "datadog_enabled": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "datadog": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "tag_name": {
+          "type": "string"
+        },
+        "identity_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     }
   }
 }

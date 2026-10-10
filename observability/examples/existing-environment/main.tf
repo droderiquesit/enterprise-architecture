@@ -34,20 +34,20 @@ locals {
 }
 
 module "fleet" {
-  source    = "./.vendor/observability-4.0.0/modules/fleet-inventory"
+  source    = "./.vendor/observability-4.1.0/modules/fleet-inventory"
   resources = local.inventory
   env       = var.env
 }
 
 # Environment-level tags (filled into telemetry that arrives without them; never overwrite a client value)
 module "env_tags" {
-  source           = "./.vendor/observability-4.0.0/modules/tagging"
+  source           = "./.vendor/observability-4.1.0/modules/tagging"
   enforce_required = false
   identity         = { env = var.env, region = var.region, managed_by = "terraform" }
 }
 
 module "azure_integration" {
-  source = "./.vendor/observability-4.0.0/modules/azure-integration"
+  source = "./.vendor/observability-4.1.0/modules/azure-integration"
   count  = var.azure_integration.enabled ? 1 : 0
 
   mode             = "app_registration"
@@ -62,7 +62,7 @@ module "azure_integration" {
 }
 
 module "diagnostics" {
-  source = "./.vendor/observability-4.0.0/modules/diagnostic-settings"
+  source = "./.vendor/observability-4.1.0/modules/diagnostic-settings"
   count  = var.diagnostics.enabled ? 1 : 0
 
   resources = module.fleet.diagnostic_targets
@@ -76,7 +76,7 @@ module "diagnostics" {
 
 # Subscription Activity Log (+ optional Entra ID) of the supplied subscriptions -> activity-logs hub.
 module "azure_logs" {
-  source = "./.vendor/observability-4.0.0/modules/azure-logs"
+  source = "./.vendor/observability-4.1.0/modules/azure-logs"
   count  = var.diagnostics.enabled ? 1 : 0
 
   activity_log = {
@@ -97,7 +97,7 @@ module "azure_logs" {
 # from Delinea DSV by the Worker pod's dsv-fetch init container (workload identity) - never through Terraform or a
 # Kubernetes Secret.
 module "observability_pipeline" {
-  source = "./.vendor/observability-4.0.0/modules/observability-pipeline"
+  source = "./.vendor/observability-4.1.0/modules/observability-pipeline"
   count  = local.op_enabled ? 1 : 0
 
   name         = "${var.env}-logs"
@@ -118,7 +118,7 @@ module "observability_pipeline" {
 }
 
 module "rum" {
-  source       = "./.vendor/observability-4.0.0/modules/rum"
+  source       = "./.vendor/observability-4.1.0/modules/rum"
   count        = length(var.rum) > 0 ? 1 : 0
   datadog_site = var.datadog_site
   applications = { for k, a in var.rum : k => merge(a, {
@@ -129,7 +129,7 @@ module "rum" {
 }
 
 module "dbm" {
-  source = "./.vendor/observability-4.0.0/modules/dbm"
+  source = "./.vendor/observability-4.1.0/modules/dbm"
   count  = var.dbm.enabled ? 1 : 0
 
   hosting  = "cluster_checks"
@@ -151,7 +151,7 @@ module "dbm" {
 }
 
 module "kubernetes" {
-  source = "./.vendor/observability-4.0.0/modules/kubernetes"
+  source = "./.vendor/observability-4.1.0/modules/kubernetes"
   count  = var.kubernetes.enabled ? 1 : 0
 
   cluster_name = var.kubernetes.cluster_name
@@ -187,7 +187,7 @@ module "kubernetes" {
 # Instrumentation settings (env vars / app settings / k8s patches) the application owners apply in their own
 # deployment code (this root never changes application settings).
 module "instrumentation" {
-  source   = "./.vendor/observability-4.0.0/modules/instrumentation"
+  source   = "./.vendor/observability-4.1.0/modules/instrumentation"
   for_each = var.instrumented_services
 
   service = merge(
@@ -205,7 +205,7 @@ module "instrumentation" {
 # the dsv-fetch release files (img-dsv-fetch zip-package, SHA256SUMS verified) unzipped into dsv_fetch_release_dir
 # before plan, and Resource Policy Contributor + User Access Administrator (condition-restricted) at the policy scope.
 module "host_agents" {
-  source = "./.vendor/observability-4.0.0/modules/host-agents"
+  source = "./.vendor/observability-4.1.0/modules/host-agents"
   count  = var.hosts.enabled ? 1 : 0
 
   mode           = "policy"
