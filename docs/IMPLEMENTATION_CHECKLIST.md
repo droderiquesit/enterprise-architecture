@@ -19,6 +19,9 @@ Columns:
 * **2026-10-10 (observability 4.0.0 integration pass):** current numbers are in
   [evidence/validation-results.md](evidence/validation-results.md) (all_terraform 95 ok; repository tests, observability
   suites, dsv-fetch Go + conformance tests, host-agent-package tests); rows 7.1, 8.1, 8.3, 8.6 updated for 4.0.0.
+* **2026-10-10 (full repository review + Graphify setup, re-run):** all three levels re-run and recorded in
+  [evidence/validation-results.md](evidence/validation-results.md): all_terraform 95 ok, `pytest tests` 565 passed,
+  e2e 12/12, .NET 116, Python 164, vitest 20, transport docker 25, checkov 0 failed; live verification still not run.
 * **Live verification** - deployment to Azure + smoke + telemetry verification with an evidence file. `not-run` everywhere:
   no evidence exists ([evidence](evidence/README.md)).
 

@@ -358,8 +358,8 @@ services:
         method: Datadog Agent DaemonSet + Cluster Agent (kubelet, KSM) + OTel app metrics via Agent OTLP; Azure integration for control-plane metrics
       logs:
         supported: 'yes'
-        method: Fluent Bit DaemonSet tails /var/log/containers -> Datadog (obs-kubernetes)
-        notes: DD_LOGS_ENABLED=false on the Agent; kube-audit via diagnostic settings optional
+        method: Datadog node Agent (obs-kubernetes, Helm) tails /var/log/containers -> Observability Pipelines Worker -> Datadog
+        notes: Fluent Bit DaemonSet only with log_pipeline = fluent_bit_direct (fallback); kube-audit via diagnostic settings optional
       traces: &id005
         supported: 'yes'
         method: OpenTelemetry SDK -> OTLP -> Datadog Agent DaemonSet OTLP receiver (hostPort 4317 via node IP)
@@ -438,7 +438,7 @@ services:
         method: Azure integration (azure.app_containerapps, azure.app_managedenvironments) + OTel app metrics via OTel gateway
       logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog; ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
+        method: Datadog serverless-init sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Observability Pipelines Worker -> Datadog (Fluent Bit sidecar only as the fluent_bit_direct fallback); ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
         notes: ContainerAppConsoleLogs must NOT also be exported (duplicate)
       traces: &id004
         supported: 'yes'
@@ -522,7 +522,7 @@ services:
         method: Azure integration (azure.app_containerapps, azure.app_managedenvironments) + OTel app metrics via OTel gateway
       logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog; ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
+        method: Datadog serverless-init sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Observability Pipelines Worker -> Datadog (Fluent Bit sidecar only as the fluent_bit_direct fallback); ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
         notes: ContainerAppConsoleLogs must NOT also be exported (duplicate)
       traces: *id004
       dbm: *id002

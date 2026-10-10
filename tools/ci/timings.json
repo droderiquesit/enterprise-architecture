@@ -113,6 +113,7 @@
     "obs-content": 4.8,
     "obs-transport": 133.1,
     "py-catalog": 11.5,
+    "py-graphify": 5.0,
     "py-pipeline": 7.1,
     "py-pr-reviewer": 4.7,
     "py-review": 25.0

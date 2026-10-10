@@ -124,7 +124,7 @@ components:
     layer: platform
     kind: terraform
     path: platform/compute/appservice
-    consumes: [foundation-network, foundation-identity]
+    consumes: [foundation-network]
     produces: [platform-appservice]
     catalog_refs: [app-service-linux, app-service-windows, functions-dedicated, logic-apps-standard]
   - id: platform-functions
@@ -296,7 +296,8 @@ components:
     layer: platform
     kind: terraform
     path: platform/data/ledger
-    consumes: [foundation-network, foundation-identity]
+    # no foundation-network: Confidential Ledger has no Private Link (public endpoint, Entra auth; README)
+    consumes: [foundation-identity]
     produces: [platform-db-ledger]
     catalog_refs: [confidential-ledger]
   - id: platform-db-horizondb

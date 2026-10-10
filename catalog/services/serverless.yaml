@@ -434,7 +434,7 @@ services:
         method: Azure integration (azure.app_containerapps, azure.app_managedenvironments) + OTel app metrics via OTel gateway
       logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Datadog; ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
+        method: Datadog serverless-init sidecar tails shared EmptyDir file (LOG_FILE_PATH) -> Observability Pipelines Worker -> Datadog (Fluent Bit sidecar only as the fluent_bit_direct fallback); ContainerAppSystemLogs via diagnostic settings (obs-diagnostics)
         notes: ContainerAppConsoleLogs must NOT also be exported (duplicate)
       traces: &id002
         supported: 'yes'
@@ -975,8 +975,8 @@ services:
         method: Azure integration (azure.app_jobs) + OTel job metrics via OTel gateway
       logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails shared EmptyDir file; ContainerAppSystemLogs via diagnostic settings
-        notes: sidecar must exit when the main container completes (shutdown signal / file sentinel)
+        method: stdout JSON -> ContainerAppConsoleLogs diagnostic setting (environment) -> Event Hubs -> Observability Pipelines Worker (allow-list keeps only the job apps) -> Datadog; ContainerAppSystemLogs via diagnostic settings
+        notes: no log sidecar on jobs (fleet policy logs.collector = azure per job workload); a sidecar would keep the execution running after the main container completes
       traces: *id002
       dbm: *id001
       rum:

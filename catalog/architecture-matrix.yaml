@@ -19,7 +19,7 @@ architectures:
     deployment: deploy-core-aks
     artifact: container-image
     runtime_config: Kubernetes Deployment env + workload identity ServiceAccount
-    telemetry: {logs: fluent-bit-daemonset, traces: datadog-agent-otlp (hostPort 4317 via node IP), metrics: datadog-agent + otel}
+    telemetry: {logs: datadog-agent node DaemonSet (obs-kubernetes, Helm) -> OP Worker (fallback fluent-bit-daemonset), traces: Datadog library (Single Step Instrumentation) -> node Agent :8126, metrics: datadog-agent (DogStatsD) + otel}
     smoke: GET /readyz via in-cluster job + public ingress /api/healthz
     rollback: per-workload Helm release (applications/charts/hello-service) - re-apply previous digest, or `helm rollback <release>` in an emergency
   container-apps-consumption:
@@ -64,7 +64,7 @@ architectures:
     workloads: [hello-dbadapter-mysql]
     deployment: deploy-dbadapters
     artifact: zip-package
-    telemetry: {logs: AppServiceConsoleLogs -> Event Hubs -> fluent-bit-aggregator, traces: otel-gateway via VNet integration}
+    telemetry: {logs: AppServiceConsoleLogs -> Event Hubs -> OP Worker, traces: otel-gateway via VNet integration}
     rollback: staging slot swap back (Standard+ SKUs) else redeploy previous zip
   app-service-linux-container:
     workloads: [hello-dbadapter-redis-appsvc (optional), hello-catalog-api-container (optional)]
@@ -85,7 +85,7 @@ architectures:
     workloads: [hello-durable (OrderProcessing, BatchProcessing, Reconciliation)]
     deployment: deploy-durable
     artifact: zip-package (blob container deployment)
-    telemetry: {logs: FunctionAppLogs -> Event Hubs -> fluent-bit-aggregator, traces: OTel SDK -> otel-gateway}
+    telemetry: {logs: FunctionAppLogs -> Event Hubs -> OP Worker, traces: OTel SDK -> otel-gateway}
     rollback: redeploy previous package (no slots on Flex)
   functions-premium:
     workloads: [hello-functions audit (Service Bus subscription trigger)]
@@ -118,7 +118,7 @@ architectures:
     workloads: [hello-worker (systemd)]
     deployment: deploy-vm-workloads
     artifact: zip-package via VM run command
-    telemetry: {logs: fluent-bit service tail, traces: datadog-agent OTLP localhost:4317, metrics: datadog-agent}
+    telemetry: {logs: datadog-agent host Agent (Azure Policy + VM Application, obs-hosts) tails LOG_FILE_PATH -> OP Worker, traces: Single Step Instrumentation -> local Agent :8126, metrics: datadog-agent}
     rollback: run command installs previous package
   vm-windows:
     workloads: [hello-inventory-api (Windows service)]

@@ -1,0 +1,44 @@
+{
+  "fake_secret_masked": "FAKE***",
+  "fake_secret_found_at_intake": false,
+  "app_path_events": [
+    {
+      "timestamp": 1791632129146,
+      "ddtags": "env:e2e,service:hello-partner-sim,version:0.1.0-e2e,team:hello-payments,domain:payments,tier:external-sim,application:enterprise-hello,region:local,telemetry.pipeline:fluent-bit",
+      "simulated_latency_ms": 81.2,
+      "message": "payment processed",
+      "trace_id": "e428de4a85324be35cf474c2991e69c7",
+      "span_id": "ad67f6a544aad65d",
+      "env": "e2e",
+      "dd.version": "0.1.0-e2e",
+      "version": "0.1.0-e2e",
+      "dd.service": "hello-partner-sim",
+      "dd.env": "e2e",
+      "logger": "hello_partner_sim",
+      "ddsource": "python",
+      "dd.trace_id": "6698106924948154823",
+      "status": "approved",
+      "order_id": "e2e-redact-8eb22ef0 password=[REDACTED]",
+      "dd.span_id": "12495226880844813917",
+      "level": "info",
+      "service": "hello-partner-sim"
+    }
+  ],
+  "transport_path_events": [
+    {
+      "timestamp": 1791632129150,
+      "ddtags": "env:e2e,service:hello-partner-sim,version:0.1.0-e2e,team:hello-payments,domain:payments,tier:external-sim,application:enterprise-hello,region:local,telemetry.pipeline:fluent-bit",
+      "logger": "e2e.probe",
+      "message": "e2e-redact-8eb22ef0-transport Authorization: [REDACTED] [REDACTED] url=https://x.blob.core.windows.net/c?sv=1&sig=[REDACTED]",
+      "level": "info",
+      "ddsource": "python",
+      "client_secret": "[REDACTED]",
+      "service": "hello-partner-sim",
+      "env": "e2e",
+      "version": "0.1.0-e2e",
+      "db": {
+        "connection_string": "[REDACTED]"
+      }
+    }
+  ]
+}

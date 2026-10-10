@@ -87,8 +87,9 @@ resource "azurerm_container_app" "this" {
         content {
           allowed_origins = ingress.value.cors_origins
           allowed_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-          # Browser RUM (allowedTracingUrls) adds W3C + Datadog headers to first-party API calls.
-          allowed_headers           = ["content-type", "idempotency-key", "traceparent", "tracestate", "x-datadog-origin", "x-datadog-parent-id", "x-datadog-sampling-priority", "x-datadog-trace-id"]
+          # Browser RUM (allowedTracingUrls, propagatorTypes [tracecontext] - ADR-0001 §10) adds only the W3C
+          # traceparent/tracestate headers to first-party API calls.
+          allowed_headers           = ["content-type", "idempotency-key", "traceparent", "tracestate"]
           exposed_headers           = ["traceparent"]
           max_age_in_seconds        = 600
           allow_credentials_enabled = false

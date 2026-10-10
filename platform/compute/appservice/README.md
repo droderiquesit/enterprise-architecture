@@ -4,7 +4,7 @@
 |---|---|
 | Component id | `platform-appservice` |
 | Owner | platform team (compute) |
-| Consumes | `foundation-network` (`subnets.appsvc-integration` delegated `Microsoft.Web/serverFarms`, `subnets.private-endpoints`, `private_dns_zones.{blob,queue,table,file}`), `foundation-identity` (declared; no grants today) |
+| Consumes | `foundation-network` (`subnets.appsvc-integration` delegated `Microsoft.Web/serverFarms`, `subnets.private-endpoints`, `private_dns_zones.{blob,queue,table,file}`) |
 | Produces | `platform-appservice` v1 |
 | Status | `implemented` |
 

@@ -62,7 +62,7 @@ architectures:
     source: applications/deployments/durable/README.md
   functions-on-container-apps:
     artifact: container-image (svc-functions)
-    runtime_config: azapi Microsoft.App/containerApps kind=functionapp; env + dsv:// references + Fluent Bit sidecar (dsv-fetch init container)
+    runtime_config: azapi Microsoft.App/containerApps kind=functionapp; env + dsv:// references + Datadog serverless-init sidecar (dsv-fetch-install init container; Fluent Bit sidecar only with log_pipeline = fluent_bit_direct)
     rollback: previous image digest
     source: applications/deployments/functions/README.md
   durable-functions:

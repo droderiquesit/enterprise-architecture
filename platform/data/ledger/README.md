@@ -10,7 +10,6 @@ Private Azure Confidential Ledger. Collections `order-audit` (hello-functions au
 ## Consumed contracts
 | Contract | Fields used |
 |---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
 | `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
 
 ## Produced contract

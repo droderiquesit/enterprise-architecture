@@ -1,0 +1,35 @@
+{
+  "marker_counts": {
+    "hello-orders-api": 1,
+    "hello-catalog-api": 1,
+    "hello-inventory-api": 1,
+    "hello-partner-sim": 1,
+    "hello-worker": 1,
+    "hello-durable": 1,
+    "hello-bff": 1,
+    "hello-dbadapter-postgresql": 1
+  },
+  "marker_definitions": {
+    "hello-orders-api": "message startswith 'Order ae6e73d2-1189-4724-bc0e-a0ab5442e5c5 created'",
+    "hello-catalog-api": "'product upserted' sku=E2E-MARKER-8EB22EF0 (direct POST /products)",
+    "hello-inventory-api": "'Reservation ... order ae6e73d2-1189-4724-bc0e-a0ab5442e5c5'",
+    "hello-partner-sim": "'payment processed' order_id=ae6e73d2-1189-4724-bc0e-a0ab5442e5c5",
+    "hello-worker": "'notification recorded' order_id=ae6e73d2-1189-4724-bc0e-a0ab5442e5c5",
+    "hello-durable": "'OrderProcessing for ae6e73d2-1189-4724-bc0e-a0ab5442e5c5 completed'",
+    "hello-bff": "retry attempt 2 log of the single fault-window request trace f50b1f6ce69c4092a6c1d9c29460d3d5",
+    "hello-dbadapter-postgresql": "'POST /roundtrip 200' of the browser roundtrip trace 0000000000000000302014af653e0718"
+  },
+  "identical_events_total": 29,
+  "identical_structured_app_events": 0,
+  "identical_events_examples": [
+    "info: Microsoft.Azure.WebJobs.Hosting.OptionsLoggingService[0]\n      ScriptJobHostOptions\n      {\n        \"FileWatchingEnabled\": true,\n        \"FileLoggingMode\"",
+    "      \n",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn"
+  ],
+  "identical_plaintext_events_more_often_at_intake_than_in_source_file": {},
+  "duplicate_span_ids": 0,
+  "spans_total": 387,
+  "log_events_total": 531
+}

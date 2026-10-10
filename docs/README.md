@@ -46,6 +46,7 @@ edit their sources, never the pages. Diagrams are rendered by `tools/docs/render
 | [Pipelines operator guide](../pipelines/README.md) | the two pipelines (`lab-platform`, `lab-applications`), stages, modes, one-time Azure DevOps setup |
 | [Branching and development](guides/branching-and-development.md) | trunk-based flow, who approves what, fast PR builds |
 | [Automated PR review](guides/automated-pr-review.md) | GitHub Copilot code review for Azure Repos plus the `eh-review/policy` bot |
+| [Graphify knowledge graph](guides/graphify.md) | local, keyless codebase graph for "what depends on X" / impact queries (`tools/graphify/build.sh`) |
 | [CONTRIBUTING](../CONTRIBUTING.md) | before you push, branch names, rules CI enforces |
 | [Cost and lifecycle](guides/cost-and-lifecycle.md) | budgets, default SKUs, auto-stop, retention, teardown order |
 

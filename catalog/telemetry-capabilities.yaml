@@ -75,7 +75,7 @@ findings:
       gateway / serverless-init). apm.mode = otel: no Datadog profiling, except the opt-in Python preview DD_PROFILING_PREVIEW_OTEL_CONTEXT_ENABLED (profiling.otel_mode = python_preview).'
     runtime_metrics: 'DD_RUNTIME_METRICS_ENABLED only where an Agent runs next to the process (DogStatsD UDP/UDS): node Agent, host Agent, serverless-init (Container Apps default). Behind
       the APM gateway (ACI, ACA jobs, App Service per-workload datadog) runtime metrics are off (Container Apps ingress has no UDP).'
-    rum: 'modules/rum (obs-prereqs): RUM application create or existing; browser SDK config allowedTracingUrls with propagatorTypes [datadog, tracecontext], session replay 0, globalContext
+    rum: 'modules/rum (obs-prereqs): RUM application create or existing; browser SDK config allowedTracingUrls with propagatorTypes [tracecontext] (W3C only, ADR §10), session replay 0, globalContext
       from the tag policy.'
     fleet: Agent version pinned by the fleet policy (7.84.2), Remote Configuration on, remote upgrades off by default; optional datadog_fleet_schedule (modules/fleet-automation).
 compute:
@@ -979,10 +979,10 @@ compute:
     signals:
       app_logs:
         supported: 'yes'
-        method: Fluent Bit sidecar tails the shared EmptyDir file (LOG_FILE_PATH) -> forward -> Observability Pipelines Worker (fluent source :24224, require_ack_response, filesystem
-          buffer) -> Datadog Logs
+        method: Datadog serverless-init sidecar (fleet policy logs.collector = serverless_init) tails the shared EmptyDir file (LOG_FILE_PATH = DD_SERVERLESS_LOG_PATH) -> Observability
+          Pipelines Worker Datadog Agent source (:8282) -> Datadog Logs; traces stay on OpenTelemetry; fallback (log_pipeline = fluent_bit_direct) Fluent Bit sidecar -> Datadog intake
         owner: applications deploy root (sidecar spec from modules/instrumentation)
-        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; serverless-init log collection off; no API key on the edge
+        duplicate_prevention: ContainerAppConsoleLogs are NOT exported by diagnostic settings; one collector per replica (serverless-init or, in the fallback, Fluent Bit)
         datadog_limitation: sidecar adds CPU/memory to each replica
       traces:
         supported: 'yes'
@@ -1140,7 +1140,7 @@ compute:
         datadog_limitation: n/a
       rum:
         supported: 'yes'
-        method: 'modules/rum (obs-prereqs, RUM application create | existing) + @datadog/browser-rum: allowedTracingUrls propagatorTypes [datadog, tracecontext], session replay 0, globalContext
+        method: 'modules/rum (obs-prereqs, RUM application create | existing) + @datadog/browser-rum: allowedTracingUrls propagatorTypes [tracecontext] (W3C only, ADR §10), session replay 0, globalContext
           from the tag policy'
         owner: obs-prereqs (application) + deploy-frontend (SDK init)
         duplicate_prevention: single RUM application per env
@@ -1566,14 +1566,16 @@ compute:
     catalog_ref: service-fabric-managed
     signals:
       app_logs:
-        supported: 'yes'
-        method: Fluent Bit service tails LOG_FILE_PATH -> Datadog HTTP intake (TLS, DD_SITE)
+        supported: partial
+        method: 'Datadog host Agent (obs-hosts VM Application, fleet policy logs.collector = agent) tails LOG_FILE_PATH (D:\SvcFab\Log\hello\inventory-api.log, host tag datadog:log_paths)
+          -> Observability Pipelines Worker -> Datadog Logs, once the node-type VMSS is enrolled: platform-servicefabric does not tag node types datadog:enabled, so the Azure Policy
+          does not enrol them by default (no collector on Service Fabric nodes until then)'
         owner: obs-hosts
-        duplicate_prevention: Datadog Agent logs_enabled=false on hosts
-        datadog_limitation: none
+        duplicate_prevention: one collector per node (host Agent; no Fluent Bit on hosts since 4.0.0)
+        datadog_limitation: node types live in the Service Fabric managed resource group (tag + policy scope needed)
       traces:
-        supported: 'yes'
-        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver
+        supported: partial
+        method: OTel SDK -> OTLP localhost:4317 -> Datadog Agent OTLP receiver (needs the enrolled host Agent, see app_logs)
         owner: obs-hosts
         duplicate_prevention: no dd-trace tracer; single exporter
         datadog_limitation: none
@@ -1623,11 +1625,12 @@ compute:
     catalog_ref: aro
     signals:
       app_logs:
-        supported: 'yes'
-        method: Fluent Bit DaemonSet tails /var/log/containers -> Datadog
+        supported: partial
+        method: 'not provisioned by the lab: obs-kubernetes installs the Datadog node Agent on AKS only (consumes platform-aks); on ARO a Datadog Agent DaemonSet (OpenShift SCCs) would
+          tail /var/log/containers -> Observability Pipelines Worker -> Datadog Logs'
         owner: obs-kubernetes
-        duplicate_prevention: Datadog Agent DD_LOGS_ENABLED=false / containerCollectAll=false
-        datadog_limitation: Fluent Bit and Agent need OpenShift SCCs
+        duplicate_prevention: one node collector (Datadog Agent); no Fluent Bit DaemonSet unless log_pipeline = fluent_bit_direct
+        datadog_limitation: the Agent needs OpenShift SCCs
       traces:
         supported: 'yes'
         method: OTel SDK -> OTLP -> Datadog Agent DaemonSet (hostPort 4317 via status.hostIP)

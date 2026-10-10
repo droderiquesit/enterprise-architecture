@@ -42,6 +42,8 @@ dev, test/prod receive the same build by promotion.
   requirement files (`uv pip compile`, see each file's header), generated docs (`python3 tools/docs/generate.py`,
   `python3 tools/catalog/render_coverage.py`) and diagram SVGs (`tools/docs/render_diagrams.sh`).
 * Documentation: start from the [docs index](docs/README.md); links are checked by `python3 tools/docs/check_links.py`.
+* Impact before renaming/deleting: optional local [Graphify knowledge graph](docs/guides/graphify.md)
+  (`tools/graphify/build.sh`, then `graphify affected "<symbol>"`).
 * No secrets anywhere: keys live in Delinea DSV (`dsv://` references only).
 * New test suites: register them in [tools/ci/suites.yaml](tools/ci/suites.yaml) (`inputs` decide when they run);
   registry components get a suite automatically.
