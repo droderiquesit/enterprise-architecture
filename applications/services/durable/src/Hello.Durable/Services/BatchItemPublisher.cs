@@ -40,7 +40,7 @@ public sealed partial class ServiceBusBatchItemPublisher : IBatchItemPublisher, 
             return;
         }
 
-        var traceparent = HelloTelemetry.ToTraceparent(System.Diagnostics.Activity.Current);
+        var traceparent = HelloTelemetry.CurrentTraceparent();
         var messages = input.ItemIds.Select(id =>
         {
             var m = new ServiceBusMessage(BinaryData.FromString(JsonSerializer.Serialize(new { batch_id = input.BatchId, item_id = id })))

@@ -1,476 +1,92 @@
 {
   "architecture": "aca",
-  "catalog": {
-    "component_of": [
-      "system:enterprise-hello"
-    ],
-    "enabled": true,
-    "lifecycle": "production",
-    "type": "db"
-  },
-  "dashboards": {
-    "enabled": true,
-    "workflow_metric_prefix": null
-  },
-  "enabled": true,
-  "endpoints": [
-    {
-      "browser_journey": false,
-      "browser_steps": [],
-      "health_path": "/readyz",
-      "name": "internal",
-      "required": false,
-      "synthetic": {
-        "enabled": true,
-        "locations": [
-          "aws:eu-central-1"
-        ],
-        "private_location": true,
-        "tick_every": 300
-      },
-      "url": "${contract:deploy-dbadapters.adapters.blob.url}",
-      "visibility": "private"
-    }
-  ],
-  "env": "dev",
-  "generated_from": {
-    "layers": [
-      "global-defaults",
-      "platform/aca",
-      "platform/database-storage",
-      "profiles/http-api",
-      "profiles/db-adapter",
-      "manifest"
-    ],
-    "manifest": "dev/hello-dbadapter-blob.yaml",
-    "sha256": "3eb2d6e7a06a7d786ceaf28f691cfa1cf1febb726b21b5265dc405ca44d27732"
-  },
-  "idle_behavior": {
-    "expected_quiet_hours": null,
-    "scale_to_zero": false
-  },
-  "metadata": {
+  "azure_tags": {
     "application": "enterprise-hello",
-    "contacts": [
-      {
-        "contact": "data-platform@example.com",
-        "name": "data-platform mailbox",
-        "type": "email"
-      }
-    ],
-    "depends_on": [],
-    "description": "Database adapter for family blob.",
-    "display_name": "hello-dbadapter-blob",
     "domain": "data",
-    "languages": [
-      "python"
-    ],
+    "env": "dev",
+    "managed_by": "terraform",
     "owner": "data-platform@example.com",
-    "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md",
+    "region": "swedencentral",
+    "service": "hello-dbadapter-blob",
     "team": "data-platform",
     "tier": "low"
   },
-  "monitors": {
-    "aca.http_5xx_ratio@app": {
-      "evaluation_delay": 900,
-      "key": "aca.http_5xx_ratio@app",
-      "message": "{{#is_alert}}**CRITICAL**: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).{{/is_alert}}\n{{#is_warning}}**WARNING**: The Container Apps ingress is returning server errors (platform view, independent of app telemetry).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Compare with the APM error rate; if APM is healthy the failures are at ingress/revision level.\n2. az containerapp revision list -n <app> -g <rg> -o table; check the active revision is healthy.\n3. Review ContainerAppSystemLogs (diagnostic settings) for probe failures and scaling events.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#aca-5xx",
-      "name": "[dev] hello-dbadapter-blob Container App [[resource.name]] 5xx ratio above 5%",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-data-platform",
-          "oncall"
-        ],
-        "warning": [
-          "team-data-platform"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 2,
-      "query": "sum(last_15m):sum:azure.app_containerapps.requests{[[resource.scope]],statuscodecategory:5xx}.as_count() / sum:azure.app_containerapps.requests{[[resource.scope]]}.as_count() * 100 > 5",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": "app",
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#aca-5xx",
-      "severity": "critical",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:data",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:aca.http_5xx_ratio",
-        "service:hello-dbadapter-blob",
-        "severity:critical",
-        "team:data-platform",
-        "tier:low"
-      ],
-      "thresholds": {
-        "critical": 5
-      },
-      "type": "query alert"
-    },
-    "aca.restarts@app": {
-      "evaluation_delay": 900,
-      "key": "aca.restarts@app",
-      "message": "{{#is_alert}}**WARNING**: Container replicas restarted repeatedly (probe failures, crashes or OOM).{{/is_alert}}\n{{#is_warning}}**WARNING**: Container replicas restarted repeatedly (probe failures, crashes or OOM).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. az containerapp logs show -n <app> -g <rg> --type system to read restart reasons.\n2. Check the Fluent Bit sidecar is not the restarting container (telemetry pipeline dashboard).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#aca-restarts",
-      "name": "[dev] hello-dbadapter-blob Container App [[resource.name]] replicas restarting",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-data-platform"
-        ],
-        "warning": [
-          "team-data-platform"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 3,
-      "query": "sum(last_15m):sum:azure.app_containerapps.restart_count{[[resource.scope]]}.as_count() > 3",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": "app",
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#aca-restarts",
-      "severity": "warning",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:data",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:aca.restarts",
-        "service:hello-dbadapter-blob",
-        "severity:warning",
-        "team:data-platform",
-        "tier:low"
-      ],
-      "thresholds": {
-        "critical": 3
-      },
-      "type": "query alert"
-    },
-    "apm.error_rate": {
-      "evaluation_delay": null,
-      "key": "apm.error_rate",
-      "message": "{{#is_alert}}**CRITICAL**: A high share of server requests fail (availability SLI is burning).{{/is_alert}}\n{{#is_warning}}**WARNING**: A high share of server requests fail (availability SLI is burning).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. APM -> Service hello-dbadapter-blob -> Errors; group by resource_name and error.type.\n2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.\n3. Check recent deployments (deployment events / DORA) and active fault injections (GET /admin/faults).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#error-rate",
-      "name": "[dev] hello-dbadapter-blob error rate above 10%",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-data-platform",
-          "oncall"
-        ],
-        "warning": [
-          "team-data-platform"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 2,
-      "query": "sum(last_10m):( sum:trace.http.server.request.errors{service:hello-dbadapter-blob,env:dev}.as_count() / clamp_min(sum:trace.http.server.request.hits{service:hello-dbadapter-blob,env:dev}.as_count(), 20) ) * 100 > 10",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": null,
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#error-rate",
-      "severity": "critical",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:data",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:apm.error_rate",
-        "service:hello-dbadapter-blob",
-        "severity:critical",
-        "team:data-platform",
-        "tier:low"
-      ],
-      "thresholds": {
-        "critical": 10,
-        "warning": 5
-      },
-      "type": "query alert"
-    },
-    "apm.latency_p95": {
-      "evaluation_delay": null,
-      "key": "apm.latency_p95",
-      "message": "{{#is_alert}}**WARNING**: Server latency p95 is above the objective.{{/is_alert}}\n{{#is_warning}}**WARNING**: Server latency p95 is above the objective.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. APM latency breakdown by resource; find the slow span type (db, http client, cache).\n2. Check database/cache saturation monitors and connection pool waits.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#latency",
-      "name": "[dev] hello-dbadapter-blob p95 latency above 2s",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-data-platform"
-        ],
-        "warning": [
-          "team-data-platform"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 3,
-      "query": "percentile(last_15m):p95:trace.http.server.request{service:hello-dbadapter-blob,env:dev} > 2",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": null,
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#latency",
-      "severity": "warning",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:data",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:apm.latency_p95",
-        "service:hello-dbadapter-blob",
-        "severity:warning",
-        "team:data-platform",
-        "tier:low"
-      ],
-      "thresholds": {
-        "critical": 2,
-        "warning": 1
-      },
-      "type": "query alert"
-    },
-    "apm.no_traffic": {
-      "evaluation_delay": null,
-      "key": "apm.no_traffic",
-      "message": "{{#is_alert}}**CRITICAL**: No server spans were received although this service is declared always-on.{{/is_alert}}\n{{#is_warning}}**WARNING**: No server spans were received although this service is declared always-on.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. Is the pipeline healthy? Check the \"telemetry pipeline canary\" monitor first - if it is also alerting, the problem is the collector/agent, not the service.\n2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?\n3. Check OTEL_EXPORTER_OTLP_ENDPOINT / agent reachability from the workload.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#missing-telemetry",
-      "name": "[dev] hello-dbadapter-blob stopped reporting traces",
-      "new_group_delay": 60,
-      "no_data_timeframe": 30,
-      "notify": {
-        "alert": [
-          "team-data-platform",
-          "oncall"
-        ],
-        "warning": [
-          "team-data-platform"
-        ]
-      },
-      "notify_no_data": true,
-      "priority": 2,
-      "query": "sum(last_30m):sum:trace.http.server.request.hits{service:hello-dbadapter-blob,env:dev}.as_count() < 1",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": null,
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#missing-telemetry",
-      "severity": "critical",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:data",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:apm.no_traffic",
-        "service:hello-dbadapter-blob",
-        "severity:critical",
-        "team:data-platform",
-        "tier:low"
-      ],
-      "thresholds": {
-        "critical": 1
-      },
-      "type": "query alert"
-    },
-    "logs.error_spike": {
-      "evaluation_delay": null,
-      "key": "logs.error_spike",
-      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\n\nTroubleshooting:\n1. Open Logs for service:hello-dbadapter-blob env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-dbadapter-blob in the last hour (a new version is the usual cause).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#error-logs",
-      "name": "[dev] hello-dbadapter-blob error log volume above 50 in 10m",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-data-platform"
-        ],
-        "warning": [
-          "team-data-platform"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 3,
-      "query": "logs(\"service:hello-dbadapter-blob env:dev status:error\").index(\"*\").rollup(\"count\").last(\"10m\") > 50",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": null,
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#error-logs",
-      "severity": "warning",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:data",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:logs.error_spike",
-        "service:hello-dbadapter-blob",
-        "severity:warning",
-        "team:data-platform",
-        "tier:low"
-      ],
-      "thresholds": {
-        "critical": 50
-      },
-      "type": "log alert"
-    },
-    "storage.blob_latency@store-blob": {
-      "evaluation_delay": 900,
-      "key": "storage.blob_latency@store-blob",
-      "message": "{{#is_alert}}**WARNING**: Blob requests are slow end-to-end.{{/is_alert}}\n{{#is_warning}}**WARNING**: Blob requests are slow end-to-end.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform` | owner: data-platform@example.com | tier: low\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Compare E2E with server latency; a large gap points at client/network.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#storage-latency",
-      "name": "[dev] hello-dbadapter-blob Blob storage [[resource.name]] E2E latency above 2000ms",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-data-platform"
-        ],
-        "warning": [
-          "team-data-platform"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 4,
-      "query": "avg(last_15m):avg:azure.storage_storageaccounts_blobservices.success_e2_e_latency{[[resource.scope]]} > 2000",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": "store-blob",
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#storage-latency",
-      "severity": "warning",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:data",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:storage.blob_latency",
-        "service:hello-dbadapter-blob",
-        "severity:warning",
-        "team:data-platform",
-        "tier:low"
-      ],
-      "thresholds": {
-        "critical": 2000
-      },
-      "type": "query alert"
-    }
+  "deprecated_sections": [],
+  "display_name": "hello-dbadapter-blob",
+  "env": "dev",
+  "identity": {
+    "application": "enterprise-hello",
+    "domain": "data",
+    "env": "dev",
+    "owner": "data-platform@example.com",
+    "region": "swedencentral",
+    "service": "hello-dbadapter-blob",
+    "team": "data-platform",
+    "tier": "low"
   },
-  "notifications": {
-    "critical": [
-      "team-data-platform",
-      "oncall"
-    ],
-    "default": [
-      "team-data-platform"
-    ],
-    "warning": [
-      "team-data-platform"
-    ]
-  },
-  "package_version": "2.0.0",
+  "os_type": "linux",
+  "package_version": "3.0.0",
   "presence_ref": "deploy-dbadapters.adapters.blob.url",
   "resources": [
     {
-      "entities": [],
       "id": "${contract:deploy-dbadapters.adapters.blob.id}",
       "required": false,
       "role": "app",
-      "tags": {},
+      "tags": {
+        "application": "enterprise-hello",
+        "domain": "data",
+        "env": "dev",
+        "managed_by": "terraform",
+        "owner": "data-platform_example.com",
+        "region": "swedencentral",
+        "service": "hello-dbadapter-blob",
+        "team": "data-platform",
+        "tier": "low"
+      },
+      "tier": null,
       "type": "Microsoft.App/containerApps"
     },
     {
-      "entities": [],
       "id": "${contract:platform-data-analytics.blob.account_id}",
       "required": false,
       "role": "store-blob",
-      "tags": {},
+      "tags": {
+        "application": "enterprise-hello",
+        "domain": "data",
+        "env": "dev",
+        "managed_by": "terraform",
+        "owner": "data-platform_example.com",
+        "region": "swedencentral",
+        "service": "hello-dbadapter-blob",
+        "team": "data-platform",
+        "tier": "low"
+      },
+      "tier": null,
       "type": "Microsoft.Storage/storageAccounts"
     }
   ],
   "runtime": "python",
-  "schema": "rendered-service/v1",
+  "schema": "rendered-service/v2",
   "service": "hello-dbadapter-blob",
-  "slos": [
-    {
-      "burn_rate_alerts": [
-        {
-          "long_window": "1h",
-          "message": "{{#is_alert}}**CRITICAL**: error budget of SLO `availability` is burning 16.8x faster than sustainable over 1h (confirmed over 5m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#slo-burn-rate",
-          "name": "[dev] hello-dbadapter-blob availability SLO burn rate critical (1h/5m)",
-          "notify": {
-            "alert": [
-              "team-data-platform",
-              "oncall"
-            ]
-          },
-          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#slo-burn-rate",
-          "severity": "critical",
-          "short_window": "5m",
-          "threshold": 16.8
-        },
-        {
-          "long_window": "6h",
-          "message": "{{#is_alert}}**WARNING**: error budget of SLO `availability` is burning 5.6x faster than sustainable over 6h (confirmed over 30m).{{/is_alert}}\n{{#is_recovery}}Burn rate back below threshold.{{/is_recovery}}\n\nService: `hello-dbadapter-blob` | env: `dev` | team: `data-platform`\n\nTroubleshooting:\n1. Open the SLO and the service error/latency monitors.\n2. Check recent deployments and dependency health.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#slo-burn-rate",
-          "name": "[dev] hello-dbadapter-blob availability SLO burn rate warning (6h/30m)",
-          "notify": {
-            "alert": [
-              "team-data-platform"
-            ]
-          },
-          "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#slo-burn-rate",
-          "severity": "warning",
-          "short_window": "30m",
-          "threshold": 5.6
-        }
-      ],
-      "denominator": "sum:trace.http.server.request.hits{service:hello-dbadapter-blob,env:dev}.as_count()",
-      "description": "availability SLO for hello-dbadapter-blob (dev). Runbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-dbadapter-blob.md#slo-availability",
-      "display_name": "[dev] hello-dbadapter-blob availability",
-      "name": "availability",
-      "numerator": "sum:trace.http.server.request.hits{service:hello-dbadapter-blob,env:dev}.as_count() - sum:trace.http.server.request.errors{service:hello-dbadapter-blob,env:dev}.as_count()",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:data",
-        "env:dev",
-        "managed_by:observability-package",
-        "service:hello-dbadapter-blob",
-        "team:data-platform",
-        "tier:low"
-      ],
-      "target": 99.0,
-      "timeframe": "7d",
-      "type": "availability",
-      "warning": null
-    }
-  ],
-  "synthetics_defaults": {
-    "min_failure_duration": 120,
-    "min_location_failed": 1,
-    "retry": {
-      "count": 1,
-      "interval": 300
-    }
+  "source": "dev/hello-dbadapter-blob.yaml",
+  "source_sha256": "0410dad639407a45d9c5f4e6c4984c5db3c268133bdfb3d3625e3a7dfef997b9",
+  "tags": {
+    "application": "enterprise-hello",
+    "domain": "data",
+    "env": "dev",
+    "managed_by": "terraform",
+    "owner": "data-platform_example.com",
+    "region": "swedencentral",
+    "service": "hello-dbadapter-blob",
+    "team": "data-platform",
+    "tier": "low"
   },
-  "tags": [
-    "application:enterprise-hello",
-    "domain:data",
-    "env:dev",
-    "managed_by:observability-package",
-    "service:hello-dbadapter-blob",
-    "team:data-platform",
-    "tier:low"
-  ],
   "telemetry": {
-    "dbm": {
-      "enabled": false
-    },
-    "logs": {
-      "route": "sidecar"
-    },
-    "profile": "db-adapter",
-    "rum": {
-      "enabled": false
-    },
-    "traces": {
-      "enabled": true,
-      "sample_rate": 1.0,
-      "server_operation": "http.server.request"
-    }
+    "apm_mode": "policy",
+    "apm_sample_rate": null,
+    "dbm": null,
+    "logs_route": "sidecar",
+    "profiling": null,
+    "rum": null
   }
 }

@@ -32,6 +32,12 @@ internal sealed class TelemetryStartupReporter(HelloTelemetryState state, IConfi
                 HelloTelemetryMode.DatadogProfilerClsid);
         }
 
+        if (state.Mode == TelemetrySdk.Datadog && state.OtelSdkDisabled)
+        {
+            // Datadog SDKs map OTEL_SDK_DISABLED=true to DD_TRACE_OTEL_ENABLED=false: Activity-based spans would be dropped.
+            logger.LogWarning("OTEL_SDK_DISABLED=true with TELEMETRY_SDK=datadog disables the tracer's OpenTelemetry/Activity support (custom spans dropped)");
+        }
+
         logger.LogInformation(
             "telemetry mode {telemetry_sdk} (datadog tracer attached={apm_tracer_attached}, metrics={apm_metrics}, otel sdk={otel_sdk})",
             state.Mode.ToString().ToLowerInvariant(),

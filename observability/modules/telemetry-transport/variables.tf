@@ -393,3 +393,9 @@ variable "dsv_fetch_source" {
   type        = string
   default     = null
 }
+
+variable "service_tags" {
+  description = "Per service: its rendered Datadog tag set (onboarding rendered `tags`, modules/tagging). The OTel gateway fills missing policy tags of that service.name (never overwriting a client value)."
+  type        = map(map(string))
+  default     = {}
+}

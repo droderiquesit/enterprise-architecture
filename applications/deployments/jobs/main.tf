@@ -111,7 +111,7 @@ resource "azurerm_container_app_job" "this" {
   workload_profile_name        = "Consumption"
   replica_timeout_in_seconds   = each.value.timeout
   replica_retry_limit          = each.value.trigger == "event" ? 1 : 0
-  tags                         = merge(local.tags, { service = each.value.svc, version = local.artifact_version[module.meta.services[each.value.svc].artifact] })
+  tags                         = merge(local.tags, { service = each.value.svc, version = local.artifact_version[module.meta.services[each.value.svc].artifact] }, module.env[each.key].azure_tags)
 
   identity {
     type         = "UserAssigned"

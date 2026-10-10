@@ -1,23 +1,23 @@
 [
  {
   "path": "/api/v2/logs",
-  "bytes": 822,
+  "bytes": 1099,
   "content_type": "application/json",
   "content_encoding": "gzip",
-  "log_count": 3,
+  "log_count": 4,
   "api_key_present": true
  },
  {
   "path": "/api/v2/logs",
-  "bytes": 1063,
+  "bytes": 985,
   "content_type": "application/json",
   "content_encoding": "gzip",
-  "log_count": 7,
+  "log_count": 5,
   "api_key_present": true
  },
  {
   "path": "/api/v0.2/traces",
-  "bytes": 4086,
+  "bytes": 4221,
   "content_type": "application/x-protobuf",
   "content_encoding": "zstd",
   "traces": {
@@ -39,16 +39,16 @@
         "team": "hello",
         "application": "enterprise-hello",
         "_dd.p.dm": "-0",
-        "_dd.p.tid": "6ac984af00000000",
-        "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
+        "_dd.p.tid": "6ac98b3900000000",
+        "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
         "env": "e2e-dd",
         "language": "dotnet",
         "version": "0.1.0-e2e",
         "_dd.tags.process": "entrypoint.basedir:app,entrypoint.name:program,entrypoint.workdir:app,svc.user:true",
         "_dd.convertedv1": "v04",
-        "_dd.install.id": "9676e926-3a17-4f96-aea3-8553928b4bbb",
+        "_dd.install.id": "b496452c-9f8a-473f-be50-0d2f33140679",
         "_dd.install.type": "docker_single_step",
-        "_dd.install.time": "1791591597"
+        "_dd.install.time": "1791593271"
        },
        "metrics": {
         "process_id": 1.0,
@@ -59,12 +59,12 @@
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984af00000000b8d98561e5f9dc72",
-       "trace_id": 13319824028441631858,
+       "trace_id_128": "6ac98b390000000018473427a8fa3eb5",
+       "trace_id": 1749424325200068277,
        "service": "hello-orders-api",
        "name": "aspnet_core.request",
        "resource": "GET /readyz",
-       "span_id": 17829444799354281297,
+       "span_id": 956328447625940647,
        "type": "web"
       }
      ],
@@ -79,7 +79,7 @@
        "meta": {
         "_dd.code_origin.frames.0.method": "build_app.<locals>.list_products",
         "http.status_code": "200",
-        "runtime-id": "e7a8c9a4ee474f78a32eedc2010f8bb5",
+        "runtime-id": "e9c8c6fa9ad647909cd2e5532cf55372",
         "_dd.code_origin.type": "entry",
         "_dd.code_origin.frames.0.type": "hello_catalog.main",
         "application": "enterprise-hello",
@@ -89,7 +89,7 @@
         "server.address": "127.0.0.1",
         "_dd.tags.process": "entrypoint.basedir:hello_catalog,entrypoint.name:main,entrypoint.type:script,svc.user:true",
         "language": "python",
-        "_dd.p.tid": "6ac984b000000000",
+        "_dd.p.tid": "6ac98b3a00000000",
         "url.path": "/products",
         "_dd.code_origin.frames.0.file": "/opt/venv/lib/python3.13/site-packages/hello_catalog/main.py",
         "env": "e2e-dd",
@@ -101,9 +101,9 @@
         "http.route": "/products",
         "http.request.method": "GET",
         "_dd.convertedv1": "v05",
-        "_dd.install.id": "9676e926-3a17-4f96-aea3-8553928b4bbb",
+        "_dd.install.id": "b496452c-9f8a-473f-be50-0d2f33140679",
         "_dd.install.type": "docker_single_step",
-        "_dd.install.time": "1791591597"
+        "_dd.install.time": "1791593271"
        },
        "metrics": {
         "_dd.top_level": 1.0,
@@ -115,12 +115,12 @@
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b000000000657ced2a20e9855b",
-       "trace_id": 7312980660139427163,
+       "trace_id_128": "6ac98b3a000000007f91ad382d3ce512",
+       "trace_id": 9192318771228632338,
        "service": "hello-catalog-api",
        "name": "server",
        "resource": "GET /products",
-       "span_id": 9512687566000823497
+       "span_id": 17745645565586247979
       },
       {
        "meta": {
@@ -147,13 +147,13 @@
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b000000000657ced2a20e9855b",
-       "trace_id": 7312980660139427163,
+       "trace_id_128": "6ac98b3a000000007f91ad382d3ce512",
+       "trace_id": 9192318771228632338,
        "service": "hello-catalog-api",
        "name": "fastapi.request",
        "resource": "GET /products",
-       "span_id": 1499826230989781074,
-       "parent_id": 9512687566000823497,
+       "span_id": 2058543840515408187,
+       "parent_id": 17745645565586247979,
        "type": "web"
       },
       {
@@ -166,19 +166,19 @@
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b000000000657ced2a20e9855b",
-       "trace_id": 7312980660139427163,
+       "trace_id_128": "6ac98b3a000000007f91ad382d3ce512",
+       "trace_id": 9192318771228632338,
        "service": "hello-catalog-api",
        "name": "fastapi.serialize_response",
        "resource": "fastapi.serialize_response",
-       "span_id": 9820646493438065627,
-       "parent_id": 1499826230989781074
+       "span_id": 15976684525132035335,
+       "parent_id": 2058543840515408187
       },
       {
        "meta": {
         "_dd.code_origin.frames.0.method": "build_app.<locals>.get_product",
         "http.status_code": "200",
-        "runtime-id": "e7a8c9a4ee474f78a32eedc2010f8bb5",
+        "runtime-id": "e9c8c6fa9ad647909cd2e5532cf55372",
         "_dd.code_origin.type": "entry",
         "_dd.code_origin.frames.0.type": "hello_catalog.main",
         "application": "enterprise-hello",
@@ -188,7 +188,7 @@
         "server.address": "127.0.0.1",
         "_dd.tags.process": "entrypoint.basedir:hello_catalog,entrypoint.name:main,entrypoint.type:script,svc.user:true",
         "language": "python",
-        "_dd.p.tid": "6ac984b000000000",
+        "_dd.p.tid": "6ac98b3a00000000",
         "url.path": "/products/SKU-0003",
         "_dd.code_origin.frames.0.file": "/opt/venv/lib/python3.13/site-packages/hello_catalog/main.py",
         "env": "e2e-dd",
@@ -209,12 +209,12 @@
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b0000000003965f968e2a18a39",
-       "trace_id": 4135986061683821113,
+       "trace_id_128": "6ac98b3a000000009dad097f65f2115d",
+       "trace_id": 11361747877701488989,
        "service": "hello-catalog-api",
        "name": "server",
        "resource": "GET /products/{sku}",
-       "span_id": 12018759824216507961
+       "span_id": 1982796580843454430
       },
       {
        "meta": {
@@ -241,13 +241,13 @@
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b0000000003965f968e2a18a39",
-       "trace_id": 4135986061683821113,
+       "trace_id_128": "6ac98b3a000000009dad097f65f2115d",
+       "trace_id": 11361747877701488989,
        "service": "hello-catalog-api",
        "name": "fastapi.request",
        "resource": "GET /products/{sku}",
-       "span_id": 1305301951200722761,
-       "parent_id": 12018759824216507961,
+       "span_id": 2758826495319409189,
+       "parent_id": 1982796580843454430,
        "type": "web"
       },
       {
@@ -260,19 +260,19 @@
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b0000000003965f968e2a18a39",
-       "trace_id": 4135986061683821113,
+       "trace_id_128": "6ac98b3a000000009dad097f65f2115d",
+       "trace_id": 11361747877701488989,
        "service": "hello-catalog-api",
        "name": "fastapi.serialize_response",
        "resource": "fastapi.serialize_response",
-       "span_id": 8433081020885162097,
-       "parent_id": 1305301951200722761
+       "span_id": 14933636882298161380,
+       "parent_id": 2758826495319409189
       },
       {
        "meta": {
         "_dd.code_origin.frames.0.method": "build_app.<locals>.get_product",
         "http.status_code": "200",
-        "runtime-id": "e7a8c9a4ee474f78a32eedc2010f8bb5",
+        "runtime-id": "e9c8c6fa9ad647909cd2e5532cf55372",
         "_dd.code_origin.type": "entry",
         "_dd.code_origin.frames.0.type": "hello_catalog.main",
         "application": "enterprise-hello",
@@ -282,7 +282,7 @@
         "server.address": "127.0.0.1",
         "_dd.tags.process": "entrypoint.basedir:hello_catalog,entrypoint.name:main,entrypoint.type:script,svc.user:true",
         "language": "python",
-        "_dd.p.tid": "6ac984b000000000",
+        "_dd.p.tid": "6ac98b3a00000000",
         "url.path": "/products/SKU-0003",
         "_dd.code_origin.frames.0.file": "/opt/venv/lib/python3.13/site-packages/hello_catalog/main.py",
         "env": "e2e-dd",
@@ -303,12 +303,12 @@
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b0000000003800b78a7d5619a1",
-       "trace_id": 4035427071560128929,
+       "trace_id_128": "6ac98b3a0000000027385fad96b85103",
+       "trace_id": 2826113965337628931,
        "service": "hello-catalog-api",
        "name": "server",
        "resource": "GET /products/{sku}",
-       "span_id": 16035299239779317199
+       "span_id": 7789167009052788638
       },
       {
        "meta": {
@@ -335,13 +335,13 @@
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b0000000003800b78a7d5619a1",
-       "trace_id": 4035427071560128929,
+       "trace_id_128": "6ac98b3a0000000027385fad96b85103",
+       "trace_id": 2826113965337628931,
        "service": "hello-catalog-api",
        "name": "fastapi.request",
        "resource": "GET /products/{sku}",
-       "span_id": 4667057930044354183,
-       "parent_id": 16035299239779317199,
+       "span_id": 17881032916355612221,
+       "parent_id": 7789167009052788638,
        "type": "web"
       },
       {
@@ -354,19 +354,19 @@
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b0000000003800b78a7d5619a1",
-       "trace_id": 4035427071560128929,
+       "trace_id_128": "6ac98b3a0000000027385fad96b85103",
+       "trace_id": 2826113965337628931,
        "service": "hello-catalog-api",
        "name": "fastapi.serialize_response",
        "resource": "fastapi.serialize_response",
-       "span_id": 4094547371941190026,
-       "parent_id": 4667057930044354183
+       "span_id": 355315683646500682,
+       "parent_id": 17881032916355612221
       },
       {
        "meta": {
         "_dd.code_origin.frames.0.method": "build_app.<locals>.get_product",
         "http.status_code": "200",
-        "runtime-id": "e7a8c9a4ee474f78a32eedc2010f8bb5",
+        "runtime-id": "e9c8c6fa9ad647909cd2e5532cf55372",
         "_dd.code_origin.type": "entry",
         "_dd.code_origin.frames.0.type": "hello_catalog.main",
         "application": "enterprise-hello",
@@ -376,7 +376,7 @@
         "server.address": "catalog-api",
         "_dd.tags.process": "entrypoint.basedir:hello_catalog,entrypoint.name:main,entrypoint.type:script,svc.user:true",
         "language": "python",
-        "_dd.p.tid": "6ac984b000000000",
+        "_dd.p.tid": "6ac98b3a00000000",
         "url.path": "/products/SKU-0001",
         "_dd.code_origin.frames.0.file": "/opt/venv/lib/python3.13/site-packages/hello_catalog/main.py",
         "env": "e2e-dd",
@@ -386,7 +386,7 @@
         "span.kind": "server",
         "http.route": "/products/{sku}",
         "http.request.method": "GET",
-        "_dd.parent_id": "3c50956a75f87380"
+        "_dd.parent_id": "efa02360ee5b64d8"
        },
        "metrics": {
         "_dd.top_level": 1.0,
@@ -397,13 +397,13 @@
         "_top_level": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b000000000e5bfb2cb61e5e4c4",
-       "trace_id": 16555147341827794116,
+       "trace_id_128": "6ac98b3a000000001f1c5784ca479ac3",
+       "trace_id": 2241762942364654275,
        "service": "hello-catalog-api",
        "name": "server",
        "resource": "GET /products/{sku}",
-       "span_id": 17650185102392528121,
-       "parent_id": 4346137924890817408
+       "span_id": 9717005404474725619,
+       "parent_id": 17266839870561281240
       },
       {
        "meta": {
@@ -429,13 +429,13 @@
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b000000000e5bfb2cb61e5e4c4",
-       "trace_id": 16555147341827794116,
+       "trace_id_128": "6ac98b3a000000001f1c5784ca479ac3",
+       "trace_id": 2241762942364654275,
        "service": "hello-catalog-api",
        "name": "fastapi.request",
        "resource": "GET /products/{sku}",
-       "span_id": 12413149686462729302,
-       "parent_id": 17650185102392528121,
+       "span_id": 11717654579023002116,
+       "parent_id": 9717005404474725619,
        "type": "web"
       },
       {
@@ -448,13 +448,107 @@
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b000000000e5bfb2cb61e5e4c4",
-       "trace_id": 16555147341827794116,
+       "trace_id_128": "6ac98b3a000000001f1c5784ca479ac3",
+       "trace_id": 2241762942364654275,
        "service": "hello-catalog-api",
        "name": "fastapi.serialize_response",
        "resource": "fastapi.serialize_response",
-       "span_id": 15212147606922398202,
-       "parent_id": 12413149686462729302
+       "span_id": 12888966399076105909,
+       "parent_id": 11717654579023002116
+      },
+      {
+       "meta": {
+        "_dd.code_origin.frames.0.method": "build_app.<locals>.get_product",
+        "http.status_code": "200",
+        "runtime-id": "e9c8c6fa9ad647909cd2e5532cf55372",
+        "_dd.code_origin.type": "entry",
+        "_dd.code_origin.frames.0.type": "hello_catalog.main",
+        "application": "enterprise-hello",
+        "_dd.p.dm": "-0",
+        "_dd.code_origin.frames.0.line": "93",
+        "url.scheme": "http",
+        "server.address": "catalog-api",
+        "_dd.tags.process": "entrypoint.basedir:hello_catalog,entrypoint.name:main,entrypoint.type:script,svc.user:true",
+        "language": "python",
+        "_dd.p.tid": "6ac98b3b00000000",
+        "url.path": "/products/SKU-0002",
+        "_dd.code_origin.frames.0.file": "/opt/venv/lib/python3.13/site-packages/hello_catalog/main.py",
+        "env": "e2e-dd",
+        "version": "0.1.0-e2e",
+        "team": "hello",
+        "network.protocol.version": "1.1",
+        "span.kind": "server",
+        "http.route": "/products/{sku}",
+        "http.request.method": "GET",
+        "_dd.parent_id": "d2d2dd14b606313f"
+       },
+       "metrics": {
+        "_dd.top_level": 1.0,
+        "_sampling_priority_v1": 1.0,
+        "_dd.tracer_kr": 1.0,
+        "process_id": 1.0,
+        "server.port": 8080.0,
+        "_top_level": 1.0
+       },
+       "links": [],
+       "trace_id_128": "6ac98b3b0000000057cbd91b18be1e8a",
+       "trace_id": 6326388811974450826,
+       "service": "hello-catalog-api",
+       "name": "server",
+       "resource": "GET /products/{sku}",
+       "span_id": 12640297203955374165,
+       "parent_id": 15191447574097047871
+      },
+      {
+       "meta": {
+        "_dd.code_origin.frames.0.method": "build_app.<locals>.get_product",
+        "http.status_code": "200",
+        "_dd.code_origin.type": "entry",
+        "_dd.code_origin.frames.0.type": "hello_catalog.main",
+        "application": "enterprise-hello",
+        "_dd.code_origin.frames.0.line": "93",
+        "_dd.code_origin.frames.0.file": "/opt/venv/lib/python3.13/site-packages/hello_catalog/main.py",
+        "env": "e2e-dd",
+        "version": "0.1.0-e2e",
+        "team": "hello",
+        "span.kind": "server",
+        "http.route": "/products/{sku}",
+        "component": "fastapi",
+        "asgi.spec_version": "2.3",
+        "asgi.version": "3.0",
+        "http.method": "GET",
+        "http.version": "1.1",
+        "_dd.svc_src": "m",
+        "http.url": "http://catalog-api:8080/products/SKU-0002"
+       },
+       "metrics": {},
+       "links": [],
+       "trace_id_128": "6ac98b3b0000000057cbd91b18be1e8a",
+       "trace_id": 6326388811974450826,
+       "service": "hello-catalog-api",
+       "name": "fastapi.request",
+       "resource": "GET /products/{sku}",
+       "span_id": 9647612792715142810,
+       "parent_id": 12640297203955374165,
+       "type": "web"
+      },
+      {
+       "meta": {
+        "application": "enterprise-hello",
+        "env": "e2e-dd",
+        "version": "0.1.0-e2e",
+        "team": "hello",
+        "_dd.svc_src": "m"
+       },
+       "metrics": {},
+       "links": [],
+       "trace_id_128": "6ac98b3b0000000057cbd91b18be1e8a",
+       "trace_id": 6326388811974450826,
+       "service": "hello-catalog-api",
+       "name": "fastapi.serialize_response",
+       "resource": "fastapi.serialize_response",
+       "span_id": 4594563518929195916,
+       "parent_id": 9647612792715142810
       }
      ],
      "language": "python",
@@ -476,8 +570,8 @@
         "team": "hello",
         "application": "enterprise-hello",
         "_dd.p.dm": "-0",
-        "_dd.p.tid": "6ac984b000000000",
-        "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
+        "_dd.p.tid": "6ac98b3a00000000",
+        "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.base_service": "hello-orders-api",
@@ -490,13 +584,13 @@
         "_top_level": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b000000000e5bfb2cb61e5e4c4",
-       "trace_id": 16555147341827794116,
+       "trace_id_128": "6ac98b3a000000001f1c5784ca479ac3",
+       "trace_id": 2241762942364654275,
        "service": "hello-orders-api-http-client",
        "name": "http.request",
        "resource": "GET catalog-api:8080/products/SKU-0001",
-       "span_id": 4346137924890817408,
-       "parent_id": 10350818709295972516,
+       "span_id": 17266839870561281240,
+       "parent_id": 5256258481006028522,
        "type": "http"
       },
       {
@@ -507,25 +601,25 @@
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.convertedv1": "v04",
-        "otel.trace_id": "6ac984b000000000e5bfb2cb61e5e4c4",
+        "otel.trace_id": "6ac98b3a000000001f1c5784ca479ac3",
         "otel.library.name": "Hello.App",
         "otel.status_code": "STATUS_CODE_UNSET",
         "messaging.system": "servicebus",
         "messaging.operation.type": "send",
         "messaging.operation.name": "send",
         "messaging.destination.name": "order-events",
-        "messaging.message.id": "6430da72-7559-47bb-ae0c-3d6ebe0e6f8c",
+        "messaging.message.id": "510ff332-4022-452f-ac4a-819cca43f855",
         "version": "0.1.0-e2e"
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b000000000e5bfb2cb61e5e4c4",
-       "trace_id": 16555147341827794116,
+       "trace_id_128": "6ac98b3a000000001f1c5784ca479ac3",
+       "trace_id": 2241762942364654275,
        "service": "hello-orders-api",
        "name": "producer",
        "resource": "send order-events",
-       "span_id": 17106811353559154054,
-       "parent_id": 10350818709295972516,
+       "span_id": 17381559944177450576,
+       "parent_id": 5256258481006028522,
        "type": "custom"
       },
       {
@@ -537,7 +631,7 @@
         "http.status_code": "202",
         "team": "hello",
         "application": "enterprise-hello",
-        "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
+        "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.convertedv1": "v04",
@@ -557,12 +651,12 @@
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b000000000e5bfb2cb61e5e4c4",
-       "trace_id": 16555147341827794116,
+       "trace_id_128": "6ac98b3a000000001f1c5784ca479ac3",
+       "trace_id": 2241762942364654275,
        "service": "hello-orders-api",
        "name": "aspnet_core.request",
        "resource": "POST /orders",
-       "span_id": 10350818709295972516,
+       "span_id": 5256258481006028522,
        "type": "web"
       },
       {
@@ -575,8 +669,8 @@
         "team": "hello",
         "application": "enterprise-hello",
         "_dd.p.dm": "-0",
-        "_dd.p.tid": "6ac984b100000000",
-        "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
+        "_dd.p.tid": "6ac98b3b00000000",
+        "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.convertedv1": "v04",
@@ -596,12 +690,12 @@
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b100000000b288e1988b25595d",
-       "trace_id": 12864780380869581149,
+       "trace_id_128": "6ac98b3b000000008f6c2f8902d0254b",
+       "trace_id": 10334687510412666187,
        "service": "hello-orders-api",
        "name": "aspnet_core.request",
        "resource": "POST /orders",
-       "span_id": 13482227436115543284,
+       "span_id": 15835478089021180533,
        "type": "web"
       },
       {
@@ -616,8 +710,8 @@
         "team": "hello",
         "application": "enterprise-hello",
         "_dd.p.dm": "-0",
-        "_dd.p.tid": "6ac984b100000000",
-        "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
+        "_dd.p.tid": "6ac98b3b00000000",
+        "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.base_service": "hello-orders-api",
@@ -629,13 +723,13 @@
         "_top_level": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b100000000d1ce51983ecbf4e9",
-       "trace_id": 15118110713459766505,
+       "trace_id_128": "6ac98b3b0000000057cbd91b18be1e8a",
+       "trace_id": 6326388811974450826,
        "service": "hello-orders-api-http-client",
        "name": "http.request",
        "resource": "GET catalog-api:8080/products/SKU-0002",
-       "span_id": 8986460584813501628,
-       "parent_id": 17269421276243685326,
+       "span_id": 15191447574097047871,
+       "parent_id": 4781044622746076238,
        "type": "http"
       },
       {
@@ -646,25 +740,25 @@
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.convertedv1": "v04",
-        "otel.trace_id": "6ac984b100000000d1ce51983ecbf4e9",
+        "otel.trace_id": "6ac98b3b0000000057cbd91b18be1e8a",
         "otel.library.name": "Hello.App",
         "otel.status_code": "STATUS_CODE_UNSET",
         "messaging.system": "servicebus",
         "messaging.operation.type": "send",
         "messaging.operation.name": "send",
         "messaging.destination.name": "order-events",
-        "messaging.message.id": "905bfddc-fb34-4537-81bd-d885cf250212",
+        "messaging.message.id": "d6cc3a08-c84f-4167-97b1-b43bf3477fe1",
         "version": "0.1.0-e2e"
        },
        "metrics": {},
        "links": [],
-       "trace_id_128": "6ac984b100000000d1ce51983ecbf4e9",
-       "trace_id": 15118110713459766505,
+       "trace_id_128": "6ac98b3b0000000057cbd91b18be1e8a",
+       "trace_id": 6326388811974450826,
        "service": "hello-orders-api",
        "name": "producer",
        "resource": "send order-events",
-       "span_id": 7306399264203687098,
-       "parent_id": 17269421276243685326,
+       "span_id": 14985681499666932165,
+       "parent_id": 4781044622746076238,
        "type": "custom"
       },
       {
@@ -676,7 +770,7 @@
         "http.status_code": "202",
         "team": "hello",
         "application": "enterprise-hello",
-        "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
+        "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.convertedv1": "v04",
@@ -696,12 +790,12 @@
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b100000000d1ce51983ecbf4e9",
-       "trace_id": 15118110713459766505,
+       "trace_id_128": "6ac98b3b0000000057cbd91b18be1e8a",
+       "trace_id": 6326388811974450826,
        "service": "hello-orders-api",
        "name": "aspnet_core.request",
        "resource": "POST /orders",
-       "span_id": 17269421276243685326,
+       "span_id": 4781044622746076238,
        "type": "web"
       },
       {
@@ -714,8 +808,8 @@
         "team": "hello",
         "application": "enterprise-hello",
         "_dd.p.dm": "-0",
-        "_dd.p.tid": "6ac984b100000000",
-        "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
+        "_dd.p.tid": "6ac98b3b00000000",
+        "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.convertedv1": "v04",
@@ -735,12 +829,12 @@
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b100000000701fdcccd36ce86c",
-       "trace_id": 8079419028804528236,
+       "trace_id_128": "6ac98b3b00000000bdc0974f0eb68b43",
+       "trace_id": 13673094834501880643,
        "service": "hello-orders-api",
        "name": "aspnet_core.request",
        "resource": "GET /orders",
-       "span_id": 5610333524852331502,
+       "span_id": 8554064116328285335,
        "type": "web"
       },
       {
@@ -753,8 +847,8 @@
         "team": "hello",
         "application": "enterprise-hello",
         "_dd.p.dm": "-0",
-        "_dd.p.tid": "6ac984b100000000",
-        "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
+        "_dd.p.tid": "6ac98b3b00000000",
+        "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
         "env": "e2e-dd",
         "language": "dotnet",
         "_dd.convertedv1": "v04",
@@ -768,18 +862,18 @@
        "metrics": {
         "_dd.top_level": 1.0,
         "process_id": 1.0,
-        "_dd.tracer_kr": 1.0,
+        "_dd.tracer_kr": 0.0,
         "_sampling_priority_v1": 1.0,
         "_top_level": 1.0,
         "_sampling_priority_rate_v1": 1.0
        },
        "links": [],
-       "trace_id_128": "6ac984b100000000a3fe263570ea11e7",
-       "trace_id": 11816924483236270567,
+       "trace_id_128": "6ac98b3b0000000098c5000bb2b05331",
+       "trace_id": 11008204914419585841,
        "service": "hello-orders-api",
        "name": "aspnet_core.request",
        "resource": "GET /healthz",
-       "span_id": 1074964787019537882,
+       "span_id": 11218827040715704019,
        "type": "web"
       }
      ],
@@ -795,53 +889,31 @@
   "api_key_present": true
  },
  {
-  "path": "/api/v2/logs",
-  "bytes": 755,
-  "content_type": "application/json",
-  "content_encoding": "gzip",
-  "log_count": 2,
-  "api_key_present": true
- },
- {
-  "path": "/api/v2/logs",
-  "bytes": 1140,
-  "content_type": "application/json",
-  "content_encoding": "gzip",
-  "log_count": 4,
-  "api_key_present": true
- },
- {
   "path": "/api/v1/check_run",
-  "bytes": 148,
+  "bytes": 147,
+  "content_type": "application/json",
+  "content_encoding": "zstd",
+  "api_key_present": true
+ },
+ {
+  "path": "/intake/",
+  "bytes": 2158,
   "content_type": "application/json",
   "content_encoding": "zstd",
   "api_key_present": true
  },
  {
   "path": "/api/v2/series",
-  "bytes": 7427,
+  "bytes": 5866,
   "content_type": "application/x-protobuf",
   "content_encoding": "zstd",
   "strings": [
-   "cache.result:bypass",
    "env:e2e-dd",
-   "hello.catalog.cache.requests",
-   "hello.idempotency.replays",
-   "hello.orders.created",
-   "order.status:Pending",
    "service:hello-catalog-api",
    "service:hello-orders-api",
-   "service:hello-orders-api-http-client",
    "version:0.1.0-e2e",
    "version:7.84.2"
   ],
-  "api_key_present": true
- },
- {
-  "path": "/intake/",
-  "bytes": 2224,
-  "content_type": "application/json",
-  "content_encoding": "zstd",
   "api_key_present": true
  },
  {
@@ -898,125 +970,9 @@
   "api_key_present": true
  },
  {
-  "path": "/api/v0.2/traces",
-  "bytes": 1550,
-  "content_type": "application/x-protobuf",
-  "content_encoding": "zstd",
-  "traces": {
-   "tracer_payloads": [
-    {
-     "spans": [
-      {
-       "meta": {
-        "http.status_code": "200",
-        "runtime-id": "e7a8c9a4ee474f78a32eedc2010f8bb5",
-        "_dd.code_origin.type": "entry",
-        "_dd.code_origin.frames.0.type": "hello_catalog.main",
-        "application": "enterprise-hello",
-        "_dd.p.dm": "-0",
-        "_dd.parent_id": "7cb6524a21db9cbc",
-        "_dd.code_origin.frames.0.line": "93",
-        "url.scheme": "http",
-        "server.address": "catalog-api",
-        "_dd.tags.process": "entrypoint.basedir:hello_catalog,entrypoint.name:main,entrypoint.type:script,svc.user:true",
-        "language": "python",
-        "_dd.p.tid": "6ac984b100000000",
-        "url.path": "/products/SKU-0002",
-        "_dd.code_origin.frames.0.file": "/opt/venv/lib/python3.13/site-packages/hello_catalog/main.py",
-        "env": "e2e-dd",
-        "http.route": "/products/{sku}",
-        "version": "0.1.0-e2e",
-        "team": "hello",
-        "network.protocol.version": "1.1",
-        "span.kind": "server",
-        "_dd.code_origin.frames.0.method": "build_app.<locals>.get_product",
-        "http.request.method": "GET",
-        "_dd.convertedv1": "v05"
-       },
-       "metrics": {
-        "_dd.top_level": 1.0,
-        "_sampling_priority_v1": 1.0,
-        "_dd.tracer_kr": 1.0,
-        "process_id": 1.0,
-        "server.port": 8080.0,
-        "_top_level": 1.0
-       },
-       "links": [],
-       "trace_id_128": "6ac984b100000000d1ce51983ecbf4e9",
-       "trace_id": 15118110713459766505,
-       "service": "hello-catalog-api",
-       "name": "server",
-       "resource": "GET /products/{sku}",
-       "span_id": 14185145496881604046,
-       "parent_id": 8986460584813501628
-      },
-      {
-       "meta": {
-        "http.status_code": "200",
-        "_dd.code_origin.type": "entry",
-        "_dd.code_origin.frames.0.type": "hello_catalog.main",
-        "application": "enterprise-hello",
-        "_dd.code_origin.frames.0.line": "93",
-        "_dd.code_origin.frames.0.file": "/opt/venv/lib/python3.13/site-packages/hello_catalog/main.py",
-        "env": "e2e-dd",
-        "http.route": "/products/{sku}",
-        "version": "0.1.0-e2e",
-        "team": "hello",
-        "span.kind": "server",
-        "_dd.code_origin.frames.0.method": "build_app.<locals>.get_product",
-        "component": "fastapi",
-        "asgi.spec_version": "2.3",
-        "asgi.version": "3.0",
-        "http.method": "GET",
-        "http.version": "1.1",
-        "_dd.svc_src": "m",
-        "http.url": "http://catalog-api:8080/products/SKU-0002"
-       },
-       "metrics": {},
-       "links": [],
-       "trace_id_128": "6ac984b100000000d1ce51983ecbf4e9",
-       "trace_id": 15118110713459766505,
-       "service": "hello-catalog-api",
-       "name": "fastapi.request",
-       "resource": "GET /products/{sku}",
-       "span_id": 2684910244930499648,
-       "parent_id": 14185145496881604046,
-       "type": "web"
-      },
-      {
-       "meta": {
-        "application": "enterprise-hello",
-        "env": "e2e-dd",
-        "version": "0.1.0-e2e",
-        "team": "hello",
-        "_dd.svc_src": "m"
-       },
-       "metrics": {},
-       "links": [],
-       "trace_id_128": "6ac984b100000000d1ce51983ecbf4e9",
-       "trace_id": 15118110713459766505,
-       "service": "hello-catalog-api",
-       "name": "fastapi.serialize_response",
-       "resource": "fastapi.serialize_response",
-       "span_id": 13524641971151973212,
-       "parent_id": 2684910244930499648
-      }
-     ],
-     "language": "python",
-     "tracer_version": "4.15.6",
-     "env": "e2e-dd",
-     "app_version": "0.1.0-e2e"
-    }
-   ],
-   "hostname": "eh-dd-agent",
-   "env": "none"
-  },
-  "api_key_present": true
- },
- {
   "path": "/api/v2/profile",
-  "bytes": 60562,
-  "content_type": "multipart/form-data; boundary=0ce41c4e317288ec-83e4e9caf940c14a-a81f3635abb7a7fe-e3d0cecb14e856dc",
+  "bytes": 61284,
+  "content_type": "multipart/form-data; boundary=90cae63fcb0c57f5-f84fc72587484b0e-41262a11173acf6a-0ed280da880f6d45",
   "content_encoding": null,
   "profile": {
    "parts": [
@@ -1028,12 +984,12 @@
     {
      "name": "code-provenance.json",
      "filename": "code-provenance.json",
-     "bytes": 2423
+     "bytes": 2449
     },
     {
      "name": "profile.pprof",
      "filename": "profile.pprof",
-     "bytes": 55143
+     "bytes": 55839
     }
    ],
    "event": {
@@ -1041,28 +997,28 @@
      "code-provenance.json",
      "profile.pprof"
     ],
-    "tags_profiler": "env:e2e-dd,service:hello-catalog-api,version:0.1.0-e2e,language:python,runtime:CPython,runtime-id:e7a8c9a4ee474f78a32eedc2010f8bb5,runtime_version:3.13.16,profiler_version:4.15.6,process_id:1,profiler_config:stack_v2_lock_mem_heap_exception_exp_dd_CAP1.0_MAXF64,application:enterprise-hello,team:hello,runtime_platform:x86_64-unknown-linux-gnu",
-    "start": "2026-10-10T00:19:57.481670114Z",
-    "end": "2026-10-10T00:20:07.835133398Z",
+    "tags_profiler": "env:e2e-dd,service:hello-catalog-api,version:0.1.0-e2e,language:python,runtime:CPython,runtime-id:e9c8c6fa9ad647909cd2e5532cf55372,runtime_version:3.13.16,profiler_version:4.15.6,process_id:1,profiler_config:stack_v2_lock_mem_heap_exception_exp_dd_CAP1.0_MAXF64,application:enterprise-hello,team:hello,runtime_platform:x86_64-unknown-linux-gnu",
+    "start": "2026-10-10T00:47:51.558775660Z",
+    "end": "2026-10-10T00:48:01.920750406Z",
     "family": "python",
     "version": "4",
     "endpoint_counts": null,
     "process_tags": "entrypoint.basedir:hello_catalog,entrypoint.name:main,entrypoint.type:script,svc.user:true",
     "internal": {
-     "sampling_interval_us": 37429,
-     "string_table_count": 453,
-     "sample_count": 739,
-     "sampling_event_count": 464,
+     "sampling_interval_us": 37616,
+     "string_table_count": 535,
+     "sample_count": 670,
+     "sampling_event_count": 418,
      "fast_copy_memory_enabled": false,
      "fast_copy_memory_user_disabled": false,
      "fast_copy_memory_capable": true,
      "fast_copy_memory_syscall_fallback": false,
-     "heap_tracker_count": 34,
+     "heap_tracker_count": 31,
      "heap_tracker_cap_drops": 0,
      "asyncio_task_count": 0,
      "greenlet_count": 0,
      "copy_memory_error_count": 0,
-     "sample_capture_cpu_time_us": 95937,
+     "sample_capture_cpu_time_us": 99982,
      "libdatadog_version": "1.0.0"
     },
     "info": {
@@ -1098,22 +1054,22 @@
        "lock.enabled": true,
        "lock.name_inspect_dir": true,
        "lock.exclude_modules": [
-        "bytecode",
-        "http",
         "envier",
+        "wrapt",
+        "werkzeug",
+        "gunicorn",
+        "logging",
         "uvicorn",
         "ddsketch",
-        "h11",
-        "threading",
-        "wrapt",
-        "concurrent",
-        "gunicorn",
-        "asyncio",
         "anyio",
-        "datadog",
+        "h11",
         "ddtrace",
-        "werkzeug",
-        "logging"
+        "http",
+        "threading",
+        "asyncio",
+        "concurrent",
+        "bytecode",
+        "datadog"
        ],
        "memory.enabled": true,
        "memory.events_buffer": 16,
@@ -1136,8 +1092,8 @@
  },
  {
   "path": "/api/v2/profile",
-  "bytes": 104050,
-  "content_type": "multipart/form-data; boundary=bdf724415a0852e7-d0d5030f72f2f707-a806f3aba64fd721-0001de5970c73328",
+  "bytes": 113081,
+  "content_type": "multipart/form-data; boundary=62846edae6a3f0f9-cacdebfb87478938-2cdc50026833bd0c-a315d1cbf73f4628",
   "content_encoding": null,
   "profile": {
    "parts": [
@@ -1149,12 +1105,12 @@
     {
      "name": "metrics.json",
      "filename": "metrics.json",
-     "bytes": 577
+     "bytes": 583
     },
     {
      "name": "profile.pprof",
      "filename": "profile.pprof",
-     "bytes": 101458
+     "bytes": 110483
     }
    ],
    "event": {
@@ -1162,7 +1118,7 @@
      "metrics.json",
      "profile.pprof"
     ],
-    "end": "2026-10-10T00:20:08.232141435Z",
+    "end": "2026-10-10T00:48:02.240334913Z",
     "endpoint_counts": {
      "GET /healthz": 1,
      "GET /orders": 1,
@@ -1185,8 +1141,8 @@
       "provider_list": "walltime_cpu_exceptions_lock_gc_cpuGc_threadsLifetime",
       "runtime": {
        "os": "linux",
-       "runtime-id": "113d619c-1e9d-4b47-972e-c60b766c44f6",
-       "start time": "2026-10-10T00:19:55Z",
+       "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
+       "start time": "2026-10-10T00:47:50Z",
        "version": "core-10.0"
       },
       "ssi": {
@@ -1209,16 +1165,274 @@
        "Cpu Limit": "0.000000",
        "Cpu Profiler Type": "TimerCreate",
        "Number of Cores": "4",
-       "Start Time": "2026-10-10T00:19:55Z"
+       "Start Time": "2026-10-10T00:47:50Z"
       }
      }
     },
     "process_tags": "entrypoint.basedir:app,entrypoint.name:program,entrypoint.workdir:app,svc.user:true",
-    "start": "2026-10-10T00:19:58.292374913Z",
-    "tags_profiler": "language:dotnet,profiler_version:3.55.1,process_architecture:x64,process_id:1,host:0b0c0af77eb9,team:hello,application:enterprise-hello,env:e2e-dd,version:0.1.0-e2e,service:hello-orders-api,runtime-id:113d619c-1e9d-4b47-972e-c60b766c44f6,profile_seq:0,number_of_cpu_cores:4,runtime_platform:x86_64-unknown-linux-gnu",
+    "start": "2026-10-10T00:47:52.300398425Z",
+    "tags_profiler": "language:dotnet,profiler_version:3.55.1,process_architecture:x64,process_id:1,host:e58463a0ba25,team:hello,application:enterprise-hello,env:e2e-dd,version:0.1.0-e2e,service:hello-orders-api,runtime-id:4929f381-d508-43c7-b613-e10834dee04c,profile_seq:0,number_of_cpu_cores:4,runtime_platform:x86_64-unknown-linux-gnu",
     "version": "4"
    }
   },
+  "api_key_present": true
+ },
+ {
+  "path": "/api/v0.2/stats",
+  "bytes": 1892,
+  "content_type": "application/msgpack",
+  "content_encoding": "gzip",
+  "api_key_present": true
+ },
+ {
+  "path": "/api/v2/profile",
+  "bytes": 24758,
+  "content_type": "multipart/form-data; boundary=de3da5eeea3e95f7-1c89f561c391bf16-b26628e0b0cdb952-bf5828a397e303fa",
+  "content_encoding": null,
+  "profile": {
+   "parts": [
+    {
+     "name": "event",
+     "filename": "event.json",
+     "bytes": 2423
+    },
+    {
+     "name": "code-provenance.json",
+     "filename": "code-provenance.json",
+     "bytes": 2449
+    },
+    {
+     "name": "profile.pprof",
+     "filename": "profile.pprof",
+     "bytes": 19313
+    }
+   ],
+   "event": {
+    "attachments": [
+     "code-provenance.json",
+     "profile.pprof"
+    ],
+    "tags_profiler": "env:e2e-dd,service:hello-catalog-api,version:0.1.0-e2e,language:python,runtime:CPython,runtime-id:e9c8c6fa9ad647909cd2e5532cf55372,runtime_version:3.13.16,profiler_version:4.15.6,process_id:1,profiler_config:stack_v2_lock_mem_heap_exception_exp_dd_CAP1.0_MAXF64,application:enterprise-hello,team:hello,runtime_platform:x86_64-unknown-linux-gnu",
+    "start": "2026-10-10T00:48:01.920628088Z",
+    "end": "2026-10-10T00:48:11.561568638Z",
+    "family": "python",
+    "version": "4",
+    "endpoint_counts": null,
+    "process_tags": "entrypoint.basedir:hello_catalog,entrypoint.name:main,entrypoint.type:script,svc.user:true",
+    "internal": {
+     "sampling_interval_us": 27713,
+     "string_table_count": 535,
+     "sample_count": 1092,
+     "sampling_event_count": 364,
+     "fast_copy_memory_enabled": true,
+     "fast_copy_memory_user_disabled": false,
+     "fast_copy_memory_capable": true,
+     "fast_copy_memory_syscall_fallback": false,
+     "heap_tracker_count": 31,
+     "heap_tracker_cap_drops": 0,
+     "asyncio_task_count": 0,
+     "greenlet_count": 0,
+     "copy_memory_error_count": 0,
+     "sample_capture_cpu_time_us": 65768,
+     "libdatadog_version": "1.0.0"
+    },
+    "info": {
+     "profiler": {
+      "settings": {
+       "enabled": true,
+       "agentless": false,
+       "code_provenance": true,
+       "endpoint_collection": true,
+       "output_pprof": null,
+       "upload_interval": 10.0,
+       "capture_pct": 1.0,
+       "max_frames": 64,
+       "ignore_profiler": false,
+       "max_time_usage_pct": 1.0,
+       "api_timeout_ms": 10000,
+       "timeline_enabled": true,
+       "enable_asserts": false,
+       "sample_pool_capacity": 4,
+       "stack.enabled": true,
+       "stack.adaptive_sampling": true,
+       "stack.adaptive_sampling_target_overhead": 1.0,
+       "stack.adaptive_sampling_max_interval": 100000,
+       "stack.adaptive_sampling_baseline": 0.0,
+       "stack.adaptive_sampling_p_stable_window_s": 600,
+       "stack.adaptive_sampling_p_stable_percentile": 95.0,
+       "stack.max_threads": 25,
+       "stack.max_tasks": 50,
+       "stack.uvloop": true,
+       "stack.native_frames": true,
+       "stack.gc_enabled": false,
+       "stack.fast_copy": true,
+       "lock.enabled": true,
+       "lock.name_inspect_dir": true,
+       "lock.exclude_modules": [
+        "envier",
+        "wrapt",
+        "werkzeug",
+        "gunicorn",
+        "logging",
+        "uvicorn",
+        "ddsketch",
+        "anyio",
+        "h11",
+        "ddtrace",
+        "http",
+        "threading",
+        "asyncio",
+        "concurrent",
+        "bytecode",
+        "datadog"
+       ],
+       "memory.enabled": true,
+       "memory.events_buffer": 16,
+       "memory.mem_domain_enabled": true,
+       "heap.enabled": true,
+       "heap._sample_size": null,
+       "native_heap.enabled": false,
+       "pytorch.enabled": false,
+       "pytorch.events_limit": 1000000,
+       "pytorch.max_frames": 128,
+       "exception.enabled": true,
+       "exception.sampling_interval": 100,
+       "exception.collect_message": false
+      }
+     }
+    }
+   }
+  },
+  "api_key_present": true
+ },
+ {
+  "path": "/api/v2/profile",
+  "bytes": 43118,
+  "content_type": "multipart/form-data; boundary=5c0a63e9591a4d64-1766f6f53fd9e161-69e6265059f8a5d4-5cea4e47490e19a8",
+  "content_encoding": null,
+  "profile": {
+   "parts": [
+    {
+     "name": "event",
+     "filename": "event.json",
+     "bytes": 1395
+    },
+    {
+     "name": "metrics.json",
+     "filename": "metrics.json",
+     "bytes": 546
+    },
+    {
+     "name": "profile.pprof",
+     "filename": "profile.pprof",
+     "bytes": 40620
+    }
+   ],
+   "event": {
+    "attachments": [
+     "metrics.json",
+     "profile.pprof"
+    ],
+    "end": "2026-10-10T00:48:12.260080322Z",
+    "endpoint_counts": null,
+    "family": "dotnet",
+    "info": {
+     "GC Config": {
+      "GC Mode": "Workstation"
+     },
+     "System Overrides": {
+      "DD_PROFILING_ENABLED": "true"
+     },
+     "System Properties": {
+      "DD_PROFILING_UPLOAD_PERIOD": "10"
+     },
+     "profiler": {
+      "activation": "manual",
+      "provider_list": "walltime_cpu_exceptions_lock_gc_cpuGc_threadsLifetime",
+      "runtime": {
+       "os": "linux",
+       "runtime-id": "4929f381-d508-43c7-b613-e10834dee04c",
+       "start time": "2026-10-10T00:47:50Z",
+       "version": "core-10.0"
+      },
+      "ssi": {
+       "mechanism": "none"
+      },
+      "version": "3.55.1"
+     }
+    },
+    "internal": {
+     "libdatadog_version": "1.0.0",
+     "systemInfo": {
+      "Environment Overrides": {
+       "DD_PROFILING_ENABLED": "true"
+      },
+      "Environment Variables": {
+       "DD_PROFILING_UPLOAD_PERIOD": "10"
+      },
+      "Runtime Settings": {
+       "Clr Version": "core-10.0",
+       "Cpu Limit": "0.000000",
+       "Cpu Profiler Type": "TimerCreate",
+       "Number of Cores": "4",
+       "Start Time": "2026-10-10T00:47:50Z"
+      }
+     }
+    },
+    "process_tags": "entrypoint.basedir:app,entrypoint.name:program,entrypoint.workdir:app,svc.user:true",
+    "start": "2026-10-10T00:48:02.262967611Z",
+    "tags_profiler": "language:dotnet,profiler_version:3.55.1,process_architecture:x64,process_id:1,host:e58463a0ba25,team:hello,application:enterprise-hello,env:e2e-dd,version:0.1.0-e2e,service:hello-orders-api,runtime-id:4929f381-d508-43c7-b613-e10834dee04c,profile_seq:1,number_of_cpu_cores:4,runtime_platform:x86_64-unknown-linux-gnu",
+    "version": "4"
+   }
+  },
+  "api_key_present": true
+ },
+ {
+  "path": "/api/beta/sketches",
+  "bytes": 245,
+  "content_type": "application/x-protobuf",
+  "content_encoding": "zstd",
+  "strings": [
+   "env:e2e-dd",
+   "hello.http.dependency.duration",
+   "service:hello-orders-api",
+   "version:0.1.0-e2e"
+  ],
+  "api_key_present": true
+ },
+ {
+  "path": "/intake/",
+  "bytes": 710,
+  "content_type": "application/json",
+  "content_encoding": "zstd",
+  "api_key_present": true
+ },
+ {
+  "path": "/api/v1/check_run",
+  "bytes": 130,
+  "content_type": "application/json",
+  "content_encoding": "zstd",
+  "api_key_present": true
+ },
+ {
+  "path": "/api/v2/series",
+  "bytes": 12282,
+  "content_type": "application/x-protobuf",
+  "content_encoding": "zstd",
+  "strings": [
+   "cache.result:bypass",
+   "env:e2e-dd",
+   "hello.catalog.cache.requests",
+   "hello.idempotency.replays",
+   "hello.orders.created",
+   "order.status:Pending",
+   "service:hello-catalog-api",
+   "service:hello-orders-api",
+   "service:hello-orders-api-http-client",
+   "status:accepted",
+   "version:0.1.0-e2e",
+   "version:7.84.2"
+  ],
   "api_key_present": true
  }
 ]

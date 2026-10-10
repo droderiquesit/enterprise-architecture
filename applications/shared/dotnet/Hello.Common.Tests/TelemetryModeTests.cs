@@ -155,6 +155,12 @@ public sealed class TelemetryModeTests
                 Assert.Equal("255", root.GetProperty("dd.trace_id").GetString());
             }
 
+            using (Datadog.Trace.Tracer.Activate(traceIdLow: 11803532876627986230UL, spanId: 67667974448284343UL, rawTraceId: "4bf92f3577b34da6a3ce929d0e0e4736"))
+            {
+                // response/message traceparent follows the Datadog span, not ASP.NET Core's own Activity
+                Assert.Equal("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", HelloTelemetry.CurrentTraceparent());
+            }
+
             // no Datadog span and no Activity: correlation fields omitted
             Assert.Null(Activity.Current);
             var none = Parse(writer);

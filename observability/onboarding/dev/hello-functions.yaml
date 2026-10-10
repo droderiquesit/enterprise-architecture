@@ -1,6 +1,7 @@
-# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# Lab onboarding manifest v2 (Enterprise Hello, env dev): identity + tags + resources + telemetry routing.
+# ${contract:...} references are resolved at plan
 # time from contracts (render.py references -> contract_references). See observability/README.md.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: hello-functions
@@ -21,25 +22,13 @@ metadata:
   - name: platform-engineering mailbox
     type: email
     contact: platform-engineering@example.com
+  region: swedencentral
 spec:
   architecture: functions
   runtime: python
-  telemetry:
-    profile: worker
   resources:
   - id: ${contract:deploy-functions.function_apps.premium.id}
     type: Microsoft.Web/sites
     role: app
     required: false
   presence_ref: deploy-functions.function_apps.premium.id
-  notifications:
-    default:
-    - team-platform-engineering
-    critical:
-    - team-platform-engineering
-    - oncall
-    warning:
-    - team-platform-engineering
-  catalog:
-    component_of:
-    - system:enterprise-hello

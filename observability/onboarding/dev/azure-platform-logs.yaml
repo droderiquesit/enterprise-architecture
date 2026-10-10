@@ -1,7 +1,7 @@
 # Lab onboarding manifest (Enterprise Hello, env dev): Azure control-plane / platform logs of the lab subscription.
 # The logs themselves are exported by obs-diagnostics (Activity Log, resource diagnostic settings, optional Entra)
-# and shipped by the obs-telemetry-transport aggregator; this manifest only creates the monitors.
-apiVersion: observability/v1
+# and shipped by the obs-telemetry-transport log pipeline; this manifest gives them their identity (tag set).
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: azure-platform-logs
@@ -20,29 +20,9 @@ metadata:
   - name: observability mailbox
     type: email
     contact: observability@example.com
+  region: swedencentral
 spec:
   architecture: external
   runtime: other
-  telemetry:
-    profile: azure-platform-logs
   resources: []
-  idle_behavior:
-    scale_to_zero: false
-  # onboarded only where the Event Hubs log path exists (obs-telemetry-transport with event_hub_mode create|existing)
   presence_ref: obs-telemetry-transport.event_hub.namespace_id
-  monitors:
-    params:
-      protected_resource_groups: "resource_group:eh-rg-*"
-      service_health_regions: '(@properties.region:Sweden\ Central OR @properties.region:Global)'
-      entra_enabled: false
-  notifications:
-    default:
-    - team-observability
-    critical:
-    - team-observability
-    - oncall
-    warning:
-    - team-observability
-  catalog:
-    component_of:
-    - system:enterprise-hello

@@ -1,5 +1,5 @@
 # Existing AKS workload + existing PostgreSQL flexible server.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: orders-api
@@ -9,32 +9,22 @@ metadata:
   domain: commerce
   tier: critical
   env: prod
-  runbook_url: https://wiki.contoso.example/runbooks/orders-api
-  languages: [java]
-  depends_on: ["datastore:orders-postgresql"]
+  languages:
+  - java
+  depends_on:
+  - datastore:orders-postgresql
+  region: westeurope
 spec:
   architecture: aks
   runtime: java
   telemetry:
-    profile: http-api
-    dbm: {enabled: true, engine: postgres}
+    dbm:
+      enabled: true
+      engine: postgres
   resources:
-    - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks-prod/providers/Microsoft.ContainerService/managedClusters/aks-prod-weu
-      type: Microsoft.ContainerService/managedClusters
-      role: cluster
-    - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data-prod/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-orders-prod
-      type: Microsoft.DBforPostgreSQL/flexibleServers
-      role: db
-  endpoints:
-    - name: internal
-      url: https://orders-api.internal.contoso.example
-      visibility: private
-      health_path: /readyz
-  slos:
-    - {name: availability, type: availability, target: 99.9, timeframe: 30d}
-    - {name: latency, type: latency, target: 99.0, timeframe: 30d, threshold_ms: 300}
-  monitors:
-    params: {pg_cpu_pct: 85}
-  notifications:
-    default: [orders]
-    critical: [orders-pager]
+  - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks-prod/providers/Microsoft.ContainerService/managedClusters/aks-prod-weu
+    type: Microsoft.ContainerService/managedClusters
+    role: cluster
+  - id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-data-prod/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-orders-prod
+    type: Microsoft.DBforPostgreSQL/flexibleServers
+    role: db

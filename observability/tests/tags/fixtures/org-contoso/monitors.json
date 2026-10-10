@@ -1,0 +1,213 @@
+[
+ {
+  "id": 101,
+  "name": "[prod] orders-api error rate",
+  "type": "query alert",
+  "query": "avg(last_10m):sum:trace.aspnet_core.request.errors{env:production,service:orders-api}.as_count() / sum:trace.aspnet_core.request.hits{env:production,service:orders-api}.as_count() > 0.05",
+  "tags": [
+   "team:orders",
+   "owner:orders@contoso.example",
+   "severity:sev2"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 102,
+  "name": "[prod] orders-api error logs",
+  "type": "log alert",
+  "query": "logs(\"service:orders-api env:production status:error business_unit:retail\").index(\"*\").rollup(\"count\").by(\"service,env\").last(\"5m\") > 50",
+  "tags": [
+   "team:orders"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 103,
+  "name": "[prod] orders-api 5xx spans",
+  "type": "trace-analytics alert",
+  "query": "trace-analytics(\"env:production service:orders-api @http.status_code:5*\").rollup(\"count\").by(\"resource_name\").last(\"10m\") > 20",
+  "tags": [
+   "team:orders"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 104,
+  "name": "[prod] storefront RUM errors",
+  "type": "rum alert",
+  "query": "rum(\"@application.id:11111111-aaaa-bbbb-cccc-222222222222 env:production service:orders-web @type:error\").rollup(\"count\").last(\"15m\") > 10",
+  "tags": [
+   "team:web"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 105,
+  "name": "[prod] HTTP check",
+  "type": "service check",
+  "query": "\"http.can_connect\".over(\"env:production\",\"team:orders\").exclude(\"host:canary-1\").by(\"host\",\"instance\").last(3).count_by_status()",
+  "tags": [
+   "team:orders"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 106,
+  "name": "[prod] inventory App Service CPU",
+  "type": "query alert",
+  "query": "avg(last_15m):avg:azure.web_sites.cpu_time{subscription_id:00000000-0000-0000-0000-000000000000,resource_group:rg-apps-prod,name:app-inventory-prod,application:orders} > 80",
+  "tags": [
+   "team:orders"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 107,
+  "name": "[prod] AKS deployment CPU",
+  "type": "metric alert",
+  "query": "avg(last_5m):avg:kubernetes.cpu.usage.total{kube_cluster_name:aks-prod-weu AND kube_namespace IN (orders,web) AND NOT tier:low} by {kube_deployment} > 900000000",
+  "tags": [
+   "team:platform"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 108,
+  "name": "[prod] orders composite",
+  "type": "composite",
+  "query": "101 && 102",
+  "tags": [
+   "team:orders"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 109,
+  "name": "[prod] catalog error logs (formula)",
+  "type": "query alert",
+  "query": "formula(\"q1\").last(\"5m\") > 5",
+  "tags": [
+   "team:catalog"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 5
+   },
+   "variables": [
+    {
+     "data_source": "logs",
+     "name": "q1",
+     "indexes": [
+      "*"
+     ],
+     "compute": {
+      "aggregation": "count"
+     },
+     "search": {
+      "query": "service:catalog-api env:production status:error"
+     },
+     "group_by": [
+      {
+       "facet": "service",
+       "limit": 10
+      }
+     ]
+    }
+   ]
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 110,
+  "name": "[prod] no orders created",
+  "type": "query alert",
+  "query": "sum(last_30m):sum:custom.orders.created{environment:production}.as_count() < 1",
+  "tags": [
+   "team:orders"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ },
+ {
+  "id": 111,
+  "name": "[prod] DB connections",
+  "type": "query alert",
+  "query": "avg(last_5m):avg:postgresql.percent_usage_connections{env:production,service:orders-api,domain:commerce} by {db} > 0.9",
+  "tags": [
+   "team:data",
+   "cost_center:cc-1234"
+  ],
+  "message": "synthetic",
+  "options": {
+   "thresholds": {
+    "critical": 1
+   }
+  },
+  "overall_state": "OK",
+  "created": "2026-09-01T10:00:00+00:00"
+ }
+]

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "onboarding-manifest.v2.schema.json",
+  "title": "ServiceOnboarding manifest v2 (one per service): identity + tags + resources + telemetry routing",
+  "description": "Declares WHO a service is (identity and Datadog tags, rendered through the tag policy), WHICH Azure resources belong to it and HOW its telemetry is collected (log route, APM mode, profiler, DBM, RUM application). The package creates no monitors, SLOs or dashboards; the 1.x/2.x content sections (monitors, notifications, catalog, endpoints, slos, idle_behavior, dashboards, telemetry.profile) are accepted for the optional extras/content add-on and ignored by the core tools (with a notice). String values may contain ${contract:<contract-name>.<dot.path>} references.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "$defs": {
+    "ref_or_string": {"type": "string", "minLength": 1},
+    "slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+    "tag_map": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_./-]{0,99}$"},
+      "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 200}
+    },
+    "resource": {
+      "type": "object",
+      "required": ["id", "type", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/ref_or_string", "description": "Azure resource id (verbatim) or a ${contract:...} reference."},
+        "type": {"type": "string", "pattern": "^[A-Za-z]+\\.[A-Za-z]+/[A-Za-z/]+$", "description": "ARM resource type, e.g. Microsoft.Sql/servers/databases"},
+        "role": {"$ref": "#/$defs/slug", "description": "Unique within the manifest."},
+        "required": {"type": "boolean", "default": true, "description": "false: an unresolved reference drops the resource instead of failing."},
+        "tags": {"$ref": "#/$defs/tag_map", "description": "Extra Datadog tags of this resource (merged over the service's tag set)."},
+        "entities": {"type": "array", "items": {"type": "string"}, "description": "(content add-on only) messaging entities."},
+        "tier": {"enum": ["security", "standard", "verbose"], "description": "Diagnostic-settings platform-log tier of this resource."}
+      }
+    },
+    "deprecated": {"description": "Content (monitor/SLO/dashboard) section of manifest v1: used only by extras/content; ignored by the core package."}
+  },
+  "properties": {
+    "apiVersion": {"enum": ["observability/v2"]},
+    "kind": {"const": "ServiceOnboarding"},
+    "metadata": {
+      "type": "object",
+      "required": ["service", "team", "owner", "env"],
+      "additionalProperties": false,
+      "properties": {
+        "service": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$", "description": "Datadog unified service tag value (DD_SERVICE)."},
+        "display_name": {"type": "string"},
+        "team": {"$ref": "#/$defs/slug"},
+        "owner": {"type": "string", "minLength": 1},
+        "application": {"type": "string"},
+        "domain": {"type": "string"},
+        "tier": {"type": "string", "enum": ["critical", "high", "medium", "low", "infrastructure"]},
+        "region": {"type": "string", "description": "Azure location of the service (tag policy key region)."},
+        "cost_center": {"type": "string"},
+        "component": {"type": "string"},
+        "env": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}], "description": "Environment(s) this manifest applies to."},
+        "repository": {"type": "string"},
+        "description": {"type": "string"},
+        "languages": {"type": "array", "items": {"type": "string"}},
+        "depends_on": {"type": "array", "items": {"type": "string", "pattern": "^(service|datastore|queue|library):[a-z0-9._-]+$"}},
+        "contacts": {"type": "array", "items": {"type": "object"}},
+        "tags": {"$ref": "#/$defs/tag_map", "description": "Additional Datadog tags of the service (canonical policy keys always win)."},
+        "runbook_url": {"$ref": "#/$defs/deprecated"}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["architecture"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean", "default": true},
+        "architecture": {"enum": ["aks", "aro", "aca", "aci", "appservice", "functions", "logicapp", "vm", "vmss", "batch", "swa", "external"]},
+        "runtime": {"enum": ["dotnet", "python", "node", "java", "browser", "other"]},
+        "os_type": {"enum": ["linux", "windows"], "default": "linux"},
+        "resources": {"type": "array", "items": {"$ref": "#/$defs/resource"}},
+        "telemetry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "logs": {"type": "object", "additionalProperties": false, "properties": {"route": {"enum": ["auto", "daemonset", "sidecar", "eventhub", "host", "none"]}}},
+            "apm": {"type": "object", "additionalProperties": false, "properties": {
+              "mode": {"enum": ["policy", "datadog", "otel", "none"]},
+              "sample_rate": {"type": "number", "minimum": 0, "maximum": 1}}},
+            "traces": {"type": "object", "additionalProperties": false, "properties": {
+              "enabled": {"type": "boolean"}, "sample_rate": {"type": "number", "minimum": 0, "maximum": 1}, "server_operation": {"type": "string"}}},
+            "profiling": {"type": "object", "additionalProperties": false, "properties": {"enabled": {"type": "boolean"}}},
+            "rum": {"type": "object", "additionalProperties": false, "properties": {
+              "enabled": {"type": "boolean"},
+              "application_ref": {"type": "string", "description": "contract path of the RUM application id (obs-prereqs.rum.applications.<k>.application_id) or a literal id"},
+              "allowed_tracing_origins": {"type": "array", "items": {"type": "string"}}}},
+            "dbm": {"type": "object", "additionalProperties": false, "properties": {
+              "enabled": {"type": "boolean"}, "engine": {"enum": ["postgres", "sqlserver", "mysql"]}, "endpoint_ref": {"type": "string"}}},
+            "profile": {"$ref": "#/$defs/deprecated"}
+          }
+        },
+        "presence_ref": {"type": "string", "description": "When set and absent from the contract references, the service is not deployed in this environment."},
+        "endpoints": {"$ref": "#/$defs/deprecated"},
+        "slos": {"$ref": "#/$defs/deprecated"},
+        "monitors": {"$ref": "#/$defs/deprecated"},
+        "notifications": {"$ref": "#/$defs/deprecated"},
+        "idle_behavior": {"$ref": "#/$defs/deprecated"},
+        "dashboards": {"$ref": "#/$defs/deprecated"},
+        "catalog": {"$ref": "#/$defs/deprecated"}
+      }
+    }
+  }
+}

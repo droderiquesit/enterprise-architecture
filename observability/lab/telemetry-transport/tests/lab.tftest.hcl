@@ -22,6 +22,12 @@ mock_provider "azapi" {
     }
   }
 }
+mock_provider "datadog" {
+  override_during = plan
+  mock_resource "datadog_observability_pipeline" {
+    defaults = { id = "aaaaaaaa-0000-0000-0000-000000000001" }
+  }
+}
 
 variables {
   environment = {
@@ -73,6 +79,68 @@ variables {
 
 run "lab_defaults" {
   command = plan
+  assert {
+    condition     = output.contract.datadog_site == "datadoghq.com" && output.contract.api_key_ref == "dsv://eh/dev/datadog-api-key#value"
+    error_message = "Site + API key DSV reference from foundation-identity v2."
+  }
+  assert {
+    condition     = output.contract.aggregator.kind == "observability_pipelines" && module.transport.op_pipeline_id == "aaaaaaaa-0000-0000-0000-000000000001" && module.transport.op_worker_id != null && module.transport.aggregator_id == null
+    error_message = "Package default: Observability Pipelines (pipeline created, Worker on ACA, no Fluent Bit aggregator)."
+  }
+  assert {
+    condition     = output.contract.fluentbit.sidecar_mode == "forward" && output.contract.fluentbit.forward_shared_key_ref == null && output.contract.aggregator.agent_logs_url == "http://x.internal.happy-hill-1.swedencentral.azurecontainerapps.io:8282"
+    error_message = "Edge collectors forward to the Worker (no key on the edge); Agents get the Worker's agent source URL."
+  }
+  assert {
+    condition     = output.contract.env.fleet.EH_LOG_PIPELINE == "observability_pipelines" && output.contract.env.fleet.EH_APM_MODE == "datadog" && output.contract.env.apm_gateway.DD_TRACE_AGENT_URL == "http://x.internal.happy-hill-1.swedencentral.azurecontainerapps.io:8126" && module.transport.apm_gateway_id != null
+    error_message = "Fleet switches and the APM gateway URL are published for modules/instrumentation."
+  }
+  assert {
+    condition     = output.contract.secrets.fetch_image == "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222" && output.contract.secrets.provider == "delinea-dsv"
+    error_message = "The contract publishes the DSV runtime settings and the dsv-fetch image."
+  }
+  assert {
+    condition     = local.env_level_tags["env"] == "dev" && local.env_level_tags["region"] == "swedencentral" && local.env_level_tags["application"] == "enterprise-hello" && !contains(keys(local.env_level_tags), "service")
+    error_message = "Environment-level default tags from modules/tagging (no service-level keys)."
+  }
+  assert {
+    condition     = local.service_tags["hello-orders-api"]["team"] == "orders" && length(local.service_tags) >= 30
+    error_message = "Per-service tag sets come from the rendered onboarding (onboarding/rendered/dev)."
+  }
+  assert {
+    condition     = local.batch_op && strcontains(local.batch_setup_script, "EH_LOG_PATHS") && !strcontains(local.batch_setup_script, "--map DD_API_KEY=$API_KEY_REF")
+    error_message = "Batch nodes forward to the Worker: no Datadog API key on the node."
+  }
+  assert {
+    condition     = jsonencode(output.contract.fluentbit.aca_console_allow) == jsonencode(["eh-caj-*"])
+    error_message = "Only ACA jobs' console logs are forwarded by default."
+  }
+}
+
+run "op_existing_pipeline" {
+  command = plan
+  variables {
+    settings = { op_pipeline_id = "bbbbbbbb-0000-0000-0000-000000000002" }
+  }
+  assert {
+    condition     = module.transport.op_pipeline_id == "bbbbbbbb-0000-0000-0000-000000000002" && output.contract.aggregator.pipeline_id == "bbbbbbbb-0000-0000-0000-000000000002"
+    error_message = "An existing pipeline id is used as is (no datadog_observability_pipeline created)."
+  }
+}
+
+run "reject_apm_gateway_cost_ceiling" {
+  command = plan
+  variables {
+    settings = { apm_gateway_max_replicas = 9 }
+  }
+  expect_failures = [var.settings]
+}
+
+run "fluent_bit_direct" {
+  command = plan
+  variables {
+    settings = { fleet = { log_pipeline = "fluent_bit_direct", apm = { mode = "otel" } } }
+  }
   assert {
     condition     = output.contract.datadog_site == "datadoghq.com" && output.contract.api_key_ref == "dsv://eh/dev/datadog-api-key#value"
     error_message = "Site + API key DSV reference from foundation-identity v2."
@@ -133,6 +201,9 @@ run "reject_lab_cost_ceiling" {
 
 run "batch_log_setup_published" {
   command = plan
+  variables {
+    settings = { fleet = { log_pipeline = "fluent_bit_direct" } }
+  }
 
   assert {
     condition     = output.contract.batch_log_setup.fluent_bit_version == "5.1.3" && length(output.contract.batch_log_setup.script_sha256) == 64 && strcontains(local.batch_setup_script, "EH_LOG_PATHS") && strcontains(local.batch_setup_script, "EH_IDENTITY_CLIENT_ID") && strcontains(local.batch_setup_script, "CONFIGURE_AGENT='false'")

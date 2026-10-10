@@ -1,6 +1,7 @@
-# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# Lab onboarding manifest v2 (Enterprise Hello, env dev): identity + tags + resources + telemetry routing.
+# ${contract:...} references are resolved at plan
 # time from contracts (render.py references -> contract_references). See observability/README.md.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: hello-frontend
@@ -21,33 +22,12 @@ metadata:
   - name: web mailbox
     type: email
     contact: web@example.com
+  region: swedencentral
 spec:
   architecture: swa
   runtime: browser
   telemetry:
-    profile: frontend
     rum:
       enabled: true
       application_ref: obs-prereqs.rum.applications.hello-frontend.application_id
-  endpoints:
-  - name: site
-    url: ${contract:deploy-frontend.url}
-    visibility: public
-    health_path: /
-    required: false
-    browser_journey: true
-  monitors:
-    params:
-      browser_assert_text: Enterprise Hello
   presence_ref: deploy-frontend.url
-  notifications:
-    default:
-    - team-web
-    critical:
-    - team-web
-    - oncall
-    warning:
-    - team-web
-  catalog:
-    component_of:
-    - system:enterprise-hello

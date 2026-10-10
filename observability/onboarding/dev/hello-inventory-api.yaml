@@ -1,6 +1,7 @@
-# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# Lab onboarding manifest v2 (Enterprise Hello, env dev): identity + tags + resources + telemetry routing.
+# ${contract:...} references are resolved at plan
 # time from contracts (render.py references -> contract_references). See observability/README.md.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: hello-inventory-api
@@ -21,11 +22,10 @@ metadata:
   - name: orders mailbox
     type: email
     contact: orders@example.com
+  region: swedencentral
 spec:
   architecture: appservice
   runtime: dotnet
-  telemetry:
-    profile: http-api
   resources:
   - id: ${contract:deploy-appservice.apps.hello-inventory-api.id}
     type: Microsoft.Web/sites
@@ -35,22 +35,5 @@ spec:
     type: Microsoft.DocumentDB/databaseAccounts
     role: inventory-db
     required: false
-  endpoints:
-  - name: internal
-    url: ${contract:deploy-appservice.apps.hello-inventory-api.url}
-    visibility: private
-    health_path: /readyz
-    required: false
   presence_ref: deploy-appservice.apps.hello-inventory-api.url
-  notifications:
-    default:
-    - team-orders
-    critical:
-    - team-orders
-    - oncall
-    warning:
-    - team-orders
-  catalog:
-    component_of:
-    - system:enterprise-hello
   enabled: true

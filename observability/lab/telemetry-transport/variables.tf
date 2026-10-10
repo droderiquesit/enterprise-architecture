@@ -23,6 +23,18 @@ variable "settings" {
     workload_profile_name          = optional(string) # null = first profile of platform_containerapps
     sidecar_mode                   = optional(string, "datadog")
     aca_console_allow              = optional(list(string)) # null = ["<prefix>-caj-*"] (ACA jobs have no sidecar)
+    # --- package 3.0.0 fleet collection ---------------------------------------------------------------------------
+    # Per-environment overrides of config/fleet-policy.yaml (merged as environments.<env>), e.g.
+    # { log_pipeline = "fluent_bit_direct", apm = { mode = "otel" }, profiling = { enabled = false } }
+    fleet                    = optional(any)
+    op_pipeline_id           = optional(string) # existing Observability Pipelines pipeline; null = create it
+    op_hosting               = optional(string, "container_app")
+    op_workload_profile_name = optional(string)             # null = workload_profile_name
+    op_buffer_storage        = optional(string, "emptydir") # emptydir | azure_files
+    op_azure_files_storage   = optional(string)
+    op_daily_quota_bytes     = optional(number, 0) # Azure platform logs quota in the pipeline (0 = none)
+    apm_gateway_hosting      = optional(string, "container_app")
+    apm_gateway_max_replicas = optional(number, 2)
   })
   default = {}
   validation {
@@ -30,8 +42,8 @@ variable "settings" {
     error_message = "event_hub_mode: create|existing|none; aggregator_hosting/gateway_hosting: container_app|none."
   }
   validation {
-    condition     = var.settings.event_hub_capacity >= 1 && var.settings.event_hub_capacity <= 2 && var.settings.gateway_max_replicas <= 5 && var.settings.aggregator_max_replicas <= 5
-    error_message = "Lab cost ceiling: event_hub_capacity 1-2 TU, gateway/aggregator max_replicas <= 5 (raise in the portable module for production)."
+    condition     = var.settings.event_hub_capacity >= 1 && var.settings.event_hub_capacity <= 2 && var.settings.gateway_max_replicas <= 5 && var.settings.aggregator_max_replicas <= 5 && var.settings.apm_gateway_max_replicas <= 5
+    error_message = "Lab cost ceiling: event_hub_capacity 1-2 TU, gateway/aggregator/apm_gateway max_replicas <= 5 (raise in the portable module for production)."
   }
 }
 

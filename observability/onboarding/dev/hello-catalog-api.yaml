@@ -1,6 +1,7 @@
-# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# Lab onboarding manifest v2 (Enterprise Hello, env dev): identity + tags + resources + telemetry routing.
+# ${contract:...} references are resolved at plan
 # time from contracts (render.py references -> contract_references). See observability/README.md.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: hello-catalog-api
@@ -22,11 +23,11 @@ metadata:
   - name: catalog mailbox
     type: email
     contact: catalog@example.com
+  region: swedencentral
 spec:
   architecture: aca
   runtime: python
   telemetry:
-    profile: http-api
     dbm:
       enabled: true
       engine: postgres
@@ -43,21 +44,4 @@ spec:
     type: Microsoft.Cache/redisEnterprise
     role: cache
     required: false
-  endpoints:
-  - name: internal
-    url: ${contract:deploy-core-aca.apps.hello-catalog-api.url}
-    visibility: private
-    health_path: /readyz
-    required: false
   presence_ref: deploy-core-aca.apps.hello-catalog-api.url
-  notifications:
-    default:
-    - team-catalog
-    critical:
-    - team-catalog
-    - oncall
-    warning:
-    - team-catalog
-  catalog:
-    component_of:
-    - system:enterprise-hello

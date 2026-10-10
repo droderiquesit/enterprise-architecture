@@ -272,7 +272,9 @@ def summarize(path: str, headers: dict, body: bytes) -> dict:
 
                 doc["raw_b64"] = base64.b64encode(raw).decode()
         elif path in ("/api/v2/series", "/api/beta/sketches", "/api/v1/series"):
-            doc["strings"] = sorted(set(s for s in strings(raw) if s.startswith(("hello.", "env:", "service:", "version:", "outcome", "cache.result", "order.status", "status:"))))
+            doc["strings"] = sorted(
+                set(s for s in strings(raw) if s.startswith(("hello.", "env:", "service:", "version:", "outcome", "cache.result", "order.status", "status:")))
+            )
             if path == "/api/v1/series":
                 doc["strings"] = sorted({m.get("metric") for m in json.loads(raw).get("series", [])} - {None})
         elif path == "/api/v2/logs":
@@ -308,7 +310,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.rfile.readline()
         return self.rfile.read(int(self.headers.get("Content-Length", "0")))
 
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         path = self.path.split("?")[0]
         if path == "/_tap":
             with _lock:
@@ -319,14 +321,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, b'{"valid":true}')
         return self._forward("GET", b"")
 
-    def do_DELETE(self):  # noqa: N802
+    def do_DELETE(self):
         if self.path == "/_tap":
             with _lock:
                 _records.clear()
             return self._send(200, b'{"ok":true}')
         return self._send(404, b"{}")
 
-    def do_POST(self):  # noqa: N802
+    def do_POST(self):
         body = self._body()
         headers = {k.lower(): v for k, v in self.headers.items()}
         record = summarize(self.path.split("?")[0], headers, body)
@@ -337,9 +339,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _forward(self, method: str, body: bytes) -> None:
         keep = {k: v for k, v in self.headers.items() if k.lower() not in ("host", "content-length", "transfer-encoding", "connection")}
-        req = urllib.request.Request(UPSTREAM + self.path, data=body if method == "POST" else None, method=method, headers=keep)
+        req = urllib.request.Request(UPSTREAM + self.path, data=body if method == "POST" else None, method=method, headers=keep)  # noqa: S310 - UPSTREAM is the local mock intake
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
                 return self._send(resp.status, resp.read(), resp.headers.get("Content-Type") or "application/json")
         except urllib.error.HTTPError as exc:
             return self._send(exc.code, exc.read() or b"{}")

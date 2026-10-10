@@ -17,13 +17,22 @@ module "instrumentation" {
     team        = var.service.team
     domain      = var.service.domain
     tier        = var.service.tier
-    application = "enterprise-hello"
+    application = var.service.application
     owner       = var.service.owner
     region      = var.service.region
+    managed_by  = var.service.managed_by
+    cost_center = var.service.cost_center
+    component   = var.service.component
   }
+  tag_policy                = var.tag_policy
+  extra_tags                = var.extra_tags
+  fleet_policy              = var.fleet_policy
+  apm                       = var.apm
+  profiling                 = var.profiling
+  os_type                   = var.os_type
   runtime                   = var.runtime
   architecture              = var.architecture
-  telemetry                 = var.telemetry
+  telemetry                 = local.telemetry
   otlp_protocol             = var.otlp_protocol
   trace_sample_ratio        = var.trace_sample_ratio
   identity_client_id        = var.identity_client_id
@@ -32,6 +41,14 @@ module "instrumentation" {
 }
 
 locals {
+  # Lab seam: obs-telemetry-transport publishes the lab-wide fleet switches in its contract (env.fleet:
+  # EH_LOG_PIPELINE, EH_APM_MODE, EH_PROFILING_ENABLED). Without them (older contracts, unit tests with mocked
+  # contracts) deployments keep the 2.x path: OpenTelemetry SDKs + Fluent Bit. Explicit var.apm / var.profiling win.
+  fleet_defaults = { EH_LOG_PIPELINE = "fluent_bit_direct", EH_APM_MODE = "otel" }
+  telemetry = merge(var.telemetry, {
+    env = merge(var.telemetry.env, { fleet = merge(local.fleet_defaults, lookup(var.telemetry.env, "fleet", {})) })
+  })
+
   # Values owned by the deployment (identity, faults, build metadata). The instrumentation env wins for
   # telemetry keys; service extra_env wins for nothing telemetry-related (it is merged first).
   base = merge(

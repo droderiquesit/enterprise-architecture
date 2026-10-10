@@ -100,7 +100,7 @@ module "app" {
   name                = "${local.prefix}-ca-${local.short[each.key]}-${local.env_name}"
   resource_group_name = azurerm_resource_group.this.name
   environment_id      = local.aca.environment_id
-  tags                = merge(local.tags, { service = each.key, version = local.artifact_version[local.meta[each.key].artifact] })
+  tags                = merge(local.tags, { service = each.key, version = local.artifact_version[local.meta[each.key].artifact] }, module.env[each.key].azure_tags)
   identity            = { id = local.ids[each.key].id, client_id = local.ids[each.key].client_id }
   registry_server     = var.platform_shared.acr_login_server
 

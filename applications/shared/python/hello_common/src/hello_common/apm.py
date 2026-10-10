@@ -143,6 +143,9 @@ def bootstrap_from_env() -> dict[str, Any]:
             _status["profiler"] = "ignored-in-otel-mode"
         return _status
     trace_enabled = _flag("DD_TRACE_ENABLED") is not False
+    if _flag("OTEL_SDK_DISABLED") is True:
+        # Datadog SDKs map OTEL_SDK_DISABLED=true to DD_TRACE_OTEL_ENABLED=false: OpenTelemetry-API spans are dropped
+        _status["notes"].append("OTEL_SDK_DISABLED=true disables ddtrace's OpenTelemetry API support (manual spans are dropped)")
     try:
         if trace_enabled:
             # Our manual spans use the OpenTelemetry API; route them to ddtrace unless explicitly disabled.
@@ -186,7 +189,7 @@ def report_status() -> None:
     }
     level = logging.INFO
     for note in doc["notes"]:
-        if "two tracers" in note or "failed" in note or "not importable" in note:
+        if "two tracers" in note or "failed" in note or "not importable" in note or "OTEL_SDK_DISABLED" in note:
             level = logging.WARNING
     log.log(
         level,

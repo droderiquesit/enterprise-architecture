@@ -9,5 +9,9 @@ terraform {
       source  = "Azure/azapi"
       version = "~> 2.13"
     }
+    datadog = {
+      source  = "DataDog/datadog"
+      version = "~> 4.25"
+    }
   }
 }

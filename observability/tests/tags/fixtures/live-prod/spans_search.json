@@ -1,0 +1,31 @@
+{
+ "by_query": {
+  "service:orders-api env:production": {
+   "data": [
+    {
+     "id": "span-1",
+     "type": "spans",
+     "attributes": {
+      "service": "orders-api",
+      "env": "production",
+      "version": "4.2.0",
+      "tags": [
+       "team:orders",
+       "owner:orders-team_contoso.example",
+       "application:orders",
+       "domain:commerce",
+       "tier:critical",
+       "region:westeurope",
+       "managed_by:terraform",
+       "environment:production",
+       "business_unit:retail"
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "default": {
+  "data": []
+ }
+}

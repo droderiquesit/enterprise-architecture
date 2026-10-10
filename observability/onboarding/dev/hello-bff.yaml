@@ -1,6 +1,7 @@
-# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# Lab onboarding manifest v2 (Enterprise Hello, env dev): identity + tags + resources + telemetry routing.
+# ${contract:...} references are resolved at plan
 # time from contracts (render.py references -> contract_references). See observability/README.md.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: hello-bff
@@ -23,42 +24,13 @@ metadata:
   - name: web mailbox
     type: email
     contact: web@example.com
+  region: swedencentral
 spec:
   architecture: aca
   runtime: dotnet
-  telemetry:
-    profile: http-api
   resources:
   - id: ${contract:deploy-core-aca.apps.hello-bff.id}
     type: Microsoft.App/containerApps
     role: app
     required: false
-  endpoints:
-  - name: api
-    url: ${contract:deploy-core-aca.apps.hello-bff.url}
-    visibility: public
-    health_path: /api/healthz
-    required: false
-  slos:
-  - name: availability
-    type: availability
-    target: 99.5
-    warning: 99.8
-    timeframe: 30d
-  - name: latency
-    type: latency
-    target: 99.0
-    timeframe: 30d
-    threshold_ms: 800
   presence_ref: deploy-core-aca.apps.hello-bff.url
-  notifications:
-    default:
-    - team-web
-    critical:
-    - team-web
-    - oncall
-    warning:
-    - team-web
-  catalog:
-    component_of:
-    - system:enterprise-hello

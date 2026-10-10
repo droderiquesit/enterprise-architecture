@@ -15,6 +15,7 @@ env:
   AZURE_CREDENTIAL_MODE: workload_identity
   CACHE_TTL_SECONDS: '60'
   DD_SITE: datadoghq.com
+  DD_TAGS: application:enterprise-hello,domain:catalog,managed_by:terraform,owner:catalog_example.com,region:swedencentral,team:catalog,tier:high
   GIT_COMMIT: 0123abc
   LOG_LEVEL: info
   OTEL_EXPORTER_OTLP_ENDPOINT: http://$(DD_AGENT_HOST):4317
@@ -26,7 +27,7 @@ env:
   OTEL_PYTHON_EXCLUDED_URLS: healthz,readyz,version
   OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: 'false'
   OTEL_PYTHON_LOG_CORRELATION: 'true'
-  OTEL_RESOURCE_ATTRIBUTES: application=enterprise-hello,cloud.platform=azure_aks,cloud.provider=azure,deployment.environment=dev,deployment.environment.name=dev,domain=catalog,owner=catalog@example.com,region=swedencentral,service.namespace=enterprise-hello,service.version=src-555555555555555555555555,team=catalog,tier=high
+  OTEL_RESOURCE_ATTRIBUTES: application=enterprise-hello,cloud.platform=azure_aks,cloud.provider=azure,deployment.environment=dev,deployment.environment.name=dev,domain=catalog,managed_by=terraform,owner=catalog_example.com,region=swedencentral,service.name=hello-catalog-api,service.namespace=enterprise-hello,service.version=src-555555555555555555555555,team=catalog,tier=high
   OTEL_SERVICE_NAME: hello-catalog-api
   OTEL_TRACES_EXPORTER: otlp
   OTEL_TRACES_SAMPLER: parentbased_traceidratio
@@ -37,6 +38,7 @@ env:
   PG_PORT: '5432'
   PG_USER: hello-catalog-api
   REDIS_AUTH: none
+  TELEMETRY_SDK: otel
 faults:
   enabled: false
 identity:
@@ -87,6 +89,14 @@ service:
   logsSource: python
   name: hello-catalog-api
   partOf: enterprise-hello
+  tags:
+    application: enterprise-hello
+    domain: catalog
+    managed_by: terraform
+    owner: catalog_example.com
+    region: swedencentral
+    team: catalog
+    tier: high
   team: catalog
   tier: high
   version: src-555555555555555555555555
@@ -95,7 +105,9 @@ serviceAccount:
   name: hello-catalog-api
 telemetry:
   agentHostFromHostIP: true
+  agentLogSource: ''
   disableAgentLogCollection: true
+  singleStepInstrumentation: false
 topologySpread:
   enabled: true
   hostnameSkew: 1

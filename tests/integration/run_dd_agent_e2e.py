@@ -54,7 +54,7 @@ DERIVED = f"hello-orders-api-ddtrace:{VERSION}"
 CHECKS = [
     ("dd-1", "Datadog Agent 7.84.2 healthy; catalog-api and orders-api serving"),
     ("dd-2", "traces from ddtrace (Python) and dd-trace-dotnet reached the intake through the Agent"),
-    ("dd-3", "distributed trace .NET -> Python with one 128-bit trace id and correct parenting"),
+    ("dd-3", "distributed trace .NET -> Python with one 128-bit trace id, correct parenting, traceparent response header"),
     ("dd-4", "Activity-based custom span (Hello.App 'send order-events') recorded by the Datadog .NET tracer"),
     ("dd-5", "health probes are not traced (Python probe filter)"),
     ("dd-6", "log correlation: Agent-collected logs carry the ids of received traces (both services)"),
@@ -70,7 +70,7 @@ def log(msg: str) -> None:
 
 
 def sh(*args: str, check: bool = True, capture: bool = True, cwd: Path | None = None, timeout: int = 1800) -> str:
-    proc = subprocess.run(list(args), cwd=cwd, capture_output=capture, text=True, timeout=timeout, check=False)
+    proc = subprocess.run(list(args), cwd=cwd, capture_output=capture, text=True, timeout=timeout, check=False)  # noqa: S603
     if check and proc.returncode != 0:
         raise RuntimeError(f"{' '.join(args)} failed ({proc.returncode}): {(proc.stderr or '')[-2000:]}")
     return proc.stdout if capture else ""
@@ -82,9 +82,9 @@ def compose(*args: str, check: bool = True) -> str:
 
 def http(method: str, url: str, body: dict | None = None, headers: dict | None = None, timeout: float = 10) -> tuple[int, dict | list | str, dict]:
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method, headers={"content-type": "application/json", **(headers or {})})
+    req = urllib.request.Request(url, data=data, method=method, headers={"content-type": "application/json", **(headers or {})})  # noqa: S310 - local test endpoints only
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             raw = resp.read().decode()
             status, hdrs = resp.status, dict(resp.headers)
     except urllib.error.HTTPError as exc:
@@ -96,7 +96,7 @@ def http(method: str, url: str, body: dict | None = None, headers: dict | None =
 
 
 def image_exists(ref: str) -> bool:
-    return subprocess.run(["docker", "image", "inspect", ref], capture_output=True, check=False).returncode == 0
+    return subprocess.run(["docker", "image", "inspect", ref], capture_output=True, check=False).returncode == 0  # noqa: S603, S607
 
 
 def build(rebuild: bool) -> None:
@@ -108,7 +108,17 @@ def build(rebuild: bool) -> None:
         log(f"building {DERIVED} (Datadog .NET tracer home, sha256-verified download)")
         import os
 
-        args = ["docker", "build", "-q", "-f", str(COMPOSE_DIR / "Dockerfile.orders-api-ddtrace"), "--build-arg", f"BASE=hello-orders-api:{VERSION}", "-t", DERIVED]
+        args = [
+            "docker",
+            "build",
+            "-q",
+            "-f",
+            str(COMPOSE_DIR / "Dockerfile.orders-api-ddtrace"),
+            "--build-arg",
+            f"BASE=hello-orders-api:{VERSION}",
+            "-t",
+            DERIVED,
+        ]
         proxy = os.environ.get("HTTPS_PROXY")
         if proxy:
             args += ["--network", "host", "--build-arg", f"HTTPS_PROXY={proxy}", "--build-arg", f"https_proxy={proxy}"]
@@ -145,12 +155,17 @@ def journey() -> dict:
     orders = []
     for i in range(2):
         key = f"dd-e2e-{uuid.uuid4().hex[:16]}"
-        status, body, hdrs = http("POST", ORDERS + "/orders", {"sku": f"SKU-000{i + 1}", "quantity": 2, "customer_ref": f"dd-e2e-{i}"}, {"Idempotency-Key": key})
+        status, body, hdrs = http(
+            "POST", ORDERS + "/orders", {"sku": f"SKU-000{i + 1}", "quantity": 2, "customer_ref": f"dd-e2e-{i}"}, {"Idempotency-Key": key}
+        )
         rec("orders POST /orders", status, {"traceparent": hdrs.get("traceparent")})
         if isinstance(body, dict) and body.get("id"):
             orders.append(body["id"])
         if i == 0:
-            rec("orders POST /orders (idempotent replay)", http("POST", ORDERS + "/orders", {"sku": "SKU-0001", "quantity": 2, "customer_ref": "dd-e2e-0"}, {"Idempotency-Key": key})[0])
+            rec(
+                "orders POST /orders (idempotent replay)",
+                http("POST", ORDERS + "/orders", {"sku": "SKU-0001", "quantity": 2, "customer_ref": "dd-e2e-0"}, {"Idempotency-Key": key})[0],
+            )
     rec("orders GET /orders", http("GET", ORDERS + "/orders?limit=5")[0])
     rec("orders GET /healthz", http("GET", ORDERS + "/healthz")[0])
     out["orders"] = orders
@@ -199,14 +214,18 @@ def ready(records: list[dict], logs: list[dict]) -> bool:
     )
 
 
-def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: dict[str, str]) -> dict:
+def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: dict[str, str], journey_doc: dict) -> dict:
     res: dict = {}
 
     def put(cid: str, ok: bool | None, detail: object) -> None:
         res[cid] = {"check": dict(CHECKS)[cid], "result": "pass" if ok else ("skip" if ok is None else "fail"), "detail": detail}
 
     spans = all_spans(records)
-    put("dd-1", meta.get("agent_healthy") and meta.get("catalog_ready") and meta.get("orders_ready"), {k: meta.get(k) for k in ("agent_version", "agent_healthy", "catalog_ready", "orders_ready")})
+    put(
+        "dd-1",
+        meta.get("agent_healthy") and meta.get("catalog_ready") and meta.get("orders_ready"),
+        {k: meta.get(k) for k in ("agent_version", "agent_healthy", "catalog_ready", "orders_ready")},
+    )
 
     py = [s for s in spans if s["language"] == "python" and s.get("service") == "hello-catalog-api"]
     net = [s for s in spans if s["language"] == ".NET" and (s.get("service") or "").startswith("hello-orders-api")]
@@ -235,12 +254,36 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
         catalog = [s for s in group if s["language"] == "python" and s.get("meta", {}).get("span.kind") == "server"]
         if server and client and catalog:
             parented = any(c.get("parent_id") == cl.get("span_id") for c in catalog for cl in client)
-            distributed.append({"trace_id": tid, "catalog_parented_by_orders_client": parented, "spans": [(s["language"], s.get("service"), s.get("name"), s.get("resource")) for s in group]})
-    put("dd-3", any(d["catalog_parented_by_orders_client"] for d in distributed), {"traces": distributed[:2], "count": len(distributed)})
+            distributed.append(
+                {
+                    "trace_id": tid,
+                    "catalog_parented_by_orders_client": parented,
+                    "spans": [(s["language"], s.get("service"), s.get("name"), s.get("resource")) for s in group],
+                }
+            )
+    # the traceparent response header of POST /orders names the Datadog trace (not ASP.NET Core's own Activity)
+    tp_ids = [r["traceparent"].split("-")[1] for r in journey_doc.get("requests", []) if r.get("traceparent") and r["name"] == "orders POST /orders"]
+    tp_match = bool(tp_ids) and all(t in by_trace for t in tp_ids)
+    put(
+        "dd-3",
+        any(d["catalog_parented_by_orders_client"] for d in distributed) and tp_match,
+        {"traces": distributed[:2], "count": len(distributed), "response_traceparent_trace_ids": tp_ids, "response_traceparent_is_datadog_trace": tp_match},
+    )
 
     activity = [s for s in net if s.get("resource") == "send order-events" and s.get("meta", {}).get("otel.library.name") == "Hello.App"]
     same_trace = [a for a in activity if any(d["trace_id"] == (a.get("trace_id_128") or str(a.get("trace_id"))) for d in distributed)]
-    put("dd-4", bool(same_trace), {"activity_spans": len(activity), "in_distributed_trace": len(same_trace), "example": {k: activity[0].get(k) for k in ("name", "resource", "service")} | {"meta": {k: v for k, v in activity[0]["meta"].items() if k.startswith(("otel.", "messaging.", "span.kind"))}} if activity else None})
+    put(
+        "dd-4",
+        bool(same_trace),
+        {
+            "activity_spans": len(activity),
+            "in_distributed_trace": len(same_trace),
+            "example": {k: activity[0].get(k) for k in ("name", "resource", "service")}
+            | {"meta": {k: v for k, v in activity[0]["meta"].items() if k.startswith(("otel.", "messaging.", "span.kind"))}}
+            if activity
+            else None,
+        },
+    )
 
     probes = [s for s in py if any(p in ((s.get("resource") or "") + (s.get("meta", {}).get("http.url") or "")) for p in ("/healthz", "/readyz"))]
     put("dd-5", not probes and bool(py), {"python_probe_spans": len(probes), "probe_requests_sent": 3})
@@ -254,7 +297,11 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
         if not line.get("dd.trace_id"):
             continue
         svc = line.get("service")
-        if line.get("trace_id") in trace_ids and line.get("dd.trace_id") in low_ids and int(line["trace_id"], 16) & 0xFFFFFFFFFFFFFFFF == int(line["dd.trace_id"]):
+        if (
+            line.get("trace_id") in trace_ids
+            and line.get("dd.trace_id") in low_ids
+            and int(line["trace_id"], 16) & 0xFFFFFFFFFFFFFFFF == int(line["dd.trace_id"])
+        ):
             correlated[svc] = correlated.get(svc, 0) + 1
         else:
             mismatched.append({k: line.get(k) for k in ("service", "message", "trace_id", "dd.trace_id")})
@@ -264,14 +311,24 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
     put(
         "dd-6",
         correlated.get("hello-catalog-api", 0) > 0 and correlated.get("hello-orders-api", 0) > 0 and omitted,
-        {"correlated_lines": correlated, "lines_with_ids_not_matching_a_received_trace": len(mismatched), "examples_unmatched": mismatched[:3], "startup_lines_without_ids": omitted, "agent_service_source": agent_tagged},
+        {
+            "correlated_lines": correlated,
+            "lines_with_ids_not_matching_a_received_trace": len(mismatched),
+            "examples_unmatched": mismatched[:3],
+            "startup_lines_without_ids": omitted,
+            "agent_service_source": agent_tagged,
+        },
     )
 
     series_posts = [r for r in records if r["path"] in ("/api/v2/series", "/api/beta/sketches")]
     strings = sorted({x for r in series_posts for x in r.get("strings", [])})
     hello = sorted(x for x in strings if x.startswith("hello."))
     bad = [x for x in strings if any(k in x for k in ("order_id", "customer_ref", "user_id", "dd-e2e-"))]
-    put("dd-7", {"hello.catalog.cache.requests", "hello.orders.created"} <= set(hello) and "env:e2e-dd" in strings and not bad, {"hello_metrics": hello, "env_tags": [x for x in strings if x.startswith("env:")], "forbidden_tags": bad, "series_payloads": len(series_posts)})
+    put(
+        "dd-7",
+        {"hello.catalog.cache.requests", "hello.orders.created"} <= set(hello) and "env:e2e-dd" in strings and not bad,
+        {"hello_metrics": hello, "env_tags": [x for x in strings if x.startswith("env:")], "forbidden_tags": bad, "series_payloads": len(series_posts)},
+    )
 
     profiles = [r for r in records if r["path"].startswith("/api/v2/profile")]
     fam: dict[str, dict] = {}
@@ -280,7 +337,15 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
         family = ev.get("family")
         if family:
             tags = ev.get("tags_profiler") or ""
-            fam.setdefault(family, {"uploads": 0, "parts": sorted({p["name"] for p in r["profile"]["parts"]}), "service_tag": next((t for t in tags.split(",") if t.startswith("service:")), None), "attachments": ev.get("attachments")})
+            fam.setdefault(
+                family,
+                {
+                    "uploads": 0,
+                    "parts": sorted({p["name"] for p in r["profile"]["parts"]}),
+                    "service_tag": next((t for t in tags.split(",") if t.startswith("service:")), None),
+                    "attachments": ev.get("attachments"),
+                },
+            )
             fam[family]["uploads"] += 1
     mock_profiles = [o for o in http("GET", INTAKE + "/_received", timeout=20)[1]["others"] if o["path"].startswith("/api/v2/profile")]
     put("dd-8", "python" in fam and "dotnet" in fam and bool(mock_profiles), {"families": fam, "profile_posts_at_mock_intake": len(mock_profiles)})
@@ -291,8 +356,16 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
     otlp_attempts = [x for x in (cat_log + ord_log).splitlines() if "otlp-must-not-be-used" in x or "Failed to export" in x]
     put(
         "dd-9",
-        py_mode.get("apm.tracer") == "enabled" and py_mode.get("apm.profiler") == "enabled" and net_mode.get("otel_sdk") is False and net_mode.get("apm_tracer_attached") is True and not otlp_attempts,
-        {"python": {k: py_mode.get(k) for k in ("message", "apm.tracer", "apm.tracer_source", "apm.profiler")}, "dotnet": {k: net_mode.get(k) for k in ("message", "apm_tracer_attached", "apm_metrics", "otel_sdk")}, "otlp_export_attempts": otlp_attempts[:3]},
+        py_mode.get("apm.tracer") == "enabled"
+        and py_mode.get("apm.profiler") == "enabled"
+        and net_mode.get("otel_sdk") is False
+        and net_mode.get("apm_tracer_attached") is True
+        and not otlp_attempts,
+        {
+            "python": {k: py_mode.get(k) for k in ("message", "apm.tracer", "apm.tracer_source", "apm.profiler")},
+            "dotnet": {k: net_mode.get(k) for k in ("message", "apm_tracer_attached", "apm_metrics", "otel_sdk")},
+            "otlp_export_attempts": otlp_attempts[:3],
+        },
     )
 
     posts = [r for r in records]
@@ -300,11 +373,20 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
     profile_keyless = [r["path"] for r in profiles if not r.get("api_key_present")]
     agent_log = container_logs.get("datadog-agent", "")
     real_sends = [x for x in agent_log.splitlines() if "datadoghq.com" in x and ("Could not send payload" in x or "Successfully posted" in x)]
-    put("dd-10", not keyless and not profile_keyless and not real_sends, {"payloads": len(posts), "without_api_key": keyless + profile_keyless, "sends_to_real_datadog": real_sends[:3], "paths": sorted({r["path"] for r in posts})})
+    put(
+        "dd-10",
+        not keyless and not profile_keyless and not real_sends,
+        {
+            "payloads": len(posts),
+            "without_api_key": keyless + profile_keyless,
+            "sends_to_real_datadog": real_sends[:3],
+            "paths": sorted({r["path"] for r in posts}),
+        },
+    )
     return res
 
 
-def write_evidence(meta: dict, results: dict, records: list[dict], logs: list[dict], journey_doc: dict, container_logs: dict[str, str]) -> Path:
+def write_evidence(meta: dict, results: dict, records: list[dict], logs: list[dict], journey_doc: dict, container_logs: dict[str, str]) -> Path:  # noqa: PLR0917
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
     ev = EVIDENCE_ROOT / f"{stamp}-datadog-agent"
     ev.mkdir(parents=True, exist_ok=True)
@@ -330,7 +412,11 @@ def write_evidence(meta: dict, results: dict, records: list[dict], logs: list[di
     for cid, what in CHECKS:
         r = results.get(cid, {"result": "not run"})
         lines.append(f"| {cid} | {r['result']} | {what} |")
-    lines += ["", "Details: `summary.json` (per-check detail), `tap_records.json` (decoded Agent payloads), `agent_collected_logs.json`, `container-*.log`.", ""]
+    lines += [
+        "",
+        "Details: `summary.json` (per-check detail), `tap_records.json` (decoded Agent payloads), `agent_collected_logs.json`, `container-*.log`.",
+        "",
+    ]
     (EVIDENCE_ROOT / "LATEST-datadog-agent.md").write_text("\n".join(lines))
     return ev
 
@@ -379,9 +465,13 @@ def run(keep: bool = False, reuse: bool = False, rebuild: bool = False) -> dict:
         # start-up lines were emitted before the reset: re-read them from the container output for dd-6/dd-9
         for svc in ("catalog-api", "orders-api", "datadog-agent", "tap"):
             container_logs[svc] = compose("logs", "--no-color", "--no-log-prefix", svc, check=False)
-        startup = [json.loads(x) for x in (container_logs["catalog-api"] + "\n" + container_logs["orders-api"]).splitlines() if x.startswith("{") and "telemetry mode" in x]
+        startup = [
+            json.loads(x)
+            for x in (container_logs["catalog-api"] + "\n" + container_logs["orders-api"]).splitlines()
+            if x.startswith("{") and "telemetry mode" in x
+        ]
         logs += [{"agent_service": None, "ddsource": "container-stdout", "ddtags": None, "line": s} for s in startup]
-        results = evaluate(meta, records, logs, container_logs)
+        results = evaluate(meta, records, logs, container_logs, journey_doc)
     except Exception as exc:  # report, then tear down
         import traceback
 

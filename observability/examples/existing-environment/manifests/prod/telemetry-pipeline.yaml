@@ -1,14 +1,13 @@
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: telemetry-pipeline
   team: platform
   owner: platform@contoso.example
   env: prod
-  runbook_url: https://wiki.contoso.example/runbooks/telemetry-pipeline
+  region: westeurope
+  application: platform
+  domain: observability
+  tier: high
 spec:
   architecture: external
-  telemetry: {profile: telemetry-pipeline}
-  notifications:
-    default: [platform]
-    critical: [platform]

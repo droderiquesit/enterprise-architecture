@@ -1,0 +1,54 @@
+{
+ "by_query": {
+  "service:orders-api env:production": {
+   "data": [
+    {
+     "id": "AQAAAX1",
+     "type": "log",
+     "attributes": {
+      "service": "orders-api",
+      "tags": [
+       "env:production",
+       "environment:production",
+       "service:orders-api",
+       "version:4.2.0",
+       "team:orders",
+       "owner:orders-team_contoso.example",
+       "application:orders",
+       "domain:commerce",
+       "tier:critical",
+       "region:westeurope",
+       "managed_by:terraform",
+       "business_unit:retail"
+      ]
+     }
+    }
+   ]
+  },
+  "service:orders-web env:production": {
+   "data": [
+    {
+     "id": "AQAAAX2",
+     "type": "log",
+     "attributes": {
+      "service": "orders-web",
+      "tags": [
+       "env:production",
+       "service:orders-web",
+       "version:2026.10.1",
+       "team:web",
+       "application:orders",
+       "domain:storefront",
+       "tier:high",
+       "region:westeurope",
+       "managed_by:terraform"
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "default": {
+  "data": []
+ }
+}

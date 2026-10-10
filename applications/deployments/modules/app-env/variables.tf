@@ -10,6 +10,11 @@ variable "service" {
     domain  = optional(string, "unknown")
     tier    = optional(string, "unknown")
     region  = optional(string, "unknown")
+    # further tag-policy identity (observability/config/tag-policy.yaml)
+    application = optional(string, "enterprise-hello")
+    managed_by  = optional(string, "terraform")
+    cost_center = optional(string)
+    component   = optional(string)
   })
 }
 
@@ -130,4 +135,40 @@ variable "secret_env" {
 variable "extra_resource_attributes" {
   type    = map(string)
   default = {}
+}
+
+variable "tag_policy" {
+  description = "Decoded tag policy (null = observability package default config/tag-policy.yaml)."
+  type        = any
+  default     = null
+}
+
+variable "extra_tags" {
+  description = "Additional Datadog tags of this workload (the policy's canonical keys win)."
+  type        = map(string)
+  default     = {}
+}
+
+variable "fleet_policy" {
+  description = "Decoded fleet policy (null = observability package default config/fleet-policy.yaml): APM mode, profiler, DSM, DBM propagation, log pipeline."
+  type        = any
+  default     = null
+}
+
+variable "apm" {
+  description = "Per-workload APM overrides (fleet policy apm section shape), e.g. { mode = \"otel\" }."
+  type        = any
+  default     = null
+}
+
+variable "profiling" {
+  description = "Per-workload Continuous Profiler overrides (fleet policy profiling section shape), e.g. { enabled = false }."
+  type        = any
+  default     = null
+}
+
+variable "os_type" {
+  description = "linux | windows (App Service / Functions plan, VM)."
+  type        = string
+  default     = "linux"
 }

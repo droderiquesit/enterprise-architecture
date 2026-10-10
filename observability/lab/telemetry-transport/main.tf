@@ -31,6 +31,37 @@ locals {
   use_pe           = var.settings.event_hub_private_endpoint && local.pe_subnet != null && local.servicebus_dns != null
 }
 
+# Package 3.0.0: environment-level tag set (modules/tagging) and the per-service tag sets of the rendered onboarding
+# (onboarding/rendered/<env>/*.json `tags`). The OP Worker and the OTel gateway fill these into telemetry that arrives
+# without them; they never overwrite a value set by the client.
+module "env_tags" {
+  source           = "../../modules/tagging"
+  enforce_required = false
+  identity = {
+    env         = var.environment.name
+    application = "enterprise-hello"
+    region      = var.environment.location
+    managed_by  = "terraform"
+    cost_center = try(var.environment.cost_center, null)
+  }
+}
+
+locals {
+  rendered_dir = "${path.module}/../../onboarding/rendered/${var.environment.name}"
+  rendered     = [for f in fileset(local.rendered_dir, "*.json") : jsondecode(file("${local.rendered_dir}/${f}"))]
+  service_tags = { for d in local.rendered : d.service => d.tags if try(d.service, null) != null }
+  # environment-level keys only (service / ownership tags come per service)
+  env_level_tags = { for k, v in module.env_tags.tags : k => v if !contains(["service", "version", "team", "owner", "domain", "tier", "component"], k) }
+
+  # config/fleet-policy.yaml with settings.fleet merged as environments.<env> (the module resolves the merge)
+  fleet_default = yamldecode(file("${path.module}/../../config/fleet-policy.yaml"))
+  fleet_policy = var.settings.fleet == null ? null : merge(local.fleet_default, {
+    environments = merge(try(local.fleet_default.environments, {}), { (var.environment.name) = var.settings.fleet })
+  })
+  # Azure scope -> env tag for platform logs that carry only a resource id
+  scope_tags = { "/subscriptions/${lower(var.environment.subscription_id)}" = { env = var.environment.name } }
+}
+
 resource "azurerm_resource_group" "this" {
   name     = "${module.naming.names.resource_group}-transport"
   location = var.environment.location
@@ -94,4 +125,25 @@ module "transport" {
   }
   sidecar_mode      = var.settings.sidecar_mode
   aca_console_allow = coalesce(var.settings.aca_console_allow, ["${var.environment.name_prefix}-caj-*"])
+
+  # --- package 3.0.0 fleet collection -----------------------------------------------------------------------------
+  fleet_policy = local.fleet_policy
+  default_tags = local.env_level_tags
+  service_tags = local.service_tags
+  observability_pipelines = {
+    pipeline_id           = var.settings.op_pipeline_id
+    name                  = "${var.environment.name_prefix}-${var.environment.name}-logs"
+    hosting               = var.settings.op_hosting
+    workload_profile_name = var.settings.op_workload_profile_name
+    buffer_storage        = var.settings.op_buffer_storage
+    azure_files_storage   = var.settings.op_azure_files_storage
+    azure = {
+      scope_tags        = local.scope_tags
+      daily_quota_bytes = var.settings.op_daily_quota_bytes
+    }
+  }
+  apm_gateway = {
+    hosting      = var.settings.apm_gateway_hosting
+    max_replicas = var.settings.apm_gateway_max_replicas
+  }
 }

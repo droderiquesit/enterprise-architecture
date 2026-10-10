@@ -24,11 +24,15 @@ module "batch_flb" {
     source      = "python"
   }
   dd_source = "python"
+  # package 3.0.0: with Observability Pipelines the nodes forward to the Worker (in-VNet, no API key on the node)
+  log_destination = local.batch_op ? "observability_pipelines" : "datadog"
+  op_endpoint     = local.batch_op ? { host = module.transport.contract.aggregator.fqdn, port = 24224 } : null
   # Placeholder; the job preparation task overrides it with EH_LOG_PATHS (the node root differs per VM size).
   log_paths = ["/mnt/batch/tasks/workitems/*/job-*/*/stdout.txt"]
 }
 
 locals {
+  batch_op          = try(module.transport.contract.aggregator.kind, "") == "observability_pipelines"
   batch_flb_version = "5.1.3"
   batch_setup_script = var.settings.batch_log_setup_enabled ? templatefile("${path.module}/../../modules/host-agents/scripts/linux-install.sh.tftpl", {
     fb_version            = local.batch_flb_version
@@ -46,6 +50,14 @@ locals {
     files                 = { for p, c in module.batch_flb[0].files : p => base64gzip(c) }
     env                   = module.batch_flb[0].env
     secrets_file          = module.batch_flb[0].secrets_env_file
+    fb_needs_key          = length(module.batch_flb[0].secret_env_names) > 0
+    agent_logs            = "false"
+    agent_logs_conf       = ""
+    op_logs_url           = ""
+    apm_ssi               = "false"
+    ssi_libraries         = ""
+    remote_updates        = "false"
+    remote_configuration  = "false"
     agent_msi_sha256      = ""
     fluent_bit_msi_sha256 = ""
     setup_revision        = 1

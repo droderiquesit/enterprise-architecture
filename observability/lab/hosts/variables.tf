@@ -23,6 +23,14 @@ variable "obs_telemetry_transport" {
   type = object({
     datadog_site = string
     api_key_ref  = string
+    aggregator = optional(object({
+      kind           = optional(string)
+      fqdn           = optional(string)
+      agent_logs_url = optional(string)
+    }))
+    env = optional(object({
+      fleet = optional(map(string))
+    }))
     secrets = object({
       tenant   = optional(string)
       tld      = optional(string)

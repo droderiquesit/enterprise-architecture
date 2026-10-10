@@ -19,6 +19,10 @@ variable "settings" {
   type = object({
     datadog_site = optional(string, "datadoghq.com")
     rum_applications = optional(map(object({
+      # create: datadog_rum_application here (default) | existing: application_id + client_token of an existing app
+      mode                       = optional(string, "create")
+      application_id             = optional(string)
+      client_token               = optional(string)
       service                    = optional(string)
       type                       = optional(string, "browser")
       session_sample_rate        = optional(number, 100)

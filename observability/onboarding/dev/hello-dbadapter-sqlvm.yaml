@@ -1,6 +1,7 @@
-# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# Lab onboarding manifest v2 (Enterprise Hello, env dev): identity + tags + resources + telemetry routing.
+# ${contract:...} references are resolved at plan
 # time from contracts (render.py references -> contract_references). See observability/README.md.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: hello-dbadapter-sqlvm
@@ -20,11 +21,10 @@ metadata:
   - name: data-platform mailbox
     type: email
     contact: data-platform@example.com
+  region: swedencentral
 spec:
   architecture: vmss
   runtime: python
-  telemetry:
-    profile: db-adapter
   resources:
   - id: ${contract:deploy-dbadapters.adapters.sqlvm.id}
     type: Microsoft.Compute/virtualMachineScaleSets
@@ -34,21 +34,4 @@ spec:
     type: Microsoft.Compute/virtualMachines
     role: store
     required: false
-  endpoints:
-  - name: internal
-    url: ${contract:deploy-dbadapters.adapters.sqlvm.url}
-    visibility: private
-    health_path: /readyz
-    required: false
   presence_ref: deploy-dbadapters.adapters.sqlvm.url
-  notifications:
-    default:
-    - team-data-platform
-    critical:
-    - team-data-platform
-    - oncall
-    warning:
-    - team-data-platform
-  catalog:
-    component_of:
-    - system:enterprise-hello

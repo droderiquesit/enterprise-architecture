@@ -64,7 +64,7 @@ resource "azurerm_container_group" "this" {
   ip_address_type     = "Private"
   subnet_ids          = [var.foundation_network.subnets["aci"].id]
   restart_policy      = "Always"
-  tags                = merge(local.tags, { service = local.svc, version = local.artifact_version[local.artifact] })
+  tags                = merge(local.tags, { service = local.svc, version = local.artifact_version[local.artifact] }, module.env.azure_tags)
 
   identity {
     type         = "UserAssigned"

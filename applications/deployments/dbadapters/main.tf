@@ -66,7 +66,7 @@ module "aca" {
   resource_group_name   = azurerm_resource_group.this.name
   environment_id        = var.platform_containerapps.environment_id
   workload_profile_name = local.hosting[each.key] == "aca-dedicated" ? local.dedicated_profile : "Consumption"
-  tags                  = merge(local.tags, { service = "${local.svc}-${each.key}", version = local.artifact_version[local.artifact] })
+  tags                  = merge(local.tags, { service = "${local.svc}-${each.key}", version = local.artifact_version[local.artifact] }, module.env[each.key].azure_tags)
   identity              = { id = local.identity.id, client_id = local.identity.client_id }
   registry_server       = var.platform_shared.acr_login_server
   container = {
@@ -93,7 +93,7 @@ module "appsvc" {
   name                = "${local.prefix}-app-db${each.value.short}-${local.env_name}-${local.suffix}"
   resource_group_name = var.platform_appservice.resource_group_name
   location            = coalesce(var.platform_appservice.location, local.location)
-  tags                = merge(local.tags, { service = "${local.svc}-${each.key}", version = local.artifact_version[local.artifact] })
+  tags                = merge(local.tags, { service = "${local.svc}-${each.key}", version = local.artifact_version[local.artifact] }, module.env[each.key].azure_tags)
   service_plan        = { id = local.linux_plan.id, sku = local.linux_plan.sku }
   os_type             = "Linux"
   mode                = "code"

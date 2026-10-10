@@ -1,0 +1,43 @@
+{
+  "producer_spans": [
+    {
+      "service": "hello-orders-api",
+      "scope": "Hello.App",
+      "name": "send order-events",
+      "kind": "producer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "fadabb55f6b56d5a",
+      "parent_span_id": "e6bcf3a4a76eb98d",
+      "links": [],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "messaging.operation.type": "send",
+        "messaging.destination.name": "order-events",
+        "messaging.message.id": "815ad89e-2d3c-46e6-ac22-9b419f13f1d3"
+      }
+    }
+  ],
+  "worker_process_spans_linked": [
+    {
+      "service": "hello-worker",
+      "scope": "hello_worker",
+      "name": "servicebus.process",
+      "kind": "consumer",
+      "trace_id": "b4487f1862edd77547c59677084dd064",
+      "span_id": "6342d5bcf114b1c3",
+      "parent_span_id": "",
+      "links": [
+        {
+          "trace_id": "0000000000000000c424d8769c17cec5",
+          "span_id": "fadabb55f6b56d5a"
+        }
+      ],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "messaging.operation.type": "process",
+        "messaging.destination.name": "order-events/subscriptions/notifications",
+        "messaging.message.id": "815ad89e-2d3c-46e6-ac22-9b419f13f1d3"
+      }
+    }
+  ]
+}

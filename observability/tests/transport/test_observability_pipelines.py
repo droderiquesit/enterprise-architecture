@@ -24,8 +24,7 @@ import time
 from pathlib import Path
 
 import pytest
-
-from dockerutil import FLB_CONFIG, FLUENT_BIT_IMAGE, HERE, Stack, sh, wait_for
+from dockerutil import FLUENT_BIT_IMAGE, HERE, Stack, sh, wait_for
 
 PKG = HERE.parents[1]
 SAMPLES = HERE / "samples"

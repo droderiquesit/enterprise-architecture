@@ -1,0 +1,22 @@
+{
+ "host_list": [
+  {
+   "name": "aks-prod-weu-node-1",
+   "tags_by_source": {
+    "Datadog": [
+     "env:production",
+     "team:platform",
+     "region:westeurope",
+     "application:orders",
+     "owner:platform_contoso.example",
+     "domain:shared",
+     "tier:infrastructure",
+     "managed_by:terraform",
+     "environment:production",
+     "business_unit:retail"
+    ]
+   }
+  }
+ ],
+ "total_matching": 1
+}

@@ -50,10 +50,11 @@ def test_docs_only_change_selects_gate_and_link_check_only(real):
 
 def test_tool_change_selects_its_suites_not_unrelated_ones(real):
     tree, reg, cat = real
-    sel = impact.select(cat, _sel(["tools/review/engine.py"]), tree, reg)
-    assert {"py-review", "py-pr-reviewer", "py-tools", "gates"} <= _ids(sel)
+    # the changeset marks svc-pr-reviewer / foundation-pr-reviewer for validation (registry inputs tools/review/**)
+    sel = impact.select(cat, _sel(["tools/review/engine.py"], validate=["svc-pr-reviewer", "foundation-pr-reviewer"]), tree, reg)
+    assert {"py-review", "py-tools", "gates", "component:svc-pr-reviewer", "component:foundation-pr-reviewer"} <= _ids(sel)
     assert not {"py-charts", "obs-content", "e2e", "py-hello-common"} & _ids(sel)
-    assert not any(s.startswith("component:") for s in sel)
+    assert {s for s in sel if s.startswith("component:")} == {"component:svc-pr-reviewer", "component:foundation-pr-reviewer"}
 
 
 def test_component_and_consumers_and_covering_suites(real):

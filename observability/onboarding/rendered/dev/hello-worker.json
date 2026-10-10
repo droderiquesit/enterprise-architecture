@@ -1,333 +1,92 @@
 {
   "architecture": "aks",
-  "catalog": {
-    "component_of": [
-      "system:enterprise-hello"
-    ],
-    "enabled": true,
-    "lifecycle": "production",
-    "type": "queue-consumer"
-  },
-  "dashboards": {
-    "enabled": true,
-    "workflow_metric_prefix": null
-  },
-  "enabled": true,
-  "endpoints": [],
-  "env": "dev",
-  "generated_from": {
-    "layers": [
-      "global-defaults",
-      "platform/aks",
-      "platform/database-storage",
-      "platform/messaging",
-      "profiles/worker",
-      "manifest"
-    ],
-    "manifest": "dev/hello-worker.yaml",
-    "sha256": "5b8e0505a1440ce8e0d05270be07a81af44ac7e017d5e6a47264b62dbcbf1e79"
-  },
-  "idle_behavior": {
-    "expected_quiet_hours": null,
-    "scale_to_zero": true
-  },
-  "metadata": {
+  "azure_tags": {
     "application": "enterprise-hello",
-    "contacts": [
-      {
-        "contact": "fulfillment@example.com",
-        "name": "fulfillment mailbox",
-        "type": "email"
-      }
-    ],
-    "depends_on": [
-      "queue:order-events",
-      "datastore:notifications-table"
-    ],
-    "description": "Notifications consumer -> Table Storage.",
-    "display_name": "hello-worker",
     "domain": "notifications",
-    "languages": [
-      "python"
-    ],
+    "env": "dev",
+    "managed_by": "terraform",
     "owner": "fulfillment@example.com",
-    "repository": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture",
-    "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md",
+    "region": "swedencentral",
+    "service": "hello-worker",
     "team": "fulfillment",
     "tier": "medium"
   },
-  "monitors": {
-    "apm.consumer_error_rate": {
-      "evaluation_delay": null,
-      "key": "apm.consumer_error_rate",
-      "message": "{{#is_alert}}**CRITICAL**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_alert}}\n{{#is_warning}}**WARNING**: Messages fail processing; they will be retried and eventually dead-lettered.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. APM consumer spans for hello-worker; follow the span link to the producer trace.\n2. Check the dead-letter monitor of the Service Bus namespace.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#consumer-errors",
-      "name": "[dev] hello-worker message processing failure rate above 10%",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-fulfillment",
-          "oncall"
-        ],
-        "warning": [
-          "team-fulfillment"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 2,
-      "query": "sum(last_15m):( sum:trace.servicebus.process.errors{service:hello-worker,env:dev}.as_count() / clamp_min(sum:trace.servicebus.process.hits{service:hello-worker,env:dev}.as_count(), 5) ) * 100 > 10",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": null,
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#consumer-errors",
-      "severity": "critical",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:notifications",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:apm.consumer_error_rate",
-        "service:hello-worker",
-        "severity:critical",
-        "team:fulfillment",
-        "tier:medium"
-      ],
-      "thresholds": {
-        "critical": 10
-      },
-      "type": "query alert"
-    },
-    "k8s.container_restarts": {
-      "evaluation_delay": null,
-      "key": "k8s.container_restarts",
-      "message": "{{#is_alert}}**WARNING**: Containers of this service restarted repeatedly in the last 10 minutes (crash loop or OOM).{{/is_alert}}\n{{#is_warning}}**WARNING**: Containers of this service restarted repeatedly in the last 10 minutes (crash loop or OOM).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. kubectl -n <namespace> logs <pod> --previous to read the last crash.\n2. Check kubernetes_state.container.status_report.count.waiting by reason (CrashLoopBackOff / OOMKilled).\n3. Compare memory limits with container.memory.usage.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#container-restarts",
-      "name": "[dev] hello-worker containers restarting",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-fulfillment"
-        ],
-        "warning": [
-          "team-fulfillment"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 3,
-      "query": "change(max(last_10m),last_10m):sum:kubernetes_state.container.restarts{service:hello-worker,env:dev} by {kube_cluster_name,kube_namespace,pod_name} > 3",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": null,
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#container-restarts",
-      "severity": "warning",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:notifications",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:k8s.container_restarts",
-        "service:hello-worker",
-        "severity:warning",
-        "team:fulfillment",
-        "tier:medium"
-      ],
-      "thresholds": {
-        "critical": 3
-      },
-      "type": "query alert"
-    },
-    "k8s.replicas_unavailable": {
-      "evaluation_delay": null,
-      "key": "k8s.replicas_unavailable",
-      "message": "{{#is_alert}}**CRITICAL**: One or more replicas of the Deployment have been unavailable for 15 minutes.{{/is_alert}}\n{{#is_warning}}**WARNING**: One or more replicas of the Deployment have been unavailable for 15 minutes.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. kubectl -n <namespace> describe deployment <deployment>; check events for ImagePullBackOff / FailedScheduling.\n2. kubectl -n <namespace> get pods -l app=<deployment> -o wide; inspect readiness probe failures (/readyz).\n3. Check node pressure in the Kubernetes overview dashboard.\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#replicas-unavailable",
-      "name": "[dev] hello-worker has unavailable replicas",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-fulfillment",
-          "oncall"
-        ],
-        "warning": [
-          "team-fulfillment"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 2,
-      "query": "max(last_15m):max:kubernetes_state.deployment.replicas_unavailable{service:hello-worker,env:dev} by {kube_cluster_name,kube_namespace,kube_deployment} > 0",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": null,
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#replicas-unavailable",
-      "severity": "critical",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:notifications",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:k8s.replicas_unavailable",
-        "service:hello-worker",
-        "severity:critical",
-        "team:fulfillment",
-        "tier:medium"
-      ],
-      "thresholds": {
-        "critical": 0
-      },
-      "type": "query alert"
-    },
-    "logs.error_spike": {
-      "evaluation_delay": null,
-      "key": "logs.error_spike",
-      "message": "{{#is_alert}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_alert}}\n{{#is_warning}}**WARNING**: The service is writing an unusual number of error-level log lines.{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\n\nTroubleshooting:\n1. Open Logs for service:hello-worker env:dev status:error and group by error.kind.\n2. Pivot to the trace via trace_id / dd.trace_id on a sample line.\n3. Check the deployment events for hello-worker in the last hour (a new version is the usual cause).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#error-logs",
-      "name": "[dev] hello-worker error log volume above 50 in 10m",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-fulfillment"
-        ],
-        "warning": [
-          "team-fulfillment"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 3,
-      "query": "logs(\"service:hello-worker env:dev status:error\").index(\"*\").rollup(\"count\").last(\"10m\") > 50",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": null,
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#error-logs",
-      "severity": "warning",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:notifications",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:logs.error_spike",
-        "service:hello-worker",
-        "severity:warning",
-        "team:fulfillment",
-        "tier:medium"
-      ],
-      "thresholds": {
-        "critical": 50
-      },
-      "type": "log alert"
-    },
-    "storage.table_availability@table-store": {
-      "evaluation_delay": 900,
-      "key": "storage.table_availability@table-store",
-      "message": "{{#is_alert}}**WARNING**: Table service requests are failing (availability counts server and auth/network errors).{{/is_alert}}\n{{#is_warning}}**WARNING**: Table service requests are failing (availability counts server and auth/network errors).{{/is_warning}}\n{{#is_no_data}}**NO DATA**: the monitored signal stopped arriving. Check the telemetry pipeline canary first (a broken pipeline looks like silence).{{/is_no_data}}\n{{#is_recovery}}Recovered.{{/is_recovery}}\n\nService: `hello-worker` | env: `dev` | team: `fulfillment` | owner: fulfillment@example.com | tier: medium\nResource: [[resource.role]] `[[resource.id]]`\n\nTroubleshooting:\n1. Check StorageRead/StorageWrite diagnostic logs for status codes (403 = RBAC / firewall).\n\nRunbook: https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#storage-availability",
-      "name": "[dev] hello-worker Table storage [[resource.name]] availability below 99%",
-      "new_group_delay": 60,
-      "no_data_timeframe": null,
-      "notify": {
-        "alert": [
-          "team-fulfillment"
-        ],
-        "warning": [
-          "team-fulfillment"
-        ]
-      },
-      "notify_no_data": false,
-      "priority": 3,
-      "query": "avg(last_30m):avg:azure.storage_storageaccounts_tableservices.availability{[[resource.scope]]} < 99",
-      "renotify_interval": 0,
-      "require_full_window": false,
-      "resource_role": "table-store",
-      "runbook_url": "https://dev.azure.com/example-org/enterprise-hello/_git/enterprise-architecture?path=/docs/runbooks/alerts/hello-worker.md#storage-availability",
-      "severity": "warning",
-      "tags": [
-        "application:enterprise-hello",
-        "domain:notifications",
-        "env:dev",
-        "managed_by:observability-package",
-        "monitor:storage.table_availability",
-        "service:hello-worker",
-        "severity:warning",
-        "team:fulfillment",
-        "tier:medium"
-      ],
-      "thresholds": {
-        "critical": 99
-      },
-      "type": "query alert"
-    }
+  "deprecated_sections": [],
+  "display_name": "hello-worker",
+  "env": "dev",
+  "identity": {
+    "application": "enterprise-hello",
+    "domain": "notifications",
+    "env": "dev",
+    "owner": "fulfillment@example.com",
+    "region": "swedencentral",
+    "service": "hello-worker",
+    "team": "fulfillment",
+    "tier": "medium"
   },
-  "notifications": {
-    "critical": [
-      "team-fulfillment",
-      "oncall"
-    ],
-    "default": [
-      "team-fulfillment"
-    ],
-    "warning": [
-      "team-fulfillment"
-    ]
-  },
-  "package_version": "2.0.0",
+  "os_type": "linux",
+  "package_version": "3.0.0",
   "presence_ref": "deploy-core-aks.apps.hello-worker.id",
   "resources": [
     {
-      "entities": [
-        "order-events/fulfillment",
-        "order-events/notifications",
-        "order-events/audit",
-        "batch-items"
-      ],
       "id": "${contract:platform-messaging.namespace_id}",
       "required": true,
       "role": "servicebus",
-      "tags": {},
+      "tags": {
+        "application": "enterprise-hello",
+        "domain": "notifications",
+        "env": "dev",
+        "managed_by": "terraform",
+        "owner": "fulfillment_example.com",
+        "region": "swedencentral",
+        "service": "hello-worker",
+        "team": "fulfillment",
+        "tier": "medium"
+      },
+      "tier": null,
       "type": "Microsoft.ServiceBus/namespaces"
     },
     {
-      "entities": [],
       "id": "${contract:platform-db-table-storage.account.id}",
       "required": false,
       "role": "table-store",
-      "tags": {},
+      "tags": {
+        "application": "enterprise-hello",
+        "domain": "notifications",
+        "env": "dev",
+        "managed_by": "terraform",
+        "owner": "fulfillment_example.com",
+        "region": "swedencentral",
+        "service": "hello-worker",
+        "team": "fulfillment",
+        "tier": "medium"
+      },
+      "tier": null,
       "type": "Microsoft.Storage/storageAccounts"
     }
   ],
   "runtime": "python",
-  "schema": "rendered-service/v1",
+  "schema": "rendered-service/v2",
   "service": "hello-worker",
-  "slos": [],
-  "synthetics_defaults": {
-    "min_failure_duration": 120,
-    "min_location_failed": 1,
-    "retry": {
-      "count": 1,
-      "interval": 300
-    }
+  "source": "dev/hello-worker.yaml",
+  "source_sha256": "f8a3e25987b8deeab932eebb28569c2dea371346a9662d14ad68b9b8e6a65786",
+  "tags": {
+    "application": "enterprise-hello",
+    "domain": "notifications",
+    "env": "dev",
+    "managed_by": "terraform",
+    "owner": "fulfillment_example.com",
+    "region": "swedencentral",
+    "service": "hello-worker",
+    "team": "fulfillment",
+    "tier": "medium"
   },
-  "tags": [
-    "application:enterprise-hello",
-    "domain:notifications",
-    "env:dev",
-    "managed_by:observability-package",
-    "service:hello-worker",
-    "team:fulfillment",
-    "tier:medium"
-  ],
   "telemetry": {
-    "dbm": {
-      "enabled": false
-    },
-    "logs": {
-      "route": "daemonset"
-    },
-    "profile": "worker",
-    "rum": {
-      "enabled": false
-    },
-    "traces": {
-      "enabled": true,
-      "sample_rate": 1.0,
-      "server_operation": "servicebus.process"
-    }
+    "apm_mode": "policy",
+    "apm_sample_rate": null,
+    "dbm": null,
+    "logs_route": "daemonset",
+    "profiling": null,
+    "rum": null
   }
 }

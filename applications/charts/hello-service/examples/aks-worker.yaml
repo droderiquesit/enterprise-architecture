@@ -14,6 +14,7 @@ dsv:
 env:
   AZURE_CREDENTIAL_MODE: workload_identity
   DD_SITE: datadoghq.com
+  DD_TAGS: application:enterprise-hello,domain:notifications,managed_by:terraform,owner:fulfillment_example.com,region:swedencentral,team:fulfillment,tier:medium
   GIT_COMMIT: 0123abc
   HEALTH_PORT: '8081'
   LOG_LEVEL: info
@@ -27,7 +28,7 @@ env:
   OTEL_PYTHON_EXCLUDED_URLS: healthz,readyz,version
   OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: 'false'
   OTEL_PYTHON_LOG_CORRELATION: 'true'
-  OTEL_RESOURCE_ATTRIBUTES: application=enterprise-hello,cloud.platform=azure_aks,cloud.provider=azure,deployment.environment=dev,deployment.environment.name=dev,domain=notifications,owner=fulfillment@example.com,region=swedencentral,service.namespace=enterprise-hello,service.version=src-777777777777777777777777,team=fulfillment,tier=medium
+  OTEL_RESOURCE_ATTRIBUTES: application=enterprise-hello,cloud.platform=azure_aks,cloud.provider=azure,deployment.environment=dev,deployment.environment.name=dev,domain=notifications,managed_by=terraform,owner=fulfillment_example.com,region=swedencentral,service.name=hello-worker,service.namespace=enterprise-hello,service.version=src-777777777777777777777777,team=fulfillment,tier=medium
   OTEL_SERVICE_NAME: hello-worker
   OTEL_TRACES_EXPORTER: otlp
   OTEL_TRACES_SAMPLER: parentbased_traceidratio
@@ -36,6 +37,7 @@ env:
   SB_TOPIC: order-events
   SERVICEBUS_FQDN: eh-sbns-msg-dev-sec.servicebus.windows.net
   TABLE_MODE: memory
+  TELEMETRY_SDK: otel
 faults:
   enabled: false
 identity:
@@ -85,6 +87,14 @@ service:
   logsSource: python
   name: hello-worker
   partOf: enterprise-hello
+  tags:
+    application: enterprise-hello
+    domain: notifications
+    managed_by: terraform
+    owner: fulfillment_example.com
+    region: swedencentral
+    team: fulfillment
+    tier: medium
   team: fulfillment
   tier: medium
   version: src-777777777777777777777777
@@ -93,7 +103,9 @@ serviceAccount:
   name: hello-worker
 telemetry:
   agentHostFromHostIP: true
+  agentLogSource: ''
   disableAgentLogCollection: true
+  singleStepInstrumentation: false
 topologySpread:
   enabled: true
   hostnameSkew: 1

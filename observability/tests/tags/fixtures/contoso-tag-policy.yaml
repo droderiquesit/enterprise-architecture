@@ -1,0 +1,26 @@
+# Customer tag policy for the org-contoso fixture (what derive_from_monitors.py suggested): the existing monitors use
+# env:production, the alias `environment`, and business_unit:retail on the orders logs.
+apiVersion: observability/tag-policy/v1
+kind: TagPolicy
+metadata:
+  name: contoso
+normalize: datadog
+enforce_required: true
+keys:
+  env:
+    required: true
+    aliases: [environment]
+    value_map: {prod: production, development: dev}
+    otel_attributes: [deployment.environment.name, deployment.environment]
+    azure_tag_keys: [env, Environment]
+  service: {required: true, default: platform, otel_attributes: [service.name]}
+  version: {required: true, default: n/a, otel_attributes: [service.version]}
+  team: {required: true}
+  owner: {required: true}
+  application: {required: true, otel_attributes: [application, service.namespace]}
+  domain: {required: true}
+  tier: {required: true}
+  region: {required: true}
+  managed_by: {required: true, default: terraform}
+static_tags:
+  business_unit: retail

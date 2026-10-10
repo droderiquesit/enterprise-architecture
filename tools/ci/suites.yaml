@@ -116,13 +116,6 @@ suites:
     paths: [tests/pipeline]
     inputs: [tests/pipeline/**, pipelines/**, azure-pipelines*.yml, tools/pipeline/**, tools/validate/**,
              tools/changeset/**, catalog/components.yaml, environments/**]
-  - id: py-pr-reviewer
-    tier: unit
-    kind: pytest
-    scope: platform
-    toolchain: python
-    paths: [applications/services/pr-reviewer/tests]
-    inputs: [applications/services/pr-reviewer/**, tools/review/**]
   - id: py-review
     tier: unit
     kind: pytest

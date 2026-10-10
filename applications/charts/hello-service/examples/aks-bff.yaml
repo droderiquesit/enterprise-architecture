@@ -17,6 +17,7 @@ env:
   CATALOG_API_URL: http://hello-catalog-api.hello.svc.cluster.local
   CORS_ALLOWED_ORIGINS: ''
   DD_SITE: datadoghq.com
+  DD_TAGS: application:enterprise-hello,domain:storefront,managed_by:terraform,owner:web_example.com,region:swedencentral,team:web,tier:critical
   GIT_COMMIT: 0123abc
   LOG_LEVEL: info
   ORDERS_API_URL: http://hello-orders-api.hello.svc.cluster.local
@@ -27,11 +28,12 @@ env:
   OTEL_LOGS_EXPORTER: none
   OTEL_METRICS_EXPORTER: otlp
   OTEL_PROPAGATORS: tracecontext,baggage
-  OTEL_RESOURCE_ATTRIBUTES: application=enterprise-hello,cloud.platform=azure_aks,cloud.provider=azure,deployment.environment=dev,deployment.environment.name=dev,domain=storefront,owner=web@example.com,region=swedencentral,service.namespace=enterprise-hello,service.version=src-222222222222222222222222,team=web,tier=critical
+  OTEL_RESOURCE_ATTRIBUTES: application=enterprise-hello,cloud.platform=azure_aks,cloud.provider=azure,deployment.environment=dev,deployment.environment.name=dev,domain=storefront,managed_by=terraform,owner=web_example.com,region=swedencentral,service.name=hello-bff,service.namespace=enterprise-hello,service.version=src-222222222222222222222222,team=web,tier=critical
   OTEL_SERVICE_NAME: hello-bff
   OTEL_TRACES_EXPORTER: otlp
   OTEL_TRACES_SAMPLER: parentbased_traceidratio
   OTEL_TRACES_SAMPLER_ARG: '1'
+  TELEMETRY_SDK: otel
 faults:
   enabled: false
 identity:
@@ -83,6 +85,14 @@ service:
   logsSource: csharp
   name: hello-bff
   partOf: enterprise-hello
+  tags:
+    application: enterprise-hello
+    domain: storefront
+    managed_by: terraform
+    owner: web_example.com
+    region: swedencentral
+    team: web
+    tier: critical
   team: web
   tier: critical
   version: src-222222222222222222222222
@@ -91,7 +101,9 @@ serviceAccount:
   name: hello-bff
 telemetry:
   agentHostFromHostIP: true
+  agentLogSource: ''
   disableAgentLogCollection: true
+  singleStepInstrumentation: false
 topologySpread:
   enabled: true
   hostnameSkew: 1

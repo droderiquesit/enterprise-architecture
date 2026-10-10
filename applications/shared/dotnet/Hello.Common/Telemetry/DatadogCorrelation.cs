@@ -47,6 +47,9 @@ public static class DatadogCorrelation
         return false;
     }
 
+    /// <summary>Correlation ids of the active Datadog span only (no Activity fallback).</summary>
+    public static bool TryGetDatadogCurrent(out CorrelationIds ids) => TryGetDatadog(out ids);
+
     /// <summary>Test hook: bind to a Datadog.Trace-shaped API in <paramref name="assembly"/> (null = rescan the process).</summary>
     public static void UseAssembly(Assembly? assembly)
     {

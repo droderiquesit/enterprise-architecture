@@ -94,7 +94,7 @@ public static class HelloWebApplicationExtensions
             context.Response.OnStarting(static state =>
             {
                 var ctx = (HttpContext)state;
-                var traceparent = HelloTelemetry.ToTraceparent(Activity.Current);
+                var traceparent = HelloTelemetry.CurrentTraceparent();
                 if (traceparent is not null && !ctx.Response.Headers.ContainsKey("traceparent"))
                 {
                     ctx.Response.Headers["traceparent"] = traceparent;

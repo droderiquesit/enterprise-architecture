@@ -352,6 +352,14 @@ def browser_journey(ctx: dict) -> dict:
     exe = os.environ.get("PW_CHROMIUM_EXECUTABLE")
     if not exe:
         os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")
+        # The installed Playwright may expect a newer Chromium revision than the one present (e.g. playwright upgraded
+        # without `playwright install`): fall back to the newest locally installed full Chromium build.
+        import glob
+
+        builds = sorted(glob.glob(os.path.join(os.environ["PLAYWRIGHT_BROWSERS_PATH"], "chromium-*", "chrome-linux*", "chrome")))
+        with sync_playwright() as probe:
+            if not os.path.exists(probe.chromium.executable_path) and builds:
+                exe = builds[-1]
     rum_requests: list[dict] = []
     api_requests: list[dict] = []
     console_errors: list[str] = []

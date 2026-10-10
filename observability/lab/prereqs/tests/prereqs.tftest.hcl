@@ -40,3 +40,14 @@ run "rejects_bad_sample_rate" {
   }
   expect_failures = [var.settings]
 }
+
+run "existing_rum_application" {
+  command = apply
+  variables {
+    settings = { rum_applications = { "hello-frontend" = { mode = "existing", application_id = "cccccccc-0000-0000-0000-000000000001", client_token = "pubexisting000000000000000000000000" } } }
+  }
+  assert {
+    condition     = length(module.rum.applications) == 1 && output.contract.rum.applications["hello-frontend"].application_id == "cccccccc-0000-0000-0000-000000000001" && output.contract.rum.applications["hello-frontend"].client_token == "pubexisting000000000000000000000000"
+    error_message = "existing RUM application: contract carries its ids, nothing is created"
+  }
+}

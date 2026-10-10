@@ -64,6 +64,17 @@
         "logsSource": {
           "type": "string",
           "pattern": "^([A-Za-z0-9]([-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?)?$"
+        },
+        "tags": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_./-]{0,99}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "Non-unified Datadog tags of the tag policy -> pod annotation ad.datadoghq.com/tags"
         }
       },
       "additionalProperties": false,
@@ -275,6 +286,15 @@
         },
         "disableAgentLogCollection": {
           "type": "boolean"
+        },
+        "agentLogSource": {
+          "type": "string",
+          "pattern": "^([a-z0-9][a-z0-9._-]{0,62})?$",
+          "description": "ddsource when the node Datadog Agent collects the container's stdout"
+        },
+        "singleStepInstrumentation": {
+          "type": "boolean",
+          "description": "label admission.datadoghq.com/enabled=true (Datadog SSI)"
         }
       },
       "additionalProperties": false

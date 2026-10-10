@@ -1,0 +1,163 @@
+{
+  "instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+  "order_status_in_browser": "Fulfilled",
+  "timeline": [
+    "Pending 12:50:02 AM",
+    "Fulfilled 12:50:07 AM"
+  ],
+  "workflow_trace_ids": [
+    "0000000000000000c424d8769c17cec5"
+  ],
+  "same_trace_as_browser": true,
+  "spans_linking_to_browser_trace": [
+    {
+      "service": "hello-orders-api",
+      "scope": "Azure.Messaging.ServiceBus.ServiceBusSender",
+      "name": "ServiceBusSender.Send",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "e39d948cc149ee64",
+      "parent_span_id": "fadabb55f6b56d5a",
+      "links": [
+        {
+          "trace_id": "0000000000000000c424d8769c17cec5",
+          "span_id": "fadabb55f6b56d5a"
+        }
+      ],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "server.address": "servicebus-emulator",
+        "messaging.destination.name": "order-events"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Hello.App",
+      "name": "process order-events",
+      "kind": "consumer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "a6677dcb83bfb4b2",
+      "parent_span_id": "008f469b5d5544bf",
+      "links": [
+        {
+          "trace_id": "0000000000000000c424d8769c17cec5",
+          "span_id": "fadabb55f6b56d5a"
+        }
+      ],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "messaging.operation.type": "process",
+        "messaging.destination.name": "order-events",
+        "messaging.message.id": "815ad89e-2d3c-46e6-ac22-9b419f13f1d3"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Azure.Messaging.ServiceBus.ServiceBusProcessor",
+      "name": "ServiceBusProcessor.ProcessMessage",
+      "kind": "consumer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c2b3775359636329",
+      "parent_span_id": "fadabb55f6b56d5a",
+      "links": [
+        {
+          "trace_id": "0000000000000000c424d8769c17cec5",
+          "span_id": "fadabb55f6b56d5a"
+        }
+      ],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "server.address": "servicebus-emulator",
+        "messaging.destination.name": "order-events/Subscriptions/fulfillment"
+      }
+    }
+  ],
+  "starter_spans": [
+    {
+      "service": "hello-durable",
+      "scope": "Hello.App",
+      "name": "process order-events",
+      "kind": "consumer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "a6677dcb83bfb4b2",
+      "parent_span_id": "008f469b5d5544bf",
+      "links": [
+        {
+          "trace_id": "0000000000000000c424d8769c17cec5",
+          "span_id": "fadabb55f6b56d5a"
+        }
+      ],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "messaging.operation.type": "process",
+        "messaging.destination.name": "order-events",
+        "messaging.message.id": "815ad89e-2d3c-46e6-ac22-9b419f13f1d3"
+      }
+    }
+  ],
+  "orchestration_spans": [
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "orchestration:OrderProcessing",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "254ccfaeab282cc2",
+      "parent_span_id": "e9b02f5c010a4158",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "orchestration",
+        "durabletask.task.name": "OrderProcessing",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.status": "Completed"
+      }
+    }
+  ],
+  "activity_span_counts": {
+    "activity:ReserveInventory": 2,
+    "activity:UpdateOrderStatus": 6,
+    "activity:ChargePayment": 2,
+    "activity:RecordFulfillment": 2,
+    "activity:RecordWorkflowOutcome": 2
+  },
+  "sql_spans_in_workflow_trace": [
+    {
+      "service": "hello-durable",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "EXEC TABLE SELECT sys.indexes",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "ebaa5a34216ae6de",
+      "parent_span_id": "2ed3ed900c30f1f2",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "fulfillment",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "SELECT",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "b99b333eead31992",
+      "parent_span_id": "2ed3ed900c30f1f2",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "fulfillment",
+        "server.address": "mssql"
+      }
+    }
+  ],
+  "downstream_server_spans_in_workflow_trace": {
+    "hello-catalog-api GET /products/{sku}": 1,
+    "hello-orders-api POST /orders/": 1,
+    "hello-bff POST /api/orders": 1,
+    "hello-inventory-api POST /inventory/{sku}/reserve": 1,
+    "hello-orders-api PATCH /orders/{id:guid}/status": 3,
+    "hello-partner-sim POST /payments": 1
+  }
+}

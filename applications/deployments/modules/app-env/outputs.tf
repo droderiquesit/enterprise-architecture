@@ -42,3 +42,48 @@ output "k8s_patch_object" {
 output "datadog_tags" {
   value = module.instrumentation.datadog_tags
 }
+
+output "tags" {
+  description = "Rendered Datadog tag set of the workload (tag policy)."
+  value       = module.instrumentation.tags
+}
+
+output "azure_tags" {
+  description = "Azure resource tags of the workload's app resource (same identity as its telemetry; the Datadog Azure integration imports them). Merge over the root's required tags."
+  value       = module.instrumentation.azure_tags
+}
+
+output "k8s_labels" {
+  description = "Pod labels: tags.datadoghq.com/* + label-safe policy tags + logs source (+ admission.datadoghq.com/enabled under SSI)."
+  value       = module.instrumentation.k8s_labels
+}
+
+output "k8s_annotations" {
+  description = "Pod annotations: ad.datadoghq.com/tags (+ ad.datadoghq.com/<container>.logs when the Datadog Agent collects the logs)."
+  value       = module.instrumentation.k8s_annotations
+}
+
+output "extra_tags_map" {
+  description = "Non-unified policy tags (Helm values service.tags -> ad.datadoghq.com/tags annotation)."
+  value       = { for k, v in module.instrumentation.tags : k => v if !contains(["env", "service", "version"], k) }
+}
+
+output "apm" {
+  description = "Effective APM decision (mode, method, fallback reason, ready)."
+  value       = module.instrumentation.apm
+}
+
+output "profiling" {
+  description = "Effective Continuous Profiler decision."
+  value       = module.instrumentation.profiling
+}
+
+output "log_collector" {
+  description = "datadog-agent | fluent-bit | fluent-bit-sidecar | diagnostic-settings."
+  value       = module.instrumentation.log_collector
+}
+
+output "app_requirements" {
+  description = "What the image / package must contain for the chosen telemetry path."
+  value       = module.instrumentation.app_requirements
+}

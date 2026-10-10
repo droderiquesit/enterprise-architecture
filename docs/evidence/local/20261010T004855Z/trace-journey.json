@@ -1,0 +1,1116 @@
+{
+  "browser_traceparent": "00-0000000000000000c424d8769c17cec5-54fafe7362f392b9-01",
+  "trace_id": "0000000000000000c424d8769c17cec5",
+  "services_in_trace": [
+    "hello-bff",
+    "hello-catalog-api",
+    "hello-durable",
+    "hello-inventory-api",
+    "hello-orders-api",
+    "hello-partner-sim"
+  ],
+  "bff_server_parent_is_browser_span": true,
+  "spans": [
+    {
+      "service": "hello-bff",
+      "scope": "Microsoft.AspNetCore",
+      "name": "POST /api/orders",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "b259778e2d35604c",
+      "parent_span_id": "54fafe7362f392b9",
+      "links": [],
+      "attributes": {
+        "http.request.method": "POST",
+        "server.address": "localhost",
+        "http.route": "/api/orders",
+        "http.response.status_code": 202
+      }
+    },
+    {
+      "service": "hello-bff",
+      "scope": "System.Net.Http",
+      "name": "POST",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "6cbacd4fd8b0f6bd",
+      "parent_span_id": "b259778e2d35604c",
+      "links": [],
+      "attributes": {
+        "http.request.method": "POST",
+        "server.address": "orders-api",
+        "url.full": "http://orders-api:8080/orders",
+        "http.response.status_code": 202
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "Microsoft.AspNetCore",
+      "name": "POST /orders/",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "e6bcf3a4a76eb98d",
+      "parent_span_id": "6cbacd4fd8b0f6bd",
+      "links": [],
+      "attributes": {
+        "http.request.method": "POST",
+        "server.address": "orders-api",
+        "http.route": "/orders/",
+        "http.response.status_code": 202
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "SELECT orders.idempotency",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "140d272443d938b0",
+      "parent_span_id": "e6bcf3a4a76eb98d",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "orders",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "System.Net.Http",
+      "name": "GET",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "645b624ae94ceda3",
+      "parent_span_id": "e6bcf3a4a76eb98d",
+      "links": [],
+      "attributes": {
+        "http.request.method": "GET",
+        "server.address": "catalog-api",
+        "url.full": "http://catalog-api:8080/products/SKU-0015",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-catalog-api",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "GET /products/{sku}",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "323f1bbfda789c46",
+      "parent_span_id": "645b624ae94ceda3",
+      "links": [],
+      "attributes": {
+        "http.route": "/products/{sku}"
+      }
+    },
+    {
+      "service": "hello-catalog-api",
+      "scope": "opentelemetry.instrumentation.redis",
+      "name": "GET",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "3c8f68d7d081cf13",
+      "parent_span_id": "323f1bbfda789c46",
+      "links": [],
+      "attributes": {
+        "db.system": "redis"
+      }
+    },
+    {
+      "service": "hello-catalog-api",
+      "scope": "opentelemetry.instrumentation.psycopg",
+      "name": "catalog",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "9838f4b084de36bc",
+      "parent_span_id": "323f1bbfda789c46",
+      "links": [],
+      "attributes": {
+        "db.system": "postgresql"
+      }
+    },
+    {
+      "service": "hello-catalog-api",
+      "scope": "opentelemetry.instrumentation.psycopg",
+      "name": "SELECT",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "dc8e1228e28914f6",
+      "parent_span_id": "323f1bbfda789c46",
+      "links": [],
+      "attributes": {
+        "db.system": "postgresql"
+      }
+    },
+    {
+      "service": "hello-catalog-api",
+      "scope": "opentelemetry.instrumentation.redis",
+      "name": "SET",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c7b2e92285df44dc",
+      "parent_span_id": "323f1bbfda789c46",
+      "links": [],
+      "attributes": {
+        "db.system": "redis"
+      }
+    },
+    {
+      "service": "hello-catalog-api",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "GET /products/{sku} http send",
+      "kind": "internal",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "dc829bbb411bf6d0",
+      "parent_span_id": "323f1bbfda789c46",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-catalog-api",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "GET /products/{sku} http send",
+      "kind": "internal",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c613f6dc84477f79",
+      "parent_span_id": "323f1bbfda789c46",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-catalog-api",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "GET /products/{sku} http send",
+      "kind": "internal",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "6c2477a6b4bf444b",
+      "parent_span_id": "323f1bbfda789c46",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "INSERT orders.idempotency orders.orders",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "5fad9afa10e647be",
+      "parent_span_id": "e6bcf3a4a76eb98d",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "orders",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "Hello.App",
+      "name": "send order-events",
+      "kind": "producer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "fadabb55f6b56d5a",
+      "parent_span_id": "e6bcf3a4a76eb98d",
+      "links": [],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "messaging.operation.type": "send",
+        "messaging.destination.name": "order-events",
+        "messaging.message.id": "815ad89e-2d3c-46e6-ac22-9b419f13f1d3"
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "Azure.Messaging.ServiceBus.ServiceBusSender",
+      "name": "ServiceBusSender.Send",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "e39d948cc149ee64",
+      "parent_span_id": "fadabb55f6b56d5a",
+      "links": [
+        {
+          "trace_id": "0000000000000000c424d8769c17cec5",
+          "span_id": "fadabb55f6b56d5a"
+        }
+      ],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "server.address": "servicebus-emulator",
+        "messaging.destination.name": "order-events"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Azure.Messaging.ServiceBus.ServiceBusProcessor",
+      "name": "ServiceBusProcessor.ProcessMessage",
+      "kind": "consumer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c2b3775359636329",
+      "parent_span_id": "fadabb55f6b56d5a",
+      "links": [
+        {
+          "trace_id": "0000000000000000c424d8769c17cec5",
+          "span_id": "fadabb55f6b56d5a"
+        }
+      ],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "server.address": "servicebus-emulator",
+        "messaging.destination.name": "order-events/Subscriptions/fulfillment"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "008f469b5d5544bf",
+      "parent_span_id": "c2b3775359636329",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Hello.App",
+      "name": "process order-events",
+      "kind": "consumer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "a6677dcb83bfb4b2",
+      "parent_span_id": "008f469b5d5544bf",
+      "links": [
+        {
+          "trace_id": "0000000000000000c424d8769c17cec5",
+          "span_id": "fadabb55f6b56d5a"
+        }
+      ],
+      "attributes": {
+        "messaging.system": "servicebus",
+        "messaging.operation.type": "process",
+        "messaging.destination.name": "order-events",
+        "messaging.message.id": "815ad89e-2d3c-46e6-ac22-9b419f13f1d3"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "System.Net.Http",
+      "name": "POST",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c4ee18a0bc8e77be",
+      "parent_span_id": "0448d19379a65905",
+      "links": [],
+      "attributes": {
+        "http.request.method": "POST",
+        "server.address": "127.0.0.1",
+        "url.full": "http://127.0.0.1:44825/TaskHubSidecarService/GetInstance",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "WebJobs.Extensions.DurableTask",
+      "name": "create_orchestration:OrderProcessing",
+      "kind": "producer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "e9b02f5c010a4158",
+      "parent_span_id": "6f6a80bc43c7a8f8",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "orchestration",
+        "durabletask.task.operation": "create_orchestration",
+        "durabletask.task.name": "OrderProcessing",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.execution_id": "abc791c6-360a-4c72-95aa-6ed2d0081f1a"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.DurableTask",
+      "name": "create_orchestration:OrderProcessing",
+      "kind": "producer",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "6f6a80bc43c7a8f8",
+      "parent_span_id": "a6677dcb83bfb4b2",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "orchestration",
+        "durabletask.task.name": "OrderProcessing",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "System.Net.Http",
+      "name": "POST",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "979124ee5b8c1e55",
+      "parent_span_id": "51ccc03f722da902",
+      "links": [],
+      "attributes": {
+        "http.request.method": "POST",
+        "server.address": "127.0.0.1",
+        "url.full": "http://127.0.0.1:44825/TaskHubSidecarService/StartInstance",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "orchestration:OrderProcessing",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "254ccfaeab282cc2",
+      "parent_span_id": "e9b02f5c010a4158",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "orchestration",
+        "durabletask.task.name": "OrderProcessing",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.status": "Completed"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "b507b9fdc118fcc0",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:ReserveInventory",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "88c54db918ee6b49",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "ReserveInventory",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 0
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:ReserveInventory",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "4f9b7e9376b3aead",
+      "parent_span_id": "88c54db918ee6b49",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "ReserveInventory",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 0
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "6bbabb5a4a0fbbf4",
+      "parent_span_id": "4f9b7e9376b3aead",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "System.Net.Http",
+      "name": "POST",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "35a890feebb0f446",
+      "parent_span_id": "6bbabb5a4a0fbbf4",
+      "links": [],
+      "attributes": {
+        "http.request.method": "POST",
+        "server.address": "inventory-api",
+        "url.full": "http://inventory-api:8080/inventory/SKU-0015/reserve",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-inventory-api",
+      "scope": "Microsoft.AspNetCore",
+      "name": "POST /inventory/{sku}/reserve",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "8950bc5358a67c67",
+      "parent_span_id": "35a890feebb0f446",
+      "links": [],
+      "attributes": {
+        "http.request.method": "POST",
+        "server.address": "inventory-api",
+        "http.route": "/inventory/{sku}/reserve",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "2a87df4868345a09",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:UpdateOrderStatus",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "22aff2b250afeec6",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "UpdateOrderStatus",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 1
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:UpdateOrderStatus",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "42c1b581452c338b",
+      "parent_span_id": "22aff2b250afeec6",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "UpdateOrderStatus",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 1
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "3828efc3c8b95dfc",
+      "parent_span_id": "42c1b581452c338b",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "System.Net.Http",
+      "name": "PATCH",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "60386b2323318ff3",
+      "parent_span_id": "3828efc3c8b95dfc",
+      "links": [],
+      "attributes": {
+        "http.request.method": "PATCH",
+        "server.address": "orders-api",
+        "url.full": "http://orders-api:8080/orders/815ad89e-2d3c-46e6-ac22-9b419f13f1d3/status",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "Microsoft.AspNetCore",
+      "name": "PATCH /orders/{id:guid}/status",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "e681ce28d591b0d6",
+      "parent_span_id": "60386b2323318ff3",
+      "links": [],
+      "attributes": {
+        "http.request.method": "PATCH",
+        "server.address": "orders-api",
+        "http.route": "/orders/{id:guid}/status",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "SELECT orders.orders",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "ce287ce9d27c64d4",
+      "parent_span_id": "e681ce28d591b0d6",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "orders",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "UPDATE",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "b4f4a7d7a42a5d71",
+      "parent_span_id": "e681ce28d591b0d6",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "orders",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "61ee52c21352c007",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:ChargePayment",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "5e3cfff3df00f9cc",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "ChargePayment",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 2
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:ChargePayment",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c0acf46aea9d11e0",
+      "parent_span_id": "5e3cfff3df00f9cc",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "ChargePayment",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 2
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "df56285e8907ea21",
+      "parent_span_id": "c0acf46aea9d11e0",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "System.Net.Http",
+      "name": "POST",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "ca00d468e29fbf42",
+      "parent_span_id": "df56285e8907ea21",
+      "links": [],
+      "attributes": {
+        "http.request.method": "POST",
+        "server.address": "partner-sim",
+        "url.full": "http://partner-sim:8080/payments",
+        "http.response.status_code": 201
+      }
+    },
+    {
+      "service": "hello-partner-sim",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "POST /payments",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "a4967d8e85a9a513",
+      "parent_span_id": "ca00d468e29fbf42",
+      "links": [],
+      "attributes": {
+        "http.route": "/payments"
+      }
+    },
+    {
+      "service": "hello-partner-sim",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "POST /payments http receive",
+      "kind": "internal",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "0d195c0866a8a363",
+      "parent_span_id": "a4967d8e85a9a513",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-partner-sim",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "POST /payments http send",
+      "kind": "internal",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c203662db238ed63",
+      "parent_span_id": "a4967d8e85a9a513",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-partner-sim",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "POST /payments http send",
+      "kind": "internal",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "cfbbcbaa4fdf3d62",
+      "parent_span_id": "a4967d8e85a9a513",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-partner-sim",
+      "scope": "opentelemetry.instrumentation.fastapi",
+      "name": "POST /payments http send",
+      "kind": "internal",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "e8acda6db7b02b08",
+      "parent_span_id": "a4967d8e85a9a513",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "7a733b49390201e7",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:UpdateOrderStatus",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "0d7f5c2bf6b1bcdf",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "UpdateOrderStatus",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 4
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:UpdateOrderStatus",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c12b9ad6a3ab5327",
+      "parent_span_id": "0d7f5c2bf6b1bcdf",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "UpdateOrderStatus",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 4
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "2411f077a39ed766",
+      "parent_span_id": "c12b9ad6a3ab5327",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "System.Net.Http",
+      "name": "PATCH",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "b68cc5f996a0ad21",
+      "parent_span_id": "2411f077a39ed766",
+      "links": [],
+      "attributes": {
+        "http.request.method": "PATCH",
+        "server.address": "orders-api",
+        "url.full": "http://orders-api:8080/orders/815ad89e-2d3c-46e6-ac22-9b419f13f1d3/status",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "Microsoft.AspNetCore",
+      "name": "PATCH /orders/{id:guid}/status",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "39fdbd343e512bcc",
+      "parent_span_id": "b68cc5f996a0ad21",
+      "links": [],
+      "attributes": {
+        "http.request.method": "PATCH",
+        "server.address": "orders-api",
+        "http.route": "/orders/{id:guid}/status",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "SELECT orders.orders",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "a1a5947a4814e77a",
+      "parent_span_id": "39fdbd343e512bcc",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "orders",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "UPDATE",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "3d308a473b63e9fe",
+      "parent_span_id": "39fdbd343e512bcc",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "orders",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "75e10a31b3edb8a9",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:RecordFulfillment",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "8a512e790697e474",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "RecordFulfillment",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 5
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:RecordFulfillment",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "6e630d08b03adf94",
+      "parent_span_id": "8a512e790697e474",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "RecordFulfillment",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 5
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "2ed3ed900c30f1f2",
+      "parent_span_id": "6e630d08b03adf94",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "EXEC TABLE SELECT sys.indexes",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "ebaa5a34216ae6de",
+      "parent_span_id": "2ed3ed900c30f1f2",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "fulfillment",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "SELECT",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "b99b333eead31992",
+      "parent_span_id": "2ed3ed900c30f1f2",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "fulfillment",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "246acc9f7ee35e26",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:UpdateOrderStatus",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "914d8f35ae6bfc5b",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "UpdateOrderStatus",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 6
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:UpdateOrderStatus",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "e13de44ee70cfd91",
+      "parent_span_id": "914d8f35ae6bfc5b",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "UpdateOrderStatus",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 6
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "4bd98ae7f55ed576",
+      "parent_span_id": "e13de44ee70cfd91",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "System.Net.Http",
+      "name": "PATCH",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "99180fa75aa055d0",
+      "parent_span_id": "4bd98ae7f55ed576",
+      "links": [],
+      "attributes": {
+        "http.request.method": "PATCH",
+        "server.address": "orders-api",
+        "url.full": "http://orders-api:8080/orders/815ad89e-2d3c-46e6-ac22-9b419f13f1d3/status",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "Microsoft.AspNetCore",
+      "name": "PATCH /orders/{id:guid}/status",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "b56047fbd2fea28d",
+      "parent_span_id": "99180fa75aa055d0",
+      "links": [],
+      "attributes": {
+        "http.request.method": "PATCH",
+        "server.address": "orders-api",
+        "http.route": "/orders/{id:guid}/status",
+        "http.response.status_code": 200
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "SELECT orders.orders",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "1c019c69e30fc9f6",
+      "parent_span_id": "b56047fbd2fea28d",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "orders",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-orders-api",
+      "scope": "OpenTelemetry.Instrumentation.SqlClient",
+      "name": "UPDATE",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "c2e9e30da20af76a",
+      "parent_span_id": "b56047fbd2fea28d",
+      "links": [],
+      "attributes": {
+        "db.system.name": "microsoft.sql_server",
+        "db.namespace": "orders",
+        "server.address": "mssql"
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "b1bde051276516bf",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:RecordWorkflowOutcome",
+      "kind": "client",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "d733f6cf448abb64",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "RecordWorkflowOutcome",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 7
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "DurableTask.Core",
+      "name": "activity:RecordWorkflowOutcome",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "0d1ec6b7f1d88f04",
+      "parent_span_id": "d733f6cf448abb64",
+      "links": [],
+      "attributes": {
+        "durabletask.type": "activity",
+        "durabletask.task.name": "RecordWorkflowOutcome",
+        "durabletask.task.instance_id": "order-815ad89e-2d3c-46e6-ac22-9b419f13f1d3",
+        "durabletask.task.task_id": 7
+      }
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "6beaacb93cb5b6bf",
+      "parent_span_id": "0d1ec6b7f1d88f04",
+      "links": [],
+      "attributes": {}
+    },
+    {
+      "service": "hello-durable",
+      "scope": "Microsoft.Azure.Functions.Worker",
+      "name": "Invoke",
+      "kind": "server",
+      "trace_id": "0000000000000000c424d8769c17cec5",
+      "span_id": "fa560eecb405075a",
+      "parent_span_id": "254ccfaeab282cc2",
+      "links": [],
+      "attributes": {}
+    }
+  ],
+  "products_list_trace": {
+    "traceparent": "00-000000000000000012ce67c5925b0daa-16db466b2df8ca5d-01",
+    "postgresql_spans": [
+      {
+        "service": "hello-catalog-api",
+        "scope": "opentelemetry.instrumentation.psycopg",
+        "name": "catalog",
+        "kind": "client",
+        "trace_id": "000000000000000012ce67c5925b0daa",
+        "span_id": "148ed41756b45533",
+        "parent_span_id": "91970ae0e64e285f",
+        "links": [],
+        "attributes": {
+          "db.system": "postgresql"
+        }
+      },
+      {
+        "service": "hello-catalog-api",
+        "scope": "opentelemetry.instrumentation.psycopg",
+        "name": "SELECT",
+        "kind": "client",
+        "trace_id": "000000000000000012ce67c5925b0daa",
+        "span_id": "d07661e150207c55",
+        "parent_span_id": "91970ae0e64e285f",
+        "links": [],
+        "attributes": {
+          "db.system": "postgresql"
+        }
+      }
+    ]
+  }
+}

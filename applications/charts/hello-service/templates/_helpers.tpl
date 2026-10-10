@@ -157,14 +157,25 @@ metadata:
     {{- if .Values.identity.workloadIdentity }}
     azure.workload.identity/use: "true"
     {{- end }}
+    {{- if .Values.telemetry.singleStepInstrumentation }}
+    # Datadog Single Step Instrumentation: the Cluster Agent admission controller injects the Datadog library
+    admission.datadoghq.com/enabled: "true"
+    {{- end }}
     {{- with .Values.podLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- if or .Values.telemetry.disableAgentLogCollection .Values.podAnnotations }}
+  {{- if or .Values.telemetry.disableAgentLogCollection .Values.telemetry.agentLogSource .Values.podAnnotations .Values.service.tags }}
   annotations:
     {{- if .Values.telemetry.disableAgentLogCollection }}
     # Logs are collected by the Fluent Bit DaemonSet only; the Datadog Agent must not ship them too.
     ad.datadoghq.com/{{ $name }}.logs: "[]"
+    {{- else if .Values.telemetry.agentLogSource }}
+    # The node Datadog Agent collects this container's stdout (-> Observability Pipelines Worker) with this source.
+    ad.datadoghq.com/{{ $name }}.logs: {{ printf "[{\"source\":%q,\"service\":%q}]" .Values.telemetry.agentLogSource .Values.service.name | quote }}
+    {{- end }}
+    {{- with .Values.service.tags }}
+    # Tag policy (observability/modules/tagging): every non-unified Datadog tag (Agent tag autodiscovery)
+    ad.datadoghq.com/tags: {{ toJson . | quote }}
     {{- end }}
     {{- with .Values.podAnnotations }}
     {{- toYaml . | nindent 4 }}

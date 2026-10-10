@@ -26,6 +26,10 @@ service:
   tier: ""
   # Fluent Bit / Datadog log source (logs.datadoghq.com/source label): csharp | python | nodejs | java
   logsSource: ""
+  # Every other Datadog tag of the tag policy (owner, application, region, managed_by, cost_center, ...), rendered
+  # as the pod annotation ad.datadoghq.com/tags (Agent tag autodiscovery; values need not be label-safe).
+  # Deployers pass app-env output extra_tags_map.
+  tags: {}
 
 # -- Container image. Digest pinning is mandatory: `tag` is rejected by the schema.
 image:
@@ -97,6 +101,11 @@ telemetry:
   # Pod annotation ad.datadoghq.com/<container>.logs: '[]' - logs are collected by the Fluent Bit
   # DaemonSet only; the Datadog Agent must not ship the same stdout lines.
   disableAgentLogCollection: true
+  # When the node Datadog Agent is the log collector (fleet policy logs.node_collector = agent):
+  # disableAgentLogCollection=false + agentLogSource=<ddsource> -> ad.datadoghq.com/<container>.logs source/service.
+  agentLogSource: ""
+  # Label admission.datadoghq.com/enabled=true for Datadog Single Step Instrumentation (apm.mode = datadog).
+  singleStepInstrumentation: false
 
 # -- Optional file logging (LOG_FILE_PATH) on an emptyDir. Off on AKS/ARO: stdout -> Fluent Bit DaemonSet.
 logFile:

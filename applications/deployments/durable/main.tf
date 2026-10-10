@@ -94,7 +94,7 @@ resource "azurerm_function_app_flex_consumption" "this" {
   resource_group_name = local.rg
   location            = local.fx_loc
   service_plan_id     = local.flex.plan_id
-  tags                = merge(local.tags, { service = local.svc, version = local.artifact_version[local.artifact] })
+  tags                = merge(local.tags, { service = local.svc, version = local.artifact_version[local.artifact] }, module.env.azure_tags)
 
   runtime_name           = "dotnet-isolated"
   runtime_version        = "10.0"
@@ -177,7 +177,7 @@ resource "azurerm_windows_function_app" "reconciliation" {
   resource_group_name = local.rg
   location            = local.fx_loc
   service_plan_id     = local.fx.consumption_windows.plan_id
-  tags                = merge(local.tags, { service = local.svc, version = local.artifact_version[local.artifact] })
+  tags                = merge(local.tags, { service = local.svc, version = local.artifact_version[local.artifact] }, module.env.azure_tags)
 
   https_only                                     = true
   public_network_access_enabled                  = true

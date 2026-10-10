@@ -36,6 +36,10 @@ module "gateway_config" {
   memory_mib               = local.gw_mem_mib
   hostname                 = local.gw_name
   images                   = { upstream = var.images.otel_contrib, ddot = var.images.ddot_collector }
+  # tag policy at the gateway: environment-wide defaults + per-service identity from the onboarding manifests
+  default_attributes    = { for k, v in local.collector_tags : k => v if !contains(["env", "service", "version"], k) }
+  service_attributes    = { for svc, t in var.service_tags : svc => { for k, v in t : k => v if !contains(["env", "service", "version"], k) } }
+  metric_attribute_keys = sort(keys(module.tags.pod_labels_as_tags))
 }
 
 locals {

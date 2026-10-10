@@ -10,7 +10,8 @@ variable "settings" {
     datadog_chart_version    = optional(string, "3.253.2")
     fluent_bit_chart_version = optional(string, "0.58.3")
     exclude_namespaces       = optional(list(string), ["kube-system", "datadog", "fluent-bit", "gatekeeper-system", "calico-system", "tigera-operator"])
-    dbm_cluster_checks       = optional(map(string), {}) # from obs-dbm (hosting = cluster_checks): file -> conf
+    ssi_namespaces           = optional(list(string), ["hello"]) # Single Step Instrumentation targets (fleet apm.mode = datadog)
+    dbm_cluster_checks       = optional(map(string), {})         # from obs-dbm (hosting = cluster_checks): file -> conf
     # dsv_secret_backend (default): Agents + Fluent Bit read the key from DSV with workload identity;
     # existing: documented fallback, Secret <synced_secret_name> maintained by the Delinea dsv-k8s syncer
     api_key_mode              = optional(string, "dsv_secret_backend")
@@ -30,6 +31,14 @@ variable "obs_telemetry_transport" {
   type = object({
     datadog_site = string
     api_key_ref  = string
+    aggregator = optional(object({
+      kind           = optional(string)
+      fqdn           = optional(string)
+      agent_logs_url = optional(string)
+    }))
+    env = optional(object({
+      fleet = optional(map(string))
+    }))
     secrets = object({
       tenant      = optional(string)
       tld         = optional(string)

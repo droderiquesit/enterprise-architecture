@@ -1,16 +1,16 @@
 {
   "meta": {
-    "started": "2026-10-10T00:19:30+00:00",
+    "started": "2026-10-10T00:47:14+00:00",
     "agent_healthy": true,
     "agent_version": "84.2 - Commit: 73e6b035 - Serialization version: v5.0.209 - Go version: go1.26.7",
     "catalog_ready": true,
     "orders_ready": true,
     "images": {
-      "hello-catalog-api:0.1.0-e2e": "sha256:325963b223ad",
-      "hello-orders-api-ddtrace:0.1.0-e2e": "sha256:165e69002d85",
+      "hello-catalog-api:0.1.0-e2e": "sha256:12709f107176",
+      "hello-orders-api-ddtrace:0.1.0-e2e": "sha256:0800b78066eb",
       "datadog/agent:7.84.2": "sha256:779986aa446b"
     },
-    "finished": "2026-10-10T00:20:17+00:00"
+    "finished": "2026-10-10T00:48:21+00:00"
   },
   "passed": 10,
   "total": 10,
@@ -29,7 +29,7 @@
       "check": "traces from ddtrace (Python) and dd-trace-dotnet reached the intake through the Agent",
       "result": "pass",
       "detail": {
-        "trace_payloads": 2,
+        "trace_payloads": 1,
         "python_spans": 15,
         "dotnet_spans": 10,
         "tracer_versions": [
@@ -56,12 +56,12 @@
       }
     },
     "dd-3": {
-      "check": "distributed trace .NET -> Python with one 128-bit trace id and correct parenting",
+      "check": "distributed trace .NET -> Python with one 128-bit trace id, correct parenting, traceparent response header",
       "result": "pass",
       "detail": {
         "traces": [
           {
-            "trace_id": "6ac984b000000000e5bfb2cb61e5e4c4",
+            "trace_id": "6ac98b3a000000001f1c5784ca479ac3",
             "catalog_parented_by_orders_client": true,
             "spans": [
               [
@@ -103,27 +103,9 @@
             ]
           },
           {
-            "trace_id": "6ac984b100000000d1ce51983ecbf4e9",
+            "trace_id": "6ac98b3b0000000057cbd91b18be1e8a",
             "catalog_parented_by_orders_client": true,
             "spans": [
-              [
-                ".NET",
-                "hello-orders-api-http-client",
-                "http.request",
-                "GET catalog-api:8080/products/SKU-0002"
-              ],
-              [
-                ".NET",
-                "hello-orders-api",
-                "producer",
-                "send order-events"
-              ],
-              [
-                ".NET",
-                "hello-orders-api",
-                "aspnet_core.request",
-                "POST /orders"
-              ],
               [
                 "python",
                 "hello-catalog-api",
@@ -141,11 +123,34 @@
                 "hello-catalog-api",
                 "fastapi.serialize_response",
                 "fastapi.serialize_response"
+              ],
+              [
+                ".NET",
+                "hello-orders-api-http-client",
+                "http.request",
+                "GET catalog-api:8080/products/SKU-0002"
+              ],
+              [
+                ".NET",
+                "hello-orders-api",
+                "producer",
+                "send order-events"
+              ],
+              [
+                ".NET",
+                "hello-orders-api",
+                "aspnet_core.request",
+                "POST /orders"
               ]
             ]
           }
         ],
-        "count": 2
+        "count": 2,
+        "response_traceparent_trace_ids": [
+          "6ac98b3a000000001f1c5784ca479ac3",
+          "6ac98b3b0000000057cbd91b18be1e8a"
+        ],
+        "response_traceparent_is_datadog_trace": true
       }
     },
     "dd-4": {
@@ -160,14 +165,14 @@
           "service": "hello-orders-api",
           "meta": {
             "span.kind": "producer",
-            "otel.trace_id": "6ac984b000000000e5bfb2cb61e5e4c4",
+            "otel.trace_id": "6ac98b3a000000001f1c5784ca479ac3",
             "otel.library.name": "Hello.App",
             "otel.status_code": "STATUS_CODE_UNSET",
             "messaging.system": "servicebus",
             "messaging.operation.type": "send",
             "messaging.operation.name": "send",
             "messaging.destination.name": "order-events",
-            "messaging.message.id": "6430da72-7559-47bb-ae0c-3d6ebe0e6f8c"
+            "messaging.message.id": "510ff332-4022-452f-ac4a-819cca43f855"
           }
         }
       }
@@ -185,8 +190,8 @@
       "result": "pass",
       "detail": {
         "correlated_lines": {
-          "hello-catalog-api": 5,
-          "hello-orders-api": 4
+          "hello-orders-api": 4,
+          "hello-catalog-api": 5
         },
         "lines_with_ids_not_matching_a_received_trace": 0,
         "examples_unmatched": [],
@@ -213,6 +218,7 @@
       "detail": {
         "hello_metrics": [
           "hello.catalog.cache.requests",
+          "hello.http.dependency.duration",
           "hello.idempotency.replays",
           "hello.orders.created"
         ],
@@ -220,7 +226,7 @@
           "env:e2e-dd"
         ],
         "forbidden_tags": [],
-        "series_payloads": 3
+        "series_payloads": 5
       }
     },
     "dd-8": {
@@ -229,7 +235,7 @@
       "detail": {
         "families": {
           "python": {
-            "uploads": 1,
+            "uploads": 2,
             "parts": [
               "code-provenance.json",
               "event",
@@ -242,7 +248,7 @@
             ]
           },
           "dotnet": {
-            "uploads": 1,
+            "uploads": 2,
             "parts": [
               "event",
               "metrics.json",
@@ -255,7 +261,7 @@
             ]
           }
         },
-        "profile_posts_at_mock_intake": 3
+        "profile_posts_at_mock_intake": 4
       }
     },
     "dd-9": {
@@ -281,11 +287,12 @@
       "check": "API key on every Agent payload; nothing sent to a real Datadog endpoint",
       "result": "pass",
       "detail": {
-        "payloads": 18,
+        "payloads": 22,
         "without_api_key": [],
         "sends_to_real_datadog": [],
         "paths": [
           "/api/beta/sketches",
+          "/api/v0.2/stats",
           "/api/v0.2/traces",
           "/api/v1/check_run",
           "/api/v1/metadata",
@@ -329,7 +336,7 @@
       {
         "name": "orders POST /orders",
         "status": 202,
-        "traceparent": "00-8eba8468254609b7a27385509584ed32-9f83772d65ae12e1-00"
+        "traceparent": "00-6ac98b3a000000001f1c5784ca479ac3-48f1fb3d57ffa6ea-01"
       },
       {
         "name": "orders POST /orders (idempotent replay)",
@@ -338,7 +345,7 @@
       {
         "name": "orders POST /orders",
         "status": 202,
-        "traceparent": "00-3104cfabf492dae67b96221216ea1c13-0a89fcfc9a897ef5-00"
+        "traceparent": "00-6ac98b3b0000000057cbd91b18be1e8a-4259aec0da12444e-01"
       },
       {
         "name": "orders GET /orders",
@@ -350,8 +357,8 @@
       }
     ],
     "orders": [
-      "6430da72-7559-47bb-ae0c-3d6ebe0e6f8c",
-      "905bfddc-fb34-4537-81bd-d885cf250212"
+      "510ff332-4022-452f-ac4a-819cca43f855",
+      "d6cc3a08-c84f-4167-97b1-b43bf3477fe1"
     ]
   }
 }

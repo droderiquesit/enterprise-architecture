@@ -1,6 +1,7 @@
-# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# Lab onboarding manifest v2 (Enterprise Hello, env dev): identity + tags + resources + telemetry routing.
+# ${contract:...} references are resolved at plan
 # time from contracts (render.py references -> contract_references). See observability/README.md.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: hello-jobs
@@ -22,23 +23,8 @@ metadata:
   - name: fulfillment mailbox
     type: email
     contact: fulfillment@example.com
+  region: swedencentral
 spec:
   architecture: aca
   runtime: python
-  telemetry:
-    profile: job
-  monitors:
-    params:
-      expected_run_window: 1h
   presence_ref: deploy-jobs.jobs.seed.id
-  notifications:
-    default:
-    - team-fulfillment
-    critical:
-    - team-fulfillment
-    - oncall
-    warning:
-    - team-fulfillment
-  catalog:
-    component_of:
-    - system:enterprise-hello

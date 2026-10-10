@@ -28,9 +28,9 @@ public static class HelloProblems
     internal static void Enrich(ProblemDetails problem, HttpContext http)
     {
         problem.Instance ??= http.Request.Path;
-        if (Activity.Current is { } activity)
+        if (Telemetry.DatadogCorrelation.TryGetCurrent(out var ids))
         {
-            problem.Extensions["trace_id"] = activity.TraceId.ToHexString();
+            problem.Extensions["trace_id"] = ids.TraceId;
         }
 
         problem.Extensions.Remove("traceId");

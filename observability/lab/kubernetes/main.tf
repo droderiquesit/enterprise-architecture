@@ -11,6 +11,20 @@ locals {
     "datadog-cluster-checks" = { namespace = "datadog", service_account = "datadog-cluster-checks" }
     "fluent-bit"             = { namespace = "fluent-bit", service_account = "fluent-bit" }
   } : {}
+
+  # Package 3.0.0 fleet switches published by obs-telemetry-transport (contract env.fleet). A transport contract
+  # without them (package 2.x) keeps this root on the 2.x path: Fluent Bit direct + OpenTelemetry.
+  fleet_env     = try(var.obs_telemetry_transport.env.fleet, null)
+  fleet_default = yamldecode(file("${path.module}/../../config/fleet-policy.yaml"))
+  fleet_policy = merge(local.fleet_default, {
+    environments = merge(try(local.fleet_default.environments, {}), { (var.environment.name) = {
+      log_pipeline = try(local.fleet_env.EH_LOG_PIPELINE, "fluent_bit_direct")
+      apm          = { mode = try(local.fleet_env.EH_APM_MODE, "otel") }
+      profiling    = { enabled = try(tobool(local.fleet_env.EH_PROFILING_ENABLED), false) }
+    } })
+  })
+  op_logs_url = try(var.obs_telemetry_transport.aggregator.agent_logs_url, null)
+  op_host     = try(var.obs_telemetry_transport.aggregator.kind, "") == "observability_pipelines" ? try(var.obs_telemetry_transport.aggregator.fqdn, null) : null
 }
 
 resource "azurerm_federated_identity_credential" "collector" {
@@ -55,7 +69,22 @@ module "kubernetes" {
     is_aks                = true
   }
   cluster_checks = var.settings.dbm_cluster_checks
-  fluent_bit     = { exclude_namespaces = var.settings.exclude_namespaces }
+  # package 3.0.0: fleet policy (log pipeline / SSI / profiling) from the transport contract, canonical tags of the
+  # cluster infrastructure (modules/tagging)
+  fleet_policy = local.fleet_policy
+  op_logs_url  = local.op_logs_url
+  identity = {
+    team        = var.environment.team
+    owner       = var.environment.owner
+    application = "enterprise-hello"
+    domain      = "platform"
+    tier        = "infrastructure"
+    region      = var.environment.location
+    managed_by  = "terraform"
+    cost_center = try(var.environment.cost_center, null)
+  }
+  apm        = { namespaces = var.settings.ssi_namespaces }
+  fluent_bit = { exclude_namespaces = var.settings.exclude_namespaces }
 
   depends_on = [azurerm_federated_identity_credential.collector]
 }

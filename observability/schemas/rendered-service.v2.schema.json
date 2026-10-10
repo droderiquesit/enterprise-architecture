@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rendered-service.v2.schema.json",
+  "title": "Rendered onboarding document v2 (tools/onboarding/render.py) - identity, tag set, resources, telemetry routing",
+  "type": "object",
+  "required": ["schema", "package_version", "source", "env", "service", "identity", "tags", "azure_tags", "architecture", "runtime", "telemetry", "resources"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "rendered-service/v2"},
+    "package_version": {"type": "string"},
+    "source": {"type": "string"},
+    "source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "env": {"type": "string"},
+    "service": {"type": "string"},
+    "display_name": {"type": "string"},
+    "identity": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Canonical tag-policy values (version excluded: set at deploy time)."},
+    "tags": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Datadog tag set (tag policy, normalised; without version)."},
+    "azure_tags": {"type": "object", "additionalProperties": {"type": "string"}},
+    "architecture": {"type": "string"},
+    "runtime": {"type": "string"},
+    "os_type": {"enum": ["linux", "windows"]},
+    "telemetry": {
+      "type": "object",
+      "required": ["logs_route", "apm_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "logs_route": {"type": "string"},
+        "apm_mode": {"enum": ["policy", "datadog", "otel", "none"]},
+        "apm_sample_rate": {"type": ["number", "null"]},
+        "profiling": {"type": ["boolean", "null"]},
+        "dbm": {"type": ["object", "null"]},
+        "rum": {"type": ["object", "null"]}
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "role", "required", "tags"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string"},
+          "type": {"type": "string"},
+          "role": {"type": "string"},
+          "required": {"type": "boolean"},
+          "tier": {"type": ["string", "null"]},
+          "tags": {"type": "object", "additionalProperties": {"type": "string"}}
+        }
+      }
+    },
+    "presence_ref": {"type": ["string", "null"]},
+    "deprecated_sections": {"type": "array", "items": {"type": "string"}, "description": "Content sections present in the manifest and ignored by the core package (extras/content uses them)."}
+  }
+}

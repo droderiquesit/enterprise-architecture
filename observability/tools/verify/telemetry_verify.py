@@ -7,7 +7,9 @@ Checks (each polled with bounded exponential backoff until it passes or --max-wa
   logs_pipeline        logs of the journey services arrived through the log pipeline (--pipeline-tag)
   logs_trace_corr      at least one pipeline log is correlated to the journey trace (trace_id / dd.trace_id)
   logs_no_duplicates   the unique marker log line exists exactly --expected-marker-count times (no double shipping)
-  required_tags        journey spans and logs carry the required unified tags (--required-tag)
+  required_tags        journey spans and logs carry every REQUIRED key of the tag policy (config/tag-policy.yaml or
+                       --tag-policy; --required-tag overrides) and, with --expected-tags-dir (rendered onboarding
+                       output), the exact values of the service's rendered tag set
   infra_metrics        every --infra-metric has at least one non-null point in the window
 
 APIs (all read-only): POST /api/v2/rum/events/search, POST /api/v2/spans/events/search (300 req/h),
@@ -27,9 +29,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Protocol
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Protocol
 
 TOOL_VERSION = "1.0.0"
 ALL_CHECKS = ["rum_resource_trace", "apm_journey", "logs_pipeline", "logs_trace_corr", "logs_no_duplicates",
@@ -50,7 +54,7 @@ def http_transport(site: str, api_key: str, app_key: str, timeout: float = 30.0)
     def call(method: str, path: str, body: dict | None, query: dict | None) -> dict:
         url = base + path + ("?" + urllib.parse.urlencode(query) if query else "")
         data = json.dumps(body).encode() if body is not None else None
-        req = urllib.request.Request(url, data=data, method=method, headers={
+        req = urllib.request.Request(url, data=data, method=method, headers={  # noqa: S310 - https URL built from the Datadog site
             "DD-API-KEY": api_key, "DD-APPLICATION-KEY": app_key,
             "Content-Type": "application/json", "Accept": "application/json"})
         try:
@@ -130,6 +134,7 @@ class Config:
     rum_query: str | None
     entry_span_query: str | None
     checks: list[str]
+    expected_tags: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 class Verifier:
@@ -301,15 +306,19 @@ class Verifier:
                     continue
                 present = tags_of(a)
                 missing = [t for t in self.cfg.required_tags if t not in present]
-                if missing:
-                    problems.append({"kind": kind, "id": it.get("id"), "service": a.get("service"), "missing": missing})
+                expected = self.cfg.expected_tags.get(str(a.get("service")), {})
+                mismatched = {k: {"expected": v, "seen": sorted(present[k])} for k, v in expected.items()
+                              if k in present and v not in present[k]}
+                if missing or mismatched:
+                    problems.append({"kind": kind, "id": it.get("id"), "service": a.get("service"), "missing": missing,
+                                     "mismatched": mismatched})
         checked = len(self.state["spans"]) + len(self.state["logs"])
         res.evidence = {"checked": checked, "violations": problems[:20], "required": self.cfg.required_tags}
         if checked == 0:
             res.details = "nothing to check yet"
             return False
         if problems:
-            res.details = f"{len(problems)} items miss required tags"
+            res.details = f"{len(problems)} items miss required tags or carry values other than the rendered tag set"
             raise TerminalFailure(res.details)
         res.details = f"{checked} spans/logs carry {self.cfg.required_tags}"
         return True
@@ -380,12 +389,17 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--env", required=True)
     ap.add_argument("--frontend-service")
     ap.add_argument("--journey-service", action="append", required=True, help="entry service first; repeatable")
-    ap.add_argument("--pipeline-tag", default="telemetry.pipeline:fluent-bit",
-                    help="tag the log pipeline adds to every record (Fluent Bit config)")
+    ap.add_argument("--pipeline-tag", default=None,
+                    help="tag the log pipeline adds to every record (default from the fleet policy log_pipeline: "
+                         "telemetry.pipeline:observability-pipelines | telemetry.pipeline:fluent-bit)")
+    ap.add_argument("--fleet-policy", default=None, help="fleet policy YAML (default: config/fleet-policy.yaml)")
+    ap.add_argument("--tag-policy", default=None, help="tag policy YAML (default: config/tag-policy.yaml)")
+    ap.add_argument("--expected-tags-dir", default=None,
+                    help="rendered onboarding dir (rendered/<env>): spans/logs of each service must carry its rendered tag values")
     ap.add_argument("--marker", help="unique marker emitted once by the traffic generator")
     ap.add_argument("--marker-query", default='env:{env} "{marker}"')
     ap.add_argument("--expected-marker-count", type=int, default=1)
-    ap.add_argument("--required-tag", action="append", default=None, help="default: env, service, version")
+    ap.add_argument("--required-tag", action="append", default=None, help="default: the tag policy's required keys")
     ap.add_argument("--infra-metric", action="append", default=[], help="metric or full query; repeatable")
     ap.add_argument("--window-minutes", type=int, default=30)
     ap.add_argument("--max-wait", type=float, default=600, help="seconds per check (bounded polling)")
@@ -396,6 +410,30 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--checks", default=",".join(ALL_CHECKS))
     ap.add_argument("--evidence", default="telemetry-evidence.json")
     return ap
+
+
+def policy_defaults(args: argparse.Namespace) -> tuple[list[str], dict[str, dict[str, str]], str]:
+    """Required tag keys (tag policy), expected per-service tag values (rendered onboarding), pipeline tag (fleet policy)."""
+    import yaml
+
+    pkg = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(pkg / "tools" / "tags"))
+    from tag_policy import TagPolicy
+
+    policy = TagPolicy.load(args.tag_policy)
+    expected: dict[str, dict[str, str]] = {}
+    if args.expected_tags_dir:
+        for f in sorted(Path(args.expected_tags_dir).glob("*.json")):
+            doc = json.loads(f.read_text(encoding="utf-8"))
+            if doc.get("env") == args.env:
+                expected[doc["service"]] = doc.get("tags", {})
+    if args.pipeline_tag:
+        pipeline_tag = args.pipeline_tag
+    else:
+        fp = yaml.safe_load(Path(args.fleet_policy or pkg / "config" / "fleet-policy.yaml").read_text(encoding="utf-8"))
+        op = (fp or {}).get("log_pipeline", "observability_pipelines") == "observability_pipelines"
+        pipeline_tag = "telemetry.pipeline:observability-pipelines" if op else "telemetry.pipeline:fluent-bit"
+    return policy.required_keys(), expected, pipeline_tag
 
 
 def main(argv: list[str] | None = None, transport: Transport | None = None,
@@ -415,14 +453,15 @@ def main(argv: list[str] | None = None, transport: Transport | None = None,
             print("ERROR: DD_API_KEY and DD_APP_KEY must be set (read-only app key is sufficient)", file=sys.stderr)
             return 2
         transport = http_transport(args.site, api_key, app_key)
+    required, expected, pipeline_tag = policy_defaults(args)
     cfg = Config(env=args.env, frontend_service=args.frontend_service, journey_services=args.journey_service,
-                 pipeline_tag=args.pipeline_tag, marker=args.marker, marker_query=args.marker_query,
+                 pipeline_tag=pipeline_tag, marker=args.marker, marker_query=args.marker_query,
                  expected_marker_count=args.expected_marker_count,
-                 required_tags=args.required_tag or ["env", "service", "version"],
+                 required_tags=args.required_tag or required, expected_tags=expected,
                  infra_metrics=args.infra_metric, window_minutes=args.window_minutes, max_wait=args.max_wait,
                  initial_interval=args.initial_interval, max_interval=args.max_interval, rum_query=args.rum_query,
                  entry_span_query=args.entry_span_query, checks=checks)
-    started = datetime.now(timezone.utc).isoformat()
+    started = datetime.now(UTC).isoformat()
     try:
         results = Verifier(cfg, transport, clock=clock, sleep=sleep).run()
     except AuthError as exc:
@@ -431,7 +470,7 @@ def main(argv: list[str] | None = None, transport: Transport | None = None,
     failed = [r for r in results if r.status == "fail"]
     evidence = {
         "tool": "observability/tools/verify/telemetry_verify.py", "tool_version": TOOL_VERSION,
-        "started_at": started, "finished_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": started, "finished_at": datetime.now(UTC).isoformat(),
         "site": args.site, "env": args.env,
         "inputs": {k: v for k, v in vars(args).items() if k not in ("evidence",)},
         "result": "fail" if failed else "pass",

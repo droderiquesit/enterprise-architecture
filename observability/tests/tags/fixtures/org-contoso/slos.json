@@ -1,0 +1,74 @@
+{
+ "data": [
+  {
+   "id": "slo-orders-availability",
+   "name": "orders-api availability",
+   "type": "metric",
+   "tags": [
+    "team:orders",
+    "journey:checkout"
+   ],
+   "query": {
+    "numerator": "sum:trace.aspnet_core.request.hits{env:production,service:orders-api}.as_count() - sum:trace.aspnet_core.request.errors{env:production,service:orders-api}.as_count()",
+    "denominator": "sum:trace.aspnet_core.request.hits{env:production,service:orders-api}.as_count()"
+   },
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.9
+    }
+   ]
+  },
+  {
+   "id": "slo-storefront-checks",
+   "name": "storefront synthetic",
+   "type": "monitor",
+   "monitor_ids": [
+    104
+   ],
+   "tags": [
+    "team:web"
+   ],
+   "thresholds": [
+    {
+     "timeframe": "7d",
+     "target": 99.0
+    }
+   ]
+  },
+  {
+   "id": "slo-web-latency",
+   "name": "orders-web latency",
+   "type": "time_slice",
+   "tags": [
+    "team:web"
+   ],
+   "sli_specification": {
+    "time_slice": {
+     "comparator": "<",
+     "threshold": 0.5,
+     "query": {
+      "formulas": [
+       {
+        "formula": "query1"
+       }
+      ],
+      "queries": [
+       {
+        "data_source": "metrics",
+        "name": "query1",
+        "query": "p95:trace.http.request{env:production,service:orders-web,tier:critical}"
+       }
+      ]
+     }
+    }
+   },
+   "thresholds": [
+    {
+     "timeframe": "30d",
+     "target": 99.0
+    }
+   ]
+  }
+ ]
+}

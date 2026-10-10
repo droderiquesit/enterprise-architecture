@@ -18,6 +18,7 @@ import argparse
 import importlib.util
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -76,15 +77,24 @@ def validate_artifact(repo: Path, comp) -> int:
         return subprocess.run(["bash", str(py_build), "--steps", "lint,test", "--services", Path(comp.path).name],
                               cwd=repo, env=env).returncode
     if (path / "pyproject.toml").exists() or (path / "requirements.txt").exists():
+        # isolated venv per component (never the agent's / developer's system Python), created with uv when present
         shared = repo / "applications/shared/python/hello_common"
+        venv = repo / ".ci-cache" / "venvs" / comp.id
+        uv = shutil.which("uv")
+        if not (venv / "bin" / "python").exists():
+            rc |= run([uv, "venv", "--quiet", "--python", sys.executable, str(venv)] if uv
+                      else [sys.executable, "-m", "venv", str(venv)])
+        py = str(venv / "bin" / "python")
+        pip = [uv, "pip", "install", "--quiet", "--python", py] if uv else [py, "-m", "pip", "install", "--quiet"]
         if (path / "requirements.txt").exists():
-            rc |= run([sys.executable, "-m", "pip", "install", "--quiet", "-r", str(path / "requirements.txt")])
-        if shared.exists():
-            rc |= run([sys.executable, "-m", "pip", "install", "--quiet", str(shared)])
-        if (path / "pyproject.toml").exists():
-            rc |= run([sys.executable, "-m", "pip", "install", "--quiet", str(path)])
-        if (path / "tests").is_dir():
-            rc |= run([sys.executable, "-m", "pytest", "-q", *XDIST, str(path / "tests")], cwd=repo)
+            rc |= run([*pip, "-r", str(path / "requirements.txt")])
+        leftovers = [d for d in (path / "build", shared / "build") if not d.exists()]
+        rc |= run([*pip, "pytest==9.1.1", "pytest-xdist==3.8.0", *([str(shared)] if shared.exists() else []),
+                   *([str(path)] if (path / "pyproject.toml").exists() else [])])
+        for d in leftovers:          # setuptools writes build/ into the source tree: never leave it behind
+            shutil.rmtree(d, ignore_errors=True)
+        if (path / "tests").is_dir() and rc == 0:
+            rc |= run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *XDIST, str(path / "tests")], cwd=repo)
         return rc
     if (path / "tests").is_dir() and list(path.glob("*.py")):
         # stdlib-only Python helpers (e.g. observability/images/dsv-fetch): unit tests only

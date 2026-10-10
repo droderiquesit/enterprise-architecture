@@ -1,6 +1,7 @@
-# Lab onboarding manifest (Enterprise Hello, env dev). ${contract:...} references are resolved at plan
+# Lab onboarding manifest v2 (Enterprise Hello, env dev): identity + tags + resources + telemetry routing.
+# ${contract:...} references are resolved at plan
 # time from contracts (render.py references -> contract_references). See observability/README.md.
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
   service: hello-durable
@@ -24,11 +25,10 @@ metadata:
   - name: fulfillment mailbox
     type: email
     contact: fulfillment@example.com
+  region: swedencentral
 spec:
   architecture: functions
   runtime: dotnet
-  telemetry:
-    profile: durable-workflow
   resources:
   - id: ${contract:deploy-durable.function_app.id}
     type: Microsoft.Web/sites
@@ -40,27 +40,4 @@ spec:
   - id: ${contract:platform-messaging.namespace_id}
     type: Microsoft.ServiceBus/namespaces
     role: servicebus
-    entities:
-    - order-events/fulfillment
-    - order-events/notifications
-    - order-events/audit
-    - batch-items
-  monitors:
-    params:
-      workflow_metric_prefix: hello
-    overrides:
-      queue.backlog@servicebus:
-        thresholds:
-          critical: 200
   presence_ref: deploy-durable.function_app.id
-  notifications:
-    default:
-    - team-fulfillment
-    critical:
-    - team-fulfillment
-    - oncall
-    warning:
-    - team-fulfillment
-  catalog:
-    component_of:
-    - system:enterprise-hello

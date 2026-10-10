@@ -56,7 +56,11 @@ locals {
     # Datadog tracers of managed runtimes (modules/instrumentation apm.method = agent_gateway)
     apm_gateway = local.apm_url == null ? {} : { DD_TRACE_AGENT_URL = local.apm_url }
     # lab-wide fleet switches read by modules/instrumentation
-    fleet = { EH_LOG_PIPELINE = local.log_pipeline }
+    fleet = {
+      EH_LOG_PIPELINE      = local.log_pipeline
+      EH_APM_MODE          = try(module.fleet.sections.apm.mode, "datadog")
+      EH_PROFILING_ENABLED = tostring(try(module.fleet.sections.profiling.enabled, true))
+    }
   }
 
   contract = {

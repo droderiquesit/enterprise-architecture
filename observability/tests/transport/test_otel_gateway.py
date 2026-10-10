@@ -254,3 +254,53 @@ def test_gateway_self_and_fluentbit_metrics_naming(tmp_path):
             assert pts[name] and all(p.get("env") == "test" for p in pts[name]), (name, pts[name][:3])
     finally:
         stack.close()
+
+
+def test_gateway_tag_policy_overlay(tmp_path):
+    """modules/otel-collector OTELCOL_CONFIG_TAGS (rendered by terraform console) on the real contrib collector:
+    missing policy tags are filled per service.name and environment-wide, client values are never overwritten, and
+    the policy keys are copied onto metric data points."""
+    mod = HERE.parents[1] / "modules" / "otel-collector"
+    if not (mod / ".terraform").exists():
+        subprocess.run(["terraform", f"-chdir={mod}", "init", "-backend=false", "-input=false"], check=True, capture_output=True)
+    vf = tmp_path / "vars.json"
+    vf.write_text(json.dumps({"env": "test",
+                              "default_attributes": {"region": "swedencentral", "managed_by": "terraform"},
+                              "service_attributes": {"hello-catalog-api": {"team": "catalog", "owner": "catalog_example.com"},
+                                                     "hello-orders-api": {"team": "orders"}},
+                              "metric_attribute_keys": ["team", "region"]}))
+    out = subprocess.run(["terraform", f"-chdir={mod}", "console", f"-var-file={vf}"], input='local.configs["OTELCOL_CONFIG_TAGS"]\n',
+                         capture_output=True, text=True, check=True).stdout
+    overlay = out.strip().removeprefix("<<EOT").removesuffix("EOT").strip("\n") + "\n"
+    outdir = tmp_path / "out"
+    outdir.mkdir(parents=True, exist_ok=True)
+    (outdir / "tags.yaml").write_text(overlay)
+    stack = Stack("otel-tags")
+    try:
+        start_mock_intake(stack)
+        _, gport, hport = _run_gateway(stack, OTELCOL_IMAGE, outdir, extra_configs=("--config=file:/out/tags.yaml",))
+        res = _send(gport, hport)
+        assert res.returncode == 0, res.stderr
+        wait_for(lambda: len(_span_names(_read_json_lines(outdir / "traces.json"))) >= 4, 60, what="spans")
+        attrs = _resource_attrs(_read_json_lines(outdir / "traces.json"), "resourceSpans")
+        orders = [a for a in attrs if a.get("service.name") == "hello-orders-api"][0]
+        catalog = [a for a in attrs if a.get("service.name") == "hello-catalog-api"][0]
+        assert orders["team"] == "observability", "a value the client sent is never overwritten"
+        assert catalog["team"] == "catalog" and catalog["owner"] == "catalog_example.com", "per-service policy tags filled"
+        assert orders["region"] == "swedencentral" and catalog["managed_by"] == "terraform", "environment-wide defaults"
+
+        def point_attrs():
+            for b in _read_json_lines(outdir / "metrics.json"):
+                for rm in b.get("resourceMetrics", []):
+                    for sm in rm["scopeMetrics"]:
+                        for m in sm["metrics"]:
+                            if m.get("name") == "orders.created":
+                                for kind in ("sum", "gauge", "histogram"):
+                                    for dp in (m.get(kind) or {}).get("dataPoints", []):
+                                        return {a["key"]: next(iter(a["value"].values())) for a in dp.get("attributes", [])}
+            return None
+        pa = wait_for(point_attrs, 60, what="metric data point")
+        assert pa["team"] == "observability" and pa["region"] == "swedencentral", pa
+    finally:
+        print(stack.logs(f"{stack.id}-gateway")[-3000:])
+        stack.close()

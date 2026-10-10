@@ -138,6 +138,8 @@ locals {
         domain     = local.meta[k].domain
         tier       = local.meta[k].tier
         logsSource = module.env[k].k8s_patch_object.metadata.labels["logs.datadoghq.com/source"]
+        # tag policy: every other Datadog tag -> pod annotation ad.datadoghq.com/tags
+        tags = module.env[k].extra_tags_map
       }
       image = {
         repository = try(split("@", local.image[k])[0], "")
@@ -161,8 +163,15 @@ locals {
       }
       secretsMode = var.settings.secrets_mode
       secretsSync = { secretName = "" }
-      telemetry   = { agentHostFromHostIP = true, disableAgentLogCollection = true }
-      logFile     = { enabled = false } # stdout -> Fluent Bit DaemonSet
+      # log collector per the fleet policy (Fluent Bit DaemonSet or the node Agent -> Observability Pipelines) and the
+      # SSI admission label when the Datadog library is injected (labels/annotations only; env comes from app-env)
+      telemetry = {
+        agentHostFromHostIP       = true
+        disableAgentLogCollection = module.env[k].log_collector != "datadog-agent"
+        agentLogSource            = module.env[k].log_collector == "datadog-agent" ? module.env[k].k8s_patch_object.metadata.labels["logs.datadoghq.com/source"] : ""
+        singleStepInstrumentation = module.env[k].apm.method == "ssi_kubernetes"
+      }
+      logFile = { enabled = false } # stdout -> Fluent Bit DaemonSet
       # Faults need FAULT_TOKEN (dsv:// reference); without it FAULTS_ENABLED stays false (chart schema rule).
       faults = { enabled = var.settings.faults_enabled && contains(keys(local.secret_env[k]), "FAULT_TOKEN") }
       resources = {

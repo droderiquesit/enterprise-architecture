@@ -88,14 +88,17 @@ public sealed partial class ServiceBusOrderEventPublisher : IOrderEventPublisher
             ContentType = "application/json",
             Subject = orderEvent.Event,
         };
-        var current = activity ?? Activity.Current;
-        var traceparent = HelloTelemetry.ToTraceparent(current);
+        // Producer Activity (a Datadog span in datadog mode with DD_TRACE_OTEL_ENABLED=true), else the active Datadog
+        // span, else Activity.Current (see HelloTelemetry.CurrentTraceparent).
+        var traceparent = HelloTelemetry.CurrentTraceparent(activity);
         if (traceparent is not null)
         {
             message.ApplicationProperties["traceparent"] = traceparent;
-            if (!string.IsNullOrEmpty(current!.TraceStateString))
+            var source = activity ?? (DatadogCorrelation.TryGetDatadogCurrent(out _) ? null : Activity.Current);
+            var tracestate = source?.TraceStateString;
+            if (!string.IsNullOrEmpty(tracestate))
             {
-                message.ApplicationProperties["tracestate"] = current.TraceStateString;
+                message.ApplicationProperties["tracestate"] = tracestate;
             }
         }
 
@@ -126,7 +129,7 @@ public sealed partial class LogOrderEventPublisher(ILogger<LogOrderEventPublishe
     {
         ArgumentNullException.ThrowIfNull(orderEvent);
         using var activity = MessagingTelemetry.StartPublish("order-events", orderEvent.OrderId);
-        var traceparent = HelloTelemetry.ToTraceparent(activity ?? Activity.Current);
+        var traceparent = HelloTelemetry.CurrentTraceparent(activity);
         _published.Enqueue((orderEvent, traceparent));
         while (_published.Count > Capacity)
         {

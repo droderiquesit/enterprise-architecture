@@ -96,7 +96,7 @@ module "app" {
   name                = "${local.prefix}-app-${each.value.short}-${local.env_name}-${local.suffix}"
   resource_group_name = local.rg
   location            = local.as_loc
-  tags                = merge(local.tags, { service = each.value.svc, version = local.artifact_version[local.meta[each.value.svc].artifact] })
+  tags                = merge(local.tags, { service = each.value.svc, version = local.artifact_version[local.meta[each.value.svc].artifact] }, module.env[each.key].azure_tags)
   service_plan        = { id = each.value.plan.id, sku = each.value.plan.sku }
   os_type             = each.value.os
   mode                = each.value.mode

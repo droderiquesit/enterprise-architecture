@@ -17,7 +17,30 @@ resource "azurerm_static_web_app" "this" {
   sku_size                           = var.settings.sku
   configuration_file_changes_enabled = true
   preview_environments_enabled       = false
-  tags                               = merge(local.tags, { service = "hello-frontend", version = local.version })
+  # Azure tags = the frontend's tag-policy identity (Datadog Azure integration imports them onto the SWA metrics)
+  tags = merge(local.tags, module.rum_tags.azure_tags)
+}
+
+# Tag policy (observability/modules/tagging): the same tag set on the SWA resource and in the RUM SDK global context.
+module "meta" {
+  source = "../modules/service-meta"
+}
+
+module "rum_tags" {
+  source = "../../../observability/modules/tagging"
+  identity = {
+    env         = local.env_name
+    service     = "hello-frontend"
+    version     = local.version
+    team        = module.meta.services["hello-frontend"].team
+    owner       = module.meta.services["hello-frontend"].owner
+    domain      = module.meta.services["hello-frontend"].domain
+    tier        = module.meta.services["hello-frontend"].tier
+    application = "enterprise-hello"
+    region      = local.location
+    managed_by  = "terraform"
+    component   = "deploy-frontend"
+  }
 }
 
 locals {
@@ -66,6 +89,10 @@ locals {
       trackUserInteractions   = local.rum.track_user_interactions
       defaultPrivacyLevel     = "mask-user-input"
       allowedTracingUrls      = local.tracing_urls
+      # APM <-> RUM header injection for the first-party API origins (Datadog + W3C tracecontext)
+      propagatorTypes = ["datadog", "tracecontext"]
+      # tag policy keys besides env/service/version: datadogRum.setGlobalContextProperty(k, v) for each entry
+      globalContext = module.rum_tags.rum_global_context
     }
   }
 
