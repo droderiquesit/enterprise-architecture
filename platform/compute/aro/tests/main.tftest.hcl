@@ -61,13 +61,29 @@ variables {
       "aro-worker"         = { id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-spoke/subnets/snet-aro-worker", name = "snet-aro-worker", address_prefix = "10.41.16.0/24" }
     }
   }
+  foundation_identity = {
+    identities = {
+      "hello-catalog-api" = {
+        id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-hello-catalog-api"
+        principal_id = "11111111-1111-1111-1111-000000000003"
+        client_id    = "22222222-2222-2222-2222-000000000003"
+        name         = "id-hello-catalog-api"
+      }
+      "obs-collector" = {
+        id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ident/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-obs-collector"
+        principal_id = "11111111-1111-1111-1111-000000000013"
+        client_id    = "22222222-2222-2222-2222-000000000013"
+        name         = "id-obs-collector"
+      }
+    }
+  }
 }
 # END FIXTURE
 
 run "blocked_by_default" {
   command = plan
   assert {
-    condition     = length(azurerm_redhat_openshift_cluster.this) == 0 && output.contract.status == "blocked" && output.contract.oidc_issuer_url == null && length(data.azapi_resource.cluster) == 0
+    condition     = length(azurerm_redhat_openshift_cluster.this) == 0 && output.contract.status == "blocked" && output.contract.oidc_issuer_url == null && length(data.azapi_resource.cluster) == 0 && length(azurerm_federated_identity_credential.workload) == 0 && output.contract.workload_identities == {}
     error_message = "ARO is blocked/disabled by default."
   }
 }
@@ -105,6 +121,35 @@ run "enabled_managed_identities" {
   assert {
     condition     = data.azapi_resource.cluster[0].type == "Microsoft.RedHatOpenShift/openShiftClusters@2025-07-25" && contains(data.azapi_resource.cluster[0].response_export_values, "properties.clusterProfile.oidcIssuer")
     error_message = "managed OIDC issuer read (GET) from the ARO resource with azapi (azurerm 5.9 does not expose clusterProfile.oidcIssuer)."
+  }
+  assert {
+    condition = (
+      length(azurerm_federated_identity_credential.workload) == 1 && contains(keys(azurerm_federated_identity_credential.workload), "hello-catalog-api") &&
+      azurerm_federated_identity_credential.workload["hello-catalog-api"].subject == "system:serviceaccount:hello:hello-catalog-api" &&
+      one(azurerm_federated_identity_credential.workload["hello-catalog-api"].audience) == "api://AzureADTokenExchange" &&
+      azurerm_federated_identity_credential.workload["hello-catalog-api"].user_assigned_identity_id == var.foundation_identity.identities["hello-catalog-api"].id
+    )
+    error_message = "hello-catalog-api (foundation-identity) federated (issuer = the azapi-read clusterProfile.oidcIssuer, known after the cluster exists) for system:serviceaccount:hello:hello-catalog-api (app workload identity, as platform-aks on AKS)."
+  }
+  assert {
+    condition     = output.contract.workload_identities["hello-catalog-api"] == { namespace = "hello", service_account = "hello-catalog-api", client_id = "22222222-2222-2222-2222-000000000003" } && length(output.contract.workload_identities) == 1
+    error_message = "contract workload_identities: namespace / service account / client id of each federated app identity (obs identities are federated by obs-kubernetes-aro)."
+  }
+}
+
+run "workload_identity_unknown_key_skipped" {
+  command = plan
+  variables {
+    settings = {
+      enabled             = true
+      version             = "4.17.27"
+      aro_rp_principal_id = "00000000-0000-0000-0004-000000000000"
+      workload_identities = { "hello-missing" = { namespace = "hello", service_account = "hello-missing" } }
+    }
+  }
+  assert {
+    condition     = length(azurerm_federated_identity_credential.workload) == 0 && output.contract.workload_identities == {}
+    error_message = "identity keys missing in foundation-identity are skipped (same filter as platform-aks)."
   }
 }
 

@@ -85,6 +85,13 @@ variable "platform_aro" {
     api_server_url = optional(string)
     console_url    = optional(string)
     ingress_ip     = optional(string)
+    # 1.1.0: managed OIDC issuer + application identities federated with it (hello-catalog-api workload identity)
+    oidc_issuer_url = optional(string)
+    workload_identities = optional(map(object({
+      namespace       = string
+      service_account = string
+      client_id       = string
+    })), {})
   })
   default = null
 }

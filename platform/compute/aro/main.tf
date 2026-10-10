@@ -28,6 +28,11 @@ locals {
     )
   ]...) : {}
 
+  # application workload identities federated with the cluster's OIDC issuer (keys missing in foundation-identity skipped)
+  identities = var.foundation_identity.identities
+  federated  = local.enabled ? { for k, v in var.settings.workload_identities : k => v if contains(keys(local.identities), k) } : {}
+  issuer     = local.enabled ? try(data.azapi_resource.cluster[0].output.properties.clusterProfile.oidcIssuer, null) : null
+
   domain = coalesce(var.settings.domain, "${var.environment.name_prefix}${var.environment.name}${module.naming.suffix}")
 }
 
@@ -162,4 +167,29 @@ data "azapi_resource" "cluster" {
   type                   = "Microsoft.RedHatOpenShift/openShiftClusters@2025-07-25"
   resource_id            = azurerm_redhat_openshift_cluster.this[0].id
   response_export_values = ["properties.clusterProfile.oidcIssuer"]
+}
+
+# ---------------------------------------------------------------- application workload identity federation
+# Same ownership as platform-aks (ADR-0001 section 3): the credential binds a foundation-identity user-assigned identity
+# to THIS cluster's OIDC issuer, so it lives with the cluster (meaningless without the issuer, replaced with it). The
+# OpenShift pod-identity webhook (openshift-cloud-credential-operator) injects AZURE_CLIENT_ID / AZURE_TENANT_ID /
+# AZURE_FEDERATED_TOKEN_FILE and the projected token into pods whose service account carries
+# azure.workload.identity/client-id and that are labelled azure.workload.identity/use=true (Learn: "Deploy and configure
+# an application using workload identity on an ARO managed identity cluster"). Observability identities are federated
+# by their own root (obs-kubernetes-aro), as on AKS (obs-kubernetes).
+resource "azurerm_federated_identity_credential" "workload" {
+  for_each = local.federated
+
+  name                      = "aro-${azurerm_redhat_openshift_cluster.this[0].name}-${each.value.namespace}-${each.value.service_account}"
+  user_assigned_identity_id = local.identities[each.key].id
+  issuer                    = local.issuer
+  subject                   = "system:serviceaccount:${each.value.namespace}:${each.value.service_account}"
+  audience                  = ["api://AzureADTokenExchange"]
+
+  lifecycle {
+    precondition {
+      condition     = local.issuer != null && can(regex("^https://", coalesce(local.issuer, "x")))
+      error_message = "The ARO cluster publishes no clusterProfile.oidcIssuer: it must be a managed-identity (workload identity) cluster."
+    }
+  }
 }

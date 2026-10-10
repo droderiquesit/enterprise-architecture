@@ -71,8 +71,8 @@ and pushes the chart (`helm package` → `helm push oci://<acr>/helm`); see the 
   whose VALUE is a `dsv://<path>#<element>` reference (from `foundation_identity.secrets.refs` or a platform contract's
   `*_secret_id` field), plus `DSV_TENANT/TLD/BASE_URL/AUTH` and `AZURE_CLIENT_ID`; `hello_common` / `Hello.Common`
   resolve them at start-up with the workload's managed identity (ACA/App Service/Functions: `IDENTITY_ENDPOINT`;
-  ACI/VM/VMSS: IMDS; AKS: workload identity - **unverified with DSV**, fallback chart `secretsMode=synced` with the
-  Delinea dsv-k8s syncer). Third-party sidecars get their key from the static `dsv-fetch` binary (registry
+  ACI/VM/VMSS: IMDS; AKS and ARO (managed-identity cluster, OpenShift pod-identity webhook): workload identity -
+  **unverified with DSV**, fallback chart `secretsMode=synced` with the Delinea dsv-k8s syncer, AKS only). Third-party sidecars get their key from the static `dsv-fetch` binary (registry
   artifact `img-dsv-fetch`, `artifacts["img-dsv-fetch"]` in core-aca/dbadapters/jobs/partner-sim): an identity-free
   init container installs it; serverless-init (ACA) runs it before start and the ACI Agent uses it as its
   `secret_backend_command`. Fluent Bit fallback: dsv-fetch init container on the ACA Consumption profile, refresher

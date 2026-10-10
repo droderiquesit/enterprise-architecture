@@ -11,10 +11,19 @@ output "contract" {
     api_server_ip       = local.enabled ? azurerm_redhat_openshift_cluster.this[0].api_server_profile[0].ip_address : null
     ingress_ip          = local.enabled ? azurerm_redhat_openshift_cluster.this[0].ingress_profile[0].ip_address : null
     # managed OIDC issuer (workload identity for application / observability service accounts); null when disabled
-    oidc_issuer_url = local.enabled ? try(data.azapi_resource.cluster[0].output.properties.clusterProfile.oidcIssuer, null) : null
-    version         = var.settings.version
-    api_visibility  = var.settings.api_visibility
-    worker_count    = var.settings.worker_count
-    os_type         = "Linux"
+    oidc_issuer_url = local.issuer
+    # application identities federated with the issuer (identity key => namespace / service account / client id);
+    # {} when disabled. deploy-specialized annotates its service account with client_id (workload identity, DSV reads).
+    workload_identities = {
+      for k, v in local.federated : k => {
+        namespace       = v.namespace
+        service_account = v.service_account
+        client_id       = local.identities[k].client_id
+      }
+    }
+    version        = var.settings.version
+    api_visibility = var.settings.api_visibility
+    worker_count   = var.settings.worker_count
+    os_type        = "Linux"
   }
 }

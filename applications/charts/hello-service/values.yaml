@@ -47,8 +47,9 @@ args: []
 identity:
   clientId: ""      # user-assigned managed identity client id (UUID) (required)
   tenantId: ""      # optional: azure.workload.identity/tenant-id annotation
-  # AKS workload identity: ServiceAccount client-id annotation + pod label azure.workload.identity/use=true.
-  # Disable where the mutating webhook is not installed (ARO without the WI webhook, kind).
+  # Workload identity: ServiceAccount client-id annotation + pod label azure.workload.identity/use=true, honoured by the
+  # AKS webhook and, on ARO managed-identity clusters, by the OpenShift pod-identity webhook (projected token volume,
+  # admitted by the restricted-v2 SCC). Disable where no such webhook runs (kind).
   workloadIdentity: true
 
 serviceAccount:
@@ -68,7 +69,7 @@ env: {}
 
 # -- Secret settings as Delinea DSV references (ADR-0001 §14): name -> dsv://<path>#<element>. References are
 #    not secrets: in secretsMode=dsv (default) they are rendered as plain env values and the application
-#    resolves them at start-up (hello_common / Hello.Common) with its AKS workload identity (AZURE_CLIENT_ID +
+#    resolves them at start-up (hello_common / Hello.Common) with its workload identity on AKS / ARO (AZURE_CLIENT_ID +
 #    federated token). Literal values are rejected by the schema.
 secretEnv: {}
 
@@ -90,8 +91,8 @@ secretsMode: dsv
 secretsSync:
   secretName: ""
 
-# -- Secret environment from other EXISTING Kubernetes Secrets (name -> {secretName, key}), e.g. ARO without
-#    workload identity (Secrets synced by dsv-k8s) or kind smoke tests. The chart never creates Secrets.
+# -- Secret environment from other EXISTING Kubernetes Secrets (name -> {secretName, key}): kind smoke tests only (AKS and
+#    ARO read Delinea DSV directly with workload identity). The chart never creates Secrets.
 existingSecretEnv: {}
 
 # -- Telemetry wiring (instrumentation contract, observability/modules/instrumentation).

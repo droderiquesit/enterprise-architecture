@@ -90,3 +90,11 @@ def test_terraform_aro_values_render(aro_values, helm_bin, tmp_path):
     assert by_kind(docs, "Route") and not by_kind(docs, "Ingress")
     dep = by_kind(docs, "Deployment")[0]
     assert dep["spec"]["replicas"] == 2 and "runAsUser" not in dep["spec"]["template"]["spec"]["securityContext"]
+    # Delinea DSV read directly with workload identity (as core-aks): SA annotation + pod label, DSV_AUTH azure, no Secret
+    sa = by_kind(docs, "ServiceAccount")[0]
+    assert sa["metadata"]["annotations"]["azure.workload.identity/client-id"] == aro_values["identity"]["clientId"]
+    assert dep["spec"]["template"]["metadata"]["labels"]["azure.workload.identity/use"] == "true"
+    assert dep["spec"]["template"]["spec"]["automountServiceAccountToken"] is True
+    env = {e["name"]: e for e in dep["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert env["DSV_AUTH"]["value"] == "azure" and env["AZURE_CREDENTIAL_MODE"]["value"] == "workload_identity"
+    assert not by_kind(docs, "Secret") and not any("secretKeyRef" in e.get("valueFrom", {}) for e in env.values())

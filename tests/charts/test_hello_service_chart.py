@@ -301,7 +301,35 @@ def test_aro_route_and_scc(helm_bin, tmp_path):
     psc = by_kind(docs, "Deployment")[0]["spec"]["template"]["spec"]["securityContext"]
     assert "runAsUser" not in psc and "fsGroup" not in psc, "OpenShift SCC assigns the UID"
     env = {e["name"]: e for e in by_kind(docs, "Deployment")[0]["spec"]["template"]["spec"]["containers"][0]["env"]}
-    assert env["PG_PASSWORD"]["valueFrom"]["secretKeyRef"] == {"name": "hello-catalog-api-db", "key": "password"}
+    # secretsMode dsv as on AKS: the dsv:// reference is the env value, resolved by the app with workload identity
+    assert env["PG_PASSWORD"] == {"name": "PG_PASSWORD", "value": "dsv://eh/dev/catalog-pg-password#value"}
+    assert env["DSV_AUTH"]["value"] == "azure" and env["DSV_BASE_URL"]["value"].endswith("/v1")
+    assert not any("valueFrom" in e and "secretKeyRef" in e["valueFrom"] for e in env.values()), "no Kubernetes Secret on ARO"
+    assert not by_kind(docs, "Secret")
+
+
+# restricted-v2 SCC (OpenShift 4.x default for authenticated users): allowed volume types. The OpenShift pod-identity
+# webhook adds a `projected` serviceAccountToken volume (azure-identity-token) - allowed, like the chart's emptyDirs.
+RESTRICTED_V2_VOLUMES = {"configMap", "csi", "downwardAPI", "emptyDir", "ephemeral", "persistentVolumeClaim", "projected", "secret"}
+
+
+def test_aro_workload_identity_under_restricted_v2(helm_bin, tmp_path):
+    docs = render(CHART / "examples" / "aro-catalog-api.yaml")
+    sa = by_kind(docs, "ServiceAccount")[0]
+    assert sa["metadata"]["name"] == "hello-catalog-api"
+    assert sa["metadata"]["annotations"]["azure.workload.identity/client-id"] == "22222222-2222-2222-2222-000000000003"
+    pod = by_kind(docs, "Deployment")[0]["spec"]["template"]
+    assert pod["metadata"]["labels"]["azure.workload.identity/use"] == "true"
+    spec = pod["spec"]
+    assert spec["serviceAccountName"] == "hello-catalog-api" and spec["automountServiceAccountToken"] is True
+    volume_types = {k for v in spec.get("volumes", []) for k in v if k != "name"}
+    assert volume_types <= RESTRICTED_V2_VOLUMES, volume_types
+    # the webhook-injected token volume (azure-identity-token) is `projected`: allowed by restricted-v2
+    assert "projected" in RESTRICTED_V2_VOLUMES
+    psc = spec["securityContext"]
+    assert psc["runAsNonRoot"] is True and not {"runAsUser", "runAsGroup", "fsGroup"} & set(psc)
+    ctr = spec["containers"][0]["securityContext"]
+    assert ctr["allowPrivilegeEscalation"] is False and ctr["capabilities"]["drop"] == ["ALL"] and "runAsUser" not in ctr
 
 
 def test_cronjob_shape(helm_bin):

@@ -340,6 +340,13 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
   `ENC[dsv://...]` resolved by dsv-fetch with Entra workload identity through the managed-identity cluster's OIDC issuer
   (platform-aro contract `oidc_issuer_url`); the cluster's admin kubeconfig is read only as an ephemeral value (never in
   plan or state). Contract `obs-kubernetes-aro` v1. Not deployed or verified live.
+- 2026-10-10: **ARO application workloads read Delinea DSV directly** (section 14; replaces the dsv-k8s synced-Secret
+  path of `deploy-specialized`): `platform-aro` (now consuming `foundation-identity`) federates each application
+  user-assigned identity with the managed-identity cluster's OIDC issuer (`system:serviceaccount:<ns>:<sa>`) and publishes
+  contract `workload_identities` (platform-aro 1.1.0) - the section 3 rule applied to AKS (federated credentials live
+  with the cluster whose issuer they trust; observability identities stay with their own root). `deploy-specialized`
+  renders the hello-service chart with workload identity and `secretsMode: dsv` as core-aks does; the OpenShift
+  pod-identity webhook injects the token. Not deployed or verified live.
 
 ## 14. Secret management: Delinea DevOps Secrets Vault (DSV)
 
@@ -351,7 +358,8 @@ identity* (the per-service identities of `foundation-identity`, the `deploy-agen
 implemented by Delinea's official Go SDK (`dsv-sdk-go` v2.3.0, `auth/azure.go`, `vault/vault.go`):
 
 1. Get an Entra access token for resource `https://management.azure.com/` from the managed identity (IMDS on VMs/VMSS/Batch/
-   self-hosted agents, `IDENTITY_ENDPOINT` on App Service/Functions/Container Apps, workload identity on AKS).
+   self-hosted agents, `IDENTITY_ENDPOINT` on App Service/Functions/Container Apps, workload identity on AKS and on ARO
+   managed-identity clusters).
 2. `POST https://<tenant>.secretsvaultcloud.<tld>/v1/token` with `{"grant_type":"azure","jwt":"<token>"}` → `accessToken`,
    `expiresIn` (DSV tokens live 1 h; refresh at 80 % of lifetime).
 3. `GET https://<tenant>.secretsvaultcloud.<tld>/v1/secrets/<path>` with `Authorization: Bearer <accessToken>` → `{data: {...}}`.

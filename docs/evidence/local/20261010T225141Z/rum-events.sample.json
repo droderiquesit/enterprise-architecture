@@ -1,0 +1,69 @@
+{
+  "intercepted_requests": 2,
+  "forwarded_to_mock_intake": {
+    "/api/v2/rum": 2
+  },
+  "forward_statuses": {
+    "202": 2
+  },
+  "event_types": {
+    "long_task": 2,
+    "resource": 14,
+    "action": 3,
+    "view": 4
+  },
+  "query_example": "ddsource=browser&dd-api-key=pub***&dd-evp-origin-version=7.15.0&dd-evp-origin=browser&dd-request-id=fa5a6a76-4169-4ce9-afd0-2cc628e784ce&batch_time=1791672891836&_dd.api=fetch",
+  "post_orders_resource__dd_trace_id": [
+    "1945001700550849663"
+  ],
+  "browser_traceparent": "00-00000000000000001afe08bdd8dd347f-3fcdf983a38b5f3e-01",
+  "first_events": {
+    "view": {
+      "type": "view",
+      "service": "hello-frontend",
+      "version": "0.1.0-e2e",
+      "date": 1791672889898,
+      "source": "browser",
+      "view": {
+        "url": "http://localhost:18080/",
+        "name": null
+      }
+    },
+    "resource": {
+      "type": "resource",
+      "service": "hello-frontend",
+      "version": "0.1.0-e2e",
+      "date": 1791672890162,
+      "source": "browser",
+      "view": {
+        "url": "http://localhost:18080/",
+        "name": null
+      },
+      "resource": {
+        "type": "fetch",
+        "method": "GET",
+        "url": "http://localhost:18080/config.json",
+        "status_code": 200
+      },
+      "_dd": {
+        "trace_id": null,
+        "span_id": null
+      }
+    },
+    "action": {
+      "type": "action",
+      "service": "hello-frontend",
+      "version": "0.1.0-e2e",
+      "date": 1791672890722,
+      "source": "browser",
+      "view": {
+        "url": "http://localhost:18080/",
+        "name": null
+      },
+      "action": {
+        "type": "click",
+        "target": "Order"
+      }
+    }
+  }
+}

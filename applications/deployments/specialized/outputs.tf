@@ -19,13 +19,13 @@ output "contract" {
     aro = local.aro_enabled ? {
       cluster_id    = local.aro.cluster_id
       api_server    = local.aro.api_server_url
-      namespace     = var.settings.aro_namespace
+      namespace     = local.aro_namespace
       deploy_script = "applications/deployments/specialized/scripts/deploy-aro.sh"
       helm = {
         release    = "hello-catalog-api"
         chart      = "hello-service"
         chart_path = "applications/charts/hello-service"
-        values     = yamlencode(local.aro_values) # no secrets: existing-Secret references only
+        values     = yamlencode(local.aro_values) # no secrets: dsv:// references only (resolved by the app)
       }
     } : null
     apps = merge(
@@ -39,7 +39,7 @@ output "contract" {
         id           = local.aro.cluster_id, name = local.aro.cluster_name, type = "Microsoft.RedHatOpenShift/openShiftClusters", service = "hello-catalog-api"
         architecture = "aro", app_log_route = "daemonset", sidecar = false, url = null, urls = { public = null, private = null }
         health_path  = "/healthz", readiness_path = "/readyz", version_path = "/version", scale_to_zero = false, min_replicas = var.settings.aro_replicas, max_replicas = var.settings.aro_replicas
-        version      = local.cat_version, image = try(var.artifacts["svc-catalog-api"].image, null), identity_name = null
+        version      = local.cat_version, image = try(var.artifacts["svc-catalog-api"].image, null), identity_name = "hello-catalog-api"
       } } : {},
       local.cvm_enabled ? { "hello-worker-cvm" = {
         id           = local.cvm.id, name = local.cvm.name, type = "Microsoft.Compute/virtualMachines", service = "hello-worker"
@@ -58,7 +58,7 @@ output "contract" {
     idle_behavior = {}
     status = {
       service_fabric = local.sf_enabled ? "implemented" : "disabled"
-      aro            = local.aro_ready ? "implemented" : (local.aro_enabled ? "blocked: needs foundation-identity hello-catalog-api and a digest-pinned svc-catalog-api image" : "blocked")
+      aro            = local.aro_ready ? "implemented" : (local.aro_enabled ? "blocked: needs platform-aro workload_identities[hello-catalog-api] (federated foundation identity, namespace = settings.aro_namespace) and a digest-pinned svc-catalog-api image" : "blocked")
       confidential   = local.cvm_enabled ? "implemented" : (local.cvm != null ? "blocked: foundation-identity contract not provided" : "disabled")
       automation     = local.automation != null ? "implemented" : "disabled"
     }

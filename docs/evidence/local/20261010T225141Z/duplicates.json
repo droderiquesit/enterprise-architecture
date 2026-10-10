@@ -1,0 +1,35 @@
+{
+  "marker_counts": {
+    "hello-orders-api": 1,
+    "hello-catalog-api": 1,
+    "hello-inventory-api": 1,
+    "hello-partner-sim": 1,
+    "hello-worker": 1,
+    "hello-durable": 1,
+    "hello-bff": 1,
+    "hello-dbadapter-postgresql": 1
+  },
+  "marker_definitions": {
+    "hello-orders-api": "message startswith 'Order b6f4e1e1-12b6-4211-902e-ec329f7a5efd created'",
+    "hello-catalog-api": "'product upserted' sku=E2E-MARKER-ABF0C6F4 (direct POST /products)",
+    "hello-inventory-api": "'Reservation ... order b6f4e1e1-12b6-4211-902e-ec329f7a5efd'",
+    "hello-partner-sim": "'payment processed' order_id=b6f4e1e1-12b6-4211-902e-ec329f7a5efd",
+    "hello-worker": "'notification recorded' order_id=b6f4e1e1-12b6-4211-902e-ec329f7a5efd",
+    "hello-durable": "'OrderProcessing for b6f4e1e1-12b6-4211-902e-ec329f7a5efd completed'",
+    "hello-bff": "retry attempt 2 log of the single fault-window request trace eeeb1dfb6f2e45958838db58c32a24e5",
+    "hello-dbadapter-postgresql": "'POST /roundtrip 200' of the browser roundtrip trace 0000000000000000a78bee696ccbed1c"
+  },
+  "identical_events_total": 7,
+  "identical_structured_app_events": 0,
+  "identical_events_examples": [
+    "info: Microsoft.Azure.WebJobs.Hosting.OptionsLoggingService[0]\n      ScriptJobHostOptions\n      {\n        \"FileWatchingEnabled\": true,\n        \"FileLoggingMode\"",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "warn: Azure.Messaging.ServiceBus[43]\n      RunOperation encountered an exception and will retry. Exception: Azure.Messaging.ServiceBus.ServiceBusException: Conn",
+    "info: Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener[0]\n      Message processing error (Action=Receive, EntityPath=order-events/Subscriptions/f"
+  ],
+  "identical_plaintext_events_more_often_at_intake_than_in_source_file": {},
+  "duplicate_span_ids": 0,
+  "spans_total": 389,
+  "log_events_total": 502
+}

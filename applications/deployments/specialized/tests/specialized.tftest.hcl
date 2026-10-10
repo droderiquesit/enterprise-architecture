@@ -292,12 +292,16 @@ variables {
     app_port            = 8080
   }
   platform_aro = {
-    enabled        = true
-    cluster_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aro/providers/Microsoft.RedHatOpenShift/openShiftClusters/eh-aro-aro-dev-sec"
-    cluster_name   = "eh-aro-aro-dev-sec"
-    api_server_url = "https://api.abc.swedencentral.aroapp.io:6443"
-    console_url    = "https://console-openshift-console.apps.abc.swedencentral.aroapp.io/"
-    ingress_ip     = "10.41.16.10"
+    enabled         = true
+    cluster_id      = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aro/providers/Microsoft.RedHatOpenShift/openShiftClusters/eh-aro-aro-dev-sec"
+    cluster_name    = "eh-aro-aro-dev-sec"
+    api_server_url  = "https://api.abc.swedencentral.aroapp.io:6443"
+    console_url     = "https://console-openshift-console.apps.abc.swedencentral.aroapp.io/"
+    ingress_ip      = "10.41.16.10"
+    oidc_issuer_url = "https://swedencentral.oic.aro.azure.net/00000000-0000-0000-0000-000000000000/11111111-1111-1111-1111-111111111111"
+    workload_identities = {
+      "hello-catalog-api" = { namespace = "hello", service_account = "hello-catalog-api", client_id = "22222222-2222-2222-2222-000000000003" }
+    }
   }
   platform_specialized_compute = {
     resource_group_name = "rg-spec"
@@ -337,8 +341,28 @@ run "all_specialized" {
     error_message = "ARO: hello-service chart values with an OpenShift Route and a digest-pinned image."
   }
   assert {
-    condition     = !can(yamldecode(output.contract.aro.helm.values).podSecurityContext.runAsUser) && !yamldecode(output.contract.aro.helm.values).identity.workloadIdentity && !yamldecode(output.contract.aro.helm.values).faults.enabled && length(setintersection(keys(yamldecode(output.contract.aro.helm.values).env), ["DD_ENV", "DD_SERVICE", "DD_VERSION", "FAULTS_ENABLED", "AZURE_CLIENT_ID", "PORT"])) == 0
-    error_message = "ARO values: no fixed runAsUser (SCC assigns it), no AKS workload identity webhook, faults off, chart-owned env not duplicated."
+    condition     = !can(yamldecode(output.contract.aro.helm.values).podSecurityContext.runAsUser) && !yamldecode(output.contract.aro.helm.values).faults.enabled && length(setintersection(keys(yamldecode(output.contract.aro.helm.values).env), ["DD_ENV", "DD_SERVICE", "DD_VERSION", "FAULTS_ENABLED", "AZURE_CLIENT_ID", "PORT", "DSV_AUTH"])) == 0
+    error_message = "ARO values: no fixed runAsUser (SCC assigns it), faults off, chart-owned env not duplicated."
+  }
+  assert {
+    condition = (
+      yamldecode(output.contract.aro.helm.values).identity.workloadIdentity &&
+      yamldecode(output.contract.aro.helm.values).identity.tenantId == var.environment.tenant_id &&
+      yamldecode(output.contract.aro.helm.values).serviceAccount == { create = true, name = "hello-catalog-api" } &&
+      output.contract.aro.namespace == "hello" &&
+      yamldecode(output.contract.aro.helm.values).env["AZURE_CREDENTIAL_MODE"] == "workload_identity" &&
+      output.contract.apps["hello-catalog-api-aro"].identity_name == "hello-catalog-api"
+    )
+    error_message = "ARO (as core-aks on AKS): workload identity on the service account federated by platform-aro (contract workload_identities), python credential mode workload_identity."
+  }
+  assert {
+    condition = (
+      yamldecode(output.contract.aro.helm.values).secretsMode == "dsv" &&
+      yamldecode(output.contract.aro.helm.values).dsv == { tenant = "contoso", tld = "com", baseUrl = "https://contoso.secretsvaultcloud.com/v1", auth = "azure" } &&
+      !can(yamldecode(output.contract.aro.helm.values).existingSecretEnv) &&
+      yamldecode(output.contract.aro.helm.values).secretsSync.secretName == ""
+    )
+    error_message = "ARO reads Delinea DSV directly (secretsMode dsv, DSV_AUTH azure from the transport contract): no synced or existing Kubernetes Secret (ADR-0001 section 14)."
   }
   assert {
     condition     = output.contract.status.aro == "implemented" && yamldecode(output.contract.aro.helm.values).identity.clientId == var.foundation_identity.identities["hello-catalog-api"].client_id && yamldecode(output.contract.aro.helm.values).replicas == 2
@@ -355,6 +379,55 @@ run "all_specialized" {
   assert {
     condition     = contains(keys(azurerm_virtual_machine_run_command.cvm_worker[0].tags), "team") && azurerm_virtual_machine_run_command.cvm_worker[0].tags["service"] == "hello-worker"
     error_message = "The confidential VM worker run command carries the tag policy azure_tags."
+  }
+}
+
+run "aro_dsv_secret_refs" {
+  command = plan
+  variables {
+    settings = {
+      aro_catalog_env        = { PG_AUTH = "password", PG_USER = "catalog_app" }
+      aro_catalog_secret_env = { PG_PASSWORD = "dsv://eh/dev/catalog-pg-password#value" }
+    }
+  }
+  assert {
+    condition     = yamldecode(output.contract.aro.helm.values).secretEnv == { PG_PASSWORD = "dsv://eh/dev/catalog-pg-password#value" } && !contains(keys(yamldecode(output.contract.aro.helm.values).env), "PG_PASSWORD") && yamldecode(output.contract.aro.helm.values).env["PG_AUTH"] == "password"
+    error_message = "ARO secret settings are dsv:// references in secretEnv (resolved by the app with workload identity), never in env."
+  }
+}
+
+run "aro_rejects_secret_values" {
+  command = plan
+  variables {
+    settings = { aro_catalog_secret_env = { PG_PASSWORD = "not-a-reference" } }
+  }
+  expect_failures = [var.settings]
+}
+
+run "aro_blocked_without_federated_identity" {
+  command = plan
+  variables {
+    platform_aro = {
+      enabled        = true
+      cluster_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aro/providers/Microsoft.RedHatOpenShift/openShiftClusters/eh-aro-aro-dev-sec"
+      cluster_name   = "eh-aro-aro-dev-sec"
+      api_server_url = "https://api.abc.swedencentral.aroapp.io:6443"
+    }
+  }
+  assert {
+    condition     = startswith(output.contract.status.aro, "blocked: needs platform-aro workload_identities") && yamldecode(output.contract.aro.helm.values).identity.clientId == "missing"
+    error_message = "Without the platform-aro federated identity the ARO release is blocked (deploy-aro.sh refuses it)."
+  }
+}
+
+run "aro_blocked_on_namespace_mismatch" {
+  command = plan
+  variables {
+    settings = { aro_namespace = "catalog" }
+  }
+  assert {
+    condition     = startswith(output.contract.status.aro, "blocked:") && output.contract.aro.namespace == "hello"
+    error_message = "settings.aro_namespace must match the namespace platform-aro federated (else the token subject would not match)."
   }
 }
 

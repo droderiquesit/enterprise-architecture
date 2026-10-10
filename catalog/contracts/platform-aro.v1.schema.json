@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "platform-aro contract v1",
-  "description": "Azure Red Hat OpenShift cluster (blocked by default; see README prerequisites).",
+  "description": "Azure Red Hat OpenShift cluster (blocked by default; see README prerequisites). 1.1.0: workload_identities (application identities federated with oidc_issuer_url, consumed by deploy-specialized).",
   "type": "object",
   "required": [
     "enabled",
@@ -68,6 +68,29 @@
       ],
       "description": "Managed OIDC issuer of the managed-identity cluster (clusterProfile.oidcIssuer): issuer of Entra workload identity federated credentials for in-cluster service accounts. Not a credential. Null when disabled.",
       "pattern": "^https://"
+    },
+    "workload_identities": {
+      "type": "object",
+      "description": "Application user-assigned identities (foundation-identity keys) federated with oidc_issuer_url: identity key -> Kubernetes namespace / service account / client id. Empty when disabled.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "namespace",
+          "service_account",
+          "client_id"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "service_account": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          }
+        }
+      }
     },
     "version": {
       "type": [

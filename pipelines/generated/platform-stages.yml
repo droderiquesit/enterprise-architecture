@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: platform pipeline.
-# Source: catalog/components.yaml (sha256 prefix 3ef9a7cb29a68a2d)
+# Source: catalog/components.yaml (sha256 prefix 0784d2e7aa34de60)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -1376,12 +1376,14 @@ stages:
       - Select
       - Validate
       - Security
+      - P_foundation_identity
+      - C_foundation_identity
       - P_foundation_network
       - C_foundation_network
       - P_foundation_secrets
       - C_foundation_secrets
     lockBehavior: ${{ parameters.settings.stageLockBehavior }}
-    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_aro'], 'true'), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_secrets.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'))), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
+    condition: and(not(canceled()), in(dependencies.Select.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Validate.result, 'Succeeded', 'SucceededWithIssues'), in(dependencies.Security.result, 'Succeeded', 'SucceededWithIssues'), eq(dependencies.Select.outputs['select.detect.sel_platform_aro'], 'true'), and(or(in(dependencies.P_foundation_identity.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_identity.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_identity'], 'true'))), in(dependencies.C_foundation_identity.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_network.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_network.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_network'], 'true'))), in(dependencies.C_foundation_network.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')), and(or(in(dependencies.P_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues'), and(eq(dependencies.P_foundation_secrets.result, 'Skipped'), ne(dependencies.Select.outputs['select.detect.sel_foundation_secrets'], 'true'))), in(dependencies.C_foundation_secrets.result, 'Succeeded', 'SucceededWithIssues', 'Skipped')))
     pool: *id001
     jobs:
       - template: ../templates/terraform-plan.yml

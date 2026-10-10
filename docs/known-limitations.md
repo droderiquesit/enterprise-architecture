@@ -111,9 +111,14 @@ key fallback) in their READMEs.
   from Delinea's dsv-cli v1.41.1 / dsv-sdk-go v2.3.0 source and docs and exercised against `tools/secrets/mock_dsv.py`.
   Unverified details: the GET response shape of policies, addressing federated users as `<provider>:<username>`, and
   which action (`read` or `list`) DSV requires for the metadata-only `describe` call used by `check.py`.
-* AKS workload identity: DSV maps Azure users by the managed identity resource id (`xms_mirid` claim). Whether DSV accepts
-  tokens obtained through workload identity federation is **not verified**; fallback: Delinea's dsv-k8s syncer or
-  host-level agents.
+* AKS and ARO workload identity: DSV maps Azure users by the managed identity resource id (`xms_mirid` claim). Whether DSV
+  accepts tokens obtained through workload identity federation is **not verified**; fallback: Delinea's dsv-k8s syncer
+  (chart `secretsMode: synced`, wired in core-aks only) or host-level agents.
+* ARO application workloads (`deploy-specialized`, hello-catalog-api) read DSV directly like AKS (no synced Secret any
+  more), not verified live - no ARO cluster: the OpenShift pod-identity webhook (`openshift-cloud-credential-operator`)
+  injecting `AZURE_*` env and the projected token into a `restricted-v2` pod of the annotated service account, the
+  `platform-aro` federated credential matching the issuer returned by `clusterProfile.oidcIssuer`, and Entra accepting
+  the exchange. Only managed-identity ARO clusters are supported (service-principal clusters have no OIDC issuer).
 * DSV is a public SaaS endpoint (no Private Link): every reader needs HTTPS egress to `<tenant>.secretsvaultcloud.<tld>`.
 * VM / VMSS hosts (Linux and Windows): the Agent resolves the API key through `dsv-fetch agent-backend` as its
   `secret_backend_command` (the key is never written to `datadog.yaml`); a rotated key reaches an Agent on its next

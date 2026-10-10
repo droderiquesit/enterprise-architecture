@@ -4,8 +4,8 @@
 |---|---|
 | Component id | `platform-aro` |
 | Owner | platform team (compute) |
-| Consumes | `foundation-network` (`spoke_vnet_id`, `subnets.aro-master`, `subnets.aro-worker`); pull secret from Delinea DSV (`aro-pull-secret`, pipeline input) |
-| Produces | `platform-aro` v1 (`status = blocked` unless enabled; `oidc_issuer_url` = the managed OIDC issuer for workload identity, consumed by `obs-kubernetes-aro`) |
+| Consumes | `foundation-network` (`spoke_vnet_id`, `subnets.aro-master`, `subnets.aro-worker`), `foundation-identity` (`identities`: application workload identities to federate); pull secret from Delinea DSV (`aro-pull-secret`, pipeline input) |
+| Produces | `platform-aro` v1 (1.1.0; `status = blocked` unless enabled; `oidc_issuer_url` = the managed OIDC issuer for workload identity, consumed by `obs-kubernetes-aro`; `workload_identities` = federated application identities, consumed by `deploy-specialized`) |
 | Status | **`blocked`** by default — prerequisites below cannot be satisfied by Terraform in this repo |
 
 ## Exact prerequisites (all required before `enabled = true`)
@@ -40,6 +40,15 @@
   Consumers federate their own user-assigned identities with in-cluster service accounts (Learn: "Deploy and configure
   an application using workload identity on an ARO managed identity cluster"), e.g. `obs-kubernetes-aro` for the
   Datadog Agents (DSV access). No kubeadmin / admin kubeconfig is ever output.
+- **Application workload identity federation** (`azurerm_federated_identity_credential.workload`, `settings.workload_identities`,
+  default `hello-catalog-api` => `hello/hello-catalog-api`): the same ownership rule as `platform-aks` (ADR-0001 section 3:
+  the credential binds a `foundation-identity` user-assigned identity to *this* cluster's issuer, so it lives with the
+  cluster). Subject `system:serviceaccount:<namespace>:<service account>`, audience `api://AzureADTokenExchange`; keys
+  missing in `foundation-identity` are skipped. Published as contract `workload_identities` (namespace, service account,
+  client id); `deploy-specialized` annotates the service account with the client id and labels the pod
+  (`azure.workload.identity/use`), and the OpenShift pod-identity webhook (`openshift-cloud-credential-operator`) injects
+  the projected token, so the app reads Delinea DSV directly (ADR-0001 section 14). A precondition rejects a cluster
+  without `clusterProfile.oidcIssuer` (only managed-identity clusters are supported).
 
 ## Cost when enabled (approx.)
 

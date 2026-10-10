@@ -29,6 +29,19 @@ variable "foundation_network" {
   })
 }
 
+# Application workload identities (federated below with the cluster's OIDC issuer, as platform-aks does on AKS).
+variable "foundation_identity" {
+  description = "foundation-identity contract v2 (only the fields this root uses)."
+  type = object({
+    identities = map(object({
+      id           = string
+      principal_id = string
+      client_id    = string
+      name         = string
+    }))
+  })
+}
+
 variable "settings" {
   description = "platform-aro settings (environment.yaml components.platform-aro). Blocked by default - see README prerequisites."
   type = object({
@@ -52,6 +65,16 @@ variable "settings" {
     # NSGs / NAT gateways / route tables attached to the ARO subnets also need operator role
     # assignments (Learn: "Understand managed identities in ARO").
     extra_network_resource_ids = optional(list(string), [])
+    # Application workload identity federation (ADR-0001 section 3: the credential binds a foundation identity to THIS
+    # cluster's OIDC issuer, so it lives with the cluster - same rule as platform-aks): identity key => namespace /
+    # service account. deploy-specialized runs hello-catalog-api under this service account and reads Delinea DSV
+    # with the federated token the OpenShift pod-identity webhook injects.
+    workload_identities = optional(map(object({
+      namespace       = string
+      service_account = string
+      })), {
+      "hello-catalog-api" = { namespace = "hello", service_account = "hello-catalog-api" }
+    })
   })
   default = {}
 

@@ -11,7 +11,8 @@
 #     a deployer service account (or an Entra-integrated identity) with edit rights on the namespace; this script runs
 #     `oc login --server <api> --token $OC_TOKEN`, which writes the kubeconfig helm uses. With --dry-run and no
 #     OC_TOKEN the chart is only rendered locally (helm template) - no cluster access.
-#   - Secrets referenced by settings.aro_secret_env (e.g. hello-catalog-api-db / password) exist in the namespace.
+#   - No Kubernetes Secret: the app reads Delinea DSV with workload identity (service account federated by platform-aro;
+#     the OpenShift pod-identity webhook injects the token). status.aro is implemented only when that identity exists.
 #   - OCI chart (--chart oci://<acr>/helm/hello-service): `helm registry login` done by the pipeline beforehand.
 #
 # Rollback: the upgrade rolls back automatically on failure (--rollback-on-failure / --atomic). Manual:

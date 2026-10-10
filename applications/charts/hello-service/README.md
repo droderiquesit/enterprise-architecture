@@ -4,7 +4,7 @@
   `helm lint --strict`, `helm template` + `kubeconform -strict` (Kubernetes 1.36.0 schemas, the platform-aks default),
   pytest assertions (`tests/charts`) and a kind v1.36.4 smoke (install, probes, BFF → catalog, upgrade, rollback).
   Not deployed to AKS/ARO from this sandbox (no Azure credentials).
-- **Chart version** `2.1.1` (2.1.1: comments/docs only - log-collector wording for observability 4.0.0, rendered output unchanged apart from a YAML comment; 2.1.0: additive `service.tags` (tag policy), `telemetry.agentLogSource`, `telemetry.singleStepInstrumentation` for the Datadog fleet collection; 2.0.0: Key Vault / CSI removed, secrets as DSV references - breaking values change) (semver of the chart, independent of the applications). The application version is
+- **Chart version** `2.1.2` (2.1.2: comments/docs only - ARO uses workload identity + `secretsMode: dsv` like AKS, `existingSecretEnv` documented for kind only, rendered output unchanged; 2.1.1: comments/docs only - log-collector wording for observability 4.0.0, rendered output unchanged apart from a YAML comment; 2.1.0: additive `service.tags` (tag policy), `telemetry.agentLogSource`, `telemetry.singleStepInstrumentation` for the Datadog fleet collection; 2.0.0: Key Vault / CSI removed, secrets as DSV references - breaking values change) (semver of the chart, independent of the applications). The application version is
   `service.version` (set per release by the deployer); `appVersion` is informational only (`helm package --app-version` may override it).
 - **Engines**: Helm 4 CLI (pinned `v4.3.0`) and the Terraform `hashicorp/helm` 3.3 provider (Helm v3 SDK); rendering is
   tested to be identical with Helm `v3.22.0`. `kubeVersion: >=1.30.0-0`.
@@ -49,11 +49,13 @@ selector `app.kubernetes.io/name` only (immutable; identical to the pre-Helm obj
 **Secrets** (chart 2.0.0, Delinea DSV - no Key Vault, no Secrets Store CSI driver): the chart never creates a `Secret`.
 `secretEnv` maps names to **DSV references** (`dsv://<path>#<element>`). With `secretsMode: dsv` (default) each reference
 is rendered as the env VALUE together with `DSV_TENANT/DSV_TLD/DSV_BASE_URL/DSV_AUTH` (from `dsv`) and `AZURE_CLIENT_ID`;
-the application resolves it at start-up with its AKS workload identity (federated token). **Open verification**: DSV maps
+the application resolves it at start-up with its Kubernetes workload identity (federated token: the AKS webhook, or on
+ARO managed-identity clusters the OpenShift pod-identity webhook, which honours the same SA annotation and pod label). **Open verification**: DSV maps
 Azure users by the managed identity's resource id (`xms_mirid` claim) - that it accepts a workload-identity-federated
 token is not verified yet. Documented fallback `secretsMode: synced`: the Delinea DSV Kubernetes syncer (dsv-k8s)
 maintains the Secret `secretsSync.secretName` (default `<fullname>-dsv`, one key per `secretEnv` name) and the chart
-references it with `secretKeyRef`. `existingSecretEnv` references other Secrets created out of band (ARO, kind).
+references it with `secretKeyRef`. `existingSecretEnv` references other Secrets created out of band (kind smoke tests only;
+ARO reads DSV directly since chart 2.1.2).
 The schema accepts secret-looking names (`*PASSWORD`, `*SECRET`, `*TOKEN`, `*API_KEY`, `*ACCESS_KEY`, `*PRIVATE_KEY`,
 `OTEL_EXPORTER_OTLP_HEADERS`) in `env` only with a `dsv://` value, and rejects inline credentials (`Password=`,
 `AccountKey=`, `SharedAccessKey=`, `Secret=`), `@Microsoft.KeyVault(` values and Key Vault URLs.
@@ -75,14 +77,14 @@ Enforced by `values.schema.json` (draft-07; `additionalProperties: false` everyw
 | `imagePullSecrets`, `command`, `args` | `[]` | `args`/`command` e.g. the job sub-command |
 | `identity.clientId` | — **required** | UUID of the user-assigned identity (`AZURE_CLIENT_ID`) |
 | `identity.tenantId` | `""` | SA annotation `azure.workload.identity/tenant-id` |
-| `identity.workloadIdentity` | `true` | SA client-id annotation + pod label + projected token; `false` on ARO/kind |
+| `identity.workloadIdentity` | `true` | SA client-id annotation + pod label + projected token (AKS and ARO webhooks); `false` on kind |
 | `serviceAccount.create` / `.name` / `.annotations` | `true` / fullname / `{}` | SA has `automountServiceAccountToken: false` |
 | `port` | `8080` | `PORT`; worker: health port (8081 for hello-worker) |
 | `env` | `{}` | chart-owned names (incl. `DSV_*`, `DD_API_KEY`) rejected; secret-looking names only with a `dsv://` value; inline credentials / Key Vault references rejected |
 | `secretEnv` | `{}` | name → `dsv://<path>#<element>` (literals and Key Vault ids rejected) |
 | `dsv.{tenant,tld,baseUrl,auth}` | `"", com, "", azure` | DSV runtime env for the app; `secretsMode: dsv` needs tenant or baseUrl and `identity.workloadIdentity` |
 | `secretsMode` / `secretsSync.secretName` | `dsv` / `<fullname>-dsv` | `synced` = dsv-k8s syncer Secret via `secretKeyRef` (fallback) |
-| `existingSecretEnv` | `{}` | name → `{secretName, key}` |
+| `existingSecretEnv` | `{}` | name → `{secretName, key}` (kind only; not used on AKS/ARO) |
 | `telemetry.agentHostFromHostIP` | `true` | `DD_AGENT_HOST` from `status.hostIP` |
 | `telemetry.disableAgentLogCollection` | `true` | `ad.datadoghq.com/<c>.logs: "[]"` (Fluent Bit DaemonSet collects) |
 | `telemetry.agentLogSource` | `""` | with `disableAgentLogCollection: false`: Agent log source (`ad.datadoghq.com/<c>.logs`) |
@@ -111,7 +113,7 @@ Enforced by `values.schema.json` (draft-07; `additionalProperties: false` everyw
 | File | Workload |
 |---|---|
 | `aks-bff.yaml`, `aks-orders-api.yaml`, `aks-catalog-api.yaml`, `aks-worker.yaml` | exactly what `applications/deployments/core-aks` renders for its test fixture (drift-checked by `tests/charts/test_deploy_roots_values.py`) |
-| `aro-catalog-api.yaml` | hello-catalog-api on ARO (Route, SCC-assigned UID, existing DB Secret, Datadog node Agent log collection - observability 4.1.0) |
+| `aro-catalog-api.yaml` | hello-catalog-api on ARO (Route, SCC-assigned UID, workload identity + `secretsMode: dsv` - `dsv://` DB password, no Secret; Datadog node Agent log collection - observability 4.1.0) |
 | `aks-jobs-cronjob.yaml` | the `cronjob` kind (hello-jobs reconcile trigger) — optional, jobs run on ACA today |
 | `kind-bff.yaml`, `kind-catalog-api.yaml` | local kind smoke |
 
@@ -131,7 +133,10 @@ helm upgrade --install hello-worker applications/charts/hello-service -n hello \
   (platform-aks workload identities, foundation-identity v2 DSV references, the instrumentation contract, artifacts).
   Chart source: this directory by default; `settings.helm.chart_repository = "oci://<acr>/helm"` +
   `chart_version` consume the published chart instead.
-- **ARO** — `applications/deployments/specialized` renders the values into its contract (`aro.helm.values`);
+- **ARO** — `applications/deployments/specialized` renders the values into its contract (`aro.helm.values`): workload
+  identity on the service account platform-aro federated with the cluster's OIDC issuer (contract `workload_identities`),
+  `secretsMode: dsv` as on AKS; `openshift.enabled` (SCC-assigned UID). The default `restricted-v2` SCC admits the pod
+  including the `projected` token volume the OpenShift pod-identity webhook injects (asserted in `tests/charts`).
   `scripts/deploy-aro.sh` runs `helm upgrade --install` after `oc login` (Terraform holds no OpenShift credentials).
 - **Applications pipeline** (`pipelines/templates/helm-charts.yml` → `tools/deploy/charts.py`): Validate stage
   `helm lint --strict` + `helm template | kubeconform` for every `examples/*.yaml`; Build stage packages a
@@ -140,10 +145,10 @@ helm upgrade --install hello-worker applications/charts/hello-service -n hello \
 
 ```bash
 python3 -m pytest tests/charts -q                     # lint/template/kubeconform(1.36)/schema + TF-rendered values
-helm package applications/charts/hello-service --version "2.1.1+src<sha12>" -d out/charts
+helm package applications/charts/hello-service --version "2.1.2+src<sha12>" -d out/charts
 az acr login --name "$ACR_NAME" --expose-token --output tsv --query accessToken \
   | helm registry login "$ACR_NAME.azurecr.io" --username 00000000-0000-0000-0000-000000000000 --password-stdin
-helm push out/charts/hello-service-2.1.1+src<sha12>.tgz "oci://$ACR_NAME.azurecr.io/helm"
+helm push out/charts/hello-service-2.1.2+src<sha12>.tgz "oci://$ACR_NAME.azurecr.io/helm"
 ```
 
   To deploy the published chart from core-aks set `settings.helm.chart_repository = "oci://<acr>.azurecr.io/helm"` and
@@ -164,14 +169,14 @@ pipeline so the next `terraform plan` shows no drift. A failed upgrade rolls bac
 `--rollback-on-failure`). Adopting objects created by the pre-Helm core-aks root: one apply with
 `settings.helm.take_ownership = true` (Helm `--take-ownership`); selectors are unchanged, so Deployments are not recreated.
 
-## Accepted static-analysis findings (checkov kubernetes on the rendered examples: 706 passed, 25 failed)
+## Accepted static-analysis findings (checkov 3.3.26 kubernetes on the rendered examples, 2026-10-10: 709 passed, 22 failed)
 
 | Check | Why accepted |
 |---|---|
 | CKV_K8S_40 high UID | images declare numeric non-root users (1654/10001); a pinned UID would break OpenShift SCC ranges — set `podSecurityContext.runAsUser` if required |
 | CKV2_K8S_6 NetworkPolicy | opt-in (`networkPolicy.enabled`): the internal LB / app routing source ranges are environment-specific |
 | CKV_K8S_35 secrets as env | the application contract reads `FAULT_TOKEN` from env; the env value is a `dsv://` reference resolved by the app (or a dsv-k8s syncer Secret in secretsMode synced) |
-| CKV_K8S_38 SA token mounted | required by AKS workload identity; disabled when `identity.workloadIdentity: false` |
+| CKV_K8S_38 SA token mounted | required by workload identity (AKS, ARO); disabled when `identity.workloadIdentity: false` |
 
 Docs: https://helm.sh/docs/topics/charts/ , https://helm.sh/docs/topics/registries/ ,
 https://learn.microsoft.com/azure/container-registry/container-registry-helm-repos ,

@@ -167,7 +167,7 @@ components:
     layer: platform
     kind: terraform
     path: platform/compute/aro
-    consumes: [foundation-network]
+    consumes: [foundation-network, foundation-identity]   # foundation-identity: app workload identity federation (as platform-aks)
     depends_on: [foundation-secrets]
     secret_env:
       TF_VAR_pull_secret: aro-pull-secret?

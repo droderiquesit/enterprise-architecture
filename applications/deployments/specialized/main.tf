@@ -28,9 +28,10 @@ locals {
 module "env" {
   source = "../modules/app-env"
   for_each = merge(
-    local.sf_enabled ? { sf = { svc = "hello-inventory-api", arch = "vm", extra = var.settings.sf_inventory_env } } : {},
-    local.aro_enabled ? { aro = { svc = "hello-catalog-api", arch = "aks", extra = var.settings.aro_catalog_env } } : {},
-    local.cvm_enabled ? { cvm = { svc = "hello-worker", arch = "vm", extra = var.settings.cvm_env } } : {},
+    local.sf_enabled ? { sf = { svc = "hello-inventory-api", arch = "vm", extra = var.settings.sf_inventory_env, secret = {} } } : {},
+    # arch "aks": Kubernetes workload identity (AZURE_CREDENTIAL_MODE=workload_identity), the same app path on ARO
+    local.aro_enabled ? { aro = { svc = "hello-catalog-api", arch = "aks", extra = var.settings.aro_catalog_env, secret = var.settings.aro_catalog_secret_env } } : {},
+    local.cvm_enabled ? { cvm = { svc = "hello-worker", arch = "vm", extra = var.settings.cvm_env, secret = {} } } : {},
   )
   service = {
     name    = each.value.svc
@@ -51,6 +52,7 @@ module "env" {
   port               = each.value.svc == "hello-worker" ? 8081 : 8080
   log_level          = var.settings.log_level
   extra_env          = each.value.extra
+  secret_env         = each.value.secret
 }
 
 # ---------------------------------------------------------------- Service Fabric (rendered manifests)
@@ -70,16 +72,25 @@ locals {
 }
 
 # ---------------------------------------------------------------- ARO (Helm values for the shared chart)
-# The same chart as AKS (applications/charts/hello-service) with OpenShift values: no fixed runAsUser (the
-# restricted-v2 SCC assigns the UID), a Route instead of an Ingress, no AKS workload identity webhook (and no Key Vault):
-# database secrets come from existing Secrets synced from Delinea DSV by the dsv-k8s syncer
-# (settings.aro_secret_env). Terraform renders the values;
-# scripts/deploy-aro.sh installs them (the ARO API needs an OpenShift login, which Terraform does not hold).
+# The same chart and secrets mode as core-aks on AKS (applications/charts/hello-service) with OpenShift values: no fixed
+# runAsUser (the restricted-v2 SCC assigns the UID; it allows the projected service account token volume), a Route
+# instead of an Ingress. Secrets (ADR-0001 section 14): secretsMode=dsv - secret settings are dsv:// references the app
+# resolves at start-up with its Entra workload identity: platform-aro federates the foundation-identity
+# hello-catalog-api identity with the managed-identity cluster's OIDC issuer for the service account published in its
+# contract (workload_identities), and the OpenShift pod-identity webhook (openshift-cloud-credential-operator) injects
+# AZURE_* env + the projected token into pods of an annotated service account labelled azure.workload.identity/use.
+# No Key Vault, no Kubernetes Secret. Terraform renders the values; scripts/deploy-aro.sh installs them (the ARO API
+# needs an OpenShift login, which Terraform does not hold).
 locals {
-  aro_client_id   = try(local.ids["hello-catalog-api"].client_id, null)
+  aro_wi          = try(local.aro.workload_identities["hello-catalog-api"], null)
+  aro_client_id   = try(local.aro_wi.client_id, null)
+  aro_namespace   = try(local.aro_wi.namespace, var.settings.aro_namespace)
   aro_chart_owned = ["DD_AGENT_HOST", "DD_ENV", "DD_SERVICE", "DD_VERSION", "AZURE_CLIENT_ID", "FAULTS_ENABLED", "PORT", "LOG_FILE_PATH", "DSV_TENANT", "DSV_TLD", "DSV_BASE_URL", "DSV_AUTH"]
   aro_image       = try(var.artifacts["svc-catalog-api"].image, null)
-  aro_ready       = local.aro_enabled && local.aro_client_id != null && can(regex("@sha256:[a-f0-9]{64}$", coalesce(local.aro_image, "x")))
+  aro_dsv_refs    = local.aro_enabled ? module.env["aro"].secret_env : {}
+  dsv             = var.obs_telemetry_transport.secrets
+  # ready: federated identity published by platform-aro (namespace = settings.aro_namespace) + digest-pinned image
+  aro_ready = local.aro_enabled && local.aro_wi != null && local.aro_namespace == var.settings.aro_namespace && can(regex("@sha256:[a-f0-9]{64}$", coalesce(local.aro_image, "x")))
   aro_values = local.aro_enabled ? {
     kind = "deployment"
     service = {
@@ -97,14 +108,25 @@ locals {
       digest     = try(split("@", local.aro_image)[1], "")
       pullPolicy = "IfNotPresent"
     }
-    identity = { clientId = coalesce(local.aro_client_id, "missing"), workloadIdentity = false }
-    port     = 8080
-    # ARO has no AKS workload identity webhook: the pod cannot authenticate to DSV, so no dsv:// settings are
-    # rendered (DSV_AUTH=none) and secrets come from Secrets synced by the Delinea dsv-k8s syncer (aro_secret_env).
-    env               = { for n, v in module.env["aro"].env : n => v if !contains(local.aro_chart_owned, n) && !startswith(v, "dsv://") }
-    dsv               = { auth = "none" }
-    secretsMode       = "synced"
-    existingSecretEnv = var.settings.aro_secret_env
+    # workload identity: ServiceAccount annotation azure.workload.identity/client-id + pod label
+    # azure.workload.identity/use=true (honoured by the OpenShift pod-identity webhook as by the AKS webhook)
+    identity = {
+      clientId         = coalesce(local.aro_client_id, "missing")
+      tenantId         = var.environment.tenant_id
+      workloadIdentity = true
+    }
+    serviceAccount = { create = true, name = try(local.aro_wi.service_account, "hello-catalog-api") }
+    port           = 8080
+    env            = { for n, v in module.env["aro"].env : n => v if !contains(local.aro_chart_owned, n) && !contains(keys(local.aro_dsv_refs), n) }
+    secretEnv      = local.aro_dsv_refs
+    dsv = {
+      tenant  = coalesce(local.dsv.tenant, "")
+      tld     = coalesce(local.dsv.tld, "com")
+      baseUrl = local.dsv.base_url
+      auth    = coalesce(local.dsv.auth, "azure")
+    }
+    secretsMode = "dsv"
+    secretsSync = { secretName = "" }
     # Datadog node Agent on ARO (obs-kubernetes-aro, observability 4.1.0): same rule as core-aks - the Agent collects
     # the container's stdout when it is the fleet log collector (Fluent Bit fallback: "[]" opt-out); SSI label when
     # the Datadog library is injected (Cluster Agent admission controller, hostip mode on OpenShift)
