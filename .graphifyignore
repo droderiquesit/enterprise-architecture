@@ -1,0 +1,18 @@
+# Graphify (codebase knowledge graph) - paths excluded from extraction, in addition to .gitignore.
+# Generated, vendored or bulky content that adds noise without architectural signal.
+graphify-out/
+**/.terraform/
+**/.vendor/
+**/node_modules/
+**/bin/
+**/obj/
+**/dist/
+**/*.lock.hcl
+**/packages.lock.json
+**/package-lock.json
+pipelines/generated/
+docs/evidence/
+docs/coverage/
+docs/diagrams/**/*.svg
+observability/onboarding/rendered/
+observability/extras/content/onboarding/rendered/

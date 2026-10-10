@@ -32,3 +32,6 @@ out/
 .artifacts/
 *.egg-info/
 .ci-cache/
+
+# Graphify knowledge graph output (regenerate with tools/graphify/build.sh; ~11 MB, changes every commit)
+graphify-out/
