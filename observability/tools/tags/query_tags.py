@@ -22,7 +22,7 @@ _OVER_CALL = re.compile(r'\.(over|exclude)\(\s*((?:"(?:[^"\\]|\\.)*"\s*,?\s*)+)\
 _STR = re.compile(r'"((?:[^"\\]|\\.)*)"')
 _METRIC_BY = re.compile(r'\bby\s*\{([^{}]*)\}')
 _SCOPE = re.compile(r'\{([^{}]*)\}')
-_IN = re.compile(r'([A-Za-z@][A-Za-z0-9_.:/@-]*)\s+(NOT\s+)?IN\s*\(([^)]*)\)', re.I)
+_IN = re.compile(r'([A-Za-z@][A-Za-z0-9_.:/@-]*)\s+(NOT\s+)?IN\s*\(([^)]*)\)', re.IGNORECASE)
 _SEARCH_TERM = re.compile(r'(-|NOT\s+)?(@?[A-Za-z][A-Za-z0-9_.\-/]*):(\((?:[^()]*)\)|"(?:[^"\\]|\\.)*"|[^\s()]+)')
 
 
@@ -48,7 +48,7 @@ def _norm_key(k: str) -> str:
 
 def _scope_items(scope: str) -> list[str]:
     # split AND / OR / commas outside parentheses
-    s = re.sub(r"\s+(AND|OR)\s+", ",", scope, flags=re.I)
+    s = re.sub(r"\s+(AND|OR)\s+", ",", scope, flags=re.IGNORECASE)
     out, depth, cur = [], 0, ""
     for ch in s:
         if ch == "(":
@@ -108,7 +108,7 @@ def parse_search(search: str, ex: Extraction, syntax: str) -> None:
         attribute = key.startswith("@")
         values = [raw]
         if raw.startswith("("):
-            values = [v.strip().strip('"') for v in re.split(r"\s+OR\s+|\s+AND\s+", raw[1:-1], flags=re.I) if v.strip()]
+            values = [v.strip().strip('"') for v in re.split(r"\s+OR\s+|\s+AND\s+", raw[1:-1], flags=re.IGNORECASE) if v.strip()]
         elif raw.startswith('"'):
             values = [raw[1:-1]]
         for raw_value in values:

@@ -221,7 +221,9 @@ def test_apm_gateway_agent_resolves_key_from_dsv(tmp_path):
     import yaml
     tr = PKG / "modules/telemetry-transport"
     dd_yaml = yaml.safe_load(console(tr, "local.apm_datadog_yaml", TRANSPORT_VARS, tmp_path))
-    start = console(tr, "azapi_resource.apm_gateway[0].body.properties.template.containers[0].command", TRANSPORT_VARS, tmp_path)
+    start = console(tr, "local.apm_command", TRANSPORT_VARS, tmp_path)
+    env = {e["name"]: e["value"] for e in console(tr, "local.apm_container_env", TRANSPORT_VARS, tmp_path)}
+    assert env["DD_API_KEY"] == "ENC[dsv://eh/test/datadog-api-key#value]", "only a DSV reference in the container env"
     assert dd_yaml["api_key"] == "ENC[dsv://eh/test/datadog-api-key#value]" and dd_yaml["apm_config"]["apm_non_local_traffic"] is True
     assert dd_yaml["secret_backend_command"] == "/opt/dsv-fetch/dsv-fetch" and dd_yaml["logs_enabled"] is False
     assert "managed_by:terraform" in dd_yaml["tags"] and "env:test" in dd_yaml["tags"]
@@ -245,14 +247,20 @@ def test_apm_gateway_agent_resolves_key_from_dsv(tmp_path):
     try:
         s.run("dsv", PYTHON_IMAGE, volumes=[f"{REPO / 'tools' / 'secrets'}:/m:ro", f"{cfg / 'dsvmock'}:/c:ro"],
               cmd=["python", "-u", "/m/mock_dsv.py", "--config", "/c/cfg.json", "--host", "0.0.0.0", "--port", "8200"])
-        agent = s.run("apm", AGENT_IMAGE, env={"HOSTNAME": "apm-gw-0"},
+        agent = s.run("apm", AGENT_IMAGE, env={**env, "HOSTNAME": "apm-gw-0"},
                       volumes=[f"{cfg / 'eh-agent'}:/eh/agent:ro", f"{cfg / 'eh-dsv'}:/eh/dsv:ro"],
                       entrypoint=start[0], cmd=start[1:])
 
         def secret_resolved():
             out = subprocess.run(["docker", "exec", agent, "agent", "secret"], capture_output=True, text=True).stdout
+            seen.append(out)
             return ("Number of secrets resolved: 1" in out or "Number of secrets decrypted: 1" in out) and out
-        out = wait_for(secret_resolved, 120, 3, "API key resolved through dsv-fetch")
+        seen: list[str] = []
+        try:
+            out = wait_for(secret_resolved, 120, 3, "API key resolved through dsv-fetch")
+        except TimeoutError:
+            print("agent secret:", (seen or [""])[-1][-3000:])
+            raise
         assert "Executable permissions: OK" in out and key not in out
         # a Datadog tracer payload from ANOTHER container (managed runtime) on 8126
         payload = json.dumps([[{"trace_id": 1, "span_id": 1, "parent_id": 0, "name": "web.request", "resource": "GET /",
@@ -267,10 +275,12 @@ def test_apm_gateway_agent_resolves_key_from_dsv(tmp_path):
                                capture_output=True, text=True)
             return r.returncode == 0 and r.stdout.strip() == "200"
         wait_for(accepted, 90, 3, "trace-agent accepts non-local traffic on 8126")
-        health = subprocess.run(["docker", "run", "--rm", "--network", s.id, PYTHON_IMAGE, "python", "-c",
-                                 "import urllib.request; print(urllib.request.urlopen('http://apm:5555/live', timeout=10).status)"],
-                                capture_output=True, text=True)
-        assert health.stdout.strip() == "200", health.stderr
+        def live():
+            h = subprocess.run(["docker", "run", "--rm", "--network", s.id, PYTHON_IMAGE, "python", "-c",
+                                "import urllib.request; print(urllib.request.urlopen('http://apm:5555/live', timeout=10).status)"],
+                               capture_output=True, text=True)
+            return h.stdout.strip() == "200"
+        wait_for(live, 120, 5, "Agent liveness on 5555 (Container Apps liveness probe)")
         logs = s.logs(agent)
         assert key not in logs, "the API key is never logged"
     finally:

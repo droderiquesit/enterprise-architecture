@@ -228,3 +228,11 @@ run "reject_op_agent_logs_without_endpoint" {
   }
   expect_failures = [helm_release.datadog]
 }
+
+run "agents_drop_health_probe_traces" {
+  command = plan
+  assert {
+    condition     = anytrue([for e in yamldecode(helm_release.datadog.values[0]).datadog.env : e.name == "DD_APM_IGNORE_RESOURCES" && strcontains(e.value, "GET /healthz") && strcontains(e.value, "GET /readyz")])
+    error_message = "Node Agents drop the health-probe resources of the fleet policy (apm.ignore_resources)"
+  }
+}

@@ -187,15 +187,22 @@ locals {
     DD_ENV     = local.u.env
     DD_SERVICE = local.u.service
     DD_VERSION = local.u.version
-    } : merge(local.contract_env, {
+    } : merge(
+    # datadog mode: no OTEL_* variable at all (no OTLP exporter config; OTEL_RESOURCE_ATTRIBUTES would be mapped to
+    # DD_TAGS by the Datadog library and duplicate the tags)
+    { for k, v in local.contract_env : k => v if !(local.dd_mode && startswith(k, "OTEL_")) },
+    {
       DD_ENV     = local.u.env
       DD_SERVICE = local.u.service
       DD_VERSION = local.u.version
-      # extra policy tags (DD_TAGS for Datadog tracers/profilers, OTEL_RESOURCE_ATTRIBUTES for OTel SDKs)
-      DD_TAGS                  = module.tags.dd_tags_extra
+      # extra policy tags (DD_TAGS for Datadog libraries/profilers; OTEL_RESOURCE_ATTRIBUTES for OTel SDKs only)
+      DD_TAGS = module.tags.dd_tags_extra
+    },
+    local.dd_mode ? {} : {
       OTEL_SERVICE_NAME        = local.u.service
       OTEL_RESOURCE_ATTRIBUTES = local.otel_resource_attributes
-  }, local.otel_env, local.datadog_env, local.none_env, local.profiling.env)
+    },
+  local.otel_env, local.datadog_env, local.none_env, local.profiling.env)
 
   # DSV runtime env contract (ADR-0001 section 14): how our app code and dsv-fetch reach DSV.
   dsv_env = merge(

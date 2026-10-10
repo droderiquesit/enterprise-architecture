@@ -3,7 +3,7 @@
 # One document decides, for every resource / workload type, HOW telemetry reaches Datadog: the log pipeline
 # (Datadog Observability Pipelines or Fluent Bit direct), the APM library (Datadog tracers or OpenTelemetry SDKs),
 # the Continuous Profiler, Data Streams Monitoring, DBM<->APM propagation, Agent fleet settings and RUM. The modules
-# read it through modules/fleet-policy (Terraform) and tools/tags/fleet_policy.py (Python); per-architecture and
+# read it through modules/fleet-policy (Terraform; telemetry_verify reads log_pipeline); per-architecture and
 # per-environment overrides are merged in this order: defaults -> architectures.<arch> -> environments.<env> ->
 # the caller's per-workload overrides. The authoritative collection path per resource type is documented in
 # modules/README-transport.md and docs/guides/datadog-fleet-collection.md (source repository).
@@ -42,6 +42,9 @@ apm:
   # full | service | disabled (applied only where the tracer + driver support it)
   dbm_propagation: full
   data_streams: true
+  # Agent-side: resources the trace-agent drops (health probes the .NET tracer traces); DD_APM_IGNORE_RESOURCES /
+  # apm_config.ignore_resources on every Agent of the fleet (node Agents, host Agents, APM gateway)
+  ignore_resources: ["GET /healthz", "GET /readyz", "GET /version", "GET /api/healthz"]
   # Datadog library majors for Single Step Instrumentation (language -> major version)
   library_versions:
     dotnet: "3"
@@ -107,6 +110,9 @@ rum:
 # Per hosting architecture (aks | aca | aci | appservice | functions | logicapp | vm | vmss | swa).
 architectures:
   functions:
+    # Exception: Azure Functions (incl. Durable Functions) stay on OpenTelemetry - Datadog documents neither the
+    # Functions host spans nor Durable Functions V2 orchestration spans for its tracers in this setup.
+    apm: {mode: otel}
     profiling: {enabled: false}       # .NET profiler: Function Apps not supported; Python: preview only
   logicapp:
     apm: {mode: none}                 # workflow runtime; no tracer to configure

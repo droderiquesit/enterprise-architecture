@@ -15,6 +15,54 @@
 
 ## Version-specific notes
 
+### 3.0.0 (from 2.x) - MAJOR: collection + tagging package; monitoring content moves out
+
+**What the package now is.** It connects resources to Datadog and makes the tags consistent. It no longer manages
+monitors, SLOs, dashboards, synthetics, catalog entities or notification routing.
+
+1. **Keep your monitoring content alive before you upgrade.** Monitors and SLOs created by 2.x are in your Terraform
+   state. Pick one option:
+   - (a) Keep managing them with the 2.0.0 content modules from `extras/content/` of the source repository. They are
+     unchanged; vendor them next to the 3.0.0 package and point the module sources there, so their state addresses
+     stay the same.
+   - (b) Hand them over to the team that owns alerting: `terraform state rm 'module.onboarding'` (no destroy), then
+     import them in their root.
+
+   Do not simply delete `module "onboarding"`. The plan would destroy every monitor.
+2. **Adopt the tag policy from your monitors.** Run `tools/tags/derive_from_monitors.py` (read-only, DD_API_KEY /
+   DD_APP_KEY from DSV). It proposes `config/tag-policy.yaml` keys, aliases and value maps your existing monitors and
+   SLOs already filter on. Review the proposal, commit it as your policy, and pass it with `--tag-policy` / `tag_policy`.
+   Then run `tools/tags/check_coverage.py` to see which monitored scopes lack which tags in live data.
+3. **Migrate manifests to v2:** `python3 tools/onboarding/migrate_v1.py --in manifests/<env> --out manifests-v2/<env> --region <azure-region>`.
+   It keeps identity, resources and telemetry routing and drops monitors, notifications, catalog, SLOs and
+   endpoints. Add the now-required tags (`application`, `domain`, `tier`, `region`; `owner` and `team` as before).
+   Validate with `--strict` and re-render. v1 manifests are rejected with a migration hint.
+4. **Choose the collection paths** (`config/fleet-policy.yaml`, overridable per environment / architecture):
+   - `log_pipeline: observability_pipelines` (default) needs the Worker. Use `modules/telemetry-transport` on Container
+     Apps or `modules/kubernetes` `op_worker` on AKS. The transport root now needs the **datadog provider**
+     (`DD_API_KEY` / `DD_APP_KEY` in the pipeline). With `fluent_bit_direct` everything stays as in 2.x.
+   - `apm.mode: datadog` (default) needs Datadog libraries in managed-runtime images (`app_requirements` output of
+     `modules/instrumentation`). AKS and Linux hosts get SSI. Your apps must read `TELEMETRY_SDK` and never start the
+     OpenTelemetry SDK next to the Datadog tracer. Set `apm.mode: otel` (per environment or per workload) until they
+     do.
+   - Profiling is on wherever supported. Turn it off with `profiling.enabled: false`.
+5. **Agents:** on AKS and Linux hosts the Datadog Agent now collects the application logs (the Fluent Bit DaemonSet
+   and host service are removed by the plan). That is expected; the logs move to the Agent, with no gap beyond
+   the restart. `logs.node_collector: fluent_bit` keeps Fluent Bit.
+6. **RUM:** `modules/rum` takes `applications.<k>.mode = existing` with `application_id` + `client_token` to adopt the
+   RUM application created by 2.x without recreating it. Alternatively `terraform state mv` it into the new module
+   address.
+7. **Pipelines:** `validate-onboarding.yml` ignores `routingFile` / `archetypesDir` (a warning is printed). Pass
+   `tagPolicy` for your own policy.
+
+Plan review for 3.0.0:
+
+* **Expected destroys:**
+  * the Fluent Bit aggregator Container App (OP mode);
+  * the Fluent Bit DaemonSet / host services where the Agent takes over;
+  * the 2.x content objects, if you did not keep them (step 1).
+* **Not expected:** any destroy of monitored infrastructure (the package never manages it).
+
 ### 2.0.0 (from 1.x) - MAJOR: Key Vault -> Delinea DSV
 Secrets move from Azure Key Vault to Delinea DevOps Secrets Vault. Nothing secret passes through Terraform any more.
 

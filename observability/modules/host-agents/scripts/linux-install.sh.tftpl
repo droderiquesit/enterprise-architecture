@@ -127,6 +127,9 @@ Environment=DD_LOGS_ENABLED=${agent_logs}
 Environment=DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED=${process_collection}
 Environment=DD_REMOTE_CONFIGURATION_ENABLED=${remote_configuration}
 Environment=DD_APM_ENABLED=true
+%{ if apm_ignore_resources != "" ~}
+Environment="DD_APM_IGNORE_RESOURCES=${apm_ignore_resources}"
+%{ endif ~}
 Environment="DD_TAGS=${agent_tags}"
 %{ if op_logs_url != "" ~}
 Environment=DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED=true

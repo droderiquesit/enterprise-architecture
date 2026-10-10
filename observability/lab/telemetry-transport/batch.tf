@@ -58,6 +58,7 @@ locals {
     ssi_libraries         = ""
     remote_updates        = "false"
     remote_configuration  = "false"
+    apm_ignore_resources  = ""
     agent_msi_sha256      = ""
     fluent_bit_msi_sha256 = ""
     setup_revision        = 1

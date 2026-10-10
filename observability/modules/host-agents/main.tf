@@ -83,7 +83,7 @@ locals {
       "${path.module}/scripts/${h.os_type == "linux" ? "linux-install.sh.tftpl" : "windows-install.ps1.tftpl"}",
       {
         fb_version            = var.fluent_bit_version
-        agent_version         = var.datadog.agent_version
+        agent_version         = coalesce(var.datadog.agent_version, try(module.fleet.agent.version, null), "7.84.2")
         site                  = var.datadog.site
         api_key_ref           = var.datadog.api_key_ref
         identity_client_id    = h.identity_client_id == null ? "" : h.identity_client_id
@@ -105,6 +105,7 @@ locals {
         ssi_libraries         = local.ssi_libraries
         remote_updates        = tostring(try(local.agent_cfg.remote_updates, false))
         remote_configuration  = tostring(try(local.agent_cfg.remote_configuration, true))
+        apm_ignore_resources  = join(",", module.fleet.agent_apm_ignore_resources)
         agent_msi_sha256      = var.windows_msi_sha256.agent
         fluent_bit_msi_sha256 = var.windows_msi_sha256.fluent_bit
         setup_revision        = var.setup_revision

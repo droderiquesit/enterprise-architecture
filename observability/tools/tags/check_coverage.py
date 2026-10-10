@@ -144,10 +144,10 @@ def live_gaps(reader: DatadogReader, policy: TagPolicy, services: list[dict], mi
 
 def markdown(rep: dict) -> str:
     lines = ["# Datadog tag coverage", "",
-             f"Policy: `{rep['policy']}` - {rep['services_checked']} services ({', '.join(rep['envs']) or '-'}); "
-             f"requirements: `{rep['requirements'] or '-'}`; live: {rep['live']}.", "",
-             f"Result: **{'FAIL' if rep['required_gaps'] else 'PASS'}** ({rep['required_gaps']} required gaps, "
-             f"{len(rep['gaps']) - rep['required_gaps']} other).", ""]
+             (f"Policy: `{rep['policy']}` - {rep['services_checked']} services ({', '.join(rep['envs']) or '-'}); "
+              f"requirements: `{rep['requirements'] or '-'}`; live: {rep['live']}."), "",
+             (f"Result: **{'FAIL' if rep['required_gaps'] else 'PASS'}** ({rep['required_gaps']} required gaps, "
+              f"{len(rep['gaps']) - rep['required_gaps']} other)."), ""]
     if rep["gaps"]:
         lines += ["| Type | Required | Where | Key(s) | Detail |", "|---|---|---|---|---|"]
         for g in rep["gaps"]:

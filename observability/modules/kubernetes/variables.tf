@@ -84,7 +84,7 @@ variable "charts" {
     datadog_repository = optional(string, "https://helm.datadoghq.com")
     fluent_bit_version = optional(string, "0.58.3")
     fluent_repository  = optional(string, "https://fluent.github.io/helm-charts")
-    agent_tag          = optional(string, "7.84.2")
+    agent_tag          = optional(string) # null = fleet policy agent.version (7.84.2)
     fluent_bit_image   = optional(string, "fluent/fluent-bit")
     fluent_bit_tag     = optional(string, "5.1.3")
   })

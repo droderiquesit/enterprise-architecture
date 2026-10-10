@@ -84,6 +84,9 @@ if ($ConfigureAgent -eq 'true') {
     'DD_OTLP_CONFIG_LOGS_ENABLED'                     = 'false'
     'DD_LOGS_ENABLED'                                 = 'false'
     'DD_TAGS'                                         = '${agent_tags}'
+%{ if apm_ignore_resources != "" ~}
+    'DD_APM_IGNORE_RESOURCES'                         = '${apm_ignore_resources}'
+%{ endif ~}
   }
   foreach ($k in $agentEnv.Keys) {
     if ([Environment]::GetEnvironmentVariable($k, 'Machine') -ne $agentEnv[$k]) {

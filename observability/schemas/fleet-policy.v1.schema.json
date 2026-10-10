@@ -20,6 +20,7 @@
         "logs_injection": {"type": "boolean"},
         "dbm_propagation": {"enum": ["full", "service", "disabled"]},
         "data_streams": {"type": "boolean"},
+        "ignore_resources": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "library_versions": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"}}
       }
     },

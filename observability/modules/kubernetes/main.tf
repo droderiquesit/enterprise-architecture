@@ -83,6 +83,12 @@ locals {
     { name = "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL", value = local.op_logs_url },
   ] : []
 
+  # trace-agent drops health-probe resources (fleet policy apm.ignore_resources)
+  agent_tag = coalesce(var.charts.agent_tag, try(module.fleet.agent.version, null), "7.84.2")
+  apm_ignore_env = length(module.fleet.agent_apm_ignore_resources) == 0 ? [] : [
+    { name = "DD_APM_IGNORE_RESOURCES", value = join(",", module.fleet.agent_apm_ignore_resources) },
+  ]
+
   release   = "datadog"
   dd_ns     = var.namespaces.datadog
   fb_ns     = var.namespaces.fluent_bit
@@ -145,14 +151,14 @@ locals {
           arguments = "agent-backend"
           timeout   = 30
         }
-        env = concat(local.dsv_env, local.agent_log_env)
-      }) : jsonencode({ apiKeyExistingSecret = var.api_key.secret_name, env = local.agent_log_env })),
+        env = concat(local.dsv_env, local.agent_log_env, local.apm_ignore_env)
+      }) : jsonencode({ apiKeyExistingSecret = var.api_key.secret_name, env = concat(local.agent_log_env, local.apm_ignore_env) })),
     )
     # Remote Configuration (Fleet Automation, APM sampling / SSI policies); preferred top-level key of the chart
     remoteConfiguration = { enabled = try(local.agent_cfg.remote_configuration, true) }
     providers           = { aks = { enabled = var.features.is_aks } }
     agents = merge({
-      image = { tag = var.charts.agent_tag }
+      image = { tag = local.agent_tag }
       containers = {
         agent        = { resources = { requests = { cpu = var.resources.agent_cpu_request, memory = var.resources.agent_memory_request }, limits = { memory = var.resources.agent_memory_limit } } }
         traceAgent   = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = var.resources.trace_memory_limit } } }
@@ -169,7 +175,7 @@ locals {
     clusterAgent = {
       enabled   = true
       replicas  = var.features.cluster_agent_replicas
-      image     = { tag = var.charts.agent_tag }
+      image     = { tag = local.agent_tag }
       resources = { requests = { cpu = "100m", memory = "128Mi" }, limits = { memory = var.resources.cluster_agent_memory } }
       confd     = var.cluster_checks
       # No Python in the Cluster Agent image -> it cannot run dsv-fetch. These entries come after the chart's own
@@ -186,7 +192,7 @@ locals {
     clusterChecksRunner = {
       enabled   = var.features.cluster_checks_runner
       replicas  = 1
-      image     = { tag = var.charts.agent_tag }
+      image     = { tag = local.agent_tag }
       resources = { requests = { cpu = "100m", memory = "256Mi" }, limits = { memory = var.resources.runner_memory_limit } }
       env = concat(
         local.dsv_mode ? local.dsv_env : [],

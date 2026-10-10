@@ -1,8 +1,17 @@
 # Azure platform and control-plane logs in Datadog
 
-Status (ADR-0001 §11): **implemented** and **locally-verified** (Terraform `test` with mock providers; Fluent Bit
-aggregator end to end in docker against a local Kafka broker and a mock Datadog intake). Nothing here has been
-**deployed** or **verified** against a live Azure subscription or Datadog organisation.
+Status (ADR-0001 §11): **implemented** and **locally-verified**. That covers:
+
+* Terraform `test` with mock providers;
+* the Observability Pipelines VRL programs executed with the Vector CLI on recorded Event Hubs batches;
+* the 2.x Fluent Bit aggregator end to end in docker against a local Kafka broker and a mock Datadog intake.
+
+Nothing here has been **deployed** or **verified** against a live Azure subscription or Datadog organisation. The
+Worker's Kafka source against Event Hubs in particular is unverified.
+
+Package 3.0.0: the default consumer of the hubs is the **Datadog Observability Pipelines Worker**
+(`log_pipeline = observability_pipelines`). The Fluent Bit aggregator described in parts of this guide is the
+`fluent_bit_direct` alternative. Both apply the same shaping. Exactly one of them reads the hubs.
 
 This guide covers the logs that Azure itself writes about your subscriptions and resources: the subscription
 **Activity Log**, **resource logs** (Key Vault audit, AKS control plane, SQL audit, Storage, WAF, ...) and,
@@ -15,11 +24,13 @@ optionally, **Microsoft Entra ID** logs. Application logs are a separate path
 subscription Activity Log ──(subscription diagnostic setting, modules/azure-logs)──┐
 Entra ID (optional) ───────(tenant diagnostic setting,       modules/azure-logs)──┤──> Event Hub "activity-logs"
 resource logs ─────────────(per-resource settings, modules/diagnostic-settings)───> Event Hub "platform-logs"
-                                                                                       │ (Kafka endpoint, SASL_SSL,
-                                                                                       │  consumer group fluent-bit)
-                                               Fluent Bit aggregator (config/fluent-bit/aggregator.yaml)
-                                               lua eh_azure_split: split batches, Datadog Azure record shape,
-                                               dedup, 1 MB guard, redaction ──> Datadog logs intake (gzip, TLS)
+                                                                                       │ (Kafka endpoint, SASL_SSL)
+          default: Observability Pipelines Worker (kafka source, consumer group observability-pipelines)
+                   processor group "azure": VRL unwrap + split_array, Datadog Azure record shape, console
+                   allow list, dedupe (correlationId), per-category sampling, quota, resource-scope tags
+                   (owner tags from modules/fleet-inventory), SDS redaction ──> Datadog Logs (disk buffer)
+          fluent_bit_direct: Fluent Bit aggregator (config/fluent-bit/aggregator.yaml, consumer group fluent-bit)
+                   lua eh_azure_split: the same shaping ──> Datadog logs intake (gzip, TLS)
 ```
 
 | Piece | Owner (lab component) | Package module |
@@ -27,9 +38,10 @@ resource logs ─────────────(per-resource settings, mod
 | `activity-logs` hub (+ consumer group) | `obs-telemetry-transport` | `modules/telemetry-transport` (`event_hub.activity_logs_hub`, default `activity-logs`; `""` shares `platform-logs`) |
 | Activity Log + Entra diagnostic settings | `obs-diagnostics` | `modules/azure-logs` |
 | Resource diagnostic settings (tiered categories) | `obs-diagnostics` | `modules/diagnostic-settings` (`category-policy.json`) |
-| Record shaping | aggregator | `config/fluent-bit/lua/enterprise_hello.lua` (`eh_azure_split`) |
-| Datadog dashboard, log-based metrics, optional index/pipeline/archive | `obs-azure-integration` | `modules/log-management` |
-| Monitors | `obs-monitoring` (manifest `azure-platform-logs`) | archetype `archetypes/profiles/azure-platform-logs.yaml` |
+| Record shaping (default) | `obs-telemetry-transport` | `modules/observability-pipeline` (`config/observability-pipelines/azure_unwrap.vrl`, `azure_shape.vrl`, `tags.vrl`) |
+| Record shaping (`fluent_bit_direct`) | `obs-telemetry-transport` aggregator | `config/fluent-bit/lua/enterprise_hello.lua` (`eh_azure_split`) |
+| Resource-scope tags (platform logs carry the owner's team, service, ...) | onboarding manifests | `modules/fleet-inventory` `scope_tags` -> pipeline `azure.scope_tags` |
+| Datadog dashboard, log-based metrics, index, monitors | your organisation (not the package since 3.0.0) | optional 2.x content: `observability/extras/content/modules/log-management`, archetype `azure-platform-logs` |
 
 **Why a dedicated `activity-logs` hub.** Control-plane logs are low volume but security relevant. Resource logs (HTTP
 logs, storage reads, AKS API server) can burst by orders of magnitude. With separate hubs a data-plane burst cannot
@@ -141,7 +153,7 @@ expect.
 | `ddsource` | `azure.<provider namespace>` lower case (e.g. `azure.keyvault`, `azure.containerservice`, `azure.storage`); `azure.subscription` / `azure.resourcegroup` for subscription / resource-group ids; `azure.activedirectory` for Entra (`microsoft.aadiam`); `azure` without resourceId |
 | `service` | `azure` (Datadog forwarder default; `FLB_AZURE_SERVICE`). Application categories keep the app's `service` |
 | `ddsourcecategory` | `azure` |
-| tags | `subscription_id`, `resource_group`, `tenant` (Datadog forwarder names), `resource_type`, `resource_name`, `resource_id`, `region` (resource logs with a location), `category`, `azure_log_type` (`activity` / `resource` / `entra` / `application`), `env` (record `tags.env`, else `FLB_AZURE_ENV_BY_SUBSCRIPTION`, else the aggregator's static `env`), `eventhub`, `forwarder:fluent-bit-aggregator`, `telemetry.pipeline:fluent-bit`, `truncated:true` when cut |
+| tags | `subscription_id`, `resource_group`, `tenant` (Datadog forwarder names), `resource_type`, `resource_name`, `resource_id`, `region` (resource logs with a location), `category`, `azure_log_type` (`activity` / `resource` / `entra` / `application`), `env` (record `tags.env`, else the resource-scope tags, else the environment default), the owner's tag-policy tags from the resource-scope map (`team`, `service`, `domain`, ... by longest resource-id prefix), `eventhub`, `telemetry.pipeline:observability-pipelines` (or `forwarder:fluent-bit-aggregator` + `telemetry.pipeline:fluent-bit` with `fluent_bit_direct`), `truncated:true` when cut |
 | `aks_audit.*` | additive copy of `verb`, `objectRef.{resource,subresource,namespace,name}`, `user.username`, `responseStatus.code`, `auditID` from the kube-audit JSON string; `properties.log` itself is untouched |
 | `message` | only from non-JSON text fields (e.g. `resultDescription`, `properties.Log`); a JSON `properties.log` is never copied into `message` (the parser would lift audit fields to the top level) |
 
@@ -152,7 +164,7 @@ Verified convention: Datadog's Entra ID integration pipeline (`integrations-core
 for other `azure.*` sources are not public; the package assumes the same behaviour, so its monitors query the raw
 attributes (`@operationName`, `@resultType`, `@category`).
 
-Other aggregator behaviour:
+Other shaping behaviour (the pipeline's VRL and the aggregator's Lua implement the same rules):
 
 * **Batches** `{"records":[...]}` are split into one log per entry. This covers Activity Log, Entra ID and resource
   logs.
@@ -178,15 +190,14 @@ Other aggregator behaviour:
 | Category tier per environment / resource (`security` < `standard` < `verbose`) | `obs-diagnostics` `settings.platform_log_tier`, resource `tier`, type overrides |
 | Never full `kube-audit` by default (Microsoft: `kube-audit-admin` drops get/list events); `kube-audit` replaces `kube-audit-admin` when selected | category policy `supersedes` |
 | Entra: non-interactive and service-principal sign-ins can be 5-10x interactive volume (Microsoft) | `settings.entra.categories` (non-interactive is opt-in) |
-| Dedicated index with retention and daily quota (warning at 80 %) | `modules/log-management` `index` (opt-in) |
-| Sampled exclusion filters (90 % excluded): full kube-audit get/list/watch, StorageRead, Cosmos data plane | `index.default_exclusions`, `index.exclusion_filters` |
-| Log-based metrics computed on 100 % before exclusion: activity writes/deletes, policy denies, Key Vault 401/403, AKS exec, Entra failures, volume by source/category, truncations | `modules/log-management` `metrics` |
+| Quota per day before Datadog (Observability Pipelines quota processor) | `observability_pipelines.azure.daily_quota_bytes` (lab `settings.op_daily_quota_bytes`) |
+| Sampling per category before Datadog (e.g. 10 % of `StorageRead`) | `observability_pipelines.azure.sample_categories` |
+| Dedupe of Event Hubs redeliveries | pipeline `dedupe` processor (`azure.dedupe`) |
+| Indexes, exclusion filters, log-based metrics | your organisation's Datadog log configuration (2.x content: `extras/content/modules/log-management`) |
 | Event Hubs | Standard, 1 TU in the lab; ingress about USD 0.028 per million events; extra hubs free |
 
-**Index order.** Datadog stores a log in the *first* index whose filter matches. Datadog does not document where an
-index created through the API is placed, so assume it lands behind a catch-all `main` index and receives nothing.
-Either let `modules/log-management` own the org-wide order (`index_order.manage = true` with every index listed)
-or check and move the index in Logs > Configuration > Indexes.
+**Index order** (when you manage indexes yourself): Datadog stores a log in the *first* index whose filter
+matches. An index created through the API may land behind a catch-all `main` index and receive nothing.
 
 ## 5. Prerequisites and permissions
 
@@ -206,9 +217,9 @@ or check and move the index in Logs > Configuration > Indexes.
 
 | | Event Hubs + Fluent Bit (default) | Azure Native tag rule |
 |---|---|---|
-| Infrastructure | Event Hubs namespace + aggregator Container App | none (Microsoft-managed diagnostic settings) |
+| Infrastructure | Event Hubs namespace + Observability Pipelines Worker (or the Fluent Bit aggregator) | none (Microsoft-managed diagnostic settings) |
 | Category control | per resource type / tier / resource | all categories of matching resources (tag include/exclude only) |
-| Shaping, dedup, redaction, size guard | yes (Lua) | Datadog defaults |
+| Shaping, dedup, redaction, size guard, owner tags | yes (VRL / Lua) | Datadog defaults |
 | Network | private endpoint, trusted services | Microsoft-managed |
 | Billing | Event Hubs + Datadog | Datadog through Azure Marketplace (MACC) |
 | Diagnostic setting ownership | `obs-diagnostics` (ADR rule 4) | the Datadog resource (counts against the 5 settings per resource) |
@@ -235,12 +246,14 @@ obs-diagnostics:
   entra: {enabled: false}            # tenant-wide; needs acknowledge_prerequisites: true
 obs-telemetry-transport:
   event_hub_activity_logs_hub: activity-logs   # "" = share platform-logs
+  op_daily_quota_bytes: 0                      # Azure platform log quota in the pipeline (0 = none)
+  # fleet: {log_pipeline: fluent_bit_direct}   # 2.x Fluent Bit aggregator instead of the Worker
 obs-azure-integration:
-  log_management: {dashboard: true, metrics: true, index: false, pipeline: false}
   native_logs: {subscription_logs: false, resource_logs: false, aad_logs: false}
+  # log_management: accepted and ignored since 3.0.0 (content moved to extras/content)
 ```
 
-The monitors come from `observability/onboarding/dev/azure-platform-logs.yaml` (profile `azure-platform-logs`):
+Monitors are not part of the package since 3.0.0. The 2.x lab content (`observability/extras/content/onboarding/dev/azure-platform-logs.yaml`, profile `azure-platform-logs`) defines:
 successful deletes in `eh-rg-*`, RBAC role-assignment changes, diagnostic setting deleted, Policy deny spike,
 Service Health for Sweden Central, Key Vault 401/403 burst, AKS exec / port-forward / attach, Entra sign-in failures
 (only when `params.entra_enabled`), and no Azure platform logs. The service is onboarded only when the
@@ -265,7 +278,8 @@ Run in Datadog Logs (use `env:<env>`). Expected results assume activity in the w
 
 Azure side: `az monitor diagnostic-settings subscription list` (Activity Log),
 `az monitor diagnostic-settings list --resource <id>`, Event Hubs metrics *Incoming Messages* per hub, and the
-`fluent-bit` consumer group lag.
+consumer group lag (`observability-pipelines`, or `fluent-bit` with `fluent_bit_direct`). The Worker reports its
+own throughput, errors and buffer usage in Datadog Observability Pipelines.
 
 ## 9. Removal
 
@@ -274,8 +288,8 @@ Azure side: `az monitor diagnostic-settings subscription list` (Activity Log),
   (7 or 30 days by license). Logs already in Datadog follow the index retention.
 * `obs-telemetry-transport` destroys the hubs. Unconsumed events are lost; diagnostic settings must be removed first
   (the pipeline order does this).
-* `modules/log-management` destroy removes the dashboard, metrics and, when enabled, index / pipeline / archive
-  definitions. Datadog does not delete an index's data immediately, and archived files stay in the storage account.
+* Destroying the pipeline definition (`modules/observability-pipeline`) stops processing. Logs already in Datadog
+  follow the index retention; archived files stay in the storage account.
 
 ## 10. References (checked 2026-10-09)
 

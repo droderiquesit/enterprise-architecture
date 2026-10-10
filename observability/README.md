@@ -1,287 +1,205 @@
-# Observability package (Datadog monitoring-as-code for Azure)
+# Observability package (Datadog collection and tagging for Azure)
 
 Version: see `VERSION` (semantic versioning). Release notes: `CHANGELOG.md`. Upgrade notes: `UPGRADING.md`.
 
-A portable, versioned package that onboards services running on Azure into Datadog from **one YAML
-manifest per service**. It works against existing enterprise infrastructure: it never creates networks,
-compute platforms, databases or applications, and it needs nothing outside this directory.
+A portable, versioned package that **connects Azure resources and workloads to Datadog** and makes every signal carry
+the same tags. Telemetry flows through the most mature Datadog path each resource type supports:
+
+* the Datadog Agent wherever it can run;
+* Datadog tracing libraries with Single Step Instrumentation and the Continuous Profiler;
+* Datadog Observability Pipelines as the central log pipeline;
+* RUM for browsers;
+* the Datadog Azure integration for platform metrics and resource tags.
+
+The package works against existing enterprise infrastructure. It never creates networks, compute platforms,
+databases or applications, and it needs nothing outside this directory.
+
+Monitors, SLOs and dashboards are **not** part of the package (since 3.0.0). They already exist in your
+organisation and select on the tags this package makes consistent. The 2.x monitoring content lives on, optional
+and unreleased, in `extras/content/` of the source repository.
 
 | What | Where |
 |---|---|
-| Terraform modules (monitoring content) | `modules/{onboarding,monitors,slos,dashboards,synthetics,service-catalog,rum,notification-routing,deployment-markers}` |
-| Terraform modules (collection/transport) | `modules/{azure-integration,diagnostic-settings,azure-logs,telemetry-transport,fluent-bit,otel-collector,host-agents,kubernetes,instrumentation,dbm}` and `config/` (separate owner; see their READMEs) |
-| Azure platform / control-plane logs | `modules/azure-logs` (Activity Log, Entra ID), `modules/diagnostic-settings` (tiered category policy), `modules/log-management` (Datadog index, metrics, dashboard), archetype profile `azure-platform-logs` - section 11 |
-| Manifest / archetype / routing schemas | `schemas/*.v1.schema.json` |
-| Monitoring archetypes | `archetypes/global-defaults.yaml`, `archetypes/platform/*.yaml`, `archetypes/profiles/*.yaml` |
-| Tools | `tools/onboarding/{validate,render}.py`, `tools/verify/telemetry_verify.py`, `tools/markers/send_deployment_event.py`, `tools/release/package.sh` |
-| Azure DevOps templates | `pipelines/templates/*.yml`, example `pipelines/azure-pipelines.consumer-example.yml` |
-| Consumer example | `examples/existing-environment/` (vendors a release tarball, onboards existing App Service + AKS + PostgreSQL) |
+| Tag policy (the core product) | `config/tag-policy.yaml`, `schemas/tag-policy.v1.schema.json`, `modules/tagging` (one tagging module, used on every path), `tools/tags/` (Python mirror + read-only Datadog tools) |
+| Fleet collection policy | `config/fleet-policy.yaml`, `schemas/fleet-policy.v1.schema.json`, `modules/fleet-policy` (per-workload decision), `modules/fleet-inventory` (one inventory input -> collection plan per resource) |
+| Log pipeline | `modules/observability-pipeline` (`datadog_observability_pipeline`), `config/observability-pipelines/*.vrl`; Worker on Container Apps (`modules/telemetry-transport`) or AKS (`modules/kubernetes`) |
+| Collection | `modules/{azure-integration,diagnostic-settings,azure-logs,telemetry-transport,fluent-bit,otel-collector,host-agents,kubernetes,dbm}`, `config/{fluent-bit,otel}` |
+| APM / profiling / RUM | `modules/instrumentation` (per-workload hook), `modules/rum` (create or existing application), `modules/fleet-automation` (optional Agent upgrade window) |
+| Onboarding | `schemas/onboarding-manifest.v2.schema.json`, `tools/onboarding/{validate,render,migrate_v1}.py` |
+| Verification | `tools/verify/telemetry_verify.py`, `tools/tags/check_coverage.py`, `tools/markers/send_deployment_event.py`, `modules/deployment-markers` |
+| Release / pipelines / example | `tools/release/package.sh`, `pipelines/templates/*.yml`, `examples/existing-environment/` |
 
-Status vocabulary: everything here is **implemented** (static validation, `terraform test` with mock providers,
-unit tests with recorded API responses). Nothing in this package has been deployed or verified against a live
-Datadog organisation by these tests.
+Status vocabulary:
+
+* Everything here is **implemented**: static validation, `terraform test` with mock providers, and unit tests with
+  recorded API responses.
+* The Fluent Bit -> Worker forward path, the VRL programs, the Worker bootstrap, the APM gateway Agent, the OTel
+  gateway, the DBM checks and the Linux installer are **locally verified** with docker (`tests/transport/`).
+* Nothing has been deployed or verified against a live Datadog organisation by these tests.
 
 ## 1. How it works
 
 ```
-manifest (per service, per env)          archetypes (shipped, overridable)
-        \                                   /
-         tools/onboarding/render.py  (merge + templates, deterministic)
-                      |
-         rendered/<env>/<service>.json  (COMMITTED; CI runs `render --check`)
-                      |
-  Terraform root -> modules/onboarding  (resolves ${contract:...} refs, Azure scopes)
-        |-> notification-routing  (route keys -> @handles per env)
-        |-> monitors              (datadog_monitor)
-        |-> slos                  (datadog_service_level_objective + "slo alert" burn-rate monitors)
-        |-> synthetics            (API tests; browser journey; private locations)
-        |-> dashboards            (datadog_dashboard_json: per service + application overview)
-        |-> service-catalog       (datadog_software_catalog, entity v3)
-        `-> datadog_downtime_schedule for declared quiet hours
+config/tag-policy.yaml ----> modules/tagging ----------------------------------------------.
+config/fleet-policy.yaml --> modules/fleet-policy (per workload) / fleet-inventory (fleet)   |
+                                       |                                                    v
+manifests (v2: identity + tags + resources) -> render.py -> rendered/<env>/*.json (committed, CI --check)
+                                       |
+    +------------------+---------------+-----------------+------------------+--------------------+
+    | Azure integration| diagnostic    | Observability   | Agents (AKS Helm,| instrumentation    |
+    | (metrics + tags) | settings ->   | Pipelines       | hosts, APM       | hook (env / patch) |
+    |                  | Event Hubs    | (Worker)        | gateway, DBM)    | + RUM application  |
+    +------------------+---------------+-----------------+------------------+--------------------+
 ```
 
-### 1.1 Merge precedence (lowest -> highest)
+Every module that emits telemetry or tags derives its tags from `modules/tagging`:
 
-1. `archetypes/global-defaults.yaml`
-2. `archetypes/platform/<x>.yaml` whose `match.architectures` contains `spec.architecture`
-3. `archetypes/platform/<x>.yaml` whose `match.resource_types` intersect the manifest's resource types (alphabetical)
-4. `archetypes/profiles/<spec.telemetry.profile>.yaml`, preceded by its `extends` chain
-5. the manifest: `metadata`, `spec`, `spec.monitors.params`, `spec.monitors.overrides["<key>"]`
-6. after expansion: `spec.monitors.overrides["<key>@<role>"]`, then `spec.monitors.disabled` (globs)
+* Agent `DD_TAGS`;
+* `ad.datadoghq.com/tags`, the UST labels and `podLabelsAsTags`;
+* tracer `DD_ENV` / `DD_SERVICE` / `DD_VERSION` / `DD_TAGS`;
+* the OTel gateway's `transform/eh_tag_policy`;
+* Fluent Bit record tags and the Observability Pipelines tag processor;
+* Azure resource tags;
+* the RUM global context.
 
-Maps deep-merge. **Lists are replaced** unless the key ends with `+` (`tags+: [...]` appends). A monitor is removed by
-`enabled: false` in any later layer or by `disabled`. `when:` conditions (`spec.telemetry.traces.enabled`,
-`!spec.idle_behavior.scale_to_zero`, `spec.telemetry.logs.route!=none`) are evaluated after the full merge.
+## 2. Tag policy
 
-Template placeholders use `[[...]]` (never collides with Datadog `{{...}}` or HCL `${...}`). `render.py` expands
-`[[service]] [[env]] [[team]] [[service_scope]] [[server_operation]] [[params.*]] [[critical]] [[warning]]`;
-Terraform expands `[[resource.scope|name|role|id]]` after resolving resource ids.
+`config/tag-policy.yaml` lists the canonical keys:
 
-### 1.2 Rendering and references (decision: commit rendered output)
+* the reserved `env`, `service` and `version`;
+* `team`, `owner`, `application`, `domain`, `tier`, `region` and `managed_by` (required);
+* `cost_center` and `component` (optional).
 
-* `render.py render` is run by the developer and the rendered JSON is **committed**. CI runs
-  `render.py render ... --check` and fails on drift, so `terraform plan` needs **no Python**.
-* Resource ids and endpoint URLs may be literals (existing environments) or references
-  `${contract:<contract-name>.<dot.path>}` (environments that publish output contracts). References stay verbatim
-  in the committed output and are resolved by `modules/onboarding` from `contract_references`
-  (a flat map produced by `render.py references --contracts-dir <dir> --out references.auto.tfvars.json`).
-* Unresolved **optional** (`required: false`) resources/endpoints are dropped with their monitors (listed in
-  `summary.dropped_optional`); unresolved **required** ones fail the plan (output precondition).
-* `spec.presence_ref` (optional): when set and absent from `contract_references`, the service is skipped (not deployed
-  in this environment). `render.py render --contracts-dir` implements the same semantics in Python.
+Each key carries its value map (for example `production -> prod`), aliases, allowed values, OTel attributes and the
+Azure tag keys it reads. Values are normalised to Datadog rules: lower case; characters other than letters, digits
+and `_-:./` become `_`; repeated `_` collapse; at most 200 characters.
 
-### 1.3 Monitor content (archetypes)
+Adopt it in this order:
 
-| Area | Monitors (key) | Signal |
-|---|---|---|
-| HTTP APIs (`profiles/http-api`) | `apm.error_rate`, `apm.http_5xx`, `apm.latency_p95`, `apm.no_traffic` | `trace.http.server.request.{hits,errors,hits.by_http_status}` + latency distribution |
-| Consumers (`profiles/worker`) | `apm.consumer_error_rate` | `trace.servicebus.process.*` (OTel operation name logic v2) |
-| Durable workflows (`profiles/durable-workflow`) | `workflow.failure_rate`, `workflow.duration_p95` | app metrics `<prefix>.workflow.completed{workflow,outcome}`, `<prefix>.workflow.duration` (ms, distribution) |
-| Jobs (`profiles/job`) | `job.missed_run`, `job.errors` | logs |
-| Frontends (`profiles/frontend`) | `rum.error_count`, `rum.lcp_p75` + browser synthetic | RUM |
-| Telemetry pipeline (`profiles/telemetry-pipeline`) | `pipeline.canary_logs_missing`, `pipeline.fluentbit_*`, `pipeline.otel_*` | canary logs, `fluentbit_*_total`, `otelcol_*` |
-| Platforms | `k8s.*` (AKS/ARO), `aca.*`, `appsvc.*`, `func.*`, `aci.*`, `logic.*`, `host.*` | kube-state-metrics core, Azure integration, Agent |
-| Data/messaging resources | `sql.*`, `sqlmi.*`, `pg.*`, `mysql.*`, `cosmos.*`, `storage.*`, `redis.*`, `redis_classic.*`, `queue.*` (backlog, processing lag, dead letters), `eventhub.*` | Azure integration metrics |
-| All services with logs | `logs.error_spike` | logs |
+1. `tools/tags/derive_from_monitors.py` reads your existing monitors and SLOs read-only and proposes the policy your
+   alerting already depends on.
+2. `tools/tags/check_coverage.py` reports which monitored scopes miss which tags in live data (logs, spans, hosts).
+3. Onboard the services. Guide: `docs/guides/datadog-tagging.md` (source repository).
 
-Every monitor message contains the summary, owner/team/tier, the resource, numbered troubleshooting steps and
-`Runbook: <runbook_url>#<section>`; notification handles are appended per state (`is_alert`, `is_warning`,
-`is_no_data`, `is_recovery`) by the monitors module from the routing file. Tags: `env, service, team, tier,
-application, domain, managed_by:observability-package, monitor:<key>, severity:<sev>`.
+## 3. Fleet collection
 
-Metric names were verified against Datadog documentation on 2026-10-09 (list and sources:
-`tests/content/fixtures/verified-metrics.txt`; Azure tag names `subscription_id`, `resource_group`, `name`,
-`server_name`, `statuscodecategory` from Datadog's recommended Azure monitors). Assumptions that could not be verified
-from documentation are listed in section 9.
+`config/fleet-policy.yaml` is the single switch board:
 
-### 1.4 Missing telemetry vs. intentional idleness
+* `log_pipeline`: `observability_pipelines` (default) or `fluent_bit_direct` (2.x).
+* `logs.node_collector`: `agent` or `fluent_bit`.
+* `apm.mode`: `datadog` (default), `otel` or `none`. Exceptions: Azure Functions and Durable Functions stay on
+  OpenTelemetry, and Windows services fall back to OpenTelemetry.
+* `apm.managed_runtime_path`: `agent_gateway` (default) or `serverless_init` (opt-in, ACA only).
+* Profiling types per runtime, DSM, DBM propagation, sampling, ignored resources.
+* Agent version, Remote Configuration and remote updates, OP Worker sizing, RUM sampling and replay.
 
-* **Always-on** services (`idle_behavior.scale_to_zero: false`, the default except for Functions, Logic Apps,
-  frontends, workers and jobs) get `apm.no_traffic` with `notify_no_data`: silence means the service or its pipeline
-  is broken.
-* **Scale-to-zero / event-driven** services never get trace no-data monitors. Their liveness comes from synthetic
-  tests (endpoints), platform monitors (replicas, restarts), queue backlog/lag monitors and the job missed-run monitor.
-* The **pipeline canary** (`pipeline.canary_logs_missing`) expects one heartbeat log per minute emitted by a
-  Fluent Bit `dummy` input (`service:telemetry-canary`, attribute `canary:true`). It runs regardless of application
-  traffic. `pipeline.fluentbit_not_reporting` and `pipeline.otel_not_reporting` watch the transport's own metrics.
-  When the canary alerts, every application no-data alert in the same window is a pipeline problem.
-* **Expected quiet hours** (`idle_behavior.expected_quiet_hours: {rrule, duration, timezone}`) create a recurring
-  `datadog_downtime_schedule` that mutes only that service's monitors.
+Overrides apply per architecture and per environment. The authoritative path per resource type and signal, the
+duplicate-prevention rules and the robustness of every hop are in `modules/README-transport.md`. The per-resource
+matrix, including unsupported combinations, is in `docs/guides/datadog-fleet-collection.md` (source repository).
 
-### 1.5 SLOs and burn-rate alerts
+## 4. Install (consumer)
 
-`availability` SLOs are metric-based (`hits - errors` / `hits`); `latency` SLOs are time-slice SLOs on the p95 of the
-trace latency distribution (`threshold_ms`). Each SLO gets two `slo alert` monitors using
-`burn_rate("<id>").over("<timeframe>").long_window(...).short_window(...) > N` with Datadog's recommended window
-pairs (critical 1h/5m, warning 6h/30m; thresholds per timeframe in `global-defaults.yaml`). Thresholds above
-90% of the maximum `1/(1-target)` are clamped with a warning.
+Prerequisites:
 
-## 2. Install (consumer)
+* Terraform >= 1.14 (tested 1.16.5) and the DataDog/datadog provider `~> 4.25`.
+* Python 3.11+ with `pyyaml` and `jsonschema`, only for validate and render in CI.
+* A Datadog API key and application key in Delinea DevOps Secrets Vault (DSV). The package uses no Azure Key Vault
+  (section 9).
 
-Prerequisites: Terraform >= 1.14 (tested 1.16.5), DataDog/datadog provider `~> 4.25`, Python 3.11+ with
-`pyyaml` and `jsonschema` (only for validate/render in CI), a Datadog API key + application key in
-Delinea DevOps Secrets Vault (DSV) - the package uses no Azure Key Vault (section 12).
+Steps:
 
-1. Pick a release: `observability-<version>.tar.gz` and its `.sha256` from the release feed.
-2. Copy `examples/existing-environment/` into your repository; set `package.lock.json` `{version, sha256, url}` and
-   run `./vendor.sh` (verifies the checksum, extracts to `.vendor/observability-<version>/`, which is git-ignored).
-   Alternative without tarballs: `source = "git::https://dev.azure.com/<org>/<project>/_git/<repo>//observability/modules/<module>?ref=observability-v<version>"`.
-3. Write one manifest per service (`schemas/onboarding-manifest.v1.schema.json`), a routing file per environment
-   (`schemas/notification-routing.v1.schema.json`), then:
+1. Pick a release: `observability-<version>.tar.gz` and its `.sha256`.
+2. Copy `examples/existing-environment/` into your repository. Set `package.lock.json` and run `./vendor.sh`.
+3. Write one manifest per service (`schemas/onboarding-manifest.v2.schema.json`), then:
    ```
-   python3 .vendor/observability-<v>/tools/onboarding/validate.py --manifests manifests --env prod --routing routing/prod.yaml --strict
-   python3 .vendor/observability-<v>/tools/onboarding/render.py render --manifests manifests --env prod --out rendered/prod
+   python3 .vendor/observability-<v>/tools/onboarding/validate.py --manifests manifests/prod --env prod --strict
+   python3 .vendor/observability-<v>/tools/onboarding/render.py render --manifests manifests/prod --env prod --out rendered/prod
    ```
-   Commit `rendered/prod/*.json`.
-4. `terraform init && terraform plan -out tfplan && terraform apply tfplan` (or the ADO templates in `pipelines/`).
-   Provider credentials come from `DD_API_KEY` / `DD_APP_KEY`; never put keys in tfvars.
+   Commit `rendered/prod/*.json`. A custom tag policy goes in with `--tag-policy`.
+4. Run `terraform init`, `terraform plan -out tfplan` and `terraform apply tfplan`, or use the ADO templates in
+   `pipelines/`. Provider credentials come from `DD_API_KEY` / `DD_APP_KEY` (from DSV), never from tfvars.
+5. Hand the `instrumentation` output (tags, env, patches, `app_requirements`) to the application owners.
 
-## 3. Configuration reference
+## 5. Upgrade, rollback, removal
 
-* Manifest fields: see the schema descriptions. Monitor keys for `overrides`/`disabled` are listed in section 1.3
-  (resource monitors are `<key>@<role>`). Thresholds are tuned through `spec.monitors.params` (names in each archetype's
-  `params:` block) or per monitor through `overrides`.
-* Your own archetypes: copy `archetypes/` into your repository, edit, and pass `--archetypes` to the tools (the merge
-  rules are unchanged). Prefer manifest params/overrides to keep upgrades simple.
-* `modules/onboarding` inputs: `services`, `routing`, `contract_references`, `synthetics {enabled, paused,
-  private_location_id, response_time_ms}`, `dashboards {service_dashboards, overview, overview_title, journey}`,
-  `service_catalog {enabled, system}`, `slos_enabled`, `extra_tags`, `strict_references`.
-* Synthetics: public endpoints use managed locations (`aws:eu-central-1` default); private endpoints run only from
-  `private_location_id` (else skipped and reported in `synthetics_skipped`). Tests are created **paused** unless
-  `synthetics.paused = false` (set it in production).
-* RUM: `modules/rum` outputs the application id and client token. The client token is the credential Datadog designs
-  for browser apps (shipped to every visitor), so it is output non-sensitive; API/application keys never are.
-* Deployment markers: the provider has no DORA/change-event resource (checked with the 4.25 schema), so pipelines run
-  `tools/markers/send_deployment_event.py` (DORA API `POST /api/v2/dora/deployment`); `modules/deployment-markers`
-  renders the commands.
+* **Upgrade:** read `UPGRADING.md`. Bump `package.lock.json`, `vendor.sh --update-sources`, re-render, review the
+  plan, apply.
+* **Rollback:** re-vendor the previous version, re-render, plan and apply. The rendered output is committed, so
+  `git revert` plus apply restores the previous state.
+* **Removal:** `terraform destroy` removes only what the root created. That covers:
+  * Datadog-side objects: integration, pipeline, RUM application, fleet schedule;
+  * diagnostic settings;
+  * Agent / Worker Helm releases, VM extensions and collector Container Apps.
 
-## 4. Upgrade
+  Monitored resources and business data are never in the state.
 
-Read `UPGRADING.md` for the target version. Procedure: bump `package.lock.json` (or the `?ref=` tag), run
-`vendor.sh`, re-run `render.py render` (archetype changes show up as diffs in `rendered/`), review
-`terraform plan` (the ADO plan template prints every destroy), apply. A minor/patch release never destroys a monitor
-whose key still exists; Datadog objects are updated in place.
-
-## 5. Rollback
-
-Datadog objects are stateless configuration: re-vendor the previous version, re-render, plan and apply. Monitor ids
-stay stable when keys are unchanged (for_each keys are `<service>/<monitor_key>`). Rendered output is committed,
-so `git revert` of the onboarding commit plus apply restores the previous state exactly.
-
-## 6. Removal
-
-`terraform destroy` of a monitoring root removes **only Datadog objects** (monitors, SLOs, burn-rate alerts,
-synthetic tests, dashboards, catalog entities, downtimes, optional webhooks). No Azure resource is created by the
-monitoring modules, so none is removed. Collection modules (diagnostic settings, agents/extensions, Helm releases)
-have their own removal notes; business data and monitored resources are never touched.
-
-## 7. Versioning policy
+## 6. Versioning policy
 
 Semantic versioning of the whole package (`VERSION`, tag `observability-v<version>`):
 
-* **MAJOR**: breaking manifest/schema change, removed or renamed module input/output, renamed monitor key (would
-  recreate monitors and lose history), changed rendered schema (`rendered-service/vN`).
-* **MINOR**: new archetypes, monitors, optional inputs, new modules; default threshold changes are called out in the
-  changelog.
-* **PATCH**: fixes that do not change resources other than correcting content.
+* **MAJOR**: a breaking manifest, schema, policy or contract change; a removed or renamed module input or output; a
+  changed default collection path.
+* **MINOR**: new modules, optional inputs, new supported resource types.
+* **PATCH**: fixes.
 
-Releases are built with `tools/release/package.sh` (deterministic tarball + sha256; the build fails when a file
-references paths outside the package, remote state, or a subscription id other than the all-zero placeholder or synthetic test ids of the form `xxxxxxxx-0000-0000-0000-000000000000`).
+`tools/release/package.sh` builds a deterministic tarball + sha256. It ships no `extras/` and no lab roots. The build
+fails when a file references paths outside the package, remote state, or a real subscription id.
 
-## 8. Pipelines
+## 7. Pipelines
 
-`pipelines/templates/`: `validate-onboarding.yml` (schema + semantic validation, rendered drift check),
-`terraform-plan.yml` (OIDC, saved plan artifact, destroy summary), `terraform-apply.yml` (deployment job applying
-the saved plan behind an ADO Environment), `telemetry-verify.yml` (bounded polling, evidence artifact),
-`deployment-marker.yml`, `dsv-secrets.yml` (reads the Datadog keys from Delinea DSV with the agent's managed identity
-into masked variables; the jobs that need keys run on a self-hosted pool). Reference them from the package repository pinned to a release tag
-(`resources.repositories` + `template: pipelines/templates/<t>.yml@obs`); a vendored tarball cannot provide templates
-because ADO expands templates before any step runs.
+`pipelines/templates/`:
 
-## 9. Known limitations / assumptions to confirm in your organisation
+* `validate-onboarding.yml`: manifest validation against the tag policy, plus the rendered drift check.
+* `terraform-plan.yml` and `terraform-apply.yml`.
+* `telemetry-verify.yml`: bounded polling. Expected tags come from `rendered/<env>`, and the pipeline tag comes from
+  the fleet policy.
+* `deployment-marker.yml`.
+* `dsv-secrets.yml`.
 
-* Service Bus entity tag: assumed `entityname` (Azure dimension `EntityName` lower-cased, same pattern as the verified
-  `statuscodecategory`); override with `params.entity_tag`.
-* Azure metric scoping uses `subscription_id`, `resource_group`, `name` (+ `server_name` for SQL databases) as in
-  Datadog's recommended Azure monitors; the `name` tag of SQL databases is assumed to be the database name.
-* Fluent Bit/OTel collector metric names assume the collector scrapes Fluent Bit's Prometheus endpoint without suffix
-  trimming and exports its own telemetry with `without_type_suffix: true`, and that both carry an `env` tag.
-* Worker operation name `servicebus.process` follows the OTel operation-name logic v2 mapping for messaging spans;
-  set `spec.telemetry.traces.server_operation` if your instrumentation differs.
-* RUM monitor syntax could not be validated with the Datadog validation API (organisation without RUM); log, metric,
-  trace-metric and SLO burn-rate monitor shapes were validated (2026-10-09).
-* Synthetic browser steps are limited to simple assertions (`assertPageContains`, `assertCurrentUrl`, ...).
+Reference the templates from the package repository pinned to a release tag.
 
-## 10. Runbook sections
+## 8. Azure platform and control-plane logs
 
-Monitor messages link to `<runbook_url>#<section>`: `error-rate`, `http-5xx`, `latency`, `missing-telemetry`,
-`error-logs`, `consumer-errors`, `workflow-failures`, `workflow-duration`, `job-missed`, `job-errors`, `rum-errors`,
-`rum-performance`, `replicas-unavailable`, `container-restarts`, `aca-5xx`, `aca-restarts`, `appservice-5xx`,
-`appservice-latency`, `functions-5xx`, `host-cpu`, `aci-not-reporting`, `logicapp-failed`, `sql-cpu`,
-`sql-connections`, `sql-deadlocks`, `sql-storage`, `postgres-down`, `postgres-cpu`, `postgres-connections`,
-`postgres-storage`, `mysql-cpu`, `mysql-connections`, `mysql-storage`, `cosmos-ru`, `cosmos-availability`,
-`storage-availability`, `storage-latency`, `queue-backlog`, `queue-lag`, `queue-dead-letter`, `queue-errors`,
-`eventhub-throttled`, `redis-load`, `redis-memory`, `pipeline-canary`, `fluentbit-errors`, `fluentbit-dropped`,
-`fluentbit-not-reporting`, `otel-export`, `otel-refused`, `otel-not-reporting`, `slo-burn-rate`, `slo-<name>`,
-`synthetics`. Provide these anchors in each service runbook.
+* `modules/azure-logs` exports the Activity Log and, optionally, Entra ID.
+* `modules/diagnostic-settings` applies tiered categories (`security | standard | verbose`).
+* Both write to Event Hubs. The **Observability Pipelines Worker** reads the hubs through the Kafka endpoint, then
+  unwraps, splits, shapes (Datadog Azure forwarder shape), dedupes, samples and applies quotas, and adds the
+  resource-scope tags of the owning service (`modules/fleet-inventory` `scope_tags`). With `fluent_bit_direct`, the
+  2.x Fluent Bit aggregator does the same.
 
-`metadata.runbook_url` is optional: when a manifest omits it, the archetype default `runbook_base_url`
-(`archetypes/global-defaults.yaml`, placeholders `[[service]]`, `[[env]]`, `[[team]]`, `[[repository]]`) is used. The
-shipped default is `[[repository]]?path=/docs/runbooks/alerts/[[service]].md` (Azure Repos file URL built from
-`metadata.repository`); override it in your vendored global defaults (e.g. a wiki or a GitHub `blob/main/...` URL).
+Guide: `docs/guides/azure-logs-to-datadog.md` (source repository).
 
-## 11. Azure platform and control-plane logs (1.1.0)
+## 9. Secrets: Delinea DSV
 
-Full guide: `docs/guides/azure-logs-to-datadog.md` in the source repository (what is collected per source and
-tier, cost controls, permissions, verification queries, removal).
-
-* **Control plane** - `modules/azure-logs`: one subscription-scoped diagnostic setting per subscription id
-  (Activity Log, all 8 categories by default) and an optional tenant-wide Entra ID setting
-  (`entra.enabled` + `acknowledge_prerequisites`: Security Administrator, Entra ID P1/P2 for sign-in logs). Both
-  stream to the `activity-logs` hub of `modules/telemetry-transport` (`event_hub.activity_logs_hub`; `""` shares
-  `platform-logs`). Inputs are subscription GUIDs and a namespace authorization rule id only.
-* **Resource logs** - `modules/diagnostic-settings` `platform_log_tier = security | standard | verbose` applies the
-  maintained per-type policy `category-policy.json` (Microsoft Learn category names, cost notes, `kube-audit`
-  supersedes `kube-audit-admin`). The 1.0 `platform_log_allowlist` input still works and replaces the policy.
-* **Shape in Datadog** - the Fluent Bit aggregator keeps every Azure field verbatim and sets `ddsource`
-  `azure.<provider>` / `azure.activedirectory`, `service:azure`, `ddsourcecategory:azure` and the Datadog forwarder
-  tags (`subscription_id`, `resource_group`, `tenant`) plus `resource_type`, `resource_name`, `region`, `category`,
-  `azure_log_type`, `env`. It also dedups Event Hubs redeliveries and truncates (never drops) records above
-  Datadog's 1 MB limit.
-* **Datadog side** - `modules/log-management`: "Azure platform logs" dashboard (default), optional log-based
-  metrics, index (retention, daily quota, sampled exclusion filters; **index order** caveat in the module README),
-  Activity Log pipeline and archive. Monitors: onboard one pseudo-service per environment with
-  `telemetry.profile: azure-platform-logs` (see `examples/existing-environment/manifests/prod/azure-platform-logs.yaml`).
-* **Native alternative** - `modules/azure-integration` `mode = native` forwards logs through the tag rule
-  (`native.send_subscription_logs`, `send_resource_logs`, `send_aad_logs`, `log_tag_filters`). It is mutually
-  exclusive with the Event Hubs path per subscription / tenant, and `eventhub_log_forwarding` validation fails the
-  plan on overlap.
-* Not collected: NSG / VNet flow logs (Storage-only Network Watcher feature; options in the guide).
-
-
-## 12. Secrets: Delinea DSV (2.0.0)
-
-No secret value is an input, output or state value of this package, and no Azure Key Vault is used. Every secret is a
-**reference** `dsv://<path>#<element>` (element default `value`) into Delinea DevOps Secrets Vault, read at run time by
-the workload with its Azure managed identity (Entra token for `https://management.azure.com/` -> DSV
-`POST /v1/token` `grant_type=azure` -> `GET /v1/secrets/<path>`). The DSV endpoint (`tenant`, `tld` or `base_url`) and the
-references are ordinary inputs (contract `obs-telemetry-transport` v2 `api_key_ref`, `secrets`).
+No secret value is an input, output or state value of this package. Every secret is a reference
+`dsv://<path>#<element>`, read at run time by the workload with its managed identity.
 
 | Consumer | How the secret is read |
 |---|---|
-| Your application (instrumentation hook) | env / app setting whose VALUE is the `dsv://` reference + `DSV_*` env; the app resolves it at start-up (the source repository's `hello_common` / `Hello.Common`; your own apps need an equivalent resolver) |
-| Fluent Bit sidecar (ACA / ACI), aggregator, DaemonSet | `images/dsv-fetch` `init --format env-yaml` writes `/dsv-secrets/fluentbit-env.yaml`; the config `includes:` it. ACA: init container (Consumption profile) or refresher container (Dedicated profiles); ACI: refresher container (ACI init containers have no managed identity); AKS: init container + in-memory emptyDir with workload identity |
-| OTel gateway | `init --format files --file-mode 0444` -> `${file:/dsv-secrets/dd-api-key}` |
-| Datadog Agent on Linux VMs / VMSS / AKS / ACI (DBM) | `api_key: ENC[dsv://...]` + `secret_backend_command` = dsv-fetch `agent-backend` (0500, owned by the Agent user) |
-| Datadog Agent / Fluent Bit on Windows | the installer reads DSV (PowerShell, IMDS) and writes ACL-restricted files (re-run to rotate) |
-| Pipelines | `pipelines/templates/dsv-secrets.yml` on a self-hosted agent with a managed identity |
+| Datadog Agents (AKS, VMs, ACI DBM, APM gateway on ACA) | `api_key: ENC[dsv://...]`, with dsv-fetch `agent-backend` as the secret backend. **Verified locally** for the APM gateway and the DBM Agent. |
+| OP Worker on ACA | dsv-fetch writes a dotenv file (init container on the Consumption profile, refresher elsewhere). The Worker command refuses to start without it (fail closed). |
+| OP Worker on AKS | Existing Secrets maintained by the Delinea dsv-k8s syncer (`apiKeyExistingSecret`, `op_worker.secret_env`). |
+| Fluent Bit sidecars, DaemonSet, hosts | dsv-fetch env-yaml file. In Observability Pipelines mode the edge needs **no** Datadog key at all. |
+| OTel gateway | dsv-fetch files. |
+| Applications | Env values that are `dsv://` references, plus `DSV_*`. |
+| Pipelines | `pipelines/templates/dsv-secrets.yml`. |
 
-Optional `env://NAME` references are **not** supported; consumers without DSV can still use the modules by pointing
-`secrets.base_url` at any service implementing the same two DSV endpoints, or by writing the env-yaml / files
-themselves (the Fluent Bit / OTel configs only need the files to exist).
+Documented exception: `apm.managed_runtime_path = serverless_init`. Datadog serverless-init 1.10.4 does not resolve
+`ENC[]` (verified locally: it sent the literal value), so `DD_API_KEY` must be a Container Apps secret. That option
+is opt-in only.
 
-Known limits: AKS workload-identity tokens with DSV are **not verified** (DSV maps users by the identity's resource id,
-`xms_mirid`); fallback: Delinea dsv-k8s syncer (`modules/kubernetes` `api_key.mode = "existing"`). The Datadog Cluster
-Agent image has no Python interpreter: give it a syncer Secret (`api_key.cluster_agent_secret_name`). Values that still
-land in Terraform state are listed in the source repository's `docs/known-limitations.md` (e.g. Event Hubs
-authorization rule keys, which azurerm stores as computed attributes).
+## 10. Known limitations
+
+* Live behaviour against Datadog has not been exercised:
+  * the Worker running the pipeline definition;
+  * Kafka SASL against Event Hubs;
+  * SSI injection and profiles in a real cluster.
+
+  The local tests stop where Datadog itself is required (API key validation, Remote Configuration).
+* DogStatsD (custom and runtime metrics of Datadog libraries) is unavailable behind the APM gateway, because
+  Container Apps ingress is TCP-only. Use `serverless_init`, or keep `apm.mode = otel` for workloads that need custom
+  metrics there.
+* Windows hosts and Azure Functions stay on OpenTelemetry. The Datadog profiler supports neither .NET Function Apps
+  nor Python on Functions (preview).
+* AKS workload-identity tokens with DSV are not verified. The fallback is the dsv-k8s syncer
+  (`api_key.mode = existing`).

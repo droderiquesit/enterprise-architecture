@@ -417,7 +417,7 @@ run "observability_pipelines_mode" {
     error_message = "Worker HA + scaling ceiling from the fleet policy"
   }
   assert {
-    condition     = strcontains(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value, "\"apm_non_local_traffic\": true") && strcontains(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value, "ENC[dsv://eh/dev/datadog-api-key#value]")
+    condition     = strcontains(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value, "\"apm_non_local_traffic\": true") && strcontains(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value, "ENC[dsv://eh/dev/datadog-api-key#value]") && contains(yamldecode(azapi_resource.apm_gateway[0].body.properties.configuration.secrets[0].value).apm_config.ignore_resources, "GET /healthz")
     error_message = "APM gateway Agent: non-local APM traffic, API key resolved from DSV"
   }
 }

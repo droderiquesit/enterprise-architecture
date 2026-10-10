@@ -99,25 +99,33 @@ locals {
   # activity source + OTel API bridge required. Python Service Bus is not a DSM technology.
   dsm_env = local.effective_mode == "datadog" && try(local.apm.data_streams, true) && local.runtime == "dotnet" ? {
     DD_DATA_STREAMS_ENABLED                   = "true"
-    DD_TRACE_OTEL_ENABLED                     = "true"
     AZURE_EXPERIMENTAL_ENABLE_ACTIVITY_SOURCE = "true"
   } : {}
   sample_rate = try(local.apm.sample_rate, null)
+  # Datadog-mode library contract agreed with the application libraries (applications/shared/python/hello_common,
+  # applications/dotnet): one tracer per process, the OTel API bridged into the Datadog tracer (manual
+  # Activity / OTel-API spans), custom hello.* metrics over DogStatsD. NEVER OTEL_EXPORTER_OTLP_* / OTEL_SDK_DISABLED
+  # here (the apps read TELEMETRY_SDK) and no OTEL_RESOURCE_ATTRIBUTES (Datadog maps it to DD_TAGS -> duplicates).
   apm_env = local.effective_mode != "datadog" ? {} : merge(
     {
-      TELEMETRY_SDK              = "datadog"
-      DD_TRACE_ENABLED           = "true"
-      DD_LOGS_INJECTION          = tostring(try(local.apm.logs_injection, true))
+      TELEMETRY_SDK                                     = "datadog"
+      DD_TRACE_ENABLED                                  = "true"
+      DD_TRACE_OTEL_ENABLED                             = "true"
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = "true"
+      DD_LOGS_INJECTION                                 = tostring(try(local.apm.logs_injection, true))
+      DD_METRICS_OTEL_ENABLED                           = "false"
       # runtime metrics travel over DogStatsD (UDP/UDS): only where an Agent runs next to the process (node Agent,
-      # serverless-init); the APM gateway's TCP ingress cannot carry them
-      DD_RUNTIME_METRICS_ENABLED = tostring(contains(["ssi_kubernetes", "ssi_host", "serverless_init"], coalesce(local.method, "none")))
-      # never two tracers in one process: the OpenTelemetry SDK stays off (apps read TELEMETRY_SDK)
-      OTEL_SDK_DISABLED     = "true"
-      OTEL_TRACES_EXPORTER  = "none"
-      OTEL_METRICS_EXPORTER = "none"
-      OTEL_LOGS_EXPORTER    = "none"
+      # host Agent, serverless-init); the APM gateway's TCP ingress cannot carry them
+      DD_RUNTIME_METRICS_ENABLED = tostring(local.dogstatsd_local)
     },
     local.sample_rate == null ? {} : { DD_TRACE_SAMPLE_RATE = tostring(local.sample_rate) },
     local.dbm_env, local.dsm_env,
+  )
+  # DogStatsD target of the Datadog libraries (hello.* custom metrics, runtime metrics). AKS: DD_AGENT_HOST =
+  # status.hostIP (modules/instrumentation k8s_patch) + port; hosts / serverless-init sidecar: localhost.
+  dogstatsd_local = contains(["ssi_kubernetes", "ssi_host", "serverless_init"], coalesce(local.method, "none"))
+  dogstatsd_env = local.effective_mode != "datadog" ? {} : (
+    local.method == "ssi_kubernetes" ? { DD_DOGSTATSD_PORT = "8125" } :
+    contains(["ssi_host", "serverless_init"], coalesce(local.method, "none")) ? { DD_DOGSTATSD_URL = "udp://localhost:8125" } : {}
   )
 }

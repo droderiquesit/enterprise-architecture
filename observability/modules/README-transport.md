@@ -1,133 +1,154 @@
-# Telemetry transport & collection: authoritative paths and duplicate prevention
+# Telemetry transport and collection: authoritative paths, robustness, duplicate prevention (3.0.0)
 
-This page is the single reference for **who collects what, where** in the portable Datadog package
-(`observability/`). It implements ADR-0001 §10. Every rule below is enforced by code and covered by a test
-(the test is named in brackets).
+This page is the single reference for **who collects what, where** in the portable Datadog package (`observability/`).
+The decisions come from `config/fleet-policy.yaml` (`modules/fleet-policy`, `modules/fleet-inventory`). Every rule
+below is enforced by code and covered by a test; the test is named in brackets.
 
-Status vocabulary (ADR §11): everything here is **implemented**. The Fluent Bit configs, OTel gateway, Datadog
-Agent DBM checks and the Linux host installer are **locally-verified** (docker, `observability/tests/transport/`).
-Nothing is **deployed** or **verified**: this sandbox has no Azure or Datadog credentials.
+Status (ADR §11): everything is **implemented**. The following are **locally verified** with docker
+(`tests/transport/`):
 
-## 1. Collection path per architecture
+* the VRL programs;
+* Fluent Bit -> Worker forward;
+* the Worker bootstrap (fail closed);
+* the APM gateway Agent (DSV secret backend, non-local traces, health);
+* the OTel gateway;
+* the DBM checks;
+* the Linux installer.
 
-| Architecture | Application logs (only path) | Traces + metrics (OTLP) | Platform metrics | Platform logs |
-|---|---|---|---|---|
-| AKS | Fluent Bit **DaemonSet** tails `/var/log/containers` (`config/fluent-bit/k8s-daemonset.yaml`) | Node Datadog Agent OTLP receiver, `hostPort` 4317/4318, endpoint `http://$(DD_AGENT_HOST):4317` (`status.hostIP`) | Azure integration | AKS diagnostic settings (tier policy: `kube-audit-admin`, `guard`, `kube-apiserver`, ...) to the platform-logs hub |
-| VM / VMSS | Fluent Bit **service** tails the app log file (`linux-host.yaml` / `windows-host.yaml`) | Host Agent OTLP receiver on `localhost:4317/4318` | Azure integration + Agent | - |
-| ACA (apps) | Fluent Bit **sidecar** tails `LOG_FILE_PATH` on a shared EmptyDir (`sidecar.yaml`, or `sidecar-forward.yaml` to the aggregator) | OTel **gateway** (internal ingress): `https://<gw>` (OTLP/HTTP) or `http://<gw>:4317` (gRPC) | Azure integration | `ContainerAppSystemLogs` to the platform-logs hub |
-| ACA **jobs** | stdout, then environment diagnostic setting `ContainerAppConsoleLogs`, then Event Hub `app-logs`, then aggregator (**allow-listed job names only**) | gateway | Azure integration | as ACA |
-| ACI | Fluent Bit sidecar (secret volume with config, `aci_sidecar` output of `modules/instrumentation`) | gateway | Azure integration | - |
-| App Service / Functions / Logic Apps Std | console, then diagnostic settings (`AppServiceConsoleLogs`, `AppServiceAppLogs`, `FunctionAppLogs`, `WorkflowRuntime`), then Event Hub `app-logs`, then aggregator `kafka` input | gateway (Functions host also exports OTLP logs, which are **dropped**, see 2.4) | Azure integration | `AppServiceHTTPLogs`, ... to the platform-logs hub |
-| Browser | - (RUM) | RUM + `allowedTracingUrls` (content package) | - | - |
-| Databases | DB logs: diagnostic settings (platform hub) | client spans from app SDKs | Azure integration | `PostgreSQLLogs`, `SQLSecurityAuditEvents`, ... |
-| Databases (DBM) | - | - | Datadog Agent DBM check from the observability subnet (ACI) or AKS cluster checks (`modules/dbm`) | - |
-| Subscription / tenant (control plane) | - | - | - | Activity Log (subscription diagnostic setting) and optional Entra ID (tenant setting), `modules/azure-logs`, to the **activity-logs** hub |
+Nothing is **deployed** or **verified** live: this sandbox has no Azure or Datadog credentials.
 
-Platform logs (resource, Activity Log, Entra ID) reach Datadog in the shape of Datadog's own Azure forwarder
-(`ddsource azure.<provider>`, `service:azure`, `subscription_id` / `resource_group` / `tenant` tags; fields verbatim).
-The categories follow the tier policy of `modules/diagnostic-settings`. Guide: `docs/guides/azure-logs-to-datadog.md`.
+## 1. Authoritative path per resource type (package defaults)
 
-`modules/instrumentation` computes the per-app integration hook (env vars, Kubernetes patch, Container Apps
-sidecar patch, App Service app settings, ACI sidecar) from the `obs-telemetry-transport` contract. The owning
-application deployment root applies that hook.
+`log_pipeline = observability_pipelines`, `logs.node_collector = agent`, `apm.mode = datadog`,
+`apm.managed_runtime_path = agent_gateway`. The 2.x paths come back with `fluent_bit_direct` and `otel`.
 
-## 2. Duplicate-prevention rules
+| Resource / workload | Application logs | Traces + profiles | Custom / runtime metrics | Platform metrics + tags | Platform logs |
+|---|---|---|---|---|---|
+| AKS pods | Node **Datadog Agent** (container logs, `ad.datadoghq.com/<c>.logs`) -> Worker `datadog_agent` source :8282 | **SSI** (Cluster Agent admission controller, `targets` per namespace, `ddTraceVersions`, `DD_PROFILING_ENABLED=auto`) -> node Agent :8126 | DogStatsD to the node Agent (`DD_AGENT_HOST` = `status.hostIP`, `DD_DOGSTATSD_PORT` 8125) | Azure integration | AKS diagnostic settings -> Event Hubs -> Worker |
+| Linux VM / VMSS | Host **Agent** tails the app log file (`conf.d/eh-applogs.d`) -> Worker :8282 | **host SSI** (installer `DD_APM_INSTRUMENTATION_ENABLED=host`) -> local Agent | DogStatsD `udp://localhost:8125` | Azure integration + Agent | - |
+| Windows VM / VMSS | **Fluent Bit** service -> forward -> Worker :24224 | OpenTelemetry -> Agent OTLP (SSI on Windows is IIS only) | OTel metrics -> Agent OTLP | Azure integration + Agent | - |
+| Container Apps (apps), ACI | **Fluent Bit sidecar** tails `LOG_FILE_PATH` -> forward -> Worker :24224 (no API key on the edge) | Datadog library in the image -> **APM gateway** (Agent on ACA, internal TCP 8126; `DD_TRACE_AGENT_URL`). Opt-in on ACA: serverless-init sidecar | off behind the gateway (DogStatsD has no TCP transport); serverless-init: localhost | Azure integration | `ContainerAppSystemLogs` -> Worker |
+| Container Apps **jobs** | stdout -> `ContainerAppConsoleLogs` -> Event Hub `app-logs` -> Worker (allow-list `aca_console_allow`) | as Container Apps | as Container Apps | Azure integration | as Container Apps |
+| App Service (Linux / Windows code, containers) | `AppServiceConsoleLogs` / `AppServiceAppLogs` -> Event Hubs -> Worker | Datadog library (.NET `Datadog.Trace.Bundle`, Python `ddtrace`) -> APM gateway over VNet integration | as Container Apps | Azure integration | `AppServiceHTTPLogs`, ... -> Worker |
+| Functions, Durable Functions | `FunctionAppLogs` -> Event Hubs -> Worker | **OpenTelemetry** (exception: Datadog documents neither the Functions host nor Durable V2 spans) -> OTel gateway | OTel -> gateway | Azure integration | as App Service |
+| Logic Apps | `WorkflowRuntime` -> Event Hubs -> Worker | none | - | Azure integration | - |
+| Batch nodes | Fluent Bit (job preparation task) -> forward -> Worker (no key on the node) | OpenTelemetry -> gateway | OTel | Azure integration | - |
+| Browser (Static Web Apps) | - | **RUM** (`modules/rum`, create or existing; `allowedTracingUrls` with `propagatorTypes [datadog, tracecontext]`; replay 0) | RUM | - | - |
+| Databases | - | DBM <-> APM propagation `DD_DBM_PROPAGATION_MODE=full` in the tracers | Agent DBM checks (`modules/dbm`: ACI or AKS cluster checks) | Azure integration | diagnostic settings -> Worker |
+| Subscription / tenant | - | - | - | - | Activity Log / Entra ID (`modules/azure-logs`) -> Event Hub `activity-logs` -> Worker |
 
-### 2.1 One collector per application log line
-| Rule | Where it is enforced |
+One inventory drives the plan. `modules/fleet-inventory` takes every resource (`id`, `type`, `architecture`,
+`runtime`, `os_type`, `tags`) and returns, for each signal, exactly one collector, the `diagnostic_targets` for
+`modules/diagnostic-settings`, the `scope_tags` for the pipeline, and `dbm_candidates`.
+[inventory.tftest]
+
+## 2. The log pipeline (Observability Pipelines)
+
+`modules/observability-pipeline` defines one `datadog_observability_pipeline` per environment.
+
+**Sources**
+
+* `fluent_bit` (24224): edge collectors.
+* `datadog_agent` (8282): node and host Agents.
+* `kafka`: the Event Hubs (SASL PLAIN, user `$ConnectionString`, `security.protocol=sasl_ssl`).
+* `opentelemetry`: off.
+
+**Processor group `app`**
+
+* VRL normalisation of the record.
+* Sensitive Data Scanner redaction (the same patterns as the 2.x Fluent Bit `eh_redact` filter).
+* VRL tag policy: defaults for missing tags, value maps and normalisation. It never overwrites a value the client set.
+
+**Processor group `azure`**
+
+1. Unwrap and split the `records` array.
+2. Shape into the Datadog forwarder form (`ddsource azure.<provider>`, `subscription_id`, `resource_group`, ...).
+3. Apply the console allow list.
+4. Filter, then dedupe on `correlationId`.
+5. Sample per category, then apply the quota.
+6. Add the resource-scope tags of the owning service.
+
+**Destinations**
+
+* `datadog_logs` with a disk buffer: at least 256 MiB, default 1 GiB, `when_full = block`.
+* An optional Azure Storage archive.
+
+[pipeline.tftest; `test_observability_pipelines.py::test_vrl_programs`]
+
+The Worker (`datadog/observability-pipelines-worker:2.22.0`, pinned by the fleet policy) runs in one of two places.
+
+**On Container Apps** (`modules/telemetry-transport`):
+
+* Internal TCP ingress on 24224 (+ 8282, 8686 health).
+* Startup, liveness and readiness probes on `/health`.
+* CPU and TCP-connection scale rules, 2-6 replicas.
+* One data dir per replica (EmptyDir or Azure Files).
+* The dsv-fetch dotenv file (fail closed).
+
+[transport.tftest `observability_pipelines_mode`, `op_dedicated_profile_uses_refresher`; `test_worker_bootstrap_fail_closed_and_env`]
+
+**On AKS** (`modules/kubernetes` `op_worker`, chart `observability-pipelines-worker` 2.22.0):
+
+* A StatefulSet with one PVC per replica, an HPA and a PDB.
+* The API key from a dsv-k8s-synced Secret.
+* Kafka SASL from `op_worker.secret_env`. The chart renders `valueFrom.secretKeyRef`; checked with `helm template`
+  of chart 2.22.0.
+
+[kubernetes.tftest `op_worker_on_aks`]
+
+The Worker needs a live Datadog org at start-up: it validates the API key and downloads the pipeline through Remote
+Configuration. The local test stops at API-key validation.
+
+## 3. Robustness per hop
+
+| Hop | Buffering | Retry / backpressure | Self-telemetry |
+|---|---|---|---|
+| App -> Fluent Bit (sidecar / host) | file tail with offset DB | resumes from the offset after a restart | Fluent Bit metrics (`fluentbit_*_total`), canary |
+| Fluent Bit -> Worker (forward) | filesystem storage, `storage.total_limit_size 512M` | `require_ack_response`, `retry_limit no_limits`; `retain_metadata_in_forward_mode false` (the Worker's fluent source rejects the metadata form; verified) | Fluent Bit output retries / errors |
+| Agent -> Worker (:8282) | Agent tailer offsets | the Agent retries with backoff; the tailers pause under backpressure | Agent status, `datadog.agent.*` |
+| Event Hubs -> Worker (Kafka) | hub retention (1 day by default) is the buffer | consumer group `observability-pipelines`; offsets survive Worker restarts | Worker metrics in Observability Pipelines |
+| Worker -> Datadog Logs | **disk buffer** per destination (persistent per replica) | `when_full = block`: backpressure to the sources instead of drops | Worker `/health`, pipeline metrics |
+| Tracer -> node Agent / APM gateway | tracer in-memory queue | the tracer drops when the queue is full (documented Datadog behaviour); the gateway scales on TCP connections | trace-agent stats, `datadog.trace_agent.*` |
+| OTel SDK -> OTel gateway -> Datadog (otel mode) | `sending_queue` | `retry_on_failure` | `otelcol_*` |
+
+Fail-closed secrets: the Worker command, the dsv-fetch init containers and the Agent secret backend refuse to start
+without their DSV-resolved values. No hop falls back to a key in env or config.
+[`test_worker_bootstrap_fail_closed_and_env`, `test_apm_gateway_agent_resolves_key_from_dsv`]
+
+## 4. Duplicate-prevention rules
+
+| Rule | Where enforced |
 |---|---|
-| The Datadog Agent never collects container or host logs: `datadog.logs.enabled=false`, `containerCollectAll=false` (Helm); `DD_LOGS_ENABLED=false` (VM drop-in, Windows machine env) | `modules/kubernetes` [kubernetes.tftest `defaults`; helm-template render check], `modules/host-agents` scripts [hosts.tftest `vm_and_vmss`; `test_host_installer.py`] |
-| Agent OTLP log ingestion is off: `datadog.otlp.logs.enabled=false`, `DD_OTLP_CONFIG_LOGS_ENABLED=false` | same as above |
-| Apps never export OTLP logs: `OTEL_LOGS_EXPORTER=none` | `modules/instrumentation` [instrumentation.tftest `aks_dotnet_uses_node_agent_and_daemonset`] |
-| `LOG_FILE_PATH` is set only on the sidecar and host routes. Apps on the Event Hub and DaemonSet routes log to stdout only. | `modules/instrumentation` [`appservice_eventhub_route_app_settings`, `aks_*`] |
-| The DaemonSet excludes the `kube-system`, `datadog`, `fluent-bit` (and other configured) namespaces. Pods can opt out with `fluentbit.io/exclude: "true"`. | `config/fluent-bit/k8s-daemonset.yaml`, `modules/fluent-bit` [render.tftest `k8s_daemonset`] |
+| One application-log collector per line: when the Agent collects (AKS, Linux hosts), the Fluent Bit DaemonSet or host service is not installed (`fluent_bit` release count 0); with `fluent_bit_direct` the Agent's log collection is off | `modules/kubernetes` [`fleet_default_agent_logs_to_op_ssi_profiling`, `op_with_fluent_bit_node_collector`], `modules/host-agents` [hosts.tftest `fleet_default_agent_logs_ssi_op`] |
+| Apps never export OTLP logs (`OTEL_LOGS_EXPORTER=none` in otel mode; no OTel variables at all in datadog mode) | `modules/instrumentation` [`datadog_mode_aks_ssi`] |
+| One tracer per process: datadog mode emits `TELEMETRY_SDK=datadog` and `DD_TRACE_OTEL_ENABLED=true` (manual OTel-API / Activity spans go into the Datadog tracer); never `OTEL_EXPORTER_OTLP_*`, `OTEL_SDK_DISABLED` or `OTEL_RESOURCE_ATTRIBUTES` (Datadog maps that to `DD_TAGS`, which would duplicate tags) | `modules/fleet-policy`, `modules/instrumentation` |
+| Diagnostic settings export app-log categories only for the `eventhub` route; platform categories are an allow list per type | `modules/diagnostic-settings` [diagnostics.tftest] |
+| Container Apps environment console logs: exported only when a job needs them; the pipeline keeps only allow-listed jobs | lab diagnostics, VRL `azure_shape` [`test_vrl_programs`] |
+| Event Hubs are consumed by exactly one reader: the Worker in OP mode (the Fluent Bit aggregator is not deployed), the aggregator in `fluent_bit_direct` | `modules/telemetry-transport` [transport.tftest `observability_pipelines_mode`] |
+| Event Hubs redeliveries: dedupe processor; application categories on non-app hubs are dropped | VRL `azure_unwrap` / `azure_shape` |
+| Native Azure log forwarding and the Event Hubs path are mutually exclusive per subscription / tenant | `modules/azure-integration`, `modules/azure-logs` validations |
+| Functions OTLP logs at the OTel gateway: accepted and dropped (the `FunctionAppLogs` path carries them) | `test_otel_gateway.py` |
+| Health-probe traces are dropped on every Agent (`DD_APM_IGNORE_RESOURCES` / `apm_config.ignore_resources` from `apm.ignore_resources`) | kubernetes / host-agents / transport tests |
 
-### 2.2 Diagnostic settings: app-log categories only for the Event Hub route
-`modules/diagnostic-settings` takes an `app_log_route` for each resource:
+## 5. Tags on every hop
 
-* `eventhub`: the supported app-log categories (`AppServiceConsoleLogs`, `AppServiceAppLogs`, `FunctionAppLogs`,
-  `WorkflowRuntime`, `ContainerAppConsoleLogs`) go to the **app-logs** hub.
-* `sidecar | daemonset | host | none`: app-log categories are **never** exported. App-log categories never reach
-  the platform hub, even if someone lists them in the platform allow-list.
-* Platform categories are an allow-list for each resource type, intersected with
-  `azurerm_monitor_diagnostic_categories`. A resource type that supports no listed category gets no setting.
-* Metrics are never exported through diagnostic settings, because the Azure integration already collects
-  them.
+`modules/tagging` renders one tag set per workload and per resource. The table shows how each path receives it.
 
-[diagnostics.tftest `routes_and_categories`, `daemonset_route_excludes_app_logs`; the lab diagnostics root discovery.tftest]
-
-### 2.3 Container Apps environments carry both routes
-An environment exports `ContainerAppConsoleLogs` for **all** of its apps. In practice:
-
-* The environment's setting includes `ContainerAppConsoleLogs` **only if** at least one app or job in that
-  environment declares `app_log_route = eventhub` (normally only jobs, which have no sidecar).
-  [lab diagnostics root `jobs_route_environment_console_logs_to_app_hub`, `sidecar_only_environment_exports_no_console_logs`]
-* The aggregator keeps console records only for allow-listed apps and jobs (`FLB_ACA_CONSOLE_ALLOW`, contract
-  `fluentbit.aca_console_allow`; the lab default is `<prefix>-caj-*`). It drops the stdout of sidecar-collected
-  apps and the Fluent Bit sidecar's own output.
-  [`test_fluentbit.py::test_aggregator_forward_and_eventhub_kafka`: evt-0103 is delivered; evt-0104 and evt-0105 are dropped]
-* The lab diagnostics root raises a `check` when an Event Hub route app is missing from the allow-list.
-  [`allow_list_mismatch_is_flagged`]
-
-### 2.4 OTLP logs at the gateway: accepted and dropped
-The Azure Functions host exports host and worker logs over OTLP as soon as `OTEL_EXPORTER_OTLP_ENDPOINT` is set,
-and `host.json` filters do not stop this. Those application logs already reach Datadog through
-`FunctionAppLogs`, Event Hubs and the aggregator. The gateway therefore has a `logs` pipeline that ends in the
-`nop` exporter:
-
-* It **accepts** the logs, so clients see no export errors or retries.
-* It **forwards nothing**.
-
-The opt-in overlay `gateway-logs-forward.yaml` (`gateway.otlp_logs = "forward"`) exists only for sources that
-have no Fluent Bit route.
-[`test_otel_gateway.py::test_gateway_accepts_and_drops_otlp_logs_by_default`, `test_gateway_logs_forward_overlay_is_opt_in`]
-
-### 2.5 Native Azure integration
-`azurerm_datadog_monitor_tag_rule` keeps `resource_log_enabled = false` by default. When enabled, the native
-resource-log forwarding creates its own diagnostic settings, which would duplicate 2.2 and 2.3. Native subscription
-(Activity Log) and Entra forwarding duplicate `modules/azure-logs`. The plan fails on any overlap per subscription
-or tenant (`modules/azure-integration` `eventhub_log_forwarding`, `modules/azure-logs` `native_log_forwarding`, lab
-settings validation) [integration.tftest `reject_native_*`, azure_logs.tftest `reject_*_native_*`, lab diagnostics
-`control_plane.tftest`]. Datadog's
-*automated log forwarding* (ARM template, control-plane Function Apps) also creates diagnostic settings. That
-conflicts with ADR rule 4, so this package does not use it (see `modules/azure-integration/README.md`).
-
-### 2.6 Azure platform logs at the aggregator
-* Batches are split one record per entry. Records with a strong identity (Entra `properties.id`, otherwise time +
-  resourceId + category + operationName + resultType + correlationId) are delivered once, even when Event Hubs
-  re-delivers a batch (bounded cache `FLB_AZURE_DEDUP_CACHE`).
-* Application categories arriving on a non-app hub (`FLB_EVENTHUB_APP_TOPIC`) are dropped, because the app-logs
-  path already carries them.
-* Records above `FLB_AZURE_MAX_RECORD_BYTES` (900000; Datadog accepts 1 MB per log) are truncated field by field
-  and flagged `truncated:true`. They are never dropped.
-
-[`test_fluentbit.py::test_aggregator_azure_platform_and_control_plane_logs`]
-
-### 2.7 Traces and metrics
-* Every app sends OTLP to exactly one target (`otlp_target` = `agent` | `gateway`).
-* APM stats are computed once, by the gateway's `datadog/connector` on 100% of spans, before sampling.
-* Gateway replicas report `host_metadata.enabled=false` and do not become hosts.
-
-## 3. Pipeline signals for monitors
-| Signal | Value |
+| Path | How the tags arrive |
 |---|---|
-| Tag on every Fluent Bit record | `telemetry.pipeline:fluent-bit` in `ddtags` (Lua `eh_finalize`) |
-| Canary | `dummy` input in the DaemonSet, aggregator and host configs. Emits 1 record per minute: `service:telemetry-canary`, attribute `canary:true`, `env:<env>` tag |
-| Fluent Bit self-metrics | Names keep `_total` (e.g. `fluentbit_output_errors_total`). Aggregator: Prometheus endpoint `:2020/api/v2/metrics/prometheus`, scraped by the gateway. DaemonSet and hosts: `fluentbit_metrics` input, then OTLP to the node or host Agent. Each point has an `env` label/attribute. |
-| Collector self-metrics | `otelcol_*` names **without** the type suffix (`without_type_suffix: true`, e.g. `otelcol_exporter_send_failed_spans`), scraped with an `env` label |
+| Datadog libraries | `DD_ENV`, `DD_SERVICE`, `DD_VERSION`, `DD_TAGS` (extra policy keys) |
+| Kubernetes | UST labels `tags.datadoghq.com/*`, `ad.datadoghq.com/tags`, `podLabelsAsTags` on the Agent; SSI label `admission.datadoghq.com/enabled` |
+| Agents | `DD_TAGS` / `datadog.tags` of the environment identity |
+| OTel gateway | `transform/eh_tag_policy` inserts missing attributes per `service.name` and never overwrites them [`test_gateway_tag_policy_overlay`] |
+| Fluent Bit | Lua `eh_finalize`: static tags never override record keys; Kubernetes label map; Azure tag map + scope tags |
+| Observability Pipelines | VRL `tags` (defaults, value maps, normalisation, `telemetry.pipeline:observability-pipelines`) |
+| Azure resources | `azure_tags` (the deploy roots merge them), imported by the Datadog Azure integration |
+| RUM | `globalContext` |
 
-[`test_fluentbit.py` (pipeline tag, canary, `_total`), `test_otel_gateway.py::test_gateway_self_and_fluentbit_metrics_naming`]
+## 6. Network exposure
 
-Datadog's OpenMetrics V2 check renames counters to `<name>.count`, which is why the DaemonSet and hosts push
-OTLP instead of being scraped by the Agent. This was verified locally: the Agent 7.84.2 openmetrics check
-produced `fluentbit_output_errors_total.count`.
-
-## 4. Network exposure
-Every receiver is internal:
-
-* ACA ingress is `external = false` (VNet-only) for both apps. Setting `external_ingress = true` is rejected by
-  validation [transport.tftest `reject_public_receivers`].
-* The optional `bearertokenauth` overlay adds token checks on OTLP. It is only available on the upstream
-  collector, because DDOT does not ship that extension.
-* Event Hubs denies public traffic except trusted services (Azure Monitor diagnostic settings). Collectors reach
-  it through a private endpoint.
+* Every receiver is internal. Container Apps ingress is `external = false` for the Worker, the APM gateway, the OTel
+  gateway and the aggregator. Validation rejects public receivers [transport.tftest `reject_public_receivers`].
+* Event Hubs denies public traffic except trusted services; collectors use a private endpoint.
+* The Worker's fluent source runs plaintext inside the VNet (internal ingress only). `fluent_tls` enables TLS with
+  certificate files written by dsv-fetch.

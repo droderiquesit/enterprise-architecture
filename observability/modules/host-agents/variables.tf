@@ -51,12 +51,12 @@ variable "datadog" {
   EOT
   type = object({
     site               = string
-    agent_version      = optional(string, "7.84.2")
+    agent_version      = optional(string) # null = fleet policy agent.version
     api_key_ref        = string
     process_collection = optional(bool, false)
   })
   validation {
-    condition     = can(regex("^7\\.[0-9]+\\.[0-9]+$", var.datadog.agent_version))
+    condition     = var.datadog.agent_version == null || can(regex("^7\\.[0-9]+\\.[0-9]+$", coalesce(var.datadog.agent_version, "x")))
     error_message = "datadog.agent_version must be a pinned 7.x.y version (no 'latest')."
   }
   validation {

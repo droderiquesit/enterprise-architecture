@@ -1,117 +1,122 @@
-# Service onboarding tutorial (one manifest per service)
+# Service onboarding tutorial (one manifest per service, package 3.0.0)
 
-This tutorial onboards a service into Datadog with the observability package: one YAML manifest validated against
-[`observability/schemas/onboarding-manifest.v1.schema.json`](../../observability/schemas/onboarding-manifest.v1.schema.json),
-merged with the shipped archetypes, rendered to committed JSON and applied by Terraform. Reference documentation:
-[`observability/README.md`](../../observability/README.md) sections 1-3.
+This tutorial connects a service to Datadog with the observability package. You write one YAML manifest
+([`onboarding-manifest.v2`](../../observability/schemas/onboarding-manifest.v2.schema.json)) that holds the identity,
+tags, resources and telemetry routing. The manifest is validated against the
+[tag policy](datadog-tagging.md), rendered to committed JSON, and consumed by the collection modules and the
+application's instrumentation hook.
 
-The commands below were run against the worked example in this repository (validation and rendering only; no
-Datadog organisation was available, so nothing was applied).
+Monitors, SLOs and dashboards are not created by the package. They already exist in your organisation and select on
+the tags this manifest makes consistent. Reference: [`observability/README.md`](../../observability/README.md).
+
+The commands below were run in this repository (validation and rendering only; no Datadog organisation was
+available, so nothing was applied).
 
 ## 1. Write the manifest
 
-Worked example: [`examples/onboarding/invoices-api.yaml`](examples/onboarding/invoices-api.yaml) - an existing .NET API on
-Azure Container Apps with its own Azure SQL database (literal resource IDs; it is not part of the lab onboarding set).
+Example: an existing .NET API on Azure Container Apps with its own Azure SQL database (literal resource ids).
 
 ```yaml
-apiVersion: observability/v1
+apiVersion: observability/v2
 kind: ServiceOnboarding
 metadata:
-  service: invoices-api            # becomes DD_SERVICE / service tag
-  team: orders                     # required
-  owner: orders@example.com        # required
-  runbook_url: https://runbooks.example.com/billing/invoices-api   # optional; default = archetype runbook_base_url; monitors link <url>#<section>
-  env: dev                         # required (string or list)
-  tier: high                       # critical | high | medium | low
-  domain: billing
+  service: invoices-api            # DD_SERVICE / service tag
+  team: orders                     # required tag-policy keys: team, owner, application, domain, tier, region
+  owner: orders@example.com
   application: enterprise-hello
+  domain: billing
+  tier: high                       # critical | high | medium | low | infrastructure
+  region: swedencentral
+  env: dev                         # string or list; value_map normalises e.g. development -> dev
 spec:
-  architecture: aca                # aks | aca | aci | appservice | functions | vm | vmss | logicapp | batch | swa | sfmc | aro | external
+  architecture: aca                # aks | aca | aci | appservice | functions | vm | vmss | logicapp | batch | swa
   runtime: dotnet
   telemetry:
-    profile: http-api              # archetypes/profiles/<profile>.yaml
-    logs: {route: sidecar}         # daemonset | sidecar | eventhub | host | none
+    logs: {route: sidecar}         # optional; default from the fleet policy per architecture
     dbm: {enabled: true, engine: sqlserver}
+    # apm: {mode: otel}            # optional per-service override of the fleet policy (datadog | otel | none)
+    # profiling: {enabled: false}  # optional per-service override
   resources:                       # literal ARM ids or ${contract:<contract>.<path>} references
-    - {id: /subscriptions/.../containerApps/ca-invoices-api-dev, type: Microsoft.App/containerApps, role: app}
-    - {id: /subscriptions/.../servers/sql-billing-dev/databases/invoices, type: Microsoft.Sql/servers/databases, role: invoices-db}
-  endpoints:
-    - {name: internal, url: https://ca-invoices-api-dev.internal..., visibility: private, health_path: /readyz}
-  slos:
-    - {name: availability, type: availability, target: 99.5, timeframe: 30d}
-    - {name: latency, type: latency, target: 99.0, timeframe: 30d, threshold_ms: 500}
-  notifications:                   # route keys from the routing file, never raw @handles
-    default: [team-orders]
-    critical: [team-orders, oncall]
+    - {id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-billing-dev/providers/Microsoft.App/containerApps/ca-invoices-api-dev, type: Microsoft.App/containerApps, role: app}
+    - {id: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-billing-dev/providers/Microsoft.Sql/servers/sql-billing-dev/databases/invoices, type: Microsoft.Sql/servers/databases, role: invoices-db}
 ```
 
-Inside this lab, resource IDs and URLs come from contracts instead of literals, for example
-`${contract:deploy-core-aca.apps.hello-orders-api.id}` and `presence_ref: deploy-core-aca.apps.hello-orders-api.url`
-(skip the service when it is not deployed) - see [`observability/onboarding/dev/hello-orders-api.yaml`](../../observability/onboarding/dev/hello-orders-api.yaml).
+Inside this lab, resource ids come from contracts instead of literals, for example
+`${contract:deploy-core-aca.apps.hello-orders-api.id}` together with
+`presence_ref: deploy-core-aca.apps.hello-orders-api.url` (skip the service when it is not deployed). See
+[`observability/onboarding/dev/hello-orders-api.yaml`](../../observability/onboarding/dev/hello-orders-api.yaml).
 
-Tuning without forking archetypes: `spec.monitors.params` (named thresholds), `spec.monitors.overrides["<key>"]` or
-`["<key>@<role>"]`, `spec.monitors.disabled` (globs), `spec.idle_behavior` (`scale_to_zero`, `expected_quiet_hours`).
+Coming from a 2.x (v1) manifest: `python3 observability/tools/onboarding/migrate_v1.py --in <dir> --out <dir> --region <region>`
+converts it. It keeps identity, resources and routing, and drops the monitoring sections. The worked v1 example
+[`examples/onboarding/invoices-api.yaml`](examples/onboarding/invoices-api.yaml) migrates to the manifest above.
 
 ## 2. Validate and render
 
 ```bash
-python3 observability/tools/onboarding/validate.py --manifests docs/guides/examples/onboarding --env dev \
-  --routing observability/onboarding/routing/dev.yaml --strict
-# VALID (0 errors, 0 warnings)
+python3 observability/tools/onboarding/validate.py --manifests manifests/dev --env dev --strict
+# VALID (0 errors, 0 warnings, 0 notices)
 
-python3 observability/tools/onboarding/render.py render --manifests docs/guides/examples/onboarding --env dev --out /tmp/rendered
+python3 observability/tools/onboarding/render.py render --manifests manifests/dev --env dev --out rendered/dev
 # rendered 1 services for env 'dev'
 ```
 
-For the lab, put the manifest in `observability/onboarding/<env>/`, render into `observability/onboarding/rendered/<env>/`
-and **commit the rendered JSON**; CI runs `render ... --check` and fails on drift, so `terraform plan` needs no Python.
+Validation fails when a required tag-policy key is missing, a value is not allowed, or a resource id is not an ARM
+id. Monitoring sections (`monitors`, `slos`, `notifications`, ...) only produce a notice: the core package ignores
+them.
 
-## 3. What gets created
+For the lab, put the manifest in `observability/onboarding/<env>/`, render into
+`observability/onboarding/rendered/<env>/` and **commit the rendered JSON**. CI runs `render ... --check`.
 
-For the worked example the merge of `global-defaults` + `platform/aca` + `platform/database-sql` + `profiles/http-api`
-+ the manifest renders these monitor keys:
+## 3. What the rendered service carries
 
-| Key | Source archetype | Signal |
+| Field | Example | Used by |
 |---|---|---|
-| `apm.error_rate`, `apm.http_5xx`, `apm.latency_p95`, `apm.no_traffic` | profiles/http-api | `trace.http.server.request.*` (no-data guard because the service is always-on) |
-| `logs.error_spike` | global-defaults | error log volume |
-| `aca.http_5xx_ratio@app`, `aca.restarts@app` | platform/aca | Azure integration metrics of the container app |
-| `sql.cpu@invoices-db`, `sql.connection_failures@invoices-db`, `sql.deadlocks@invoices-db`, `sql.storage@invoices-db` | platform/database-sql | Azure integration metrics of the database |
+| `tags` | `env:dev, service:invoices-api, team:orders, owner:orders_example.com, application:enterprise-hello, domain:billing, tier:high, region:swedencentral, managed_by:terraform` (Datadog-normalised) | instrumentation (`DD_TAGS`), Observability Pipelines / OTel gateway defaults, telemetry_verify expected tags |
+| `azure_tags` | the same keys, Azure values (`owner: orders@example.com`) | the deployment root's Azure resource tags (imported by the Datadog Azure integration) |
+| `resources[*].tags` | per resource | `modules/fleet-inventory` -> resource-scope tags of platform logs, diagnostic targets, DBM candidates |
+| `telemetry` | `logs_route: sidecar`, `apm_mode: policy`, `dbm` | instrumentation, diagnostic settings, DBM |
 
-Plus, from `modules/onboarding` when Terraform applies the rendered file:
+`version` is a deploy-time value. The deployment sets it (`DD_VERSION`); it is not part of the manifest.
 
-* two SLOs (`availability` metric-based, `latency` time-slice on p95) and two burn-rate `slo alert` monitors each
-  (critical 1h/5m, warning 6h/30m);
-* a synthetic API test per endpoint - private endpoints only from a configured private location (otherwise skipped
-  and listed in `synthetics_skipped`); tests are created **paused** unless `synthetics.paused = false`;
-* a service dashboard (and the application overview when enabled), a Software Catalog entity (`component_of`
-  system), a `datadog_downtime_schedule` for declared quiet hours;
-* tags `env, service, team, tier, application, domain, managed_by:observability-package, monitor:<key>, severity:<sev>`
-  on every monitor; notification handles appended per state from the routing file.
+## 4. Connect the resources (platform side)
 
-Nothing in Azure is created by the monitoring modules. DBM (`telemetry.dbm`) is configured by the collection module
-`modules/dbm` (lab: `obs-dbm`), not by onboarding.
-
-## 4. Apply
-
-* **Lab**: commit the rendered file; `obs-monitoring` lists `observability/onboarding/**` in its `inputs`, so change
-  detection selects it and the pipeline plans/applies it after the selected deployments.
-* **Elsewhere**: a consumer root that calls `modules/onboarding` (template:
-  [`observability/examples/existing-environment/`](../../observability/examples/existing-environment/README.md)) with
-  `DD_API_KEY` / `DD_APP_KEY` in the environment: `terraform init && terraform plan -out tfplan && terraform apply tfplan`.
+* The rendered resources feed `modules/fleet-inventory`. Its outputs drive `modules/diagnostic-settings` (platform
+  logs, and app logs for the `eventhub` route) and give the Observability Pipelines pipeline the resource-scope tags.
+* `modules/dbm` configures Database Monitoring for `telemetry.dbm`.
+* In the lab this happens in the `obs-*` roots; elsewhere see
+  [`observability/examples/existing-environment/`](../../observability/examples/existing-environment/README.md).
 
 ## 5. Instrument the application (owner's side)
 
-The package never changes application settings. The application owner applies the integration hook of
-`modules/instrumentation` (outputs `env`, `secret_env`, `app_settings`, `container_app_patch`, `k8s_patch`,
-`aci_sidecar`, `log_route`, `otlp_target`, `datadog_tags`): `DD_ENV/DD_SERVICE/DD_VERSION`, `OTEL_SERVICE_NAME`,
-`OTEL_RESOURCE_ATTRIBUTES` (team, domain, tier, application, owner, region, `cloud.provider=azure`, `cloud.platform`),
-`OTEL_EXPORTER_OTLP_ENDPOINT/PROTOCOL`, `OTEL_TRACES_SAMPLER=parentbased_traceidratio`, `OTEL_LOGS_EXPORTER=none`, and
-for the sidecar route the Fluent Bit sidecar with `LOG_FILE_PATH`. In this lab the deployment roots do this through
-`applications/deployments/modules/app-env`.
+The package never changes application settings. The owner applies the hook of `modules/instrumentation`:
+
+* `env` and `secret_env` (DSV references);
+* `app_settings`, `container_app_patch`, `k8s_patch` or `aci_sidecar`;
+* `app_requirements`: which Datadog library the image must contain.
+
+With the default `apm.mode = datadog` the hook sets these variables:
+
+* `TELEMETRY_SDK=datadog` and `DD_TRACE_OTEL_ENABLED=true`;
+* `DD_ENV`, `DD_SERVICE`, `DD_VERSION`, and `DD_TAGS` with the extra policy keys;
+* `DD_LOGS_INJECTION=true` and `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED=true`;
+* the profiler settings;
+* `DD_TRACE_AGENT_URL`, which points at the in-VNet APM gateway on Container Apps and App Service;
+* on AKS, the DogStatsD target (`DD_AGENT_HOST` = node IP).
+
+It sets **no** `OTEL_*` variable. With `apm.mode = otel` the hook sets the OpenTelemetry variables of 2.x instead.
+For the sidecar route it adds the Fluent Bit sidecar, which forwards to the Observability Pipelines Worker with no API
+key. In this lab the deployment roots apply the hook through `applications/deployments/modules/app-env`.
 
 ## 6. Verify
 
-After traffic flows, `observability/tools/verify/telemetry_verify.py` checks a journey end to end (RUM -> trace,
-spans of every journey service plus a database span, pipeline logs correlated to the trace, no duplicate log lines,
-required tags, infra metrics). It has only been exercised against recorded API responses in unit tests.
+Once traffic flows, `observability/tools/verify/telemetry_verify.py --expected-tags-dir rendered/dev` checks a journey
+end to end:
+
+* the RUM -> trace link;
+* spans of every journey service plus a database span;
+* logs correlated to the trace, with no duplicates;
+* the tag-policy tags with their rendered values;
+* the pipeline tag of the fleet policy.
+
+`observability/tools/tags/check_coverage.py` reports which monitored scopes miss which tags. Both tools have only been
+exercised against recorded API responses.

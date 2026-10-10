@@ -1,7 +1,7 @@
 variable "settings" {
   description = "obs-hosts settings."
   type = object({
-    agent_version            = optional(string, "7.84.2")
+    agent_version            = optional(string) # null = fleet policy agent.version
     fluent_bit_version       = optional(string, "5.1.3")
     setup_revision           = optional(number, 1) # bump to re-run the installers (e.g. once after the 2.0 upgrade)
     linux_log_glob           = optional(string, "*.log")

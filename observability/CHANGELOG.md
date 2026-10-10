@@ -4,6 +4,109 @@ All notable changes to the observability package. Format: Keep a Changelog; vers
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-10
+
+**BREAKING** (SemVer major): the package is now the **collection and tagging** layer of Datadog on Azure. It connects
+resources and workloads to Datadog through the most mature Datadog path each type supports, with one tag policy on
+every signal. Monitors, SLOs, dashboards, synthetics, the service catalog and notification routing are no longer
+part of the package: they exist in your organisation and select on the tags. See `UPGRADING.md` "3.0.0".
+
+### Added
+- **Tag policy** (core product): `config/tag-policy.yaml` + `schemas/tag-policy.v1.schema.json` and
+  `modules/tagging`, the single tagging function used on every path:
+  - Agent `DD_TAGS`, UST labels, `ad.datadoghq.com/tags`, `podLabelsAsTags`;
+  - tracer `DD_*` variables;
+  - the OTel gateway `transform/eh_tag_policy`, Fluent Bit Lua and the Observability Pipelines VRL;
+  - Azure resource tags and the RUM global context.
+
+  `tools/tags/tag_policy.py` is the Python mirror (parity tested).
+- **Tag tools** (read-only Datadog client; GET plus documented search POSTs only; offline fixtures):
+  - `tools/tags/derive_from_monitors.py` proposes a tag policy from existing monitors and SLOs;
+  - `tools/tags/check_coverage.py` reports monitored scopes that miss policy tags in live logs, spans and hosts;
+  - `tools/tags/query_tags.py`.
+- **Fleet policy** (`config/fleet-policy.yaml`, `modules/fleet-policy`) and one fleet inventory input
+  (`modules/fleet-inventory`). Together they give one authoritative collector per resource and signal
+  (`modules/README-transport.md`, `docs/guides/datadog-fleet-collection.md`).
+- **Observability Pipelines as the default log pipeline** (`log_pipeline = observability_pipelines`):
+  - `modules/observability-pipeline` (`datadog_observability_pipeline`). Sources: fluent, Datadog Agent, Event Hubs
+    over Kafka. VRL tag policy and Azure shaping, Sensitive Data Scanner redaction, dedupe, sampling, quotas. Datadog
+    Logs destination with a disk buffer (`when_full = block`); optional Azure Storage archive.
+  - The Worker runs as a Container App with internal TCP ingress, probes and scale rules (`modules/telemetry-transport`),
+    or on AKS through Helm chart 2.22.0 as a StatefulSet with PVCs (`modules/kubernetes` `op_worker`). Its secrets
+    come from DSV and the Worker fails closed without them.
+- **Datadog APM** (`apm.mode = datadog`, default):
+  - AKS: Single Step Instrumentation (Cluster Agent admission controller, target namespaces, `ddTraceVersions`,
+    init-container securityContext for the restricted PSS).
+  - Linux VMs/VMSS: host SSI.
+  - Managed runtimes: the library in the image plus the in-VNet **Datadog Agent APM gateway** on Container Apps
+    (API key `ENC[dsv://]`).
+  - ACA can opt in to serverless-init (`managed_runtime_path = serverless_init`).
+  - Library contract: `TELEMETRY_SDK=datadog`, `DD_TRACE_OTEL_ENABLED=true`,
+    `DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED=true`, log injection, DogStatsD target,
+    `DD_METRICS_OTEL_ENABLED=false`, sampling, `DD_DBM_PROPAGATION_MODE=full`, DSM for .NET Service Bus. Never any
+    `OTEL_*` variable in this mode.
+  - `apm.mode = otel` keeps the 2.x OpenTelemetry path. Azure Functions and Durable Functions stay on it by policy;
+    Windows services fall back to it.
+- **Continuous Profiler fleet-wide** (`profiling` in the fleet policy and in `modules/instrumentation` outputs):
+  - .NET: CPU, wall time, exceptions, GC (lock, allocation and heap opt-in; allocation and heap are preview), code
+    hotspots, endpoint profiling.
+  - Python: stack, lock, memory, heap, timeline.
+  - `DD_PROFILING_ENABLED=auto` under SSI.
+  - Profiles carry UST + `DD_TAGS` and upload through the same Agent as the traces.
+  - Unsupported combinations report a reason: .NET Function Apps, Python on Functions (preview), Windows hosts in
+    otel mode, otel mode in general except the opt-in Python preview.
+- **RUM back in core**: `modules/rum` creates an application or adopts an existing one. `browser_config` sets
+  `allowedTracingUrls` with `propagatorTypes [datadog, tracecontext]`, session replay 0, and `globalContext` from the
+  tag policy.
+- **Fleet management**:
+  - Agent version pinned (7.84.2) and Remote Configuration on everywhere.
+  - Remote updates optional, plus an optional `datadog_fleet_schedule` (`modules/fleet-automation`).
+  - `apm.ignore_resources` (health probes) on every Agent.
+- `modules/kubernetes`: the node Agent collects container logs to the Worker (no Fluent Bit DaemonSet), SSI targets,
+  `podLabelsAsTags`, Remote Configuration, an optional OP Worker.
+- `modules/host-agents`: the Agent collects application logs on Linux hosts, host SSI, `DD_REMOTE_UPDATES`, and
+  Fluent Bit forwards to the Worker on Windows.
+- `modules/fluent-bit`: `log_destination = observability_pipelines` (forward, acknowledged, filesystem buffer,
+  metadata-free so the Worker's fluent source accepts it), plus the Kubernetes label map, the Azure tag map and scope
+  tags.
+- Onboarding manifest **v2** (`schemas/onboarding-manifest.v2.schema.json`, `rendered-service.v2`): identity + tags +
+  resources + telemetry routing. `tools/onboarding/migrate_v1.py` converts v1 manifests.
+- `tools/verify/telemetry_verify.py`: `--tag-policy`, `--fleet-policy`, `--expected-tags-dir`; the pipeline tag
+  follows `log_pipeline`.
+- Local docker tests:
+  - VRL programs (Vector CLI);
+  - Fluent Bit 5.1.3 -> fluent source;
+  - Worker 2.22.0 bootstrap (fail closed);
+  - APM gateway Agent 7.84.2 (DSV secret backend, non-local traces, health).
+
+### Changed
+- Contract `obs-telemetry-transport` v2 (same schema, new values inside open objects):
+  - `aggregator.{kind, pipeline_id, agent_logs_url}`;
+  - `env.apm_gateway.DD_TRACE_AGENT_URL`;
+  - `env.fleet` (`EH_LOG_PIPELINE`, `EH_APM_MODE`, `EH_PROFILING_ENABLED`);
+  - `fluentbit.forward_host` is the Worker in OP mode and `sidecar_mode` is `forward`.
+- `modules/instrumentation` takes `tag_policy`, `fleet_policy`, `apm`, `profiling`, `os_type`, `serverless_init` and
+  the identity keys (`application`, `owner`, `region`, `managed_by`, `cost_center`, `component`, `extra`). New
+  outputs: `tags`, `azure_tags`, `k8s_labels`, `k8s_annotations`, `apm`, `profiling`, `log_collector`,
+  `app_requirements`, `rum_global_context`.
+- Runtime metrics of Datadog libraries are enabled only next to an Agent (DogStatsD has no TCP transport).
+- `pipelines/templates/validate-onboarding.yml` takes a `tagPolicy` parameter; `routingFile` and `archetypesDir` are
+  ignored. `telemetry-verify.yml` takes `tagPolicy`, `fleetPolicy` and `expectedTagsDir`, and `pipelineTag` now
+  defaults to the fleet policy.
+- `examples/existing-environment` rewritten: fleet inventory, Observability Pipelines with the Worker on AKS, RUM,
+  tags. It creates no monitoring content.
+
+### Removed
+- From the release (moved to `extras/content/`, optional, version 2.0.0 content, not packaged):
+  - `modules/{monitors,slos,dashboards,synthetics,service-catalog,notification-routing,onboarding,log-management}`;
+  - `archetypes/`, the v1 manifest / archetype / routing schemas and `tests/content` (content tests);
+  - the lab root `obs-monitoring` (source repository only).
+- `modules/fluent-bit` Lua `static_tags_without_env` (replaced by the tag-policy aware `eh_finalize`).
+
+### Verification status
+- Implemented and tested offline (terraform test with mock providers, pytest, docker).
+- Not deployed and not verified against a live Datadog organisation.
+
 ## [2.0.0] - 2026-10-09
 
 **BREAKING** (SemVer major): Azure Key Vault is no longer used for any secret. Every secret is a Delinea DevOps Secrets

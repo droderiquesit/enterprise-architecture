@@ -21,7 +21,7 @@ run "aks_dotnet_ssi_with_profiler_dsm_dbm" {
     error_message = ".NET profiler: auto under SSI, exceptions on, preview heap off, code hotspots on"
   }
   assert {
-    condition     = output.apm_env["TELEMETRY_SDK"] == "datadog" && output.apm_env["OTEL_SDK_DISABLED"] == "true" && output.apm_env["DD_DATA_STREAMS_ENABLED"] == "true" && output.apm_env["AZURE_EXPERIMENTAL_ENABLE_ACTIVITY_SOURCE"] == "true" && output.apm_env["DD_DBM_PROPAGATION_MODE"] == "full"
+    condition     = output.apm_env["TELEMETRY_SDK"] == "datadog" && !contains(keys(output.apm_env), "OTEL_SDK_DISABLED") && output.apm_env["DD_TRACE_OTEL_ENABLED"] == "true" && output.apm_env["DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED"] == "true" && output.apm_env["DD_DOGSTATSD_PORT"] == "8125" && output.apm_env["DD_METRICS_OTEL_ENABLED"] == "false" && output.apm_env["DD_DATA_STREAMS_ENABLED"] == "true" && output.apm_env["AZURE_EXPERIMENTAL_ENABLE_ACTIVITY_SOURCE"] == "true" && output.apm_env["DD_DBM_PROPAGATION_MODE"] == "full"
     error_message = "datadog mode: SDK switch, DSM for Service Bus (.NET), DBM propagation"
   }
   assert {
@@ -54,15 +54,15 @@ run "aca_python_agent_gateway" {
   }
 }
 
-run "functions_profiler_unsupported" {
+run "functions_stay_on_otel" {
   command = plan
   variables {
     architecture = "functions"
     runtime      = "dotnet"
   }
   assert {
-    condition     = output.apm.method == "agent_gateway" && !output.profiling.enabled && length(output.profiling.env) == 0 && output.profiling.reason != null
-    error_message = ".NET Function Apps: tracing yes, profiler not supported (reason reported)"
+    condition     = output.apm.mode == "otel" && output.apm.method == "otlp_gateway" && length(output.apm_env) == 0 && !output.profiling.enabled && length(output.profiling.env) == 0 && output.profiling.reason != null
+    error_message = "Functions exception: OpenTelemetry (package policy architectures.functions), no Datadog profiler (reason reported)"
   }
 }
 

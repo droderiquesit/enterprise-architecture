@@ -80,7 +80,7 @@ locals {
     env                        = var.datadog.env
     tags                       = [for k in sort(keys(local.collector_tags)) : "${k}:${local.collector_tags[k]}"]
     logs_enabled               = false
-    apm_config                 = { enabled = true, apm_non_local_traffic = true, receiver_port = 8126 }
+    apm_config                 = merge({ enabled = true, apm_non_local_traffic = true, receiver_port = 8126 }, length(module.fleet.agent_apm_ignore_resources) == 0 ? {} : { ignore_resources = module.fleet.agent_apm_ignore_resources })
     process_config             = { process_collection = { enabled = false } }
     remote_configuration       = { enabled = try(module.fleet.agent.remote_configuration, true) }
     health_port                = 5555
@@ -89,6 +89,17 @@ locals {
     secret_backend_arguments   = ["agent-backend", "--config", "/eh/dsv/dsv.json"]
     secret_backend_timeout     = 30
   })
+  apm_container_env = [
+    { name = "DD_SITE", value = var.datadog.site },
+    # the image's init requires a non-empty DD_API_KEY; ENC[] is resolved by the secret backend
+    { name = "DD_API_KEY", value = "ENC[${var.datadog.api_key_ref}]" },
+    { name = "DD_APM_ENABLED", value = "true" },
+    { name = "DD_APM_NON_LOCAL_TRAFFIC", value = "true" },
+    { name = "DD_LOGS_ENABLED", value = "false" },
+    { name = "DD_PROCESS_AGENT_ENABLED", value = "false" },
+    { name = "DD_HEALTH_PORT", value = "5555" },
+  ]
+  apm_command    = ["/bin/sh", "-c", "python3 -I /eh/dsv/dsv_fetch.py install --dest /opt/dsv-fetch/dsv-fetch --python /opt/datadog-agent/embedded/bin/python3 && cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml && export DD_HOSTNAME=\"$${HOSTNAME}\" && exec /bin/entrypoint.sh"]
   collector_tags = merge(var.default_tags, { env = var.datadog.env }, var.datadog.extra_tags)
 }
 
@@ -262,18 +273,9 @@ resource "azapi_resource" "apm_gateway" {
           image = local.apm_image
           # dsv-fetch becomes the Agent's secret backend (root-owned, 0500, embedded python3), the rendered
           # datadog.yaml is installed, every replica reports under its own hostname, then the image entrypoint runs
-          command   = ["/bin/sh", "-c", "python3 -I /eh/dsv/dsv_fetch.py install --dest /opt/dsv-fetch/dsv-fetch --python /opt/datadog-agent/embedded/bin/python3 && cp /eh/agent/datadog.yaml /etc/datadog-agent/datadog.yaml && export DD_HOSTNAME=\"$${HOSTNAME}\" && exec /bin/entrypoint.sh"]
+          command   = local.apm_command
           resources = { cpu = var.apm_gateway.cpu, memory = var.apm_gateway.memory }
-          env = [
-            { name = "DD_SITE", value = var.datadog.site },
-            # the image's init requires a non-empty DD_API_KEY; ENC[] is resolved by the secret backend
-            { name = "DD_API_KEY", value = "ENC[${var.datadog.api_key_ref}]" },
-            { name = "DD_APM_ENABLED", value = "true" },
-            { name = "DD_APM_NON_LOCAL_TRAFFIC", value = "true" },
-            { name = "DD_LOGS_ENABLED", value = "false" },
-            { name = "DD_PROCESS_AGENT_ENABLED", value = "false" },
-            { name = "DD_HEALTH_PORT", value = "5555" },
-          ]
+          env       = local.apm_container_env
           probes = [
             { type = "Liveness", httpGet = { path = "/live", port = 5555 }, initialDelaySeconds = 30, periodSeconds = 30, failureThreshold = 5 },
             { type = "Readiness", httpGet = { path = "/ready", port = 5555 }, periodSeconds = 15 },

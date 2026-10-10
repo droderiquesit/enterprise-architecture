@@ -319,7 +319,7 @@ run "datadog_mode_aks_ssi" {
     error_message = "default fleet policy on AKS: SSI tracer + Agent log collection (-> Observability Pipelines)"
   }
   assert {
-    condition     = output.env["TELEMETRY_SDK"] == "datadog" && output.env["OTEL_SDK_DISABLED"] == "true" && !contains(keys(output.env), "OTEL_EXPORTER_OTLP_ENDPOINT")
+    condition     = output.env["TELEMETRY_SDK"] == "datadog" && output.env["DD_TRACE_OTEL_ENABLED"] == "true" && length([for k in keys(output.env) : k if startswith(k, "OTEL_")]) == 0 && output.env["DD_DOGSTATSD_PORT"] == "8125" && strcontains(output.env["DD_TAGS"], "team:")
     error_message = "datadog mode: no OTLP exporter env, OTel SDK disabled (never two tracers)"
   }
   assert {
@@ -381,15 +381,15 @@ run "datadog_mode_aca_serverless_init_opt_in" {
   }
 }
 
-run "datadog_mode_functions_no_profiler" {
+run "functions_exception_stays_otel" {
   command = plan
   variables {
     apm          = null
     architecture = "functions"
   }
   assert {
-    condition     = output.apm.method == "agent_gateway" && !output.apm.ready && !output.profiling.enabled && !contains(keys(output.env), "DD_PROFILING_ENABLED") && output.env["DD_DOTNET_TRACER_HOME"] == "/home/site/wwwroot/datadog"
-    error_message = "Functions: tracer via Datadog.Trace.Bundle -> gateway (not ready without contract URL); .NET profiler unsupported"
+    condition     = output.apm.mode == "otel" && output.env["TELEMETRY_SDK"] == "otel" && !output.profiling.enabled && !contains(keys(output.env), "DD_PROFILING_ENABLED") && !contains(keys(output.env), "DD_DOTNET_TRACER_HOME")
+    error_message = "Functions / Durable Functions exception: OpenTelemetry (Datadog documents neither the Functions host nor Durable V2 spans); no Datadog profiler"
   }
 }
 
