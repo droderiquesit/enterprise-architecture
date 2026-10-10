@@ -4,7 +4,7 @@
   `helm lint --strict`, `helm template` + `kubeconform -strict` (Kubernetes 1.36.0 schemas, the platform-aks default),
   pytest assertions (`tests/charts`) and a kind v1.36.4 smoke (install, probes, BFF → catalog, upgrade, rollback).
   Not deployed to AKS/ARO from this sandbox (no Azure credentials).
-- **Chart version** `2.1.0` (2.1.0: additive `service.tags` (tag policy), `telemetry.agentLogSource`, `telemetry.singleStepInstrumentation` for the Datadog fleet collection; 2.0.0: Key Vault / CSI removed, secrets as DSV references - breaking values change) (semver of the chart, independent of the applications). The application version is
+- **Chart version** `2.1.1` (2.1.1: comments/docs only - log-collector wording for observability 4.0.0, rendered output unchanged apart from a YAML comment; 2.1.0: additive `service.tags` (tag policy), `telemetry.agentLogSource`, `telemetry.singleStepInstrumentation` for the Datadog fleet collection; 2.0.0: Key Vault / CSI removed, secrets as DSV references - breaking values change) (semver of the chart, independent of the applications). The application version is
   `service.version` (set per release by the deployer); `appVersion` is informational only (`helm package --app-version` may override it).
 - **Engines**: Helm 4 CLI (pinned `v4.3.0`) and the Terraform `hashicorp/helm` 3.3 provider (Helm v3 SDK); rendering is
   tested to be identical with Helm `v3.22.0`. `kubeVersion: >=1.30.0-0`.
@@ -140,10 +140,10 @@ helm upgrade --install hello-worker applications/charts/hello-service -n hello \
 
 ```bash
 python3 -m pytest tests/charts -q                     # lint/template/kubeconform(1.36)/schema + TF-rendered values
-helm package applications/charts/hello-service --version "2.1.0+src<sha12>" -d out/charts
+helm package applications/charts/hello-service --version "2.1.1+src<sha12>" -d out/charts
 az acr login --name "$ACR_NAME" --expose-token --output tsv --query accessToken \
   | helm registry login "$ACR_NAME.azurecr.io" --username 00000000-0000-0000-0000-000000000000 --password-stdin
-helm push out/charts/hello-service-2.1.0+src<sha12>.tgz "oci://$ACR_NAME.azurecr.io/helm"
+helm push out/charts/hello-service-2.1.1+src<sha12>.tgz "oci://$ACR_NAME.azurecr.io/helm"
 ```
 
   To deploy the published chart from core-aks set `settings.helm.chart_repository = "oci://<acr>.azurecr.io/helm"` and

@@ -39,7 +39,7 @@ missing resources, literal secret-looking env (only `dsv://` references allowed)
 | `networkPolicy` | `settings.network_policy_enabled` (+ `network_policy_allow_cidrs` for the BFF) |
 
 Chart source: the repository chart (default, always in step with this root) or the chart the applications pipeline
-published to ACR: `settings.helm = { chart_repository = "oci://<acr login server>/helm", chart_version = "2.1.0" }`
+published to ACR: `settings.helm = { chart_repository = "oci://<acr login server>/helm", chart_version = "2.1.1" }`
 (the agent runs `helm registry login` with an `az acr login --expose-token` token before `terraform plan`).
 
 ## App settings

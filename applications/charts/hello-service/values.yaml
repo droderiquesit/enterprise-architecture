@@ -100,7 +100,8 @@ telemetry:
   agentHostFromHostIP: true
   # Pod annotation ad.datadoghq.com/<container>.logs: '[]' - for the Fluent Bit DaemonSet (log_pipeline =
   # fluent_bit_direct): the Datadog Agent must not ship the same stdout lines. core-aks sets false under
-  # observability 4.0.0 (the node Agent is the collector) together with agentLogSource.
+  # observability 4.0.0 (the node Agent is the collector) together with agentLogSource. Default true on purpose:
+  # without a deployer decision the chart never risks double shipping (one collector per log source, ADR-0001 §13).
   disableAgentLogCollection: true
   # When the node Datadog Agent is the log collector (fleet policy logs.node_collector = agent):
   # disableAgentLogCollection=false + agentLogSource=<ddsource> -> ad.datadoghq.com/<container>.logs source/service.
