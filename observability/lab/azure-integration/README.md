@@ -21,9 +21,9 @@
   Hubs path of `obs-diagnostics` is authoritative.
 * `eventhub_log_forwarding`: mirror of what `obs-diagnostics` exports (`activity_logs = true`,
   `resource_logs = true`, `entra = false`). Validation fails when `native_logs` would forward the same source.
-* `log_management` (`modules/log-management`): `dashboard` (true), `metrics` (true), `index` (false: org-wide
-  object, read the index-order note in the module README), `index_retention_days`, `index_daily_limit`, `pipeline`
-  (false), `dashboard_entra`
+* `log_management`: accepted and ignored since package 3.0.0. The 2.x dashboard / log-based metrics / index /
+  pipeline moved to `extras/content/modules/log-management` (optional); parsing, tags, dedupe and quotas of the
+  Azure platform logs happen in the Observability Pipelines pipeline of `obs-telemetry-transport`.
 
 ## Providers
 * The Datadog provider reads `DD_API_KEY` and `DD_APP_KEY` from the pipeline environment (Delinea DSV, masked variables).

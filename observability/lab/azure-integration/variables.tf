@@ -28,7 +28,7 @@ variable "settings" {
       resource_logs = optional(bool, true)
       entra         = optional(bool, false)
     }), {})
-    # Datadog-side log management for the Azure platform logs (modules/log-management)
+    # 2.x Datadog-side log management (moved to extras/content/modules/log-management in 3.0.0): accepted, ignored
     log_management = optional(object({
       dashboard            = optional(bool, true)
       dashboard_entra      = optional(bool, false)

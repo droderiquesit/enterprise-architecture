@@ -39,19 +39,7 @@ module "integration" {
   }
 }
 
-# Datadog-side handling of the Azure platform / control-plane logs: dashboard + log-based metrics by default,
-# index / pipeline opt-in (org-wide objects).
-module "log_management" {
-  source = "../../modules/log-management"
-
-  env = var.environment.name
-  index = {
-    enabled        = var.settings.log_management.index
-    name           = "azure-platform-${var.environment.name}"
-    retention_days = var.settings.log_management.index_retention_days
-    daily_limit    = var.settings.log_management.index_daily_limit
-  }
-  pipeline  = { enabled = var.settings.log_management.pipeline }
-  metrics   = { enabled = var.settings.log_management.metrics }
-  dashboard = { enabled = var.settings.log_management.dashboard, entra = var.settings.log_management.dashboard_entra }
-}
+# Package 3.0.0: Datadog-side log content for the Azure platform logs (dashboard, log-based metrics, index, pipeline)
+# moved to extras/content/modules/log-management (optional, not in the release tarball). Parsing, tagging, dedupe
+# and quotas of these logs happen in the Observability Pipelines pipeline of obs-telemetry-transport.
+# settings.log_management is accepted and ignored.

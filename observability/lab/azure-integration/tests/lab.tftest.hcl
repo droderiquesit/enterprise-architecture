@@ -82,11 +82,14 @@ run "reject_bad_mode" {
   expect_failures = [var.settings]
 }
 
-run "log_management_defaults" {
+run "no_log_content_in_core" {
   command = plan
+  variables {
+    settings = { log_management = { index = true } }
+  }
   assert {
-    condition     = length(output.azure_log_metrics) == 8 && module.log_management.index_name == null && module.log_management.pipeline_id == null && output.azure_logs_dashboard_url == "/dashboard/abc-def-ghi"
-    error_message = "Lab: dashboard + log-based metrics; index and pipeline (org-wide objects) stay opt-in."
+    condition     = !contains(keys(output), "azure_logs_dashboard_url")
+    error_message = "Package 3.0.0: no Datadog log content (dashboards, metrics, indexes) in the core lab; settings.log_management is ignored."
   }
 }
 
