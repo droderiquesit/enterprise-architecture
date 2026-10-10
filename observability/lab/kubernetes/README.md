@@ -39,6 +39,8 @@ Fallback `api_key_mode = existing`: Secret `synced_secret_name` maintained by th
 * `kubelogin_mode`, `kubelet_tls_mode` (aks_rotation)
 * `process_collection`, `cluster_checks_runner`
 * chart versions, `exclude_namespaces`
+* `ssi_namespaces` (default `["hello"]`): Single Step Instrumentation target namespaces when the fleet policy
+  `apm.mode` is `datadog`
 * `dbm_cluster_checks` (from obs-dbm `cluster_check_confd` when obs-dbm hosting = cluster_checks)
 
 ## Cost

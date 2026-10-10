@@ -1,5 +1,5 @@
 output "contract" {
-  description = "obs-telemetry-transport v2 (catalog/contracts/obs-telemetry-transport.v2.schema.json). DSV references only."
+  description = "obs-telemetry-transport v3 (catalog/contracts/obs-telemetry-transport.v3.schema.json). DSV references only."
   value       = merge(module.transport.contract, { batch_log_setup = local.batch_log_setup })
 }
 

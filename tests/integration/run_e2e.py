@@ -41,6 +41,17 @@ WORK = Path(os.environ.get("E2E_WORK_DIR", HERE / ".work")).resolve()
 EVIDENCE_ROOT = REPO / "docs" / "evidence" / "local"
 VERSION = os.environ.get("E2E_VERSION", "0.1.0-e2e")
 LABEL = "locally-verified (docker, mock Datadog intake)"
+# Log pipeline of this run (fleet policy `log_pipeline`). The local stack ships logs with Fluent Bit straight to the
+# mock intake (fluent_bit_direct), whose eh_finalize filter tags `telemetry.pipeline:fluent-bit`. A stack routed through
+# the Observability Pipelines Worker (E2E_LOG_PIPELINE=observability_pipelines) carries the OP VRL tag instead.
+PIPELINE_TAGS = {
+    "fluent_bit_direct": "telemetry.pipeline:fluent-bit",
+    "observability_pipelines": "telemetry.pipeline:observability-pipelines",
+}
+LOG_PIPELINE = os.environ.get("E2E_LOG_PIPELINE", "fluent_bit_direct")
+if LOG_PIPELINE not in PIPELINE_TAGS:
+    raise SystemExit(f"E2E_LOG_PIPELINE must be one of {sorted(PIPELINE_TAGS)}, not {LOG_PIPELINE!r}")
+PIPELINE_TAG = PIPELINE_TAGS[LOG_PIPELINE]
 
 FRONTEND = "http://localhost:18080"
 BFF = "http://localhost:18081"
@@ -771,7 +782,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
             for e in evs
             if all(
                 t in (e.get("ddtags") or "").split(",")
-                for t in ("env:e2e", f"service:{svc}", f"version:{VERSION}", f"team:{team}", "telemetry.pipeline:fluent-bit")
+                for t in ("env:e2e", f"service:{svc}", f"version:{VERSION}", f"team:{team}", PIPELINE_TAG)
             )
         ]
         src_ok = [e for e in evs if e.get("ddsource") == src]
@@ -785,7 +796,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
         for e in events
         if e.get("trace_id") and (e.get("dd.trace_id") != dd_id(e["trace_id"]) or (e.get("span_id") and e.get("dd.span_id") != str(int(e["span_id"], 16))))
     ]
-    no_pipeline = [e for e in events if "telemetry.pipeline:fluent-bit" not in (e.get("ddtags") or "").split(",")]
+    no_pipeline = [e for e in events if PIPELINE_TAG not in (e.get("ddtags") or "").split(",")]
     req_ok = all(r["path"] == "/api/v2/logs" and r["content_encoding"] == "gzip" and r["api_key_present"] for r in rcv["requests"])
     ok = not problems and {"hello-orders-api", "hello-catalog-api"} <= set(jl_services) and not bad_dd and not no_pipeline and req_ok
     l_ev = write(

@@ -1,6 +1,7 @@
 """End-to-end against the fake Azure DevOps server: read PR as data -> review -> threads / status / vote."""
 
 import pytest
+from conftest import git  # module level: a function-level import would pick up whichever conftest pytest loaded last
 from fake_ado import BOT_ID, HUMAN_ID, ORG, PROJECT, PROJECT_ID, REPO_ID, FakeAdo
 
 from tools.review import render
@@ -147,8 +148,6 @@ def test_forged_marker_in_human_comment_is_ignored(repo, ado):
 
 
 def test_policy_missing_on_target_fails_closed(repo, ado):
-    from conftest import git
-
     repo.branch("nopolicy")
     head = repo.commit({".review/policy.yaml": None})
     git(repo.path, "branch", "-f", "target-without-policy", head)

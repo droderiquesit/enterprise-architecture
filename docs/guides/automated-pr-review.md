@@ -114,9 +114,11 @@ runs exactly the same engine on a local checkout (policy/registry from `--base`)
    via `tools/changeset` (registry, `Graph`, `Fingerprinter.owns`, read-only), layers and transitive consumers.
    Lockfiles are refined into `dependency-patch` / `dependency-change` (requirements pins, package-lock v2/3,
    `.terraform.lock.hcl`, `Directory.Packages.props`, NuGet `packages.lock.json`); onboarding manifests into
-   `observability-thresholds` (only numeric values at guarded paths, inside the guardrail range),
-   `onboarding-manifest` (new, non-prod, schema-valid against `observability/schemas/onboarding-manifest.v1.schema.json`)
-   or `observability-config`.
+   `observability-thresholds` (only numeric values at guarded paths, inside the guardrail range; with the v2
+   manifests of observability 3.0.0 these are the trace sample rates `spec.telemetry.{apm,traces}.sample_rate`),
+   `onboarding-manifest` (new, non-prod, schema-valid against `observability/schemas/onboarding-manifest.v2.schema.json`)
+   or `observability-config`. The optional v1 monitoring content under `observability/extras/content/**` is not
+   refined (class `code`, human review).
 2. **Rules** (findings with severity, file/line, suggestion, stable fingerprint):
    - Terraform text rules: security-sensitive resource types (role assignments, federated credentials, NSGs/rules,
      routes, firewall, locks, policy, private endpoints, `azapi_resource`, …), resources removed without `moved`,

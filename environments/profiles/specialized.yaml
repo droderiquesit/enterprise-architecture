@@ -23,7 +23,6 @@ components:
 - obs-telemetry-transport
 - img-dsv-fetch
 - obs-diagnostics
-- obs-monitoring
 - deploy-specialized
 - svc-catalog-api
 - svc-inventory-api

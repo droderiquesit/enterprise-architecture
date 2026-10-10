@@ -96,8 +96,8 @@ Columns:
 
 | # | Requirement | Status | Implementing files | Static validation | Local integration | Live verification |
 |---|---|---|---|---|---|---|
-| 7.1 | Versioned package, self-contained (no references outside `observability/`), release tarball + sha256 | implemented (1.0.0) | [observability/README.md](../observability/README.md), [tools/release/package.sh](../observability/tools/release/package.sh), [tests/portability](../observability/tests/portability/test_portability.py) | pass (module tests in `all_terraform`) | pass: package built + vendored outside the repo (observability/tests/portability) | not-run |
-| 7.2 | One-manifest onboarding with schemas, archetypes, deterministic committed render | implemented | [observability/schemas](../observability/schemas/), [archetypes](../observability/archetypes/), [tools/onboarding](../observability/tools/onboarding/) | pass (`validate --strict`, `render --check`) | n/a | not-run |
+| 7.1 | Versioned package, self-contained (no references outside `observability/`), release tarball + sha256 | implemented (3.0.0) | [observability/README.md](../observability/README.md), [tools/release/package.sh](../observability/tools/release/package.sh), [tests/portability](../observability/tests/portability/test_portability.py) | pass (module tests in `all_terraform`) | pass: package built + vendored outside the repo (observability/tests/portability) | not-run |
+| 7.2 | One-manifest onboarding with schemas, deterministic committed render (v2: identity, tags, resources, telemetry; v1 archetypes only in extras) | implemented | [observability/schemas](../observability/schemas/), [tools/onboarding](../observability/tools/onboarding/), [extras archetypes](../observability/extras/content/archetypes/) | pass (`validate --strict`, `render --check`) | n/a | not-run |
 | 7.3 | Existing-environment example (vendored release, no lab dependency, fault injection disabled) | implemented | [examples/existing-environment](../observability/examples/existing-environment/README.md) | per README (`terraform test` after vendoring) | pass: plan with mock providers from an isolated copy (portability tests) | not-run |
 | 7.4 | Upgrade / rollback / removal procedures preserving infrastructure and data | implemented | [UPGRADING.md](../observability/UPGRADING.md), [adoption guide](guides/observability-production-adoption.md) | n/a | n/a | not-run |
 | 7.5 | Instrumentation hook (integration contract) for application owners | implemented | [modules/instrumentation](../observability/modules/instrumentation/main.tf), [deployments/modules/app-env](../applications/deployments/modules/app-env/main.tf) | pass | n/a | not-run |
@@ -117,13 +117,17 @@ Columns:
 
 ## 9. Monitoring as code
 
+Since observability package 3.0.0 this content is **optional** and not part of the package or release tarball: it lives in
+[observability/extras/content](../observability/extras/content/README.md) (version 2.0.0) and the `obs-monitoring` root is an
+optional component that no profile enables by default.
+
 | # | Requirement | Status | Implementing files | Static validation | Local integration | Live verification |
 |---|---|---|---|---|---|---|
-| 9.1 | Monitors per archetype (APM, logs, platforms, data, messaging, pipeline) with runbook links and routing | implemented | [modules/monitors](../observability/modules/monitors/README.md), [archetypes](../observability/archetypes/) | pass | n/a | not-run |
-| 9.2 | SLOs + burn-rate alerts | implemented | [modules/slos](../observability/modules/slos/README.md) | pass | n/a | not-run |
-| 9.3 | Synthetics (API, browser, private locations), dashboards, Software Catalog, downtimes | implemented (synthetics created paused) | [modules/synthetics](../observability/modules/synthetics/README.md), [dashboards](../observability/modules/dashboards/README.md), [service-catalog](../observability/modules/service-catalog/README.md) | pass | n/a | not-run |
+| 9.1 | Monitors per archetype (APM, logs, platforms, data, messaging, pipeline) with runbook links and routing | implemented | [modules/monitors](../observability/extras/content/modules/monitors/README.md), [archetypes](../observability/extras/content/archetypes/) | pass | n/a | not-run |
+| 9.2 | SLOs + burn-rate alerts | implemented | [modules/slos](../observability/extras/content/modules/slos/README.md) | pass | n/a | not-run |
+| 9.3 | Synthetics (API, browser, private locations), dashboards, Software Catalog, downtimes | implemented (synthetics created paused) | [modules/synthetics](../observability/extras/content/modules/synthetics/README.md), [dashboards](../observability/extras/content/modules/dashboards/README.md), [service-catalog](../observability/extras/content/modules/service-catalog/README.md) | pass | n/a | not-run |
 | 9.4 | Missing telemetry vs intentional idleness (canary, scale-to-zero) | implemented | [observability/README.md](../observability/README.md) section 1.4 | pass | n/a | not-run |
-| 9.5 | Lab onboarding of every service (32 rendered services) | implemented | [observability/onboarding](../observability/onboarding/dev/), [lab/monitoring](../observability/lab/monitoring/README.md) | pass | n/a | not-run |
+| 9.5 | Lab onboarding of every service (32 rendered services) | implemented (v2 manifests in the package; v1 content manifests in extras, `obs-monitoring` optional) | [observability/onboarding](../observability/onboarding/dev/), [extras onboarding](../observability/extras/content/onboarding/dev/), [lab/monitoring](../observability/extras/content/lab/monitoring/README.md) | pass | n/a | not-run |
 | 9.6 | Alert runbooks referenced by monitors | implemented (archetype `runbook_base_url` -> `docs/runbooks/alerts/<service>.md` in the repository named by `metadata.repository`; lab repository URL is a placeholder org) | [runbooks/alert-response.md](runbooks/alert-response.md), [runbooks/alerts/](runbooks/alerts/README.md) | `tools/docs/generate.py --check` | n/a | n/a |
 
 ## 10. Pipeline and delivery

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Instrumentation / telemetry transport contract v2 (also emitted by the portable package for existing environments). Secrets are Delinea DSV references (dsv://<path>#<element>), never values; v2 replaces the v1 Key Vault secret ids (ADR-0001 section 14). Superseded by v3 (observability 3.0.0); kept for 2.x package producers and rollback.",
+  "title": "Instrumentation / telemetry transport contract v3 (observability package 3.0.0; also emitted by the portable package for existing environments). Formalises the fleet collection fields: aggregator.{kind,pipeline_id,agent_logs_url,log_pipeline,eventhub_consumer} (Observability Pipelines Worker or Fluent Bit aggregator), gateway.apm (Datadog Agent APM gateway), env.fleet (lab-wide fleet switches) and env.apm_gateway (Datadog tracer agent URL). Secrets are Delinea DSV references (dsv://<path>#<element>), never values (ADR-0001 sections 10, 13, 14).",
   "type": "object",
   "required": [
     "datadog_site",
@@ -181,7 +181,59 @@
     },
     "env": {
       "type": "object",
-      "description": "env var maps per runtime: common, dotnet, python, browser",
+      "description": "env var maps per runtime: common, dotnet, python, browser, plus apm_gateway and fleet (v3)",
+      "required": [
+        "common",
+        "fleet"
+      ],
+      "properties": {
+        "fleet": {
+          "type": "object",
+          "description": "lab-wide fleet switches read by modules/instrumentation (config/fleet-policy.yaml after environment overrides)",
+          "required": [
+            "EH_LOG_PIPELINE",
+            "EH_APM_MODE",
+            "EH_PROFILING_ENABLED"
+          ],
+          "properties": {
+            "EH_LOG_PIPELINE": {
+              "enum": [
+                "observability_pipelines",
+                "fluent_bit_direct"
+              ]
+            },
+            "EH_APM_MODE": {
+              "enum": [
+                "datadog",
+                "otel",
+                "none"
+              ]
+            },
+            "EH_PROFILING_ENABLED": {
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "apm_gateway": {
+          "type": "object",
+          "description": "Datadog tracers of managed runtimes (modules/instrumentation apm.method = agent_gateway); empty when no APM gateway is hosted or configured",
+          "properties": {
+            "DD_TRACE_AGENT_URL": {
+              "type": "string",
+              "pattern": "^https?://"
+            }
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
       "additionalProperties": {
         "type": "object",
         "additionalProperties": {
@@ -231,8 +283,48 @@
             "string",
             "null"
           ]
+        },
+        "kind": {
+          "enum": [
+            "observability_pipelines",
+            "fluent_bit"
+          ]
+        },
+        "log_pipeline": {
+          "enum": [
+            "observability_pipelines",
+            "fluent_bit_direct"
+          ],
+          "description": "fleet policy log_pipeline"
+        },
+        "pipeline_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Datadog Observability Pipelines pipeline id (kind observability_pipelines); null otherwise"
+        },
+        "agent_logs_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^https?://",
+          "description": "URL the Datadog Agents send logs to (DD_LOGS_CONFIG_LOGS_DD_URL target: the Worker's Datadog Agent source); null unless kind = observability_pipelines"
+        },
+        "eventhub_consumer": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Event Hubs consumer group of the aggregation tier"
         }
-      }
+      },
+      "description": "log aggregation tier: the Datadog Observability Pipelines Worker (kind observability_pipelines) or the Fluent Bit aggregator (kind fluent_bit)",
+      "required": [
+        "kind",
+        "log_pipeline"
+      ]
     },
     "gateway": {
       "type": [
@@ -264,6 +356,35 @@
             "tail",
             "none"
           ]
+        },
+        "apm": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Datadog Agent APM gateway for the Datadog tracers of managed runtimes (internal ingress; API key from DSV)",
+          "properties": {
+            "hosting": {
+              "enum": [
+                "container_app",
+                "none"
+              ]
+            },
+            "resource_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^https?://"
+            }
+          },
+          "additionalProperties": false
         }
       }
     },

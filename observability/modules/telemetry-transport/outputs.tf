@@ -151,7 +151,7 @@ locals {
 }
 
 output "contract" {
-  description = "obs-telemetry-transport v2 contract (catalog/contracts/obs-telemetry-transport.v2.schema.json). No secrets: DSV references only."
+  description = "obs-telemetry-transport v3 contract (catalog/contracts/obs-telemetry-transport.v3.schema.json). No secrets: DSV references only."
   value       = local.contract
 }
 

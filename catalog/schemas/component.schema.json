@@ -142,6 +142,10 @@
           "discovers_resources": {
             "type": "boolean"
           },
+          "optional": {
+            "description": "Optional component: listed in no built-in profile; enabled only through profile custom (custom_components).",
+            "type": "boolean"
+          },
           "after_deployments": {
             "type": "boolean"
           },

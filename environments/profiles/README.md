@@ -67,3 +67,17 @@ target settings path exists in the root's `settings` type).
   consumer would retain every order event until TTL).
 - `enterprise`, `full`, `specialized`: `platform-containerapps.ingress_mode: internal`; ACR Premium with private
   endpoint and public access disabled.
+
+## Observability settings (package 3.0.0)
+
+Not features: set them per environment in `environments/<env>/environment.yaml` `components.<id>` (or per profile in
+`component_settings.<id>`). Types and defaults: the root's `variables.tf`; descriptions: the root README.
+
+| Component | Settings | Meaning |
+|---|---|---|
+| `obs-telemetry-transport` | `fleet` | overrides of `observability/config/fleet-policy.yaml`, merged as `environments.<env>` (e.g. `{log_pipeline: fluent_bit_direct}`, `{apm: {mode: otel}}`); published in the contract as `env.fleet` |
+| `obs-telemetry-transport` | `op_pipeline_id`, `op_hosting`, `op_workload_profile_name`, `op_buffer_storage`, `op_azure_files_storage`, `op_daily_quota_bytes` | Observability Pipelines Worker (central log pipeline): existing pipeline id or create, hosting, buffer, platform-log quota |
+| `obs-telemetry-transport` | `apm_gateway_hosting`, `apm_gateway_max_replicas` | Datadog Agent APM gateway for managed runtimes (contract `env.apm_gateway`) |
+| `obs-kubernetes` | `ssi_namespaces` | Single Step Instrumentation target namespaces (fleet `apm.mode = datadog`) |
+| `obs-prereqs` | `rum_applications.<key>.{mode, application_id, client_token}` | `mode: create` (default) or `existing` with the id + client token of an existing RUM application |
+| `obs-azure-integration` | `log_management` | 2.x setting, accepted and **ignored** since package 3.0.0 (log indexes/metrics are not managed by the package); remove it from environment files |

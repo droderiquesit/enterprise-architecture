@@ -59,7 +59,7 @@ variable "platform_db_sql" {
 }
 
 variable "obs_telemetry_transport" {
-  description = "obs-telemetry-transport contract v2 (required). Secrets are Delinea DSV references (dsv://...), never values."
+  description = "obs-telemetry-transport contract v3 (required). Secrets are Delinea DSV references (dsv://...), never values."
   type = object({
     datadog_site = string
     api_key_ref  = string

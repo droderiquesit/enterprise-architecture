@@ -141,14 +141,15 @@ terraform:
                         ip_restriction_default_action, shared_access_key_enabled, local_authentication_enabled,
                         local_auth_enabled, role_definition_name, principal_id, scope, security_rule, min_tls_version]
 
+# Observability package 3.0.0: manifests are ServiceOnboarding v2 (identity, tags, resources, telemetry routing); the
+# numeric tuning knobs are the per-service trace sample rates. The v1 monitoring content (SLO targets, monitor
+# thresholds) lives in observability/extras/content/** and is not refined here (class `code`: human review).
 observability:
-  manifest_schema: observability/schemas/onboarding-manifest.v1.schema.json
+  manifest_schema: observability/schemas/onboarding-manifest.v2.schema.json
   prod_envs: [prod]
   threshold_paths:
-    - {path: "spec.slos[*].target", min: 95.0, max: 99.99}
-    - {path: "spec.slos[*].warning", min: 95.0, max: 99.999}
-    - {path: "spec.slos[*].threshold_ms", min: 50, max: 10000}
-    - {path: "spec.monitors.params.error_log_threshold", min: 5, max: 1000}
+    - {path: "spec.telemetry.apm.sample_rate", min: 0.05, max: 1.0}
+    - {path: "spec.telemetry.traces.sample_rate", min: 0.05, max: 1.0}
 
 dependencies:
   allow_new_packages: false

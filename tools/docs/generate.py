@@ -11,7 +11,7 @@ Outputs
                                               + tools/docs/architecture-matrix-supplement.yaml (columns the catalog
                                               leaves empty, each value citing the README it was taken from)
   docs/runbooks/alerts/<service>.md           one page per rendered service in
-                                              observability/onboarding/rendered/<env>/*.json: the monitors of that
+                                              observability/extras/content/onboarding/rendered/<env>/*.json: the monitors of that
                                               service grouped by runbook section (anchors match `#<section>`)
   README.md (block between the STATUS markers) catalog/component counts
 
@@ -277,13 +277,13 @@ SECTION_INDEX = "../alert-response.md"
 
 def render_alert_runbooks() -> dict[str, str]:
     pages: dict[str, str] = {}
-    rendered = sorted(glob.glob(str(REPO / f"observability/onboarding/rendered/{ENV}/*.json")))
+    rendered = sorted(glob.glob(str(REPO / f"observability/extras/content/onboarding/rendered/{ENV}/*.json")))
     index = [GENERATED, "", "# Alert runbooks per service", "",
-             f"One page per service rendered from `observability/onboarding/rendered/{ENV}/*.json`. Each monitor message links to",
+             f"One page per service rendered from `observability/extras/content/onboarding/rendered/{ENV}/*.json`. Each monitor message links to",
              "`<runbook_url>#<section>`; the anchors on these pages match those sections, and each section points to the shared",
              f"procedure in [alert-response.md]({SECTION_INDEX}).",
              "",
-             "> Monitor links come from the archetype default `runbook_base_url` (`observability/archetypes/global-defaults.yaml`):",
+             "> Monitor links come from the archetype default `runbook_base_url` (`observability/extras/content/archetypes/global-defaults.yaml`):",
              "> `[[repository]]?path=/docs/runbooks/alerts/[[service]].md`, i.e. these pages in the repository named by each",
              "> manifest's `metadata.repository` (Azure Repos file URL). The lab manifests use the placeholder organisation",
              "> `example-org`; set `metadata.repository` (or override `runbook_base_url`) to your repository URL",
@@ -317,8 +317,8 @@ def render_alert_runbooks() -> dict[str, str]:
         team = md.get("team") or d.get("team") or "-"
         lines = [GENERATED, "", f"# Alert runbook: {svc}", "",
                  f"Service `{svc}` - team `{team}`, owner {md.get('owner') or d.get('owner') or '-'}, tier `{md.get('tier') or d.get('tier') or '-'}`,",
-                 f"architecture `{(d.get('spec') or {}).get('architecture') or d.get('architecture') or '-'}`. Source: `observability/onboarding/{ENV}/{Path(f).stem}.yaml`",
-                 f"(rendered `observability/onboarding/rendered/{ENV}/{Path(f).name}`).", "",
+                 f"architecture `{(d.get('spec') or {}).get('architecture') or d.get('architecture') or '-'}`. Source: `observability/extras/content/onboarding/{ENV}/{Path(f).stem}.yaml`",
+                 f"(rendered `observability/extras/content/onboarding/rendered/{ENV}/{Path(f).name}`).", "",
                  "Before acting on any no-data alert, check the telemetry pipeline canary ([telemetry-pipeline](telemetry-pipeline.md#pipeline-canary)):",
                  "a broken pipeline looks like silence.", ""]
         for sec in sorted(sections):
@@ -409,7 +409,7 @@ GENERIC = {
 
 def render_alert_response() -> str:
     by_section: dict[str, list[tuple[str, str, dict]]] = defaultdict(list)
-    for f in sorted(glob.glob(str(REPO / "observability/archetypes/**/*.yaml"), recursive=True)):
+    for f in sorted(glob.glob(str(REPO / "observability/extras/content/archetypes/**/*.yaml"), recursive=True)):
         d = yaml.safe_load(Path(f).read_text()) or {}
         mons = d.get("monitors") or {}
         for key, m in mons.items():
@@ -417,7 +417,7 @@ def render_alert_response() -> str:
                 by_section[m["runbook_section"]].append((key, str(Path(f).relative_to(REPO)), m))
     lines = [GENERATED, "", "# Alert response procedures", "",
              "One section per runbook anchor used by the monitors of the observability package. The summary and troubleshooting",
-             "steps are taken verbatim from the archetypes (`observability/archetypes/**`, placeholders like `[[service]]` are filled",
+             "steps are taken verbatim from the archetypes (`observability/extras/content/archetypes/**`, placeholders like `[[service]]` are filled",
              "per service in the rendered monitor message); **Lab** notes add facts specific to this repository. Per-service",
              "pages listing the actual monitors: [alerts/README.md](alerts/README.md).", "",
              "General first steps for every alert: (1) check the telemetry pipeline canary ([pipeline-canary](#pipeline-canary)) -",

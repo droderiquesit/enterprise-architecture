@@ -3,7 +3,7 @@
 # Alert response procedures
 
 One section per runbook anchor used by the monitors of the observability package. The summary and troubleshooting
-steps are taken verbatim from the archetypes (`observability/archetypes/**`, placeholders like `[[service]]` are filled
+steps are taken verbatim from the archetypes (`observability/extras/content/archetypes/**`, placeholders like `[[service]]` are filled
 per service in the rendered monitor message); **Lab** notes add facts specific to this repository. Per-service
 pages listing the actual monitors: [alerts/README.md](alerts/README.md).
 
@@ -17,7 +17,7 @@ Sections: [error-rate](#error-rate) [http-5xx](#http-5xx) [latency](#latency) [m
 
 **A high share of server requests fail (availability SLI is burning).**
 
-Monitors: `apm.error_rate` (critical, archetypes/profiles/http-api.yaml).
+Monitors: `apm.error_rate` (critical, extras/content/archetypes/profiles/http-api.yaml).
 
 1. APM -> Service [[service]] -> Errors; group by resource_name and error.type.
 2. Check dependencies on the service map (database, cache, downstream APIs) for the same window.
@@ -29,7 +29,7 @@ Lab: check active faults (`GET /admin/faults`), recent deployments (DORA events 
 
 **The service answered requests with HTTP 5xx.**
 
-Monitors: `apm.http_5xx` (warning, archetypes/profiles/http-api.yaml).
+Monitors: `apm.http_5xx` (warning, extras/content/archetypes/profiles/http-api.yaml).
 
 1. Filter traces by http.status_code:5* for [[service]]; open the error span.
 2. 503 from /readyz-gated dependencies means a dependency is down; 500 means an unhandled exception.
@@ -40,7 +40,7 @@ Lab: 503 problems from `/readyz`-gated dependencies mean a dependency is down; t
 
 **Server latency p95 is above the objective.**
 
-Monitors: `apm.latency_p95` (warning, archetypes/profiles/http-api.yaml).
+Monitors: `apm.latency_p95` (warning, extras/content/archetypes/profiles/http-api.yaml).
 
 1. APM latency breakdown by resource; find the slow span type (db, http client, cache).
 2. Check database/cache saturation monitors and connection pool waits.
@@ -49,7 +49,7 @@ Monitors: `apm.latency_p95` (warning, archetypes/profiles/http-api.yaml).
 
 **No server spans were received although this service is declared always-on.**
 
-Monitors: `apm.no_traffic` (critical, archetypes/profiles/http-api.yaml).
+Monitors: `apm.no_traffic` (critical, extras/content/archetypes/profiles/http-api.yaml).
 
 1. Is the pipeline healthy? Check the "telemetry pipeline canary" monitor first - if it is also alerting, the problem is the collector/agent, not the service.
 2. Is the service running and receiving traffic (synthetic test, load balancer metrics)?
@@ -61,7 +61,7 @@ Lab: ACA/ACI traces go to the OTel gateway (`obs-telemetry-transport`, internal 
 
 **The service is writing an unusual number of error-level log lines.**
 
-Monitors: `logs.error_spike` (warning, archetypes/global-defaults.yaml).
+Monitors: `logs.error_spike` (warning, extras/content/archetypes/global-defaults.yaml).
 
 1. Open Logs for service:[[service]] env:[[env]] status:error and group by error.kind.
 2. Pivot to the trace via trace_id / dd.trace_id on a sample line.
@@ -73,7 +73,7 @@ Lab: logs carry `dd.trace_id`; use `GET /admin/faults` (with `X-Fault-Token`) to
 
 **Messages fail processing; they will be retried and eventually dead-lettered.**
 
-Monitors: `apm.consumer_error_rate` (critical, archetypes/profiles/worker.yaml).
+Monitors: `apm.consumer_error_rate` (critical, extras/content/archetypes/profiles/worker.yaml).
 
 1. APM consumer spans for [[service]]; follow the span link to the producer trace.
 2. Check the dead-letter monitor of the Service Bus namespace.
@@ -84,7 +84,7 @@ Lab: consumers are hello-worker (`notifications`), hello-functions `audit`, hell
 
 **Orchestrations end in the failed state (compensation ran).**
 
-Monitors: `workflow.failure_rate` (critical, archetypes/profiles/durable-workflow.yaml).
+Monitors: `workflow.failure_rate` (critical, extras/content/archetypes/profiles/durable-workflow.yaml).
 
 1. GET /api/workflows/{instanceId} for a failed instance; read the failure details and history.
 2. Check the activity that failed (partner API, SQL fulfillment, inventory reservation) in APM.
@@ -96,7 +96,7 @@ Lab: `hello.workflow.completed{workflow,outcome}` from hello-durable; `outcome:c
 
 **Orchestrations take longer than expected (retries, durable timers, slow partner API).**
 
-Monitors: `workflow.duration_p95` (warning, archetypes/profiles/durable-workflow.yaml).
+Monitors: `workflow.duration_p95` (warning, extras/content/archetypes/profiles/durable-workflow.yaml).
 
 1. Check partner-sim latency and the retry policy (3 attempts, exponential backoff).
 2. Check the Durable task hub storage throttling.
@@ -107,7 +107,7 @@ Lab: OrderProcessing races `ChargePayment` (3 attempts) against a durable timer;
 
 **The job did not run (or its logs are not reaching Datadog) within the expected schedule window.**
 
-Monitors: `job.missed_run` (warning, archetypes/profiles/job.yaml).
+Monitors: `job.missed_run` (warning, extras/content/archetypes/profiles/job.yaml).
 
 1. az containerapp job execution list -n <job> -g <rg> -o table
 2. If executions succeeded, check the Fluent Bit sidecar of the job (telemetry pipeline dashboard).
@@ -118,7 +118,7 @@ Lab: ACA jobs `seed` (manual), `reconcile` and `traffic` (scheduled), `batchitem
 
 **The job logged errors in its last run.**
 
-Monitors: `job.errors` (warning, archetypes/profiles/job.yaml).
+Monitors: `job.errors` (warning, extras/content/archetypes/profiles/job.yaml).
 
 1. Open the job logs and the job's root span in APM.
 
@@ -126,7 +126,7 @@ Monitors: `job.errors` (warning, archetypes/profiles/job.yaml).
 
 **Users hit JavaScript or network errors.**
 
-Monitors: `rum.error_count` (warning, archetypes/profiles/frontend.yaml).
+Monitors: `rum.error_count` (warning, extras/content/archetypes/profiles/frontend.yaml).
 
 1. RUM -> Error Tracking for [[service]]; group by @error.source (network vs source).
 2. Network errors on API calls: open the linked backend trace (resource -> APM).
@@ -138,7 +138,7 @@ Lab: browser config comes from `config.json` written by `deploy-frontend`; `apiB
 
 **Page load performance (Largest Contentful Paint, nanoseconds) degraded.**
 
-Monitors: `rum.lcp_p75` (warning, archetypes/profiles/frontend.yaml).
+Monitors: `rum.lcp_p75` (warning, extras/content/archetypes/profiles/frontend.yaml).
 
 1. RUM view performance: compare by @view.url_path and @geo.country.
 
@@ -146,7 +146,7 @@ Monitors: `rum.lcp_p75` (warning, archetypes/profiles/frontend.yaml).
 
 **One or more replicas of the Deployment have been unavailable for 15 minutes.**
 
-Monitors: `k8s.replicas_unavailable` (critical, archetypes/platform/aks.yaml).
+Monitors: `k8s.replicas_unavailable` (critical, extras/content/archetypes/platform/aks.yaml).
 
 1. kubectl -n <namespace> describe deployment <deployment>; check events for ImagePullBackOff / FailedScheduling.
 2. kubectl -n <namespace> get pods -l app=<deployment> -o wide; inspect readiness probe failures (/readyz).
@@ -156,7 +156,7 @@ Monitors: `k8s.replicas_unavailable` (critical, archetypes/platform/aks.yaml).
 
 **Containers of this service restarted repeatedly in the last 10 minutes (crash loop or OOM).**
 
-Monitors: `k8s.container_restarts` (warning, archetypes/platform/aks.yaml).
+Monitors: `k8s.container_restarts` (warning, extras/content/archetypes/platform/aks.yaml).
 
 1. kubectl -n <namespace> logs <pod> --previous to read the last crash.
 2. Check kubernetes_state.container.status_report.count.waiting by reason (CrashLoopBackOff / OOMKilled).
@@ -166,7 +166,7 @@ Monitors: `k8s.container_restarts` (warning, archetypes/platform/aks.yaml).
 
 **The Container Apps ingress is returning server errors (platform view, independent of app telemetry).**
 
-Monitors: `aca.http_5xx_ratio` (critical, archetypes/platform/aca.yaml).
+Monitors: `aca.http_5xx_ratio` (critical, extras/content/archetypes/platform/aca.yaml).
 
 1. Compare with the APM error rate; if APM is healthy the failures are at ingress/revision level.
 2. az containerapp revision list -n <app> -g <rg> -o table; check the active revision is healthy.
@@ -176,7 +176,7 @@ Monitors: `aca.http_5xx_ratio` (critical, archetypes/platform/aca.yaml).
 
 **Container replicas restarted repeatedly (probe failures, crashes or OOM).**
 
-Monitors: `aca.restarts` (warning, archetypes/platform/aca.yaml).
+Monitors: `aca.restarts` (warning, extras/content/archetypes/platform/aca.yaml).
 
 1. az containerapp logs show -n <app> -g <rg> --type system to read restart reasons.
 2. Check the Fluent Bit sidecar is not the restarting container (telemetry pipeline dashboard).
@@ -185,7 +185,7 @@ Monitors: `aca.restarts` (warning, archetypes/platform/aca.yaml).
 
 **The App Service front end reports a high share of HTTP 5xx responses.**
 
-Monitors: `appsvc.http_5xx_ratio` (critical, archetypes/platform/appservice.yaml).
+Monitors: `appsvc.http_5xx_ratio` (critical, extras/content/archetypes/platform/appservice.yaml).
 
 1. Compare with APM: platform-only 5xx (APM healthy) usually means worker crash/restart or 502/503 from the front end.
 2. Check AppServiceConsoleLogs and AppServiceHTTPLogs in the log pipeline.
@@ -195,7 +195,7 @@ Monitors: `appsvc.http_5xx_ratio` (critical, archetypes/platform/appservice.yaml
 
 **Average platform response time is high.**
 
-Monitors: `appsvc.response_time` (warning, archetypes/platform/appservice.yaml).
+Monitors: `appsvc.response_time` (warning, extras/content/archetypes/platform/appservice.yaml).
 
 1. Check the plan CPU/memory (azure.web_serverfarms.cpu_percentage / memory_percentage).
 2. Check downstream latency in the APM service map.
@@ -204,7 +204,7 @@ Monitors: `appsvc.response_time` (warning, archetypes/platform/appservice.yaml).
 
 **HTTP-triggered functions return server errors.**
 
-Monitors: `func.http_5xx_ratio` (warning, archetypes/platform/functions.yaml).
+Monitors: `func.http_5xx_ratio` (warning, extras/content/archetypes/platform/functions.yaml).
 
 1. Check FunctionAppLogs (Event Hubs -> Fluent Bit) for the failing function name.
 2. Check host start-up errors (storage/identity) - a failing host returns 5xx for every trigger.
@@ -213,7 +213,7 @@ Monitors: `func.http_5xx_ratio` (warning, archetypes/platform/functions.yaml).
 
 **Host CPU is saturated, or the Datadog Agent stopped reporting (no data).**
 
-Monitors: `host.cpu_high` (warning, archetypes/platform/vm.yaml).
+Monitors: `host.cpu_high` (warning, extras/content/archetypes/platform/vm.yaml).
 
 1. No data: check the VM is running (az vm get-instance-view) and the datadog-agent service status.
 2. High CPU: Live Processes for host:{{host.name}}.
@@ -222,7 +222,7 @@ Monitors: `host.cpu_high` (warning, archetypes/platform/vm.yaml).
 
 **The container group stopped emitting platform metrics.**
 
-Monitors: `aci.not_reporting` (warning, archetypes/platform/aci.yaml).
+Monitors: `aci.not_reporting` (warning, extras/content/archetypes/platform/aci.yaml).
 
 1. az container show -n <group> -g <rg> --query instanceView.state
 2. az container logs -n <group> -g <rg> --container-name <name>
@@ -235,7 +235,7 @@ Lab: hello-partner-sim runs as a single ACI container group (restart policy Alwa
 
 **Logic Apps Standard workflow runs are failing.**
 
-Monitors: `logic.runs_failed` (warning, archetypes/platform/logicapp.yaml), `logic.standard_failure_rate` (warning, archetypes/platform/logicapp.yaml).
+Monitors: `logic.runs_failed` (warning, extras/content/archetypes/platform/logicapp.yaml), `logic.standard_failure_rate` (warning, extras/content/archetypes/platform/logicapp.yaml).
 
 1. Portal -> Logic App -> Runs history; open the failed action.
 2. Check WorkflowRuntime diagnostic logs in the log pipeline.
@@ -250,7 +250,7 @@ Monitors: `logic.runs_failed` (warning, archetypes/platform/logicapp.yaml), `log
 
 **Managed instance CPU is saturated.**
 
-Monitors: `sql.cpu` (warning, archetypes/platform/database-sql.yaml), `sql.dtu` (warning, archetypes/platform/database-sql.yaml), `sqlmi.cpu` (warning, archetypes/platform/database-sql.yaml).
+Monitors: `sql.cpu` (warning, extras/content/archetypes/platform/database-sql.yaml), `sql.dtu` (warning, extras/content/archetypes/platform/database-sql.yaml), `sqlmi.cpu` (warning, extras/content/archetypes/platform/database-sql.yaml).
 
 1. Open Database Monitoring -> Query metrics for this database; sort by CPU.
 2. Check azure.sql_servers_databases.workers_percent and sessions_percent.
@@ -266,7 +266,7 @@ Lab: S0 (`orders`), serverless 1 vCore (`fulfillment`, auto-pause 60 min), Basic
 
 **Clients fail to connect (firewall/private endpoint, Entra auth, or exhausted workers).**
 
-Monitors: `sql.connection_failures` (critical, archetypes/platform/database-sql.yaml).
+Monitors: `sql.connection_failures` (critical, extras/content/archetypes/platform/database-sql.yaml).
 
 1. Check the app logs for SqlException numbers (18456 login failed, 40613 unavailable, 10928 limits).
 2. Verify the managed identity still has a database user (CREATE USER ... FROM EXTERNAL PROVIDER).
@@ -276,7 +276,7 @@ Monitors: `sql.connection_failures` (critical, archetypes/platform/database-sql.
 
 **Deadlocks were detected.**
 
-Monitors: `sql.deadlocks` (warning, archetypes/platform/database-sql.yaml).
+Monitors: `sql.deadlocks` (warning, extras/content/archetypes/platform/database-sql.yaml).
 
 1. Read the deadlock graph from the SQL diagnostic logs (Deadlocks category) or DBM samples.
 
@@ -284,7 +284,7 @@ Monitors: `sql.deadlocks` (warning, archetypes/platform/database-sql.yaml).
 
 **The database is close to its max size.**
 
-Monitors: `sql.storage` (warning, archetypes/platform/database-sql.yaml).
+Monitors: `sql.storage` (warning, extras/content/archetypes/platform/database-sql.yaml).
 
 1. Check retention jobs (history purge) and raise max size if growth is expected.
 
@@ -292,7 +292,7 @@ Monitors: `sql.storage` (warning, archetypes/platform/database-sql.yaml).
 
 **The server reports it is not alive.**
 
-Monitors: `pg.alive` (critical, archetypes/platform/database-postgresql.yaml).
+Monitors: `pg.alive` (critical, extras/content/archetypes/platform/database-postgresql.yaml).
 
 1. az postgres flexible-server show -n <server> -g <rg> --query state (Stopped? auto-stopped after 7 days?).
 2. Check Azure Resource Health for the server.
@@ -303,7 +303,7 @@ Lab: PostgreSQL Flexible Server (B1ms) for `catalog`; a manually stopped server 
 
 **Server CPU is saturated (Burstable SKUs also exhaust CPU credits).**
 
-Monitors: `pg.cpu` (warning, archetypes/platform/database-postgresql.yaml).
+Monitors: `pg.cpu` (warning, extras/content/archetypes/platform/database-postgresql.yaml).
 
 1. DBM -> Query metrics for this host; look for sequential scans.
 2. Burstable SKU: check azure.dbforpostgresql_flexibleservers.cpu_credits_remaining.
@@ -312,7 +312,7 @@ Monitors: `pg.cpu` (warning, archetypes/platform/database-postgresql.yaml).
 
 **Connections are being rejected (auth, max_connections, network).**
 
-Monitors: `pg.connections_failed` (critical, archetypes/platform/database-postgresql.yaml).
+Monitors: `pg.connections_failed` (critical, extras/content/archetypes/platform/database-postgresql.yaml).
 
 1. Check active_connections vs max_connections.
 2. Entra auth: verify the managed identity role (pgaadauth_create_principal) and token audience.
@@ -321,7 +321,7 @@ Monitors: `pg.connections_failed` (critical, archetypes/platform/database-postgr
 
 **Storage is almost full (server becomes read-only at the limit).**
 
-Monitors: `pg.storage` (warning, archetypes/platform/database-postgresql.yaml).
+Monitors: `pg.storage` (warning, extras/content/archetypes/platform/database-postgresql.yaml).
 
 1. Enable storage auto-grow or scale storage.
 
@@ -329,7 +329,7 @@ Monitors: `pg.storage` (warning, archetypes/platform/database-postgresql.yaml).
 
 **Server CPU is saturated.**
 
-Monitors: `mysql.cpu` (warning, archetypes/platform/database-mysql.yaml).
+Monitors: `mysql.cpu` (warning, extras/content/archetypes/platform/database-mysql.yaml).
 
 1. DBM query metrics; slow query log via diagnostic settings.
 
@@ -337,7 +337,7 @@ Monitors: `mysql.cpu` (warning, archetypes/platform/database-mysql.yaml).
 
 **Clients fail to connect or connections are aborted.**
 
-Monitors: `mysql.aborted_connections` (warning, archetypes/platform/database-mysql.yaml).
+Monitors: `mysql.aborted_connections` (warning, extras/content/archetypes/platform/database-mysql.yaml).
 
 1. Check TLS settings and credentials of the client.
 
@@ -345,7 +345,7 @@ Monitors: `mysql.aborted_connections` (warning, archetypes/platform/database-mys
 
 **Storage almost full.**
 
-Monitors: `mysql.storage` (warning, archetypes/platform/database-mysql.yaml).
+Monitors: `mysql.storage` (warning, extras/content/archetypes/platform/database-mysql.yaml).
 
 1. Enable storage auto-grow.
 
@@ -353,7 +353,7 @@ Monitors: `mysql.storage` (warning, archetypes/platform/database-mysql.yaml).
 
 **Provisioned throughput is exhausted on at least one partition; expect 429 throttling.**
 
-Monitors: `cosmos.ru_saturation` (warning, archetypes/platform/database-cosmos.yaml).
+Monitors: `cosmos.ru_saturation` (warning, extras/content/archetypes/platform/database-cosmos.yaml).
 
 1. Check hot partitions (PartitionKeyRUConsumption diagnostic logs).
 2. Raise RU/s or autoscale max; check retry-after handling in the SDK.
@@ -362,7 +362,7 @@ Monitors: `cosmos.ru_saturation` (warning, archetypes/platform/database-cosmos.y
 
 **The account reports reduced service availability.**
 
-Monitors: `cosmos.availability` (critical, archetypes/platform/database-cosmos.yaml).
+Monitors: `cosmos.availability` (critical, extras/content/archetypes/platform/database-cosmos.yaml).
 
 1. Check Azure Service Health and Resource Health for the account region.
 
@@ -370,7 +370,7 @@ Monitors: `cosmos.availability` (critical, archetypes/platform/database-cosmos.y
 
 **Table service requests are failing (availability counts server and auth/network errors).**
 
-Monitors: `storage.table_availability` (warning, archetypes/platform/database-storage.yaml).
+Monitors: `storage.table_availability` (warning, extras/content/archetypes/platform/database-storage.yaml).
 
 1. Check StorageRead/StorageWrite diagnostic logs for status codes (403 = RBAC / firewall).
 
@@ -378,7 +378,7 @@ Monitors: `storage.table_availability` (warning, archetypes/platform/database-st
 
 **Blob requests are slow end-to-end.**
 
-Monitors: `storage.blob_latency` (warning, archetypes/platform/database-storage.yaml).
+Monitors: `storage.blob_latency` (warning, extras/content/archetypes/platform/database-storage.yaml).
 
 1. Compare E2E with server latency; a large gap points at client/network.
 
@@ -386,7 +386,7 @@ Monitors: `storage.blob_latency` (warning, archetypes/platform/database-storage.
 
 **Active (deliverable) messages are accumulating in a topic subscription.**
 
-Monitors: `queue.backlog` (warning, archetypes/platform/messaging.yaml).
+Monitors: `queue.backlog` (warning, extras/content/archetypes/platform/messaging.yaml).
 
 1. Is the consumer running? Check its APM consumer spans and replica/instance count.
 2. Compare incoming_messages vs outgoing_messages on the namespace.
@@ -398,7 +398,7 @@ Lab: in the `minimal` profile the subscriptions `notifications`, `audit` and `ar
 
 **Consumers are not keeping up; messages have waited for at least 30 minutes.**
 
-Monitors: `queue.processing_lag` (critical, archetypes/platform/messaging.yaml).
+Monitors: `queue.processing_lag` (critical, extras/content/archetypes/platform/messaging.yaml).
 
 1. Scale out the consumer (KEDA / Functions scale) or fix the failing dependency.
 2. Check for lock-lost errors (processing longer than the lock duration).
@@ -409,7 +409,7 @@ Monitors: `queue.processing_lag` (critical, archetypes/platform/messaging.yaml).
 
 **Messages were dead-lettered in a queue.**
 
-Monitors: `queue.dead_letters_subscription` (warning, archetypes/platform/messaging.yaml), `queue.dead_letters_queue` (warning, archetypes/platform/messaging.yaml).
+Monitors: `queue.dead_letters_subscription` (warning, extras/content/archetypes/platform/messaging.yaml), `queue.dead_letters_queue` (warning, extras/content/archetypes/platform/messaging.yaml).
 
 1. Peek the DLQ (Service Bus Explorer) and read DeadLetterReason / DeadLetterErrorDescription.
 2. Find the consumer span via the traceparent application property of the message.
@@ -423,7 +423,7 @@ Lab: max delivery count 10 (subscriptions) / 5 (`batch-items`); dead-letter on e
 
 **The namespace returns server errors or throttles requests.**
 
-Monitors: `queue.server_errors` (warning, archetypes/platform/messaging.yaml).
+Monitors: `queue.server_errors` (warning, extras/content/archetypes/platform/messaging.yaml).
 
 1. Standard tier throttling: check operation rate; consider Premium.
 
@@ -431,7 +431,7 @@ Monitors: `queue.server_errors` (warning, archetypes/platform/messaging.yaml).
 
 **Event Hubs is throttling producers/consumers (log export path may be delayed or dropped).**
 
-Monitors: `eventhub.throttled` (warning, archetypes/platform/messaging.yaml).
+Monitors: `eventhub.throttled` (warning, extras/content/archetypes/platform/messaging.yaml).
 
 1. Increase throughput units / enable auto-inflate.
 2. Check the Fluent Bit kafka input lag on the telemetry pipeline dashboard.
@@ -444,7 +444,7 @@ Lab: Event Hubs Standard 1 TU by default (`obs-telemetry-transport` `event_hub.c
 
 **The cache is CPU-bound.**
 
-Monitors: `redis.server_load` (warning, archetypes/platform/cache.yaml), `redis_classic.server_load` (warning, archetypes/platform/cache.yaml).
+Monitors: `redis.server_load` (warning, extras/content/archetypes/platform/cache.yaml), `redis_classic.server_load` (warning, extras/content/archetypes/platform/cache.yaml).
 
 1. Check azure.cache_redisenterprise.operations_per_second and expensive commands.
 2. Watch the database CPU: cache saturation shifts load to the origin.
@@ -457,7 +457,7 @@ Monitors: `redis.server_load` (warning, archetypes/platform/cache.yaml), `redis_
 
 **Memory is nearly full.**
 
-Monitors: `redis.memory` (warning, archetypes/platform/cache.yaml), `redis_classic.memory` (warning, archetypes/platform/cache.yaml).
+Monitors: `redis.memory` (warning, extras/content/archetypes/platform/cache.yaml), `redis_classic.memory` (warning, extras/content/archetypes/platform/cache.yaml).
 
 1. Check TTLs (cache-aside keys must expire) and evictedkeys.
 
@@ -467,7 +467,7 @@ Monitors: `redis.memory` (warning, archetypes/platform/cache.yaml), `redis_class
 
 **The heartbeat record emitted every minute by Fluent Bit did not arrive. Application "no data" alerts during this window are pipeline failures, not idleness.**
 
-Monitors: `pipeline.canary_logs_missing` (critical, archetypes/profiles/telemetry-pipeline.yaml).
+Monitors: `pipeline.canary_logs_missing` (critical, extras/content/archetypes/profiles/telemetry-pipeline.yaml).
 
 1. Fluent Bit health: GET http://<fluent-bit>:2020/api/v2/health on the aggregator / DaemonSet / sidecars.
 2. Check fluentbit_output_errors_total and retries below; 403 from Datadog = wrong API key or site.
@@ -479,7 +479,7 @@ Lab: the canary is a Fluent Bit `dummy` input in the aggregator (`service:teleme
 
 **Fluent Bit outputs return errors (records are retried).**
 
-Monitors: `pipeline.fluentbit_output_errors` (warning, archetypes/profiles/telemetry-pipeline.yaml).
+Monitors: `pipeline.fluentbit_output_errors` (warning, extras/content/archetypes/profiles/telemetry-pipeline.yaml).
 
 1. kubectl logs / container logs of Fluent Bit; look for "[output:datadog" or "[output:http" errors.
 
@@ -487,7 +487,7 @@ Monitors: `pipeline.fluentbit_output_errors` (warning, archetypes/profiles/telem
 
 **Log records were lost after exhausting retries.**
 
-Monitors: `pipeline.fluentbit_dropped` (critical, archetypes/profiles/telemetry-pipeline.yaml).
+Monitors: `pipeline.fluentbit_dropped` (critical, extras/content/archetypes/profiles/telemetry-pipeline.yaml).
 
 1. Check storage.total_limit_size / filesystem buffering and Datadog intake reachability.
 
@@ -495,7 +495,7 @@ Monitors: `pipeline.fluentbit_dropped` (critical, archetypes/profiles/telemetry-
 
 **No Fluent Bit metrics arrive (Fluent Bit down, or the gateway stopped scraping it).**
 
-Monitors: `pipeline.fluentbit_not_reporting` (critical, archetypes/profiles/telemetry-pipeline.yaml).
+Monitors: `pipeline.fluentbit_not_reporting` (critical, extras/content/archetypes/profiles/telemetry-pipeline.yaml).
 
 1. Check the OTel gateway prometheus receiver target list and Fluent Bit HTTP server (port 2020).
 
@@ -503,7 +503,7 @@ Monitors: `pipeline.fluentbit_not_reporting` (critical, archetypes/profiles/tele
 
 **The collector fails to export telemetry to Datadog.**
 
-Monitors: `pipeline.otel_export_failures` (critical, archetypes/profiles/telemetry-pipeline.yaml).
+Monitors: `pipeline.otel_export_failures` (critical, extras/content/archetypes/profiles/telemetry-pipeline.yaml).
 
 1. Collector logs: look for 403 (API key), 413 (payload), DNS/TLS errors.
 2. otelcol_exporter_queue_size close to otelcol_exporter_queue_capacity = backpressure.
@@ -512,7 +512,7 @@ Monitors: `pipeline.otel_export_failures` (critical, archetypes/profiles/telemet
 
 **Receivers refuse data (memory_limiter engaged or invalid payloads).**
 
-Monitors: `pipeline.otel_refused` (warning, archetypes/profiles/telemetry-pipeline.yaml).
+Monitors: `pipeline.otel_refused` (warning, extras/content/archetypes/profiles/telemetry-pipeline.yaml).
 
 1. Check otelcol_process_memory_rss against the memory_limiter settings; scale the gateway.
 
@@ -522,7 +522,7 @@ Lab: the gateway accepts OTLP logs and drops them on purpose (nop exporter); ref
 
 **The collector stopped reporting its own metrics (collector down or metrics path broken).**
 
-Monitors: `pipeline.otel_not_reporting` (critical, archetypes/profiles/telemetry-pipeline.yaml).
+Monitors: `pipeline.otel_not_reporting` (critical, extras/content/archetypes/profiles/telemetry-pipeline.yaml).
 
 1. Check the gateway replicas (Container App / Deployment) and its internal telemetry endpoint :8888.
 
@@ -561,7 +561,7 @@ Lab: Open the SLO, then the service error/latency monitors; check recent deploym
 
 **Someone opened an interactive session into a pod (kube-audit-admin / kube-audit).**
 
-Monitors: `azlogs.aks_exec` (warning, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.aks_exec` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Logs: source:azure.containerservice @aks_audit.objectRef.subresource:exec - aks_audit.user.username and objectRef namespace/name.
 2. properties.log holds the full audit event (sourceIPs, userAgent, annotations authorization.k8s.io/reason).
@@ -571,7 +571,7 @@ Monitors: `azlogs.aks_exec` (warning, archetypes/profiles/azure-platform-logs.ya
 
 **Azure resources were deleted in a protected resource group (Activity Log, Administrative category).**
 
-Monitors: `azlogs.activity_deletes` (warning, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.activity_deletes` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Logs: [[params.activity_scope]] @category:Administrative @operationName:*DELETE* - group by @operationName and resource_group.
 2. Who: identity.claims (upn / appid) and callerIpAddress; correlationId groups the steps of one operation.
@@ -581,7 +581,7 @@ Monitors: `azlogs.activity_deletes` (warning, archetypes/profiles/azure-platform
 
 **A diagnostic setting was deleted - logs of that resource no longer reach Datadog (defense-evasion pattern).**
 
-Monitors: `azlogs.diagnostic_settings_deleted` (critical, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.diagnostic_settings_deleted` (critical, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Logs: @operationName:*DIAGNOSTICSETTINGS/DELETE* - resourceId names the resource that lost its export.
 2. If not done by the obs-diagnostics pipeline (retire/destroy), re-apply obs-diagnostics and investigate the caller.
@@ -590,7 +590,7 @@ Monitors: `azlogs.diagnostic_settings_deleted` (critical, archetypes/profiles/az
 
 **No Azure platform / Activity Log record reached Datadog (diagnostic settings, Event Hubs or the aggregator Kafka input broken).**
 
-Monitors: `azlogs.logs_missing` (warning, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.logs_missing` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Check the telemetry pipeline canary first (aggregator alive?).
 2. Event Hubs metrics: incoming messages on platform-logs / activity-logs; consumer group fluent-bit lag.
@@ -600,7 +600,7 @@ Monitors: `azlogs.logs_missing` (warning, archetypes/profiles/azure-platform-log
 
 **Azure Policy is denying many requests (a deployment is fighting a policy assignment).**
 
-Monitors: `azlogs.policy_deny_spike` (warning, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.policy_deny_spike` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Logs: @category:Policy - properties.policies names the assignment and definition that denied the request.
 2. Correlate with the deployment pipeline run (correlationId); fix the template or request a policy exemption.
@@ -609,7 +609,7 @@ Monitors: `azlogs.policy_deny_spike` (warning, archetypes/profiles/azure-platfor
 
 **A role assignment was created or removed (privilege change).**
 
-Monitors: `azlogs.rbac_changes` (warning, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.rbac_changes` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Logs: @operationName:*ROLEASSIGNMENTS* - properties.requestbody / responseBody hold principalId and roleDefinitionId.
 2. Confirm the change came from the deployment pipeline identity (identity.claims.appid) and a reviewed change.
@@ -619,7 +619,7 @@ Monitors: `azlogs.rbac_changes` (warning, archetypes/profiles/azure-platform-log
 
 **Microsoft published a Service Health event (incident / action required / security) affecting this subscription and region.**
 
-Monitors: `azlogs.service_health` (warning, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.service_health` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Logs: @category:ServiceHealth - properties.title, properties.impactedServices, properties.trackingId.
 2. Check Azure Service Health in the portal for the tracking id; correlate with application monitors before acting.
@@ -628,7 +628,7 @@ Monitors: `azlogs.service_health` (warning, archetypes/profiles/azure-platform-l
 
 **Failed interactive sign-ins spike (password spray / misconfigured client).**
 
-Monitors: `azlogs.entra_signin_failures` (warning, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.entra_signin_failures` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Logs: source:azure.activedirectory @category:SignInLogs - group by @properties.status.errorCode, @properties.userPrincipalName, callerIpAddress.
 2. 50126 = bad credentials, 50053 = locked out, 53003 = blocked by Conditional Access.
@@ -638,7 +638,7 @@ Monitors: `azlogs.entra_signin_failures` (warning, archetypes/profiles/azure-pla
 
 **A burst of denied Key Vault requests (missing RBAC role / access policy, or someone probing secrets).**
 
-Monitors: `azlogs.keyvault_access_denied` (warning, archetypes/profiles/azure-platform-logs.yaml).
+Monitors: `azlogs.keyvault_access_denied` (warning, extras/content/archetypes/profiles/azure-platform-logs.yaml).
 
 1. Logs: source:azure.keyvault @properties.httpStatusCode:403 - identity.claim (appid / objectidentifier / xms_mirid) is the caller.
 2. A workload identity after a role change: re-apply its role assignment. An unknown caller: security incident.

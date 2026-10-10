@@ -45,6 +45,7 @@ module "env" {
   runtime            = "python"
   architecture       = local.arch[local.hosting[each.key]]
   telemetry          = local.telemetry
+  serverless_init    = { subscription_id = var.environment.subscription_id, resource_group = azurerm_resource_group.this.name }
   identity_client_id = local.identity.client_id
   faults = {
     enabled   = var.settings.faults_enabled

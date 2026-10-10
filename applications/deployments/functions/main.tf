@@ -73,8 +73,10 @@ module "env" {
     tier    = local.meta.tier
     region  = local.fx_loc
   }
-  runtime            = "python"
-  architecture       = each.value
+  runtime      = "python"
+  architecture = each.value
+  # Functions on Container Apps stay on OpenTelemetry like every Functions host (ADR-0001 §13, 2026-10-10)
+  apm                = each.value == "aca" ? { mode = "otel" } : null
   telemetry          = var.obs_telemetry_transport
   identity_client_id = local.identity.client_id
   faults = {

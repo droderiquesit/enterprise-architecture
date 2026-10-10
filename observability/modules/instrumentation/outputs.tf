@@ -129,7 +129,7 @@ output "app_requirements" {
     local.dd_mode && var.runtime == "python" && !contains(["ssi_kubernetes", "ssi_host"], coalesce(local.apm.method, "none")) ? "Python: ddtrace in the image/package; the app starts it when TELEMETRY_SDK=datadog (import ddtrace.auto / ddtrace-run); OTel SDK init skipped" : "",
     local.dd_mode && var.runtime == "dotnet" && contains(["agent_gateway", "serverless_init"], coalesce(local.apm.method, "none")) ? (contains(["appservice", "functions"], var.architecture) ? "dotnet: Datadog.Trace.Bundle NuGet package in the app (tracer + profiler under ${local.tracer_home})" : "dotnet: dd-trace-dotnet installed at ${local.tracer_home} in the image (tracer + continuous profiler)") : "",
     local.dd_mode && contains(["ssi_kubernetes", "ssi_host"], coalesce(local.apm.method, "none")) ? "Single Step Instrumentation injects the Datadog library; the app must not initialise the OTel SDK when TELEMETRY_SDK=datadog" : "",
-    local.apm.method == "serverless_init" ? "ACA secret '${var.serverless_init.api_key_secret_name}' with the Datadog API key (owned by the application root; documented exception to the DSV-only rule)" : "",
+    local.apm.method == "serverless_init" ? "Container Apps: the app identity reads the Datadog API key (${var.telemetry.api_key_ref}) from Delinea DSV (dsv-fetch writes it for the serverless-init sidecar; no Container Apps secret)" : "",
     local.otel_mode && var.runtime != "browser" ? "OpenTelemetry SDK (TELEMETRY_SDK=otel)" : "",
   ])
 }

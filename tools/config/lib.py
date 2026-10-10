@@ -125,6 +125,11 @@ def resolve_enabled(registry: Registry, graph: Graph, env_doc: dict, profile_doc
     unknown = [c for c in requested if c not in registry]
     if unknown:
         raise ConfigError(f"profile '{profile}' references unknown components: {', '.join(sorted(unknown))}")
+    if profile != "custom":
+        optional = [c for c in requested if registry.get(c).optional]
+        if optional:
+            raise ConfigError(f"profile '{profile}' lists optional components {', '.join(sorted(optional))} "
+                              "(optional components are enabled only through profile custom / custom_components)")
     enabled: Set[str] = set()
     for cid in requested:
         c = registry.get(cid)

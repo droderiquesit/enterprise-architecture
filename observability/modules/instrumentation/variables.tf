@@ -46,7 +46,7 @@ variable "architecture" {
 
 variable "telemetry" {
   description = <<-EOT
-    The obs-telemetry-transport contract v2 (catalog/contracts/obs-telemetry-transport.v2.schema.json) or an
+    The obs-telemetry-transport contract v3 (catalog/contracts/obs-telemetry-transport.v3.schema.json) or an
     equivalent object built by hand for an existing environment. Only non-secret values and Delinea DSV
     references (dsv://<path>#<element>) are read; secret VALUES never pass through this module.
       secrets : DSV runtime env for workloads (DSV_TENANT/DSV_TLD/DSV_BASE_URL/DSV_AUTH) and the dsv-fetch
@@ -226,12 +226,12 @@ variable "dotnet_tracer_home" {
 }
 
 variable "serverless_init" {
-  description = "apm.managed_runtime_path = serverless_init (Container Apps only): sidecar image, sizing, Azure context and the NAME of the ACA secret holding the Datadog API key (owned by the application root; documented DSV exception)."
+  description = "apm.managed_runtime_path = serverless_init (Container Apps only; the fleet policy default for aca in datadog mode): sidecar image, sizing and Azure context. The Datadog API key is read from Delinea DSV (telemetry.api_key_ref) by a dsv-fetch init/refresher container; api_key_secret_name is ignored (kept for compatibility)."
   type = object({
     image               = optional(string, "datadog/serverless-init:1.10.4")
     cpu                 = optional(number, 0.25)
     memory              = optional(string, "0.5Gi")
-    api_key_secret_name = optional(string, "dd-api-key")
+    api_key_secret_name = optional(string) # ignored: the key comes from DSV (no Container Apps secret)
     subscription_id     = optional(string)
     resource_group      = optional(string)
   })

@@ -28,6 +28,7 @@ module "instrumentation" {
   extra_tags                = var.extra_tags
   fleet_policy              = var.fleet_policy
   apm                       = var.apm
+  serverless_init           = var.serverless_init
   profiling                 = var.profiling
   os_type                   = var.os_type
   runtime                   = var.runtime

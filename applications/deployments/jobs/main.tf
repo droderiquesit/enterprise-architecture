@@ -86,8 +86,11 @@ module "env" {
     tier    = module.meta.services[each.value.svc].tier
     region  = local.location
   }
-  runtime            = "python"
-  architecture       = "aca"
+  runtime      = "python"
+  architecture = "aca"
+  # run-to-completion jobs have no sidecar (it would keep executions alive): Datadog tracer -> APM gateway instead of
+  # the Container Apps default serverless-init (no DogStatsD for jobs - docs/known-limitations.md)
+  apm                = { managed_runtime_path = "agent_gateway" }
   telemetry          = local.telemetry
   identity_client_id = local.ids[each.value.svc].client_id
   faults             = { enabled = false }

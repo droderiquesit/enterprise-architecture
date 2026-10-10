@@ -22,7 +22,6 @@ components:
 - img-dsv-fetch
 - obs-diagnostics
 - obs-dbm
-- obs-monitoring
 - deploy-core-aca
 - deploy-frontend
 - deploy-durable

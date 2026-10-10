@@ -20,7 +20,7 @@ locals {
   sidecars   = local.has_sidecar ? local.patch.sidecars : []
   sorted_env = sort(keys(var.env))
   extra_containers = concat(
-    [for s in local.sidecars : { name = s.name, image = s.image, cpu = s.cpu, memory = s.memory, command = null, args = s.args, env = s.env, volume_mounts = s.volume_mounts, liveness_probe = s.liveness_probe }],
+    [for s in local.sidecars : { name = s.name, image = s.image, cpu = s.cpu, memory = s.memory, command = try(s.command, null), args = s.args, env = s.env, volume_mounts = s.volume_mounts, liveness_probe = s.liveness_probe }],
     [for r in local.refreshers : { name = r.name, image = r.image, cpu = r.cpu, memory = r.memory, command = r.command, args = r.args, env = r.env, volume_mounts = r.volume_mounts, liveness_probe = null }],
   )
 

@@ -46,9 +46,14 @@ locals {
   container = coalesce(var.container_name, var.service.service)
 
   fleet_env = lookup(var.telemetry.env, "fleet", {})
+  # The contract's EH_APM_MODE is the environment-wide mode; a per-architecture mode of the policy (exceptions such as
+  # functions = otel, appservice = otel, logicapp = none) still wins over it, as in the policy's own merge order.
+  policy_doc     = [for p in [var.fleet_policy, yamldecode(file("${path.module}/../../config/fleet-policy.yaml"))] : p if p != null][0]
+  arch_apm_mode  = try(local.policy_doc.architectures[var.architecture].apm.mode, null)
+  contract_apm_m = lookup(local.fleet_env, "EH_APM_MODE", "") == "" || local.arch_apm_mode != null ? {} : { apm = { mode = local.fleet_env["EH_APM_MODE"] } }
   contract_fleet = merge(
     lookup(local.fleet_env, "EH_LOG_PIPELINE", "") == "" ? {} : { log_pipeline = local.fleet_env["EH_LOG_PIPELINE"] },
-    lookup(local.fleet_env, "EH_APM_MODE", "") == "" ? {} : { apm = { mode = local.fleet_env["EH_APM_MODE"] } },
+    local.contract_apm_m,
     lookup(local.fleet_env, "EH_PROFILING_ENABLED", "") == "" ? {} : { profiling = { enabled = local.fleet_env["EH_PROFILING_ENABLED"] == "true" } },
   )
 
@@ -270,6 +275,10 @@ locals {
 
   uses_sidecar = local.log_route == "sidecar" && var.runtime != "browser"
   needs_fetch  = local.uses_sidecar && length(local.sidecar_secret_refs) > 0
+  # serverless-init (ACA default in datadog mode): its DD_API_KEY comes from DSV too - a second dsv-fetch run writes a
+  # dotenv file into the same in-memory volume, which the sidecar sources before exec'ing /datadog-init
+  uses_serverless_init = local.apm.method == "serverless_init" && var.runtime != "browser"
+  needs_secrets_volume = local.needs_fetch || local.uses_serverless_init
 
   secrets_dir   = replace(var.telemetry.secrets.env_file, "/\\/[^\\/]+$/", "")
   env_yaml_name = replace(var.telemetry.secrets.env_file, "/^.*\\//", "")
@@ -279,7 +288,14 @@ locals {
     ["init", "--out", local.secrets_dir, "--format", "env-yaml", "--env-yaml-name", local.env_yaml_name],
     flatten([for k in sort(keys(local.sidecar_secret_refs)) : ["--map", "${k}=${local.sidecar_secret_refs[k]}"]]),
   )
-  fetch_env = merge(local.dsv_env, { DSV_TIMEOUT_SECONDS = "10" })
+  fetch_env   = merge(local.dsv_env, { DSV_TIMEOUT_SECONDS = "10" })
+  si_env_file = "${local.secrets_dir}/serverless-init.env"
+  si_fetch_args = ["init", "--out", local.secrets_dir, "--format", "dotenv", "--dotenv-name", "serverless-init.env",
+  "--map", "DD_API_KEY=${var.telemetry.api_key_ref}"]
+  fetch_runs = concat(
+    local.needs_fetch ? [{ name = "dsv-fetch", args = local.fetch_args }] : [],
+    local.uses_serverless_init ? [{ name = "dsv-fetch-datadog", args = local.si_fetch_args }] : [],
+  )
 
   container_app_patch = {
     # Container Apps "secrets" carry ONLY the non-secret Fluent Bit config files (mounted as a Secret volume
@@ -294,35 +310,37 @@ locals {
         { name = "app-logs", storage_type = "EmptyDir" },
         { name = "flb-files", storage_type = "Secret" },
       ],
-      local.needs_fetch ? [{ name = "dsv-secrets", storage_type = "EmptyDir" }] : [],
-    ) : []
+      local.needs_secrets_volume ? [{ name = "dsv-secrets", storage_type = "EmptyDir" }] : [],
+      ) : (
+      local.uses_serverless_init ? [{ name = "dsv-secrets", storage_type = "EmptyDir" }] : []
+    )
     # dsv-fetch runs before the sidecar starts and writes the env-yaml file (mode 0400) into the
     # replica-scoped EmptyDir. Requires managed identity for init containers: workload-profiles environment,
     # Consumption profile (Microsoft Learn: init containers cannot use managed identities in consumption-only
     # environments or on dedicated workload profiles).
-    init_containers = local.needs_fetch ? [{
-      name          = "dsv-fetch"
+    init_containers = [for f in local.fetch_runs : {
+      name          = f.name
       image         = var.telemetry.secrets.fetch_image
       cpu           = var.fetch_resources.cpu
       memory        = var.fetch_resources.memory
       command       = null
-      args          = local.fetch_args
+      args          = f.args
       env           = [for k in sort(keys(local.fetch_env)) : { name = k, value = local.fetch_env[k], secret_name = null }]
       volume_mounts = [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }]
-    }] : []
+    }]
     # Same reader as a regular REFRESHER container, for Dedicated workload profiles / consumption-only environments
     # where init containers get no managed identity: writes the file, then re-fetches every refresh_s seconds; the
     # sidecar fails fast until the file exists and is restarted by the platform.
-    refresher_containers = local.needs_fetch ? [{
-      name          = "dsv-fetch"
+    refresher_containers = [for f in local.fetch_runs : {
+      name          = f.name
       image         = var.telemetry.secrets.fetch_image
       cpu           = var.fetch_resources.cpu
       memory        = var.fetch_resources.memory
       command       = ["/usr/bin/python3.13", "-I", "-c", local.aci_fetch_stub]
-      args          = local.fetch_args
+      args          = f.args
       env           = [for k in sort(keys(local.fetch_env)) : { name = k, value = local.fetch_env[k], secret_name = null }]
       volume_mounts = [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }]
-    }] : []
+    }]
     app_container = {
       name          = local.container
       env           = [for k in sort(keys(local.env)) : { name = k, value = local.env[k], secret_name = null }]
@@ -330,12 +348,13 @@ locals {
     }
     # for-expressions (tuples): the Fluent Bit and serverless-init sidecars have different shapes
     sidecars = concat([for _ in(local.uses_sidecar ? [1] : []) : {
-      name   = "fluent-bit"
-      image  = var.telemetry.fluentbit.sidecar_image
-      cpu    = var.sidecar_resources.cpu
-      memory = var.sidecar_resources.memory
-      args   = ["-c", "/fluent-bit/etc/eh/fluent-bit.yaml"]
-      env    = [for k in sort(keys(local.sidecar_env)) : { name = k, value = local.sidecar_env[k], secret_name = null }]
+      name    = "fluent-bit"
+      image   = var.telemetry.fluentbit.sidecar_image
+      cpu     = var.sidecar_resources.cpu
+      memory  = var.sidecar_resources.memory
+      command = null
+      args    = ["-c", "/fluent-bit/etc/eh/fluent-bit.yaml"]
+      env     = [for k in sort(keys(local.sidecar_env)) : { name = k, value = local.sidecar_env[k], secret_name = null }]
       volume_mounts = concat(
         [
           { name = "app-logs", path = local.log_dir, sub_path = null },
@@ -408,31 +427,32 @@ locals {
     local.log_collector == "datadog-agent" ? { "ad.datadoghq.com/${local.container}.logs" = jsonencode([{ source = local.dd_source, service = local.u.service }]) } : {},
   )
 
-  # ---------------------------------------------------------------- Datadog serverless-init sidecar (ACA, opt-in)
-  # Datadog's Container Apps sidecar pattern. serverless-init 1.10.4 reads DD_API_KEY only as a plain value (it does
-  # not resolve ENC[] secret backends - verified locally), so the key must be an ACA secret the application owner
-  # maintains (var.serverless_init.api_key_secret_name): a documented exception to the DSV-only rule. Logs stay on
-  # the Fluent Bit sidecar (DD_LOGS_ENABLED=false) - no double collection.
-  serverless_init_sidecar = [for _ in(local.apm.method == "serverless_init" && var.runtime != "browser" ? [1] : []) : {
-    name   = "datadog"
-    image  = var.serverless_init.image
-    cpu    = var.serverless_init.cpu
-    memory = var.serverless_init.memory
-    args   = []
-    env = concat(
-      [for k, v in {
-        DD_SITE                  = var.telemetry.datadog_site
-        DD_ENV                   = local.u.env
-        DD_SERVICE               = local.u.service
-        DD_VERSION               = local.u.version
-        DD_TAGS                  = module.tags.dd_tags_extra
-        DD_LOGS_ENABLED          = "false"
-        DD_AZURE_SUBSCRIPTION_ID = coalesce(var.serverless_init.subscription_id, "unset")
-        DD_AZURE_RESOURCE_GROUP  = coalesce(var.serverless_init.resource_group, "unset")
-      } : { name = k, value = v, secret_name = null }],
-      [{ name = "DD_API_KEY", value = null, secret_name = var.serverless_init.api_key_secret_name }],
-    )
-    volume_mounts  = []
+  # ---------------------------------------------------------------- Datadog serverless-init sidecar (ACA)
+  # Default managed-runtime path of Container Apps in datadog mode (config/fleet-policy.yaml architectures.aca): the
+  # tracer sends to localhost:8126 and DogStatsD (hello.* custom metrics, runtime metrics) to udp://localhost:8125,
+  # which the APM gateway path cannot carry. serverless-init 1.10.4 reads DD_API_KEY only from its environment (no
+  # ENC[] secret backend, no datadog.yaml api_key - both verified locally), so the dsv-fetch init/refresher container
+  # writes it from Delinea DSV into a dotenv file on the in-memory dsv-secrets volume and the sidecar sources that file
+  # before exec'ing /datadog-init (the image has /bin/sh): no Container Apps secret, no value in Terraform state.
+  # Logs stay on the Fluent Bit sidecar (DD_LOGS_ENABLED=false) - no double collection.
+  serverless_init_sidecar = [for _ in(local.uses_serverless_init ? [1] : []) : {
+    name    = "datadog"
+    image   = var.serverless_init.image
+    cpu     = var.serverless_init.cpu
+    memory  = var.serverless_init.memory
+    command = ["/bin/sh", "-c", "set -a; . ${local.si_env_file}; set +a; exec /datadog-init"]
+    args    = []
+    env = [for k, v in {
+      DD_SITE                  = var.telemetry.datadog_site
+      DD_ENV                   = local.u.env
+      DD_SERVICE               = local.u.service
+      DD_VERSION               = local.u.version
+      DD_TAGS                  = module.tags.dd_tags_extra
+      DD_LOGS_ENABLED          = "false"
+      DD_AZURE_SUBSCRIPTION_ID = coalesce(var.serverless_init.subscription_id, "unset")
+      DD_AZURE_RESOURCE_GROUP  = coalesce(var.serverless_init.resource_group, "unset")
+    } : { name = k, value = v, secret_name = null }]
+    volume_mounts  = [{ name = "dsv-secrets", path = local.secrets_dir, sub_path = null }]
     liveness_probe = { transport = "TCP", port = 8126, path = null }
   }]
   k8s_env = concat(

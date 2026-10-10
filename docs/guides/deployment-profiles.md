@@ -21,15 +21,17 @@ Precedence for a root's `settings`: root `variables.tf` defaults < profile `feat
 
 | Profile | Components | Topology / egress | Notable settings | `expensive` / confirmation |
 |---|---:|---|---|---|
-| [`minimal`](../../environments/profiles/minimal.yaml) | 28 | single spoke, NAT Gateway | Container Apps `ingress_mode: external`; Service Bus Standard; ACR Standard (root default) | no / no |
-| [`enterprise`](../../environments/profiles/enterprise.yaml) | 48 | hub-spoke, NAT Gateway | ACA internal; Service Bus Premium; ACR Premium + private endpoint, public access off; private deploy agents | no / no |
-| [`full`](../../environments/profiles/full.yaml) | 60 | hub-spoke, NAT Gateway | as enterprise + Batch, Service Fabric, SQL VM, all Cosmos APIs, DocumentDB, Ledger, analytics, Logic Apps; deployed in groups | yes / yes |
-| [`specialized`](../../environments/profiles/specialized.yaml) | 21 | hub-spoke | SF, ARO, specialized compute, SQL MI, Cassandra MI, HorizonDB - each still gated by its own `enabled` setting and prerequisites | yes / yes |
-| [`observability-only`](../../environments/profiles/observability-only.yaml) | 3 | none | `obs-prereqs`, `obs-azure-integration`, `obs-monitoring` only | no / no |
+| [`minimal`](../../environments/profiles/minimal.yaml) | 29 | single spoke, NAT Gateway | Container Apps `ingress_mode: external`; Service Bus Standard; ACR Standard (root default) | no / no |
+| [`enterprise`](../../environments/profiles/enterprise.yaml) | 51 | hub-spoke, NAT Gateway | ACA internal; Service Bus Premium; ACR Premium + private endpoint, public access off; private deploy agents | no / no |
+| [`full`](../../environments/profiles/full.yaml) | 63 | hub-spoke, NAT Gateway | as enterprise + Batch, Service Fabric, SQL VM, all Cosmos APIs, DocumentDB, Ledger, analytics, Logic Apps; deployed in groups | yes / yes |
+| [`specialized`](../../environments/profiles/specialized.yaml) | 22 | hub-spoke | SF, ARO, specialized compute, SQL MI, Cassandra MI, HorizonDB - each still gated by its own `enabled` setting and prerequisites | yes / yes |
+| [`observability-only`](../../environments/profiles/observability-only.yaml) | 2 | none | `obs-prereqs`, `obs-azure-integration` only | no / no |
 | [`custom`](../../environments/profiles/custom.yaml) | `custom_components` | per settings | dependencies auto-added | per selection |
 
 Counts are the `components:` lists of the profile files (artifact builds included). Exact membership per component:
-[component-ownership.md](component-ownership.md) ("Profiles" column).
+[component-ownership.md](component-ownership.md) ("Profiles" column). Optional components (`optional: true` in the
+registry, currently `obs-monitoring`, the optional monitoring content of `observability/extras/content`) are in no
+built-in profile; enable them with profile `custom` (`resolve.py` rejects them in the other profiles).
 
 ## minimal
 
@@ -133,8 +135,9 @@ roots create nothing (or only report `status = blocked`).
 
 ## observability-only
 
-Applies Datadog content to existing resources: `obs-prereqs` (RUM application), `obs-azure-integration`,
-`obs-monitoring`. Use it with manifests that reference existing resource IDs. For a separate organisation-level adoption
+Applies Datadog collection configuration to existing resources: `obs-prereqs` (RUM application),
+`obs-azure-integration`. Monitors, SLOs and dashboards are not part of the observability package since 3.0.0; the
+optional `obs-monitoring` content root is enabled only with profile `custom`. For a separate organisation-level adoption
 outside this lab, use the package release directly: [observability-production-adoption.md](observability-production-adoption.md).
 
 ## custom

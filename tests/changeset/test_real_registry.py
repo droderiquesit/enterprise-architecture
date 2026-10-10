@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 from fixture_repo import REPO_ROOT, commit_all, make_real_registry_repo, record_successful_deployment, write
 
 from tools.changeset.graph import Graph
@@ -88,7 +89,32 @@ def test_real_registry_monitoring_change(tmp_path):
     write(repo, "observability/extras/content/archetypes/web.yaml", "x: 1\n")   # monitoring content (extras)
     commit_all(repo, "archetype")
     doc = select_deploy(repo, "dev", store)
+    # obs-monitoring is optional (observability 3.0.0): in no built-in profile, so the default dev profile plans nothing
+    assert doc["summary"]["plan"] == [] and doc["artifacts_to_build"] == []
+
+
+def test_real_registry_monitoring_change_custom_profile(tmp_path):
+    repo = make_real_registry_repo(tmp_path)
+    env_path = repo / "environments/dev/environment.yaml"
+    env = yaml.safe_load(env_path.read_text())
+    env.update(profile="custom", custom_components=["obs-monitoring"])
+    write(repo, "environments/dev/environment.yaml", yaml.safe_dump(env, sort_keys=False))
+    commit_all(repo, "enable optional monitoring content")
+    store = LocalStore(tmp_path / "records")
+    record_successful_deployment(repo, tmp_path / "records")
+    write(repo, "observability/extras/content/archetypes/web.yaml", "x: 1\n")
+    commit_all(repo, "archetype")
+    doc = select_deploy(repo, "dev", store)
     assert doc["summary"]["plan"] == ["obs-monitoring"] and doc["artifacts_to_build"] == []
+
+
+def test_optional_component_rejected_in_builtin_profile(real):
+    tree, reg, graph = real
+    assert reg.get("obs-monitoring").optional
+    prof = dict(load_profile(tree, "minimal"))
+    prof["components"] = list(prof["components"]) + ["obs-monitoring"]
+    with pytest.raises(ConfigError, match="optional components obs-monitoring"):
+        resolve_enabled(reg, graph, load_environment(tree, "dev"), prof)
 
 
 def test_real_repo_records_bootstrap_never_selected(tmp_path):

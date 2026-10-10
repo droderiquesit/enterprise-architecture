@@ -35,7 +35,6 @@ components:
 - obs-hosts
 - obs-kubernetes
 - obs-dbm
-- obs-monitoring
 - deploy-core-aks
 - deploy-frontend
 - deploy-durable

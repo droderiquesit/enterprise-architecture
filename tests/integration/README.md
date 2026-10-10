@@ -92,7 +92,9 @@ path itself is tested by `observability/tests/transport`.
    activity spans for instance `order-<id>`, in (or linked to) the order's trace; order reaches `Fulfilled` in the UI.
 4. **Worker**: `servicebus.process` consumer span in its own trace with a span link to hello-orders-api's producer span.
 5. **Logs**: every app's logs reached the intake via its Fluent Bit sidecar with `ddsource`, `service`, `ddtags`
-   (`env`, `service`, `version`, `team`, `telemetry.pipeline:fluent-bit`); journey log lines carry the browser trace id
+   (`env`, `service`, `version`, `team`, and the pipeline tag of the configured log pipeline: `telemetry.pipeline:fluent-bit`
+   for the local Fluent Bit direct path (default), `telemetry.pipeline:observability-pipelines` with
+   `E2E_LOG_PIPELINE=observability_pipelines`); journey log lines carry the browser trace id
    and `dd.trace_id` == decimal low 64 bits, `dd.span_id` == decimal span id; gzip + API key header on every request.
 6. **No duplicates**: one unique marker log per service occurs exactly once; no identical structured events; repeated
    plain-text host lines are compared with the source file; no duplicated span ids.

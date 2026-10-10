@@ -9,7 +9,10 @@ Fluent Bit aggregator and the OTel gateway (Container Apps, internal ingress).
   * `foundation_identity` v2 (`identities["obs-collector"]`, `secrets.{tenant, tld, base_url, base_path, refs}`)
   * `artifacts["img-dsv-fetch"].image` (digest-pinned dsv-fetch image, registry artifact)
   * `platform_containerapps` (environment_id, default_domain, workload_profiles)
-* **Produces:** `obs-telemetry-transport` **v2** (`output "contract"`, `catalog/contracts/obs-telemetry-transport.v2.schema.json`):
+* **Produces:** `obs-telemetry-transport` **v3** (`output "contract"`, `catalog/contracts/obs-telemetry-transport.v3.schema.json`;
+  v3 formalises the 3.0.0 fleet fields: `aggregator.{kind, log_pipeline, pipeline_id, agent_logs_url, eventhub_consumer}`,
+  `gateway.apm`, `env.fleet` (`EH_LOG_PIPELINE`, `EH_APM_MODE`, `EH_PROFILING_ENABLED`) and `env.apm_gateway`
+  (`DD_TRACE_AGENT_URL`); v2 is kept for 2.x package producers / rollback). As in v2:
   DSV references (`api_key_ref`, `otlp.headers_ref`, `fluentbit.forward_shared_key_ref`) and `secrets` (DSV endpoint +
   `fetch_image`) instead of Key Vault ids. Earlier optional additions: `otlp.{ default_protocol, node_agent_*_port, host_agent_grpc_endpoint,
   gateway_distribution, internal_only, logs_policy}`, `fluentbit.{sidecar_forward_config, sidecar_parsers,
@@ -26,6 +29,13 @@ Fluent Bit aggregator and the OTel gateway (Container Apps, internal ingress).
   `gateway_sampling_percentage`, `gateway_otlp_logs` (drop)
 * `*_max_replicas` (≤ 5 in the lab), `workload_profile_name`, `sidecar_mode`
 * `aca_console_allow` (default `["<prefix>-caj-*"]`: jobs only)
+* package 3.0.0 fleet collection:
+  * `fleet`: per-environment overrides of `observability/config/fleet-policy.yaml`, merged as `environments.<env>`
+    (e.g. `{log_pipeline: fluent_bit_direct}`, `{apm: {mode: otel}}`, `{profiling: {enabled: false}}`); null = policy as committed
+  * `op_pipeline_id` (existing Observability Pipelines pipeline; null = create it), `op_hosting` (`container_app`),
+    `op_workload_profile_name` (null = `workload_profile_name`), `op_buffer_storage` (`emptydir` | `azure_files`),
+    `op_azure_files_storage`, `op_daily_quota_bytes` (Azure platform logs quota in the pipeline; 0 = none)
+  * `apm_gateway_hosting` (`container_app`), `apm_gateway_max_replicas` (≤ 5 in the lab)
 
 * `eventhub_listen_secret_name` (`eventhub-fluentbit-listen`): DSV secret the aggregator reads; after apply the
   pipeline runs `tools/secrets/publish.py --output generated_secrets`, which writes the sensitive output

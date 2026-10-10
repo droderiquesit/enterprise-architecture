@@ -59,6 +59,7 @@ class Component:
     retry: Dict[str, int] = field(default_factory=dict)          # {attempts, max_minutes} (tools/deploy/retry.py)
     drift_auto_remediate: bool = False                           # drift.auto_remediate (additive-only plan+apply)
     owners: List[str] = field(default_factory=list)              # review groups (default: branching.yaml owners_by_layer)
+    optional: bool = False                                       # in no built-in profile; enabled via profile custom
     raw: dict = field(default_factory=dict)
 
     @property
@@ -192,6 +193,7 @@ def load_registry(tree: Tree, path: str = REGISTRY_PATH) -> Registry:
             retry=dict(raw.get("retry") or {}),
             drift_auto_remediate=bool((raw.get("drift") or {}).get("auto_remediate", False)),
             owners=list(raw.get("owners") or []),
+            optional=bool(raw.get("optional", False)),
             raw=raw,
         )
         if c.id in components:

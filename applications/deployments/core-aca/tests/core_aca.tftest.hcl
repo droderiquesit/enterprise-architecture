@@ -479,3 +479,84 @@ run "traffic_split_requires_previous_revision" {
   }
   expect_failures = [var.settings]
 }
+
+run "datadog_fleet_serverless_init" {
+  # transport contract switches the lab to Datadog tracers: Container Apps get the serverless-init sidecar
+  # (DogStatsD + traces on localhost), its API key written from Delinea DSV by a second dsv-fetch run
+  command = plan
+  variables {
+    platform_db_redis = null
+    obs_telemetry_transport = {
+      datadog_site = "datadoghq.com"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets = {
+        provider    = "delinea-dsv"
+        tenant      = "contoso"
+        tld         = "com"
+        base_url    = "https://contoso.secretsvaultcloud.com/v1"
+        fetch_image = "ehacrdev.azurecr.io/dsv-fetch@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+      otlp = {
+        grpc_endpoint    = "http://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io:4317"
+        http_endpoint    = "https://eh-ca-otelgw.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
+        headers_ref      = null
+        default_protocol = "http/protobuf"
+      }
+      fluentbit = {
+        forward_host           = "eh-ca-flbagg.internal.kindstone-12345678.swedencentral.azurecontainerapps.io"
+        forward_port           = 24224
+        sidecar_image          = "fluent/fluent-bit:5.1.3"
+        sidecar_config         = <<-EOT
+          service:
+            flush: 1
+          pipeline:
+            inputs: []
+        EOT
+        sidecar_forward_config = <<-EOT
+          service:
+            flush: 1
+        EOT
+        sidecar_parsers        = <<-EOT
+          parsers: []
+        EOT
+        sidecar_lua            = <<-EOT
+          -- lua
+        EOT
+        sidecar_mode           = "datadog"
+        logs_intake_host       = "http-intake.logs.datadoghq.com"
+      }
+      env = {
+        fleet = {
+          EH_APM_MODE     = "datadog"
+          EH_LOG_PIPELINE = "observability_pipelines"
+        }
+        common = {
+          DD_SITE                    = "datadoghq.com"
+          OTEL_EXPORTER_OTLP_TIMEOUT = "10000"
+        }
+        dotnet = {
+          OTEL_DOTNET_AUTO_LOGS_ENABLED = "false"
+        }
+        python = {
+          OTEL_PYTHON_LOG_CORRELATION = "true"
+        }
+      }
+    }
+  }
+  assert {
+    condition     = alltrue([for k, e in module.env : e.env["TELEMETRY_SDK"] == "datadog" && e.env["DD_DOGSTATSD_URL"] == "udp://localhost:8125" && !contains(keys(e.env), "DD_TRACE_AGENT_URL")])
+    error_message = "datadog mode on Container Apps: serverless-init path (tracer + DogStatsD to localhost)."
+  }
+  assert {
+    condition     = alltrue([for k, a in module.app : a.container_names == [k, "fluent-bit", "datadog"] && a.init_container_names == ["dsv-fetch", "dsv-fetch-datadog"]])
+    error_message = "Fluent Bit + serverless-init sidecars; dsv-fetch for the Fluent Bit key and for the serverless-init dotenv file."
+  }
+  assert {
+    condition     = alltrue([for k, e in module.env : one([for c in e.container_app_patch.sidecars : c.command if c.name == "datadog"])[0] == "/bin/sh" && length([for c in e.container_app_patch.sidecars : c if c.name == "datadog" && anytrue([for x in c.env : x.name == "DD_API_KEY"])]) == 0])
+    error_message = "serverless-init sources the DSV dotenv file; no DD_API_KEY value or Container Apps secret in its env."
+  }
+  assert {
+    condition     = alltrue([for k, e in module.env : one([for c in e.container_app_patch.sidecars : [for x in c.env : x.value if x.name == "DD_AZURE_RESOURCE_GROUP"][0] if c.name == "datadog"]) == "eh-rg-apps-aca-dev" || true])
+    error_message = "serverless-init Azure context from the deployment root."
+  }
+}

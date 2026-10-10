@@ -44,4 +44,6 @@ self_healing:
   auto_rollback: true
   notify: {work_item: true, work_item_type: Bug, datadog_event: true}
 # Per-component overrides of each root's `settings` defaults (see <root>/variables.tf).
+# Observability 3.0.0 settings (obs-telemetry-transport fleet / op_* / apm_gateway_*, obs-kubernetes ssi_namespaces,
+# obs-prereqs rum_applications mode/application_id/client_token): environments/profiles/README.md. log_management is ignored.
 components: {}

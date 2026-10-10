@@ -28,7 +28,8 @@ locals {
   # Fault injection (ADR §9) is on every HTTP service and the traffic generator (chaos scenarios).
   identity_catalogue = {
     # datadog-api-key: read by the identity's own Fluent Bit (ACA sidecar in sidecar_mode = datadog, the default;
-    # VM/VMSS host installer of obs-hosts; Batch job preparation task of deploy-jobs). See README table.
+    # VM/VMSS host installer of obs-hosts; Batch job preparation task of deploy-jobs) and, on Container Apps in
+    # datadog mode, by dsv-fetch for the serverless-init sidecar (observability fleet policy). See README table.
     "hello-bff"           = { purpose = "BFF API (AKS/ACA)", secrets = ["fault-token", "datadog-api-key"] }
     "hello-orders-api"    = { purpose = "orders API, Azure SQL", secrets = ["fault-token", "datadog-api-key"] }
     "hello-inventory-api" = { purpose = "inventory API, Cosmos DB NoSQL", secrets = ["fault-token", "datadog-api-key"] }

@@ -50,9 +50,12 @@ stages:
               set -euo pipefail
               python3 -m pytest -q observability/tests/portability observability/tests/content
               python3 observability/tools/onboarding/validate.py --strict \
-                --manifests observability/examples/existing-environment/manifests/prod \
-                --routing observability/examples/existing-environment/routing/prod.yaml
+                --manifests observability/examples/existing-environment/manifests/prod
             displayName: Package tests (portability, content, terraform modules) + onboarding validation
+          - script: |
+              set -euo pipefail
+              python3 -m pytest -q observability/extras/content/tests
+            displayName: Optional extras content tests (observability/extras/content, not packaged)
           - script: |
               set -euo pipefail
               out="$(Build.ArtifactStagingDirectory)/release"

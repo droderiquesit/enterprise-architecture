@@ -20,7 +20,7 @@ Column meanings:
 * **Code present** - whether the owner directory contains resource files at generation time. It is *not* a
   status claim; status per ADR section 11 is tracked in [IMPLEMENTATION_CHECKLIST.md](../IMPLEMENTATION_CHECKLIST.md).
 
-Registry: **71 components** - 1 bootstrap, 6 foundation, 29 platform, 9 observability, 25 applications, 1 docs (14 artifact, 1 docs, 56 terraform).
+Registry: **73 components** - 1 bootstrap, 7 foundation, 29 platform, 9 observability, 26 applications, 1 docs (15 artifact, 1 docs, 57 terraform).
 
 ## Bootstrap
 
@@ -38,6 +38,7 @@ Registry: **71 components** - 1 bootstrap, 6 foundation, 29 platform, 9 observab
 | `foundation-governance` | terraform | [`foundation/governance/`](../../foundation/governance) | `<env>/foundation-governance.tfstate` | `foundation-governance` | - | - | - | enterprise, full, minimal, specialized | yes |
 | `foundation-deploy-agents` | terraform | [`foundation/deploy-agents/`](../../foundation/deploy-agents) | `<env>/foundation-deploy-agents.tfstate` | `foundation-deploy-agents` | `foundation-network`, `foundation-identity` | - | `foundation-identity`, `foundation-network` | enterprise, full, specialized | yes |
 | `foundation-edge` | terraform | [`foundation/edge/`](../../foundation/edge) | `<env>/foundation-edge.tfstate` | `foundation-edge` | `foundation-network` | - | `foundation-network`, `foundation-secrets` | enterprise, full | yes |
+| `foundation-pr-reviewer` | terraform | [`foundation/pr-reviewer/`](../../foundation/pr-reviewer) | `<env>/foundation-pr-reviewer.tfstate` | `foundation-pr-reviewer` | `foundation-identity` | `foundation-network` | `foundation-identity`, `svc-pr-reviewer` | enterprise, full | yes |
 
 ## Platform
 
@@ -84,7 +85,7 @@ Registry: **71 components** - 1 bootstrap, 6 foundation, 29 platform, 9 observab
 | `obs-hosts` | terraform | [`observability/lab/hosts/`](../../observability/lab/hosts) | `<env>/obs-hosts.tfstate` | - | `obs-telemetry-transport`, `platform-vm`, `platform-vmss` | `platform-db-sqlvm`, `deploy-vm-workloads` | `obs-telemetry-transport`, `platform-vm`, `platform-vmss` | enterprise, full | yes |
 | `obs-kubernetes` | terraform | [`observability/lab/kubernetes/`](../../observability/lab/kubernetes) | `<env>/obs-kubernetes.tfstate` | `obs-kubernetes` | `obs-telemetry-transport`, `platform-aks`, `foundation-identity` | - | `foundation-identity`, `obs-telemetry-transport`, `platform-aks`, `img-dsv-fetch` | enterprise, full | yes |
 | `obs-dbm` | terraform | [`observability/lab/dbm/`](../../observability/lab/dbm) | `<env>/obs-dbm.tfstate` | - | `obs-telemetry-transport`, `foundation-network`, `foundation-identity` | `platform-db-postgresql`, `platform-db-mysql`, `platform-db-sql`, `platform-db-sqlmi`, `platform-db-sqlvm` | `foundation-identity`, `foundation-network`, `obs-telemetry-transport`, `img-dsv-fetch` | enterprise, full, minimal | yes |
-| `obs-monitoring` | terraform | [`observability/lab/monitoring/`](../../observability/lab/monitoring) | `<env>/obs-monitoring.tfstate` | - | `obs-prereqs` | `deploy-core-aks`, `deploy-core-aca`, `deploy-frontend`, `deploy-durable`, `deploy-functions`, `deploy-partner-sim`, `deploy-dbadapters`, `deploy-appservice`, `deploy-jobs`, `deploy-vm-workloads`, `deploy-logicapps`, `deploy-specialized`, `obs-telemetry-transport` | `obs-prereqs`, `(after all selected deploy-*)` | enterprise, full, minimal, observability-only, specialized | yes |
+| `obs-monitoring` | terraform | [`observability/extras/content/lab/monitoring/`](../../observability/extras/content/lab/monitoring) | `<env>/obs-monitoring.tfstate` | - | `obs-prereqs` | `deploy-core-aks`, `deploy-core-aca`, `deploy-frontend`, `deploy-durable`, `deploy-functions`, `deploy-partner-sim`, `deploy-dbadapters`, `deploy-appservice`, `deploy-jobs`, `deploy-vm-workloads`, `deploy-logicapps`, `deploy-specialized`, `obs-telemetry-transport` | `obs-prereqs`, `(after all selected deploy-*)` | enterprise, full, minimal, observability-only, specialized | yes |
 | `img-dsv-fetch` | artifact (container-image) | [`observability/images/dsv-fetch/`](../../observability/images/dsv-fetch) | - | - | - | - | - | enterprise, full, minimal, specialized | yes |
 
 ## Applications (artifact builds and deployment roots)
@@ -104,6 +105,7 @@ Registry: **71 components** - 1 bootstrap, 6 foundation, 29 platform, 9 observab
 | `svc-jobs` | artifact (container-image + zip-package) | [`applications/services/jobs/`](../../applications/services/jobs) | - | - | - | - | - | enterprise, full, minimal, specialized | yes |
 | `svc-traffic` | artifact (container-image) | [`applications/services/traffic/`](../../applications/services/traffic) | - | - | - | - | - | enterprise, full, minimal | yes |
 | `svc-logicapps` | artifact (zip-package) | [`applications/services/logicapps/`](../../applications/services/logicapps) | - | - | - | - | - | full | yes |
+| `svc-pr-reviewer` | artifact (zip-package) | [`applications/services/pr-reviewer/`](../../applications/services/pr-reviewer) | - | - | - | - | - | enterprise, full | yes |
 | `deploy-core-aks` | terraform | [`applications/deployments/core-aks/`](../../applications/deployments/core-aks) | `<env>/deploy-core-aks.tfstate` | `deploy-core-aks` | `platform-aks`, `platform-shared`, `platform-messaging`, `platform-db-sql`, `platform-db-postgresql`, `obs-telemetry-transport`, `foundation-identity` | `platform-db-redis`, `obs-kubernetes` | `foundation-identity`, `obs-telemetry-transport`, `platform-aks`, `platform-db-postgresql`, `platform-db-sql`, `platform-messaging`, `platform-shared`, `svc-bff`, `svc-orders-api`, `svc-catalog-api`, `svc-worker` | enterprise, full | yes |
 | `deploy-core-aca` | terraform | [`applications/deployments/core-aca/`](../../applications/deployments/core-aca) | `<env>/deploy-core-aca.tfstate` | `deploy-core-aca` | `platform-containerapps`, `platform-shared`, `platform-messaging`, `platform-db-sql`, `platform-db-postgresql`, `obs-telemetry-transport`, `foundation-identity` | `platform-db-redis` | `foundation-identity`, `obs-telemetry-transport`, `platform-containerapps`, `platform-db-postgresql`, `platform-db-sql`, `platform-messaging`, `platform-shared`, `svc-bff`, `svc-orders-api`, `svc-catalog-api`, `img-dsv-fetch` | minimal | yes |
 | `deploy-frontend` | terraform | [`applications/deployments/frontend/`](../../applications/deployments/frontend) | `<env>/deploy-frontend.tfstate` | `deploy-frontend` | `obs-prereqs`, `foundation-identity` | `deploy-core-aks`, `deploy-core-aca`, `foundation-edge` | `foundation-identity`, `obs-prereqs`, `svc-frontend` | enterprise, full, minimal | yes |

@@ -1,8 +1,8 @@
 # azure-enterprise-observability-lab
 
 A configurable Azure enterprise **test environment**, a working sample application (**Enterprise Hello**) that
-exercises it end to end, and a **portable, versioned Datadog observability-as-code package** that onboards services
-from one YAML manifest each. Everything is Terraform, Python and .NET in one repository, delivered by one universal
+exercises it end to end, and a **portable, versioned Datadog fleet collection configuration package** (tags, Agent fleet,
+Observability Pipelines, tracers, RUM) that onboards services from one YAML manifest each. Everything is Terraform, Python and .NET in one repository, delivered by one universal
 Azure DevOps pipeline that deploys only the components that changed (plus what they need).
 
 > **Status.** Code is implemented and statically validated (Terraform `fmt`/`validate`/`terraform test` with mock
@@ -21,7 +21,7 @@ Azure DevOps pipeline that deploys only the components that changed (plus what t
 | foundation | [`foundation/`](foundation/README.md) | hub/spoke or single-spoke network, subnet catalogue with delegations, NSGs, NAT/firewall egress, private DNS zones, workload identities + Delinea DSV secret access (users/policies as code; no Key Vault), budget + policy, private deployment agents, optional edge (App Gateway, Front Door, APIM, Firewall, Bastion) |
 | platform | [`platform/`](platform/README.md), [`platform/data/`](platform/data/README.md) | compute platforms (AKS, Container Apps, App Service, Functions, VM, VMSS, Batch, Service Fabric, ARO, specialized), ACR, Service Bus, 17 database/data-store roots |
 | applications | [`applications/`](applications/deployments/README.md) | Enterprise Hello services (React frontend, .NET BFF/orders/inventory/durable, Python catalog/adapters/worker/jobs/functions/partner-sim/traffic, Logic Apps) and one deployment root per hosting group |
-| observability | [`observability/`](observability/README.md) | portable package (monitors, SLOs, synthetics, dashboards, catalog, RUM, Azure integration, diagnostic settings, Fluent Bit / OTel transport, agents, DBM) + lab roots under `observability/lab/` |
+| observability | [`observability/`](observability/README.md) | portable package for fleet collection configuration (3.0.0): tag policy, fleet collection policy, Datadog Observability Pipelines (central log pipeline, OP Worker), Fluent Bit edge collectors, Datadog Agent fleet (hosts, AKS, DBM), APM via Datadog tracers / Single Step Instrumentation, profiling, RUM, Azure integration and diagnostic settings + lab roots under `observability/lab/`. Monitors, SLOs and dashboards are not in the package; the optional 2.x content is in [`observability/extras/content/`](observability/extras/content/README.md) |
 | delivery | [`azure-pipelines.yml`](azure-pipelines.yml) (platform), [`azure-pipelines.applications.yml`](azure-pipelines.applications.yml) (applications), [`pipelines/`](pipelines/README.md), [`tools/`](tools/README.md) | two pipelines on one governed template: change detection, generated plan/apply stages, promotion dev -> test -> prod, plan binding, contracts, smoke, telemetry verification, evidence, observability package release |
 | catalog | [`catalog/`](catalog/) | component registry, Azure service catalog (100 entries), architecture matrix, telemetry capabilities, contract schemas, provider gaps |
 
@@ -37,7 +37,7 @@ Selected with `profile:` in `environments/<env>/environment.yaml` (details: [dep
 | `enterprise` | common enterprise patterns: AKS, App Service, Container Apps, Functions, VM, VMSS, SQL, PostgreSQL, MySQL, Cosmos NoSQL, Managed Redis, Table Storage, private agents, hub-spoke | no (but well above minimal) |
 | `full` | every implemented and eligible catalog entry, deployed in groups `g1`..`g6` | yes, requires confirmation |
 | `specialized` | restricted / partner / preview / high-cost services (SF, ARO, SQL MI, Cassandra MI, HorizonDB, ...) | yes, requires confirmation |
-| `observability-only` | monitoring applied to existing resources; no lab infrastructure | no |
+| `observability-only` | Datadog collection configuration (Azure integration, RUM prerequisites) for existing resources; no lab infrastructure | no |
 | `custom` | explicit `custom_components`; hard dependencies added automatically | depends |
 
 ## Quick start
@@ -88,7 +88,7 @@ tests/                          tooling tests (changeset, pipeline, tools, catal
 |---|---:|---:|---:|---:|---:|---|
 | Azure services (`catalog/services/*.yaml`) | 102 | 55 | 14 | 2 | 31 | not-run: 102 |
 
-Components in `catalog/components.yaml`: **71** (14 artifact, 1 docs, 56 terraform; 25 applications, 1 bootstrap, 1 docs, 6 foundation, 9 observability, 29 platform). Non-GA lifecycle entries in the service catalog: 13.
+Components in `catalog/components.yaml`: **73** (15 artifact, 1 docs, 57 terraform; 26 applications, 1 bootstrap, 1 docs, 7 foundation, 9 observability, 29 platform). Non-GA lifecycle entries in the service catalog: 13.
 <!-- END STATUS -->
 
 Live validation: **not-run** for every component and service. Per-requirement status with links to the implementing

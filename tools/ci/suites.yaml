@@ -61,8 +61,18 @@ suites:
     scope: platform
     toolchain: python
     paths: [observability/tests/content]
-    inputs: [observability/tests/content/**, observability/tools/**, observability/onboarding/**, observability/archetypes/**,
+    inputs: [observability/tests/content/**, observability/tools/**, observability/onboarding/**,
              observability/schemas/**, observability/config/**]
+  - id: obs-extras-content
+    # optional 2.x monitoring content (observability/extras/content, not in the 3.0.0 package): its own suite/step,
+    # never collected together with observability/tests (separate conftest.py, own tools/onboarding v1)
+    tier: unit
+    kind: pytest
+    scope: platform
+    toolchain: terraform
+    paths: [observability/extras/content/tests]
+    inputs: [observability/extras/content/**]
+    covers: [obs-monitoring]
   - id: obs-portability
     tier: unit
     kind: pytest

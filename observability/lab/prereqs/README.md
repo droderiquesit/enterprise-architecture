@@ -1,19 +1,22 @@
 # obs-prereqs (lab root)
 
-- **Owner**: observability layer (monitoring-as-code content). Component id `obs-prereqs` (catalog/components.yaml).
+- **Owner**: observability layer (collection configuration: RUM). Component id `obs-prereqs` (catalog/components.yaml).
 - **Purpose**: create Datadog objects that must exist *before* applications deploy: the RUM application(s) whose id and
   client token the frontend bakes into its runtime `config.json`.
 - **Consumed contracts**: none.
 - **Produced contract**: `obs-prereqs` v1 (`catalog/contracts/obs-prereqs.v1.schema.json`):
   `{datadog_site, rum.applications.<key>.{application_id, client_token, name, type, site, service, session_sample_rate,
   session_replay_sample_rate, default_privacy_level, track_user_interactions}}`. Consumers: `deploy-frontend`
-  (config.json), `obs-monitoring` (RUM references).
+  (config.json), `obs-monitoring` (optional extras content, RUM references).
 - **Why the client token is in a contract**: Datadog documents client tokens as the credential for end-user facing
   applications (API keys "cannot be used to send data from a browser ... as they would be exposed client-side").
   Every visitor downloads it with `config.json`; it only submits RUM data. API/application keys never leave Delinea DSV (pipeline masked variables only).
 - **Settings** (`components.obs-prereqs`): `datadog_site` (default `datadoghq.com`), `rum_applications` map
-  (default `{hello-frontend = {}}`; per app `type`, `service`, `session_sample_rate` 100, `session_replay_sample_rate` 0,
-  `default_privacy_level` `mask-user-input`, `track_user_interactions` true). Names: `<prefix>-<env>-<key>`.
+  (default `{hello-frontend = {}}`; per app `mode` (`create` default: `datadog_rum_application` here | `existing`: use an
+  application the organisation already has and create nothing), `application_id` + `client_token` (required with
+  `mode = existing`; the client token is a browser credential, not a DSV secret, see below), `type`, `service`,
+  `session_sample_rate` 100, `session_replay_sample_rate` 0, `default_privacy_level` `mask-user-input`,
+  `track_user_interactions` true). Names: `<prefix>-<env>-<key>`.
 - **Credentials**: provider reads `DD_API_KEY`/`DD_APP_KEY` from the pipeline environment (read from Delinea DSV,
   `datadog-api-key`, `datadog-app-key`).
 - **Cost at defaults**: no Azure cost. Datadog RUM is billed per session (1k-session units); the lab traffic generator

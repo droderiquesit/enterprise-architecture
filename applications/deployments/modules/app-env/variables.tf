@@ -33,7 +33,7 @@ variable "architecture" {
 }
 
 variable "telemetry" {
-  description = "obs-telemetry-transport contract v2 (catalog/contracts/obs-telemetry-transport.v2.schema.json), fields used by the instrumentation hook."
+  description = "obs-telemetry-transport contract v3 (catalog/contracts/obs-telemetry-transport.v3.schema.json), fields used by the instrumentation hook."
   type = object({
     datadog_site = string
     api_key_ref  = string
@@ -159,6 +159,12 @@ variable "apm" {
   description = "Per-workload APM overrides (fleet policy apm section shape), e.g. { mode = \"otel\" }."
   type        = any
   default     = null
+}
+
+variable "serverless_init" {
+  description = "Container Apps serverless-init sidecar (fleet policy default for aca in datadog mode): Azure context (subscription_id, resource_group) and optional image/sizing. The Datadog API key is read from Delinea DSV by dsv-fetch."
+  type        = any
+  default     = {}
 }
 
 variable "profiling" {

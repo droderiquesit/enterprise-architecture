@@ -44,7 +44,6 @@ components:
 - obs-hosts
 - obs-kubernetes
 - obs-dbm
-- obs-monitoring
 - deploy-core-aks
 - deploy-frontend
 - deploy-durable
@@ -164,7 +163,6 @@ groups:
   - obs-hosts
   - obs-kubernetes
   - obs-dbm
-  - obs-monitoring
 component_settings:
   platform-containerapps:
     ingress_mode: internal

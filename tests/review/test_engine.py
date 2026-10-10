@@ -68,20 +68,40 @@ def test_requirements_index_url_injection_is_not_a_patch(repo):
     assert "dependency-change" in r.classes and "dependency.non-pin-line" in rules(r) and r.decision.vote != 10
 
 
+def _with_sample_rate(repo, path, rate):
+    # v2 manifests (package 3.0.0) carry no SLOs; the tunable numeric value is the per-service trace sample rate
+    text = (repo.path / path).read_text().replace("  runtime: dotnet\n", f"  runtime: dotnet\n  telemetry:\n    apm:\n      sample_rate: {rate}\n", 1)
+    assert f"sample_rate: {rate}" in text
+    return text
+
+
 def test_observability_threshold_within_guardrail_is_approvable(repo):
     path = "observability/onboarding/dev/hello-bff.yaml"
-    text = (repo.path / path).read_text().replace("target: 99.5", "target: 99.7", 1)
-    r = run(repo, {path: text})
+    repo.commit({path: _with_sample_rate(repo, path, 0.5)}, "base sample rate")
+    r = run(repo, {path: _with_sample_rate(repo, path, 0.5).replace("sample_rate: 0.5", "sample_rate: 0.25")})
     assert r.classes == {"observability-thresholds": [path]} and r.decision.outcome == "approve"
 
 
 def test_observability_threshold_outside_guardrail_needs_human(repo):
     path = "observability/onboarding/dev/hello-bff.yaml"
-    text = (repo.path / path).read_text().replace("target: 99.5", "target: 80.0", 1)
-    r = run(repo, {path: text})
+    repo.commit({path: _with_sample_rate(repo, path, 0.5)}, "base sample rate")
+    r = run(repo, {path: _with_sample_rate(repo, path, 0.5).replace("sample_rate: 0.5", "sample_rate: 0.01")})
     assert "observability-config" in r.classes and "observability.guardrail" in rules(r)
     assert r.decision.outcome == "wait-for-author" or r.decision.human_required
     assert r.decision.vote <= 0
+
+
+def test_observability_new_tuning_key_needs_human(repo):
+    # adding a knob (not changing an existing value) is not threshold tuning
+    path = "observability/onboarding/dev/hello-bff.yaml"
+    r = run(repo, {path: _with_sample_rate(repo, path, 0.5)})
+    assert r.classes == {"observability-config": [path]} and r.decision.vote < 10
+
+
+def test_extras_monitoring_content_is_not_auto_approved(repo):
+    r = run(repo, {"observability/extras/content/onboarding/dev/hello-bff.yaml": "apiVersion: observability/v1\n"})
+    assert "observability-thresholds" not in r.classes and "onboarding-manifest" not in r.classes
+    assert r.decision.vote < 10
 
 
 def test_new_valid_onboarding_manifest_approvable_prod_never(repo):

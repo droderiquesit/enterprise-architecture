@@ -17,7 +17,7 @@ TRUSTED = [
     ".review/policy.yaml",
     "catalog/components.yaml",
     "catalog/schemas/component.schema.json",
-    "observability/schemas/onboarding-manifest.v1.schema.json",
+    "observability/schemas/onboarding-manifest.v2.schema.json",
     "observability/onboarding/dev/hello-bff.yaml",
 ]
 BASE_FILES = {

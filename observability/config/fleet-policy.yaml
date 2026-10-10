@@ -33,8 +33,9 @@ apm:
   # none:    no traces.
   mode: datadog
   # Managed runtimes (no node Agent): agent_gateway = tracer -> the in-VNet Datadog Agent APM gateway of the
-  # telemetry transport (the API key stays in Delinea DSV); serverless_init = Datadog serverless-init sidecar
-  # (Container Apps only; needs DD_API_KEY as a platform secret - see the guide: not DSV-compliant, opt-in).
+  # telemetry transport (TCP only: no DogStatsD, so no custom/runtime metrics); serverless_init = Datadog
+  # serverless-init sidecar (Container Apps only; traces + DogStatsD on localhost; its DD_API_KEY is read from Delinea
+  # DSV by a dsv-fetch init container). Default here: agent_gateway; architectures.aca selects serverless_init.
   managed_runtime_path: agent_gateway
   # null: sampling decided by the Agent (adaptive / remote configuration); 0..1: DD_TRACE_SAMPLE_RATE.
   sample_rate: null
@@ -109,6 +110,15 @@ rum:
 
 # Per hosting architecture (aks | aca | aci | appservice | functions | logicapp | vm | vmss | swa).
 architectures:
+  aca:
+    # Container Apps: serverless-init sidecar by default (DogStatsD for hello.* custom metrics and runtime metrics;
+    # the APM gateway path has no UDP). Per workload: apm = {managed_runtime_path = "agent_gateway"} to opt out.
+    apm: {managed_runtime_path: serverless_init}
+  appservice:
+    # App Service: the package has no Datadog App Service sidecar integration yet and the APM gateway path carries no
+    # DogStatsD, so App Service workloads default to OpenTelemetry (OTLP metrics + traces via the OTel gateway).
+    # Per workload: apm = {mode = "datadog"} uses the Datadog tracer -> APM gateway (traces/profiles, no DogStatsD).
+    apm: {mode: otel}
   functions:
     # Exception: Azure Functions (incl. Durable Functions) stay on OpenTelemetry - Datadog documents neither the
     # Functions host spans nor Durable Functions V2 orchestration spans for its tracers in this setup.

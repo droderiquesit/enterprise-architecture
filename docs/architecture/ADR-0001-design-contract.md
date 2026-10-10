@@ -274,6 +274,20 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
   `foundation-secrets`; platform-scope artifact `img-dsv-fetch` is consumed by applications roots by its recorded digest
   (cross-scope artifacts, `tools/deploy/artifacts.py tfvars --recorded`). Pipelines use no variable groups for secrets.
 - 2026-10-09: Static Web Apps is not available in swedencentral; the frontend SWA resource uses a separate `swa_location` (default westeurope).
+- 2026-10-10: Section 10 amended for observability package 3.0.0 (fleet collection configuration; `config/fleet-policy.yaml`,
+  tag policy `config/tag-policy.yaml`). **Logs:** the Datadog Agent collects application logs wherever it runs (AKS nodes,
+  VM/VMSS hosts; the Fluent Bit DaemonSet / host service is not installed there); Fluent Bit remains the edge collector
+  only where no Agent runs (ACA/ACI sidecars, Batch nodes). **Datadog Observability Pipelines** (OP Worker on Container
+  Apps or AKS) is the central log pipeline: Agents, Fluent Bit edge collectors and the Event Hubs path ship to the Worker,
+  which applies the tag policy and sends to Datadog (`telemetry.pipeline:observability-pipelines`). Still one collector per
+  log source (no double shipping); `log_pipeline = fluent_bit_direct` keeps the 2.x paths. **APM:** Datadog tracing
+  libraries (Single Step Instrumentation on AKS and Linux hosts; library in the image plus the in-VNet Datadog Agent APM
+  gateway or, on Container Apps, the Datadog serverless-init managed runtime path) with the Continuous Profiler;
+  Functions and Durable Functions remain on OpenTelemetry (OTLP -> OTel gateway), Logic Apps have no tracer.
+  **Monitoring content** (monitors, SLOs, dashboards, synthetics, service catalog) is out of the core package: optional
+  in `observability/extras/content` (component `obs-monitoring`, `optional: true`, in no built-in profile). Contract
+  `obs-telemetry-transport` is **v3** (formalises `aggregator.{kind, pipeline_id, agent_logs_url}`, `env.fleet`,
+  `env.apm_gateway`; v2 kept for 2.x producers / rollback). Secrets stay in Delinea DSV (section 14).
 
 ## 14. Secret management: Delinea DevOps Secrets Vault (DSV)
 

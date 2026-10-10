@@ -339,7 +339,8 @@ run "datadog_mode_aks_ssi" {
 run "datadog_mode_aca_dotnet_agent_gateway" {
   command = plan
   variables {
-    apm          = null
+    # per-workload opt-out of the aca default (serverless_init)
+    apm          = { managed_runtime_path = "agent_gateway" }
     architecture = "aca"
     telemetry = {
       datadog_site = "datadoghq.eu"
@@ -360,24 +361,88 @@ run "datadog_mode_aca_dotnet_agent_gateway" {
   }
   assert {
     condition     = length([for c in output.container_app_patch.sidecars : c if c.name == "datadog"]) == 0 && length(output.app_requirements) > 0
-    error_message = "no serverless-init sidecar by default; app requirements reported"
+    error_message = "no serverless-init sidecar on the agent_gateway path; app requirements reported"
   }
 }
 
-run "datadog_mode_aca_serverless_init_opt_in" {
+run "datadog_mode_aca_default_serverless_init" {
   command = plan
   variables {
-    apm             = { managed_runtime_path = "serverless_init" }
+    apm             = null
     architecture    = "aca"
     serverless_init = { subscription_id = "00000000-0000-0000-0000-000000000000", resource_group = "rg-app" }
+  }
+  assert {
+    condition     = output.apm.mode == "datadog" && output.apm.method == "serverless_init" && !contains(keys(output.env), "DD_TRACE_AGENT_URL")
+    error_message = "Container Apps default in datadog mode: serverless-init sidecar (tracer -> localhost:8126)"
+  }
+  assert {
+    condition     = output.env["DD_DOGSTATSD_URL"] == "udp://localhost:8125" && output.env["DD_RUNTIME_METRICS_ENABLED"] == "true"
+    error_message = "DogStatsD (custom + runtime metrics) to the serverless-init sidecar on localhost"
   }
   assert {
     condition     = one([for c in output.container_app_patch.sidecars : c.image if c.name == "datadog"]) == "datadog/serverless-init:1.10.4"
     error_message = "serverless-init sidecar pinned"
   }
   assert {
-    condition     = one(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e.secret_name if e.name == "DD_API_KEY"] if c.name == "datadog"])) == "dd-api-key" && one(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e.value if e.name == "DD_LOGS_ENABLED"] if c.name == "datadog"])) == "false"
-    error_message = "API key from an ACA secret reference; serverless-init logs off (Fluent Bit sidecar collects)"
+    condition     = length(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e if e.name == "DD_API_KEY" || e.secret_name != null]])) == 0 && one(flatten([for c in output.container_app_patch.sidecars : [for e in c.env : e.value if e.name == "DD_LOGS_ENABLED"] if c.name == "datadog"])) == "false"
+    error_message = "no API key value or Container Apps secret reference in any sidecar env; serverless-init logs off (Fluent Bit sidecar collects)"
+  }
+  assert {
+    condition     = jsonencode(one([for c in output.container_app_patch.sidecars : c.command if c.name == "datadog"])) == jsonencode(["/bin/sh", "-c", "set -a; . /dsv-secrets/serverless-init.env; set +a; exec /datadog-init"]) && contains(flatten([for c in output.container_app_patch.sidecars : [for m in c.volume_mounts : m.name] if c.name == "datadog"]), "dsv-secrets")
+    error_message = "the sidecar sources the dsv-fetch dotenv file from the in-memory volume, then execs /datadog-init"
+  }
+  assert {
+    condition     = one([for c in output.container_app_patch.init_containers : join(" ", c.args) if c.name == "dsv-fetch-datadog"]) == "init --out /dsv-secrets --format dotenv --dotenv-name serverless-init.env --map DD_API_KEY=dsv://eh/dev/datadog-api-key#value" && length(output.container_app_patch.refresher_containers) == length(output.container_app_patch.init_containers)
+    error_message = "dsv-fetch writes DD_API_KEY from Delinea DSV (reference only) for serverless-init; refresher variant for Dedicated profiles"
+  }
+  assert {
+    condition     = length([for v in output.container_app_patch.volumes : v if v.name == "dsv-secrets" && v.storage_type == "EmptyDir"]) == 1
+    error_message = "one in-memory dsv-secrets volume shared by both dsv-fetch runs"
+  }
+}
+
+run "datadog_mode_aca_serverless_init_forward_sidecar" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "aca"
+    telemetry = {
+      datadog_site = "datadoghq.eu"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+      otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
+      fluentbit    = { forward_host = "opw.internal", forward_port = 24224, sidecar_mode = "forward", sidecar_forward_config = "service: {}\n", sidecar_parsers = "p", sidecar_lua = "l" }
+      env          = {}
+    }
+  }
+  assert {
+    condition     = [for c in output.container_app_patch.init_containers : c.name] == ["dsv-fetch-datadog"] && length([for v in output.container_app_patch.volumes : v if v.name == "dsv-secrets"]) == 1
+    error_message = "Observability Pipelines forward sidecar needs no key; serverless-init still gets its DSV dotenv file"
+  }
+}
+
+run "appservice_datadog_mode_defaults_to_otel" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "appservice"
+  }
+  assert {
+    condition     = output.apm.requested_mode == "otel" && output.apm.mode == "otel" && output.app_settings["TELEMETRY_SDK"] == "otel" && !contains(keys(output.app_settings), "DD_DOGSTATSD_URL")
+    error_message = "App Service: fleet policy architectures.appservice = otel (no Datadog sidecar integration; the APM gateway path has no DogStatsD)"
+  }
+}
+
+run "appservice_datadog_mode_per_workload" {
+  command = plan
+  variables {
+    apm          = { mode = "datadog" }
+    architecture = "appservice"
+  }
+  assert {
+    condition     = output.apm.mode == "datadog" && output.apm.method == "agent_gateway" && output.app_settings["DD_RUNTIME_METRICS_ENABLED"] == "false"
+    error_message = "per-workload opt-in: Datadog tracer -> APM gateway (no DogStatsD, runtime metrics off)"
   }
 }
 
@@ -422,5 +487,45 @@ run "contract_fleet_switch" {
   assert {
     condition     = output.apm.mode == "otel" && output.log_pipeline == "fluent_bit_direct" && output.log_collector == "fluent-bit"
     error_message = "lab-wide switches from the transport contract env.fleet"
+  }
+}
+
+run "contract_datadog_switch_keeps_architecture_exceptions" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "functions"
+    telemetry = {
+      datadog_site = "datadoghq.eu"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1" }
+      otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
+      fluentbit    = { forward_host = "x", forward_port = 24224 }
+      env          = { fleet = { EH_APM_MODE = "datadog", EH_LOG_PIPELINE = "observability_pipelines" } }
+    }
+  }
+  assert {
+    condition     = output.apm.mode == "otel" && output.log_pipeline == "observability_pipelines"
+    error_message = "env-wide EH_APM_MODE = datadog does not override the functions exception (OpenTelemetry)"
+  }
+}
+
+run "contract_datadog_switch_aca_serverless_init" {
+  command = plan
+  variables {
+    apm          = null
+    architecture = "aca"
+    telemetry = {
+      datadog_site = "datadoghq.eu"
+      api_key_ref  = "dsv://eh/dev/datadog-api-key#value"
+      secrets      = { base_url = "https://contoso.secretsvaultcloud.com/v1", fetch_image = "ehacr.azurecr.io/dsv-fetch@sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+      otlp         = { grpc_endpoint = "http://gw:4317", http_endpoint = "http://gw:4318" }
+      fluentbit    = { forward_host = "x", forward_port = 24224, sidecar_mode = "forward", sidecar_forward_config = "service: {}\n", sidecar_parsers = "p", sidecar_lua = "l" }
+      env          = { fleet = { EH_APM_MODE = "datadog" } }
+    }
+  }
+  assert {
+    condition     = output.apm.mode == "datadog" && output.apm.method == "serverless_init"
+    error_message = "lab contract switch datadog on Container Apps: serverless-init by default"
   }
 }

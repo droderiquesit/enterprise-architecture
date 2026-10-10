@@ -1,5 +1,5 @@
 # GENERATED FILE - DO NOT EDIT. Scope: platform pipeline.
-# Source: catalog/components.yaml (sha256 prefix f1f15adf4fa2066c)
+# Source: catalog/components.yaml (sha256 prefix 1a07ec9a839c7bbf)
 # Regenerate: python3 tools/pipeline/generate.py   (CI fails when this file is stale)
 # Stage conditions: see tools/pipeline/generate.py docstring; evaluated in tests by
 # tools/pipeline/conditions.py.
@@ -1662,7 +1662,7 @@ stages:
             - img-dsv-fetch
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          secretEnv: false
+          secretEnv: true
           settings: ${{ parameters.settings }}
   - stage: C_obs_telemetry_transport
     displayName: apply obs-telemetry-transport
@@ -1681,7 +1681,7 @@ stages:
           artifacts: *id040
           timeoutMinutes: 60
           environment: ${{ parameters.environment }}
-          secretEnv: false
+          secretEnv: true
           settings: ${{ parameters.settings }}
           dryRun: ${{ parameters.dryRun }}
   - stage: P_obs_dbm

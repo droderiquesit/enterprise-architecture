@@ -83,6 +83,7 @@ module "env" {
   runtime            = local.meta[each.key].runtime
   architecture       = "aca"
   telemetry          = local.telemetry
+  serverless_init    = { subscription_id = var.environment.subscription_id, resource_group = azurerm_resource_group.this.name }
   identity_client_id = local.ids[each.key].client_id
   faults = {
     enabled   = var.settings.faults_enabled

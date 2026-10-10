@@ -47,8 +47,9 @@ Inside this lab, resource ids come from contracts instead of literals, for examp
 [`observability/onboarding/dev/hello-orders-api.yaml`](../../observability/onboarding/dev/hello-orders-api.yaml).
 
 Coming from a 2.x (v1) manifest: `python3 observability/tools/onboarding/migrate_v1.py --in <dir> --out <dir> --region <region>`
-converts it. It keeps identity, resources and routing, and drops the monitoring sections. The worked v1 example
-[`examples/onboarding/invoices-api.yaml`](examples/onboarding/invoices-api.yaml) migrates to the manifest above.
+converts it. It keeps identity, resources and routing, and drops the monitoring sections. The worked example
+[`examples/onboarding/invoices-api.yaml`](examples/onboarding/invoices-api.yaml) is the unedited output of
+`migrate_v1.py --region swedencentral` for the 2.x (v1) invoices-api manifest: the manifest above plus the optional metadata (display name, repository, ...).
 
 ## 2. Validate and render
 

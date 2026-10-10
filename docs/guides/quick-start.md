@@ -35,9 +35,8 @@ python3 -m pytest -q tests
 # one component exactly as the pipeline Validate stage runs it
 python3 tools/validate/component.py --component deploy-core-aca --env dev
 
-# observability content
-python3 observability/tools/onboarding/validate.py --manifests observability/onboarding/dev --env dev \
-  --routing observability/onboarding/routing/dev.yaml --strict
+# observability onboarding (package 3.0.0: identity, tags, resources, telemetry routing)
+python3 observability/tools/onboarding/validate.py --manifests observability/onboarding/dev --env dev --strict
 python3 observability/tools/onboarding/render.py render --manifests observability/onboarding/dev --env dev \
   --out observability/onboarding/rendered/dev --check
 
