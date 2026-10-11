@@ -4,16 +4,14 @@
 |---|---|
 | Component id | `platform-aks` |
 | Owner | platform team (compute) |
-| Consumes | `foundation-network` (`subnets.aks-nodes`, `egress.type`, `spoke_vnet_id`), `foundation-identity` (`aks-control-plane`, `aks-kubelet`, workload identities, `deploy-agent`), `platform-shared` (`log_analytics_workspace_id`, only for the Defender opt-in) |
+| Consumes | `foundation-network` (`subnets.aks-nodes`, `egress.type`), `foundation-identity` (`aks-control-plane`, `aks-kubelet`, workload identities, `deploy-agent`), `platform-shared` (`log_analytics_workspace_id`, only for the Defender opt-in) |
 | Produces | `platform-aks` v1 (no kubeconfig, no credentials) |
 | Status | `implemented` |
 
 ## What it creates
 
-- Resource group + AKS cluster: Kubernetes **1.36** by default (AKS calendar on Learn, checked 2026-10-09:
-  1.35 GA Mar 2026/EOL Mar 2027, **1.36 GA Jun 2026/EOL Jun 2027**, 1.37 GA Oct 2026 and still rolling out),
-  `automatic_upgrade_channel = "patch"`, `node_os_upgrade_channel = "NodeImage"`, weekly maintenance windows
-  (Sunday 02:00 UTC, 4 h) for both channels.
+- Resource group + AKS cluster: Kubernetes **1.36** by default (EOL Jun 2027), `automatic_upgrade_channel = "patch"`,
+  `node_os_upgrade_channel = "NodeImage"`, weekly maintenance windows (Sunday 02:00 UTC, 4 h) for both channels.
 - **Entra ID + Azure RBAC for Kubernetes**, `local_account_disabled = true`, OIDC issuer + **workload identity**.
 - Control plane identity `aks-control-plane` (user-assigned) with *Network Contributor* on the node subnet and
   *Managed Identity Operator* on the kubelet identity `aks-kubelet` (AcrPull is granted in platform-shared).

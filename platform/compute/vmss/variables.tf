@@ -73,8 +73,7 @@ variable "settings" {
       notification_email = optional(list(string), [])
     }), {})
     encryption_at_host_enabled = optional(bool, false)
-    # Datadog Agent via the obs-hosts Azure Policy (observability 4.0.0): enrolment tag (= obs-hosts
-    # settings.policy.enrollment_tag) and the foundation-identity key of the DSV-reader identity the policy attaches
+    # obs-hosts enrolment tag (= its settings.policy.enrollment_tag) and the DSV-reader identity key it attaches
     datadog = optional(object({
       enabled      = optional(bool, true)
       tag_name     = optional(string, "datadog:enabled")

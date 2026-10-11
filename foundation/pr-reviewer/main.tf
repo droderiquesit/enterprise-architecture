@@ -1,7 +1,5 @@
-# foundation-pr-reviewer: the TRUSTED automated PR reviewer (eh-pr-reviewer, applications/services/pr-reviewer).
-# It is lab governance tooling, not a workload: it owns its identity, runtime storage, Flex Consumption plan and
-# function app in one root so the trust boundary (deployed only from main, identity used only here) stays in one
-# place. The app package is deployed by the pipeline from main only (never from a PR build).
+# The trusted PR reviewer owns identity, storage, plan and app in one root so its trust boundary (deployed only
+# from main, identity used only here) stays in one place.
 module "naming" {
   source          = "../modules/naming"
   prefix          = var.environment.name_prefix

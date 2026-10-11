@@ -1,7 +1,4 @@
-# Partial configuration (ADR-0001 §4). The pipeline passes:
-#   -backend-config="storage_account_name=<bootstrap.state_storage_account_name>"
-#   -backend-config="container_name=tfstate" -backend-config="key=<env>/foundation-edge.tfstate"
-#   -backend-config="use_azuread_auth=true" -backend-config="use_oidc=true"
+# Partial configuration: the pipeline passes -backend-config (ADR-0001 §4).
 terraform {
   backend "azurerm" {}
 }

@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import os
+import posixpath
 import subprocess
+from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Set
 
 # Never part of any fingerprint: generated, local or cache files.
 IGNORED_DIR_NAMES = {".git", ".terraform", "node_modules", "__pycache__", ".pytest_cache", "bin", "obj", ".venv", "dist"}
@@ -62,9 +64,30 @@ class Tree:
         prefix = directory + "/" if directory else ""
         return {p: b for p, b in self.files().items() if p.startswith(prefix)}
 
+    def _index(self) -> None:
+        """Directory set and .tf files per directory, rebuilt whenever files() returns a new mapping."""
+        files = self.files()
+        if getattr(self, "_indexed", None) is files:
+            return
+        dirs: Set[str] = set()
+        tf: Dict[str, List[str]] = defaultdict(list)
+        for p in files:
+            d = posixpath.dirname(p)
+            if p.endswith(".tf"):
+                tf[d].append(p)
+            while d and d not in dirs:
+                dirs.add(d)
+                d = posixpath.dirname(d)
+        self._indexed, self._dirs, self._tf = files, dirs, tf
+
     def is_dir(self, directory: str) -> bool:
-        prefix = directory.rstrip("/") + "/"
-        return any(p.startswith(prefix) for p in self.files())
+        self._index()
+        return directory.rstrip("/") in self._dirs
+
+    def tf_files(self, directory: str) -> List[str]:
+        """.tf files directly in `directory`."""
+        self._index()
+        return self._tf.get(directory.rstrip("/"), [])
 
 
 class WorkTree(Tree):
@@ -116,6 +139,7 @@ class GitTree(Tree):
         self.label = f"git:{self.rev[:12]}"
         self._files: Optional[Dict[str, str]] = None
         self._cache: Dict[str, bytes] = {}
+        self._batch: Optional[subprocess.Popen] = None
 
     def files(self) -> Dict[str, str]:
         if self._files is None:
@@ -137,8 +161,25 @@ class GitTree(Tree):
         if sha is None:
             return None
         if sha not in self._cache:
-            proc = subprocess.run(["git", "-C", str(self.repo), "cat-file", "blob", sha], capture_output=True)
-            if proc.returncode != 0:
-                raise RuntimeError(proc.stderr.decode())
-            self._cache[sha] = proc.stdout
+            self._cache[sha] = self._cat(sha)
         return self._cache[sha]
+
+    def _cat(self, sha: str) -> bytes:
+        """Blob content through one long-lived `git cat-file --batch` (one process per tree, not per file)."""
+        if self._batch is None or self._batch.poll() is not None:
+            self._batch = subprocess.Popen(["git", "-C", str(self.repo), "cat-file", "--batch"],
+                                           stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        self._batch.stdin.write(sha.encode() + b"\n")
+        self._batch.stdin.flush()
+        header = self._batch.stdout.readline().split()
+        if len(header) != 3:
+            raise RuntimeError(f"git cat-file: {b' '.join(header).decode()}")
+        data = self._batch.stdout.read(int(header[2]))
+        self._batch.stdout.read(1)  # trailing newline
+        return data
+
+    def __del__(self):
+        batch = getattr(self, "_batch", None)
+        if batch is not None and batch.poll() is None:
+            batch.stdin.close()
+            batch.wait()

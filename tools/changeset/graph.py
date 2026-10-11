@@ -30,13 +30,11 @@ def discover_charts(tree: Tree, dirs: Iterable[str]) -> List[str]:
     (e.g. helm_release.chart = "${path.module}/../../charts/hello"). They are deployment inputs."""
     found = set()
     for d in dirs:
-        prefix = d.rstrip("/") + "/"
-        for path in tree.files():
-            if path.startswith(prefix) and "/" not in path[len(prefix):] and path.endswith(".tf"):
-                for name in CHART_REF_RE.findall(tree.read_text(path) or ""):
-                    cand = f"{CHARTS_DIR}/{name}"
-                    if tree.is_dir(cand):
-                        found.add(cand)
+        for path in tree.tf_files(d):
+            for name in CHART_REF_RE.findall(tree.read_text(path) or ""):
+                cand = f"{CHARTS_DIR}/{name}"
+                if tree.is_dir(cand):
+                    found.add(cand)
     return sorted(found)
 
 
@@ -56,12 +54,7 @@ def discover_modules(tree: Tree, root_dir: str) -> List[str]:
         if d in visited:
             continue
         visited.add(d)
-        prefix = d + "/"
-        for path in tree.files():
-            if not path.startswith(prefix) or "/" in path[len(prefix):]:
-                continue
-            if not path.endswith(".tf"):
-                continue
+        for path in tree.tf_files(d):
             text = tree.read_text(path) or ""
             for src in MODULE_SOURCE_RE.findall(text):
                 target = posixpath.normpath(posixpath.join(d, src.split("//")[0]))

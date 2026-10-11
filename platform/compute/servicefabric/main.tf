@@ -5,13 +5,9 @@ locals {
   # BYO VNet: explicit settings.byo_vnet, else (backward compatible) whenever the SF resource provider principal is set
   byovnet = coalesce(var.settings.byo_vnet, local.sfrp != null)
 
-  # Datadog Agent enrolment (observability 4.1.0, ADR-0001 §3 rule 3 as amended): node types of a managed cluster are
-  # VMSS in the Microsoft-managed SFC_ resource group, changed ONLY through the node type API (Learn: "manually making
-  # changes to the resources in a managed cluster isn't supported"), so the obs-hosts Azure Policy cannot enrol them.
-  # This root attaches the per-environment DSV-reader identity (foundation-identity obs-host-agent, contract output)
-  # through the node type's vmManagedIdentity and tags the node type; obs-hosts sets properties.vmApplications (the
-  # same datadog-agent-windows VM Application version as on every other host), which this root never sends
-  # (ignore_body_changes keeps the remote value on every update).
+  # Datadog Agent enrolment (ADR-0001 §3 rule 3): node types change only through the node type API, so the obs-hosts
+  # policy cannot enrol them. This root attaches the DSV-reader identity (vmManagedIdentity) and tags the node type;
+  # obs-hosts owns properties.vmApplications, which this root never sends (ignore_body_changes).
   dd_enabled     = local.enabled && var.settings.datadog.enabled
   dd_identity_id = local.dd_enabled ? try(var.foundation_identity.identities[var.settings.datadog.identity_key].id, null) : null
   dd_tags        = local.dd_enabled ? { (var.settings.datadog.tag_name) = "true" } : {}
@@ -48,8 +44,7 @@ resource "azurerm_role_assignment" "sfrp_subnet" {
   description          = "Service Fabric Resource Provider: BYO VNet for the managed cluster"
 }
 
-# Learn (how-to-managed-identity-managed-cluster-virtual-machine-scale-sets): the Service Fabric Resource Provider needs
-# Managed Identity Operator on a user-assigned identity before a node type can reference it in vmManagedIdentity.
+# The Service Fabric RP needs Managed Identity Operator on an identity before a node type can reference it.
 resource "azurerm_role_assignment" "sfrp_dd_identity" {
   count                = local.dd_enabled ? 1 : 0
   scope                = local.dd_identity_id
@@ -65,10 +60,8 @@ resource "azurerm_role_assignment" "sfrp_dd_identity" {
   }
 }
 
-# provider gap (catalog/provider-gaps.yaml, service-fabric-managed): azurerm_service_fabric_managed_cluster 5.9.0 has no
-# node type vmManagedIdentity / vmApplications / vmExtensions, and its update re-PUTs every node type from its own
-# node_type blocks (dropping properties it does not model). The cluster and its node type are therefore azapi
-# resources (Microsoft.ServiceFabric 2026-02-01, the latest GA version, embedded in azapi 2.13.0).
+# Provider gap (catalog/provider-gaps.yaml): azurerm_service_fabric_managed_cluster lacks node type
+# vmManagedIdentity/vmApplications and re-PUTs node types without them, so cluster and node type are azapi resources.
 resource "azapi_resource" "cluster" {
   count     = local.enabled ? 1 : 0
   type      = "Microsoft.ServiceFabric/managedClusters@2026-02-01"

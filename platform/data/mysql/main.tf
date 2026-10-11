@@ -15,8 +15,7 @@ locals {
     adapter = { owner = "hello-dbadapter", boundary = "db adapter" }
   }
 
-  # Datadog DBM (https://docs.datadoghq.com/database_monitoring/setup_mysql/azure/): performance_schema
-  # must be ON (static parameter: server restart). events_statements_* consumers are ON by default on Azure.
+  # Datadog DBM needs performance_schema ON (static parameter: server restart).
   server_parameters = {
     performance_schema       = "ON"
     require_secure_transport = "ON"

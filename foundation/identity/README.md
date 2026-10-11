@@ -61,7 +61,7 @@ environment's required paths exist (never reading values). Path `/<prefix>/<env>
 | `dbm-<engine>-password` (`settings.dbm_sql_auth_engines`) | obs-dbm | operator |
 | platform apply inputs (`sqlvm-admin-password`, `documentdb-admin-password`, `cassandra-mi-admin-password`, `mysql-admin-password`, `appgw-tls-pfx`, `aro-pull-secret`) | deploy-agent | operator |
 
-DBM authentication per engine (Datadog [managed authentication guide](https://docs.datadoghq.com/database_monitoring/guide/managed_authentication/), checked 2026-10-09):
+DBM authentication per engine (Datadog [managed authentication guide](https://docs.datadoghq.com/database_monitoring/guide/managed_authentication/)):
 **PostgreSQL Flexible** → managed identity (`azure.managed_authentication`, Agent ≥ 7.48) → no password;
 **Azure SQL DB / SQL MI** → managed identity (`managed_identity.client_id`, ODBC driver ≥ 17) → no password;
 **MySQL Flexible** and **SQL Server on VM** → SQL auth passwords above (`settings.dbm_sql_auth_engines`).

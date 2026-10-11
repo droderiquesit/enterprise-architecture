@@ -70,11 +70,9 @@ resource "azurerm_network_interface" "this" {
   }
 }
 
-# ---------------------------------------------------------------- Datadog Agent enrolment (observability 4.0.0)
-# The obs-hosts Azure Policy (DeployIfNotExists) enrols every VM tagged <datadog.tag_name> = "true": it attaches the
-# per-environment DSV-reader identity (foundation-identity obs-host-agent, contract output) and the pinned Datadog
-# Agent VM Application (ADR-0001 §3 rule 3 amendment). This root keeps that identity in identity_ids (no drift) and
-# ignores gallery_application, so a platform apply never removes what the policy added.
+# ---------------------------------------------------------------- Datadog Agent enrolment
+# The obs-hosts policy attaches the DSV-reader identity and the Agent VM Application to tagged VMs (ADR-0001 §3 rule 3).
+# The identity stays in identity_ids and gallery_application is ignored, so an apply never removes what it added.
 locals {
   dd_enabled     = var.settings.datadog.enabled
   dd_tags        = local.dd_enabled ? { (var.settings.datadog.tag_name) = "true" } : {}

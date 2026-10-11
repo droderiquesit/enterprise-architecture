@@ -61,8 +61,7 @@ variable "settings" {
     dbadapter_secret_name = optional(string, "sqlvm-dbadapter-password")
     host_identity_name    = optional(string, "obs-dbm") # user-assigned identity for host agents (DSV auth)
     dbm_secret_name       = optional(string, "dbm-sqlvm-password")
-    # Datadog Agent via the obs-hosts Azure Policy (observability 4.0.0): enrolment tag (= obs-hosts
-    # settings.policy.enrollment_tag) and the foundation-identity key of the DSV-reader identity the policy attaches
+    # obs-hosts enrolment tag (= its settings.policy.enrollment_tag) and the DSV-reader identity key it attaches
     datadog = optional(object({
       enabled      = optional(bool, true)
       tag_name     = optional(string, "datadog:enabled")

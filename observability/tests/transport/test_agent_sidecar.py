@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -35,7 +34,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from dockerutil import DSV_FETCH_IMAGE, PACKAGE, PYTHON_IMAGE, REPO, Stack, dsv_fetch_binary, sh, wait_for
+from dockerutil import DSV_FETCH_IMAGE, PACKAGE, PYTHON_IMAGE, REPO, Stack, dsv_fetch_binary, sh, tf_console, wait_for
 
 pytestmark = pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
 
@@ -84,8 +83,6 @@ for i in range(60):
 
 
 def _render(tmp: Path, architecture: str, runtime: str) -> dict:
-    tf = os.environ.get("TERRAFORM_BIN", "terraform")
-    mod = PACKAGE / "modules" / "instrumentation"
     tfvars = {
         "service": {"service": "hello-partner-sim", "env": "test", "version": "1.0.0", "team": "payments", "domain": "payments",
                     "tier": "backend", "owner": "payments-team@example.com", "region": "swedencentral", "application": "enterprise-hello"},
@@ -105,10 +102,8 @@ def _render(tmp: Path, architecture: str, runtime: str) -> dict:
     }
     vf = tmp / f"{architecture}.tfvars.json"
     vf.write_text(json.dumps(tfvars))
-    subprocess.run([tf, "init", "-backend=false", "-input=false"], cwd=mod, check=True, capture_output=True)
-    expr = "jsonencode({env = local.env, aci = local.aci_sidecar, aca = local.container_app_patch, files = local.uses_agent_sidecar ? {datadog = local.agent_datadog_yaml, logs = local.agent_logs_conf, dsv = local.agent_dsv_json, start = local.agent_start, env = local.agent_env} : null})"
-    out = subprocess.run([tf, "console", "-no-color", f"-var-file={vf}"], cwd=mod, input=expr, capture_output=True, text=True, check=True).stdout.strip()
-    return json.loads(json.loads(out.splitlines()[-1]))
+    expr = "{env = local.env, aci = local.aci_sidecar, aca = local.container_app_patch, files = local.uses_agent_sidecar ? {datadog = local.agent_datadog_yaml, logs = local.agent_logs_conf, dsv = local.agent_dsv_json, start = local.agent_start, env = local.agent_env} : null}"
+    return tf_console(PACKAGE / "modules" / "instrumentation", expr, vf)
 
 
 def _binary(tmp: Path) -> tuple[Path, bool]:

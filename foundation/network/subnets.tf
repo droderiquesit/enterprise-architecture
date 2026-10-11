@@ -1,18 +1,5 @@
 # Subnet catalogue (ADR-0001 §8). Names are fixed; prefixes are configurable via settings.subnets.
-#
-# Sizing rationale (verified on Microsoft Learn 2026-10-09):
-#   aks-nodes          /22  Azure CNI Overlay: only nodes take VNet IPs (pods use the overlay CIDR); 1019 nodes max.
-#   aca-infra          /23  Workload-profiles environments need >= /27 (12 IPs reserved); /23 = 498 usable IPs
-#                           (249 dedicated nodes or ~2490 consumption replicas). Subnet can't be resized after creation.
-#   aro-master/worker  /23  ARO docs minimum /27, examples and Red Hat guidance use /23 each.
-#   appsvc-integration /26  App Service/Functions Premium VNet integration: /26 recommended for scale + upgrades.
-#   flex-integration   /26  Flex Consumption: /27 minimum for one app, /26 recommended for several apps.
-#   aci                /26  delegated container groups, one IP per group.
-#   deploy-agents      /26  VMSS / Managed DevOps Pools (max pool size + 5 reserved).
-#   postgres, mysql    /27  Flexible Server VNet injection (dedicated delegated subnets).
-#   sqlmi              /26  SQL MI minimum /27; /26 leaves room for a second instance / updates.
-#   cassandra-mi       /26  Managed Instance for Apache Cassandra datacenter nodes.
-#   private-endpoints  /24  one IP per private endpoint NIC.
+# Sizing rationale: README "Address plan".
 locals {
   spoke_cidr = var.settings.spoke_address_space[0]
   hub_cidr   = var.settings.hub_address_space[0]

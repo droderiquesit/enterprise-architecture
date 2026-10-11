@@ -1,8 +1,6 @@
 locals {
   host_identity = try(var.foundation_identity.identities[var.settings.host_identity_name], null)
-  # Datadog Agent enrolment (observability 4.0.0): the obs-hosts Azure Policy attaches the DSV-reader identity
-  # (foundation-identity obs-host-agent) and the Datadog Agent VM Application to VMs tagged <datadog.tag_name> = "true"
-  # (ADR-0001 §3 rule 3 amendment); it stays in identity_ids here and gallery_application is ignored.
+  # Datadog Agent enrolment as in platform-vm (identity kept in identity_ids, gallery_application ignored).
   dd_tags           = var.settings.datadog.enabled ? { (var.settings.datadog.tag_name) = "true" } : {}
   dd_identity_id    = var.settings.datadog.enabled ? try(var.foundation_identity.identities[var.settings.datadog.identity_key].id, null) : null
   user_identity_ids = distinct(compact([try(local.host_identity.id, null), local.dd_identity_id]))
@@ -126,8 +124,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "data" {
   caching            = each.key == "data" ? "ReadOnly" : "None"
 }
 
-# SQL IaaS Agent extension registration (management modes were removed in March 2023: registration is
-# least-privilege and features install the agent on demand). Private connectivity only.
+# SQL IaaS Agent extension registration (least-privilege; features install the agent on demand). Private only.
 resource "azurerm_mssql_virtual_machine" "this" {
   virtual_machine_id               = azurerm_windows_virtual_machine.this.id
   sql_license_type                 = "PAYG" # Developer edition images must use PAYG (no license charge)

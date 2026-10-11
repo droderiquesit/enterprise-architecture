@@ -1,10 +1,5 @@
-# Pipeline identities (user-assigned managed identities + workload identity federation).
-#
-#   plan      Reader (subscription) + state lease/write (tfstate) + read contracts + write plans
-#   apply     Contributor + constrained RBAC Administrator (+ Resource Policy Contributor) + write all containers
-#   build     packages container write + AcrPush (granted by platform-shared settings.acr_push_principal_ids)
-#   validate  NO Azure role assignments. Untrusted PR validation runs on Microsoft-hosted agents without any
-#             service connection (fmt/validate/test with mock providers need no credentials).
+# Pipeline identities + workload identity federation; rights per identity are in README "Pipeline identities and least privilege".
+# `validate` has no role assignments by design.
 locals {
   pipeline_identities = merge(
     { plan = "terraform plan (read-only Azure, writes state locks and plan files)", apply = "terraform apply", build = "artifact build (AcrPush via platform-shared, writes packages)" },
@@ -17,8 +12,7 @@ locals {
     rbac_administrator        = "f58310d9-a9f6-439a-9e8d-f62e7b41a168"
   }
 
-  # ABAC condition on "Role Based Access Control Administrator" (condition version 2.0), from
-  # https://learn.microsoft.com/azure/role-based-access-control/delegate-role-assignments-examples
+  # ABAC condition (version 2.0) on Role Based Access Control Administrator.
   privileged_roles = join(", ", [local.role_ids.owner, local.role_ids.user_access_administrator, local.role_ids.rbac_administrator])
   allowlist_roles  = join(", ", local.s.apply_role_allowlist)
   apply_rbac_condition = local.s.apply_rbac_mode == "constrained" ? join(" AND ", [
@@ -50,16 +44,7 @@ locals {
     { for r in local.s.plan_extra_role_names : "plan/subscription/${r}" => { identity = "plan", scope = "subscription", role = r } },
   )
 
-  legacy_ado = local.s.azure_devops_legacy == null ? [] : [
-    for id, sc in local.s.azure_devops_legacy.service_connections : {
-      identity  = id
-      name      = "ado-legacy-${sc}"
-      issuer    = "https://vstoken.dev.azure.com/${local.s.azure_devops_legacy.organization_id}"
-      subject   = "sc://${local.s.azure_devops_legacy.organization_name}/${local.s.azure_devops_legacy.project}/${sc}"
-      audiences = ["api://AzureADTokenExchange"]
-    }
-  ]
-  federated_credentials = { for f in concat(local.s.federated_credentials, local.legacy_ado) : "${f.identity}/${f.name}" => f }
+  federated_credentials = { for f in local.s.federated_credentials : "${f.identity}/${f.name}" => f }
 }
 
 resource "azurerm_user_assigned_identity" "pipeline" {

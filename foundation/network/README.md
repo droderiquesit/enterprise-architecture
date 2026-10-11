@@ -18,7 +18,7 @@
 
 ## Address plan (defaults; every prefix overridable via `settings.subnets.<key>.address_prefix`)
 
-| Subnet | Prefix | Delegation | NSG | Explicit egress | Why this size (Microsoft Learn, verified 2026-10-09) |
+| Subnet | Prefix | Delegation | NSG | Explicit egress | Why this size |
 |---|---|---|---|---|---|
 | `aks-nodes` | 10.41.0.0/22 | — | yes | yes | Azure CNI Overlay: only nodes use VNet IPs (1019 nodes) |
 | `aca-infra` | 10.41.4.0/23 | `Microsoft.App/environments` | yes | yes | workload-profiles env min **/27** (12 IPs reserved); /23 = 498 IPs ≈ 249 dedicated nodes / ~2490 consumption replicas; cannot be resized later. (ADR §8: /27 minimum, /23 for headroom.) |
@@ -82,7 +82,7 @@ agentsvc` with `ampls_zones = true`, `documentdb` = alias of `mongocluster`, + `
 Verified against [Private endpoint DNS zone values](https://learn.microsoft.com/azure/private-link/private-endpoint-dns):
 Azure Managed Redis = `privatelink.redis.azure.net`; DocumentDB (Mongo vCore) = `privatelink.mongocluster.cosmos.azure.com`;
 ACA = `privatelink.<region>.azurecontainerapps.io`; Data Explorer = `privatelink.<region>.kusto.windows.net`.
-**Azure confidential ledger** is not listed as a Private Link resource (checked 2026-10-09) → no zone; platform-db-ledger
+**Azure confidential ledger** is not listed as a Private Link resource → no zone; platform-db-ledger
 must document public endpoint + Entra/cert auth. `postgres_vnet`/`mysql_vnet` are dedicated zones for Flexible Server VNet
 injection (`<prefix><env>.private.<engine>.database.azure.com`) so they never clash with private-endpoint records.
 Lab internal zone: `<env>.<prefix>.lab.internal` (VM auto-registration on the spoke link).

@@ -42,8 +42,7 @@ variable "settings" {
     entra_client_application_id    = optional(string)
     # Object id of the tenant's "Azure Service Fabric Resource Provider" service principal. Needed for BYO VNet (Network
     # Contributor on the sfmc subnet) and for the Datadog DSV-reader identity on the node type (Managed Identity Operator
-    # on that identity). byo_vnet: null => BYO VNet whenever the principal id is set (pre-4.1 behaviour); false =>
-    # managed cluster VNet even with the principal id.
+    # on that identity). byo_vnet: null => BYO VNet whenever the principal id is set; false => managed cluster VNet.
     sf_resource_provider_principal_id = optional(string)
     byo_vnet                          = optional(bool)
     node_type = optional(object({
@@ -60,9 +59,7 @@ variable "settings" {
       tags                 = optional(map(string), {})
       placement_properties = optional(map(string), {})
     }), {})
-    # Datadog Agent on the nodes (observability 4.1.0): this root attaches the DSV-reader identity and tags the node
-    # type; obs-hosts adds the datadog-agent-windows VM Application to the node type (Azure Policy cannot reach node
-    # types). tag_name = obs-hosts settings.enrollment_tag.name.
+    # Datadog Agent on the nodes (see main.tf); tag_name = obs-hosts settings.enrollment_tag.name.
     datadog = optional(object({
       enabled      = optional(bool, true)
       tag_name     = optional(string, "datadog:enabled")

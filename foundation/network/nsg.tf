@@ -24,12 +24,12 @@ locals {
       { name = "AllowHttpOutbound", priority = 130, direction = "Outbound", access = "Allow", protocol = "*", source = "*", destination = "Internet", ports = ["80"] },
     ]
     "appgw" = [
-      # Application Gateway v2 infrastructure ports + listeners: https://learn.microsoft.com/azure/application-gateway/configuration-infrastructure
+      # Application Gateway v2 infrastructure ports + listeners
       { name = "AllowGatewayManagerInbound", priority = 100, direction = "Inbound", access = "Allow", protocol = "Tcp", source = "GatewayManager", destination = "*", ports = ["65200-65535"] },
       { name = "AllowListenersInbound", priority = 110, direction = "Inbound", access = "Allow", protocol = "Tcp", source = "Internet", destination = "*", ports = [for p in var.settings.appgw_listener_ports : tostring(p)] },
     ]
     "apim" = [
-      # API Management v2 VNet integration dependency: https://learn.microsoft.com/azure/api-management/integrate-vnet-outbound
+      # API Management v2 VNet integration dependency
       { name = "AllowKeyVaultOutbound", priority = 100, direction = "Outbound", access = "Allow", protocol = "Tcp", source = "VirtualNetwork", destination = "AzureKeyVault", ports = ["443"] },
     ]
     "aks-nodes" = var.settings.aks_public_ingress ? [

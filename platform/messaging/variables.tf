@@ -21,7 +21,7 @@ variable "foundation_network" {
     location          = string
     subnets           = map(object({ id = string, name = string }))
     private_dns_zones = optional(map(object({ id = string, name = string })), {})
-    egress            = optional(object({ public_ips = optional(list(string), []) }), { type = "nat-gateway", public_ips = [] })
+    egress            = optional(object({ public_ips = optional(list(string), []) }), {})
   })
 }
 

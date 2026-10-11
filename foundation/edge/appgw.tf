@@ -18,12 +18,8 @@ locals {
   }
 }
 
-# TLS certificate: Key Vault references are not available (all lab secrets live in Delinea DSV, ADR-0001 section 14).
-# The listener certificate is passed as `ssl_certificate.data` (base64 PFX) + `password` from the ephemeral pipeline
-# inputs var.tls_certificate_pfx / var.tls_certificate_password (DSV appgw-tls-pfx, elements value/password, fetched
-# by tools/secrets/fetch.py). azurerm 5.9 has NO write-only form of ssl_certificate.data/password, so the PFX and
-# its password ARE stored in Terraform state and in the saved plan (protected containers) - docs/known-limitations.md.
-# Recommended alternative without any secret: Front Door (settings.front_door) with its Microsoft-managed certificate.
+# No Key Vault references (secrets live in DSV): the PFX comes from var.tls_certificate_* and, lacking a write-only
+# argument, IS stored in state and the saved plan (docs/known-limitations.md). Front Door avoids the secret entirely.
 resource "azurerm_public_ip" "appgw" {
   count = local.agw_on ? 1 : 0
 

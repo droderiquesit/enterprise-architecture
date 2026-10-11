@@ -27,17 +27,14 @@ locals {
   # turns each list into one DSV user + read permission on exactly those paths).
   # Fault injection (ADR §9) is on every HTTP service and the traffic generator (chaos scenarios).
   identity_catalogue = {
-    # datadog-api-key: read with the workload's own identity by the collector that runs next to it (observability
-    # 4.0.0 fleet policy): dsv-fetch for Datadog serverless-init on Container Apps and for the Agent sidecar on ACI,
-    # the Batch job preparation task (Fluent Bit, pool identity) and, only with log_pipeline = fluent_bit_direct,
-    # the fallback Fluent Bit sidecar. Policy-enrolled VM/VMSS Agents use obs-host-agent. See README.
+    # datadog-api-key: read with the workload's own identity by the collector next to it (ACA serverless-init, ACI
+    # Agent sidecar, Batch prep task, fallback Fluent Bit). Policy-enrolled VM/VMSS Agents use obs-host-agent.
     "hello-bff"           = { purpose = "BFF API (AKS/ACA)", secrets = ["fault-token", "datadog-api-key"] }
     "hello-orders-api"    = { purpose = "orders API, Azure SQL", secrets = ["fault-token", "datadog-api-key"] }
     "hello-inventory-api" = { purpose = "inventory API, Cosmos DB NoSQL", secrets = ["fault-token", "datadog-api-key"] }
     "hello-catalog-api"   = { purpose = "catalog API, PostgreSQL + Managed Redis", secrets = ["fault-token", "datadog-api-key"] }
     "hello-dbadapter"     = { purpose = "per-family DB adapters", secrets = concat(["fault-token", "datadog-api-key"], local.adapter_secret_names) }
-    # hello-worker runs on AKS / VM / VMSS only, where the node Agent (obs-collector) or the policy-enrolled host Agent
-    # (obs-host-agent) holds the key; 4.0.0 has no Fluent Bit on hosts, so the workload identity reads no secret.
+    # hello-worker runs only where a node/host Agent holds the key, so it reads no secret.
     "hello-worker"      = { purpose = "notifications worker, Table Storage", secrets = [] }
     "hello-durable"     = { purpose = "Durable Functions orchestrations", secrets = ["fault-token"] }
     "hello-functions"   = { purpose = "audit/event functions", secrets = ["fault-token", "datadog-api-key"] }
@@ -48,8 +45,7 @@ locals {
     "hello-frontend"    = { purpose = "frontend hosting (SWA/nginx); RUM client token is injected at deploy time", secrets = [] }
     "obs-collector"     = { purpose = "Fluent Bit / OTel gateway", secrets = ["datadog-api-key", "fluentbit-shared-key", "eventhub-fluentbit-listen"] }
     "obs-dbm"           = { purpose = "Datadog Agent DBM checks", secrets = concat(["datadog-api-key"], local.dbm_secret_names) }
-    # Datadog Agent on VMs / VMSS (observability 4.0.0): the obs-hosts Azure Policy attaches this ONE identity to every
-    # host tagged datadog:enabled; dsv-fetch (Agent secret backend) reads ONLY the ingest-only API key with it.
+    # Attached by the obs-hosts policy to every host tagged datadog:enabled; reads only the ingest-only API key.
     "obs-host-agent"    = { purpose = "Datadog Agent on policy-enrolled VMs / VMSS (DSV reader: ingest-only API key)", secrets = ["datadog-api-key"] }
     "aks-control-plane" = { purpose = "AKS cluster (control plane) identity", secrets = [] }
     "aks-kubelet"       = { purpose = "AKS kubelet identity (AcrPull granted by platform-aks)", secrets = [] }

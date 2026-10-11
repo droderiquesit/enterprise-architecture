@@ -78,6 +78,17 @@ class Stack:
         sh("docker", "network", "rm", self.id, check=False)
 
 
+def tf_console(module: Path, expr: str, var_file: Path) -> object:
+    """Evaluate `jsonencode(expr)` in a module with terraform console (no provider calls) and decode it."""
+    tf = os.environ.get("TERRAFORM_BIN", "terraform")
+    if not (module / ".terraform").exists():
+        subprocess.run([tf, f"-chdir={module}", "init", "-backend=false", "-input=false", "-no-color"], check=True, capture_output=True)
+    out = subprocess.run([tf, f"-chdir={module}", "console", "-no-color", f"-var-file={var_file}"], input=f"jsonencode({expr})\n",
+                         capture_output=True, text=True, check=True).stdout.strip()
+    # warnings (e.g. about the console's evaluation mode) precede the value: the value is the last line
+    return json.loads(json.loads(out.splitlines()[-1]))
+
+
 def http_json(url: str, method: str = "GET", timeout: float = 5.0):
     req = urllib.request.Request(url, method=method)
     with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - local test endpoint

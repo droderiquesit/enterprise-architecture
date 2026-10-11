@@ -34,10 +34,8 @@ resource "azurerm_resource_group" "agents" {
 }
 
 # ------------------------------------------------------------------ VMSS agents (default)
-# Requirements for Azure DevOps "Azure Virtual Machine Scale Set agents"
-# (https://learn.microsoft.com/azure/devops/pipelines/agents/scale-set-agents):
-#   Uniform orchestration, overprovisioning disabled, upgrade policy Manual, no autoscale, no instance protection.
-# Azure DevOps owns capacity (instances) and installs the agent extension; both are ignored here.
+# Azure DevOps scale set agents require Uniform orchestration, no overprovisioning, Manual upgrades and no autoscale;
+# Azure DevOps owns capacity and the agent extension, so both are ignored here.
 resource "azurerm_linux_virtual_machine_scale_set" "agents" {
   #checkov:skip=CKV_AZURE_97:encryption at host is a setting (default off) because it requires the Microsoft.Compute/EncryptionAtHost feature registration per subscription.
   count = local.vmss_mode ? 1 : 0
@@ -105,7 +103,6 @@ resource "azurerm_linux_virtual_machine_scale_set" "agents" {
 }
 
 # ------------------------------------------------------------------ Managed DevOps Pools (optional)
-# azurerm 5.9 ships azurerm_managed_devops_pool + azurerm_dev_center(_project): no AzAPI needed.
 resource "azurerm_dev_center" "this" {
   count = local.mdp_mode || local.copilot_pool.enabled ? 1 : 0
 
@@ -126,8 +123,7 @@ resource "azurerm_dev_center_project" "this" {
   tags                = local.tags
 }
 
-# The Managed DevOps Pools first-party principal ("DevOpsInfrastructure") needs Reader + Network Contributor
-# on the VNet to inject agents (https://learn.microsoft.com/azure/devops/managed-devops-pools/configure-networking).
+# The DevOpsInfrastructure principal needs Reader + Network Contributor on the VNet to inject agents.
 resource "azurerm_role_assignment" "mdp_vnet_reader" {
   count = local.mdp_mode ? 1 : 0
 

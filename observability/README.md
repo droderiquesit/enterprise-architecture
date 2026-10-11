@@ -207,21 +207,4 @@ Datadog serverless-init 1.10.4 does not resolve `ENC[]` (verified locally), henc
 
 ## 10. Known limitations
 
-* Live behaviour against Datadog has not been exercised:
-  * the Worker running the pipeline definition;
-  * Kafka SASL against Event Hubs;
-  * SSI injection and profiles in a real cluster.
-
-  The local tests stop where Datadog itself is required (API key validation, Remote Configuration).
-* DogStatsD (custom and runtime metrics of Datadog libraries) is unavailable behind the APM gateway, because
-  Container Apps ingress is TCP-only. Use `serverless_init`, or keep `apm.mode = otel` for workloads that need custom
-  metrics there.
-* Windows hosts and Azure Functions stay on OpenTelemetry. The Datadog profiler supports neither .NET Function Apps
-  nor Python on Functions (preview).
-* AKS workload-identity tokens with DSV are not verified; the documented alternative is the node pool's kubelet
-  identity via IMDS.
-* Not verified on Azure: the policy remediation's partial PUT on VMSS, the Service Fabric node type
-  `vmApplications` update (GET + PUT by `azapi_update_resource`) and its per-upgrade-domain rollout, gallery publishing with the publisher identity,
-  the Windows MSI + `dsv-fetch.exe` ACLs on a real Windows host, the ACI `emptyDir` written by the uid 65532 init
-  container, and the Helm post-renderer on the deploy agents (needs `sh` and `awk`). See `docs/known-limitations.md`
-  in the source repository.
+Nothing has run against live Datadog or Azure; the itemised list is `docs/known-limitations.md` in the source repository.

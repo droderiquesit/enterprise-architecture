@@ -18,6 +18,7 @@ import pathlib
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 import jsonschema
 
@@ -125,8 +126,9 @@ def main(argv):
         print(f"unknown root(s): {', '.join(unknown)}; expected one of: {', '.join(sorted(ROOT_CONTRACT))}", file=sys.stderr)
         return 2
     all_errors = static_checks()
-    for name in names:
-        checked, errors = run_root(name)
+    with ThreadPoolExecutor(max_workers=4) as pool:  # each root runs its own terraform test
+        results = list(pool.map(run_root, names))
+    for name, (checked, errors) in zip(names, results):
         status = "ok" if not errors else "FAIL"
         print(f"{status:4} {name:18} contracts validated: {checked}")
         all_errors += errors

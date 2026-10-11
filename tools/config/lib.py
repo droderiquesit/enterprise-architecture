@@ -159,7 +159,7 @@ def resolve_enabled(registry: Registry, graph: Graph, env_doc: dict, profile_doc
     if missing:
         raise ConfigError("profile is not closed under hard dependencies:\n  " + "\n  ".join(sorted(set(missing))))
     for cid in sorted(enabled):
-        for up, kind in graph.upstream(cid).items():
+        for up, kind in sorted(graph.upstream(cid).items()):
             if kind == "optional" and up not in enabled:
                 notes.append(f"{cid}: optional input {up} not enabled (ignored)")
     return enabled, notes

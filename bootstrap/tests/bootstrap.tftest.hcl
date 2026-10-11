@@ -126,17 +126,7 @@ run "federated_credentials" {
         issuer   = "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0"
         subject  = "eid1/c/pub/t/abc/a/def/sc/77777777-7777-7777-7777-777777777777/88888888-8888-8888-8888-888888888888"
       }]
-      azure_devops_legacy = {
-        organization_name   = "contoso"
-        organization_id     = "99999999-9999-9999-9999-999999999999"
-        project             = "enterprise-hello"
-        service_connections = { plan = "sc-eh-dev-plan" }
-      }
     }
-  }
-  assert {
-    condition     = azurerm_federated_identity_credential.pipeline["plan/ado-legacy-sc-eh-dev-plan"].issuer == "https://vstoken.dev.azure.com/99999999-9999-9999-9999-999999999999" && azurerm_federated_identity_credential.pipeline["plan/ado-legacy-sc-eh-dev-plan"].subject == "sc://contoso/enterprise-hello/sc-eh-dev-plan"
-    error_message = "legacy Azure DevOps issuer/subject format"
   }
   assert {
     condition     = tolist(azurerm_federated_identity_credential.pipeline["apply/ado-apply"].audience) == tolist(["api://AzureADTokenExchange"])

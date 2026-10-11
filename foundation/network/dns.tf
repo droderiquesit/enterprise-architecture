@@ -1,13 +1,6 @@
-# Private DNS zones for every Private Link service used in the catalogue. Zone names follow
-# https://learn.microsoft.com/azure/private-link/private-endpoint-dns (verified 2026-10-09).
-# Contract key (short key) => zone name. Consumers look zones up by short key, never by name.
-#
-# Not included on purpose:
-#   - Azure confidential ledger: no Private Link resource / DNS zone is listed in the Learn table above
-#     (checked 2026-10-09) -> platform-db-ledger stays on its public endpoint (AAD/cert auth) and records that.
-#   - SQL Managed Instance: the VNet-local endpoint needs no zone; MI private endpoints would need
-#     privatelink.<dnsPrefix>.database.windows.net, which is instance specific (platform-db-sqlmi owns it if used).
-#   - AMPLS zones are opt-in (settings.ampls_zones) because they redirect *all* Azure Monitor endpoints.
+# Private DNS zones (https://learn.microsoft.com/azure/private-link/private-endpoint-dns), keyed by the short
+# contract key consumers look up. Not included: confidential ledger (no Private Link), SQL MI (instance-specific
+# zone, owned by platform-db-sqlmi if used); AMPLS zones are opt-in because they redirect all Azure Monitor endpoints.
 locals {
   region = var.environment.location
 

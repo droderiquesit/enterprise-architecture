@@ -5,9 +5,7 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 5.9"
     }
-    # Bootstrap only (ADR-0001 §2): Entra app registration for the Datadog Azure integration.
-    # 3.10.0 is the latest release (published 2026-09-24, checked against registry.terraform.io on 2026-10-09);
-    # Datadog secretless auth needs >= 3.7.0.
+    # Bootstrap only (ADR-0001 §2): Datadog integration app registration; secretless auth needs >= 3.7.0.
     azuread = {
       source  = "hashicorp/azuread"
       version = "~> 3.10"

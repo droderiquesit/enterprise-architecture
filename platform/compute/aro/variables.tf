@@ -59,10 +59,7 @@ variable "settings" {
     # NSGs / NAT gateways / route tables attached to the ARO subnets also need operator role
     # assignments (Learn: "Understand managed identities in ARO").
     extra_network_resource_ids = optional(list(string), [])
-    # Application workload identity federation (ADR-0001 section 3: the credential binds a foundation identity to THIS
-    # cluster's OIDC issuer, so it lives with the cluster - same rule as platform-aks): identity key => namespace /
-    # service account. deploy-specialized runs hello-catalog-api under this service account and reads Delinea DSV
-    # with the federated token the OpenShift pod-identity webhook injects.
+    # Application workload identity federation (see main.tf): identity key => namespace / service account.
     workload_identities = optional(map(object({
       namespace       = string
       service_account = string

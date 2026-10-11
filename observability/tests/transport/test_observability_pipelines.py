@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 
 import pytest
-from dockerutil import FLUENT_BIT_IMAGE, HERE, Stack, dsv_fetch_binary, sh, wait_for
+from dockerutil import FLUENT_BIT_IMAGE, HERE, Stack, dsv_fetch_binary, sh, tf_console, wait_for
 
 PKG = HERE.parents[1]
 SAMPLES = HERE / "samples"
@@ -43,15 +43,9 @@ pytestmark = pytest.mark.skipif(not (shutil.which("docker") and shutil.which("te
 
 
 def console(module: Path, expr: str, tfvars: dict, tmp: Path) -> object:
-    """Evaluate an expression of a module with terraform console (no provider calls) and decode it."""
-    if not (module / ".terraform").exists():
-        sh("terraform", f"-chdir={module}", "init", "-backend=false", "-input=false", "-no-color")
     vf = tmp / f"{module.name}.tfvars.json"
     vf.write_text(json.dumps(tfvars))
-    out = subprocess.run(["terraform", f"-chdir={module}", "console", f"-var-file={vf}"], input=f"jsonencode({expr})\n",
-                         capture_output=True, text=True, check=True).stdout.strip()
-    # warnings (e.g. about the console's evaluation mode) precede the value: the value is the last line
-    return json.loads(json.loads(out.splitlines()[-1]))
+    return tf_console(module, expr, vf)
 
 
 OP_VARS = {

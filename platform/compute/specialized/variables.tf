@@ -74,8 +74,7 @@ variable "settings" {
       cluster_priority = optional(string, "LowPriority")
     }), {})
     auto_shutdown_time = optional(string, "1900")
-    # Datadog Agent via the obs-hosts Azure Policy (observability 4.0.0), as in platform-vm: enrolment tag (= obs-hosts
-    # settings.policy.enrollment_tag) and the foundation-identity key of the DSV-reader identity the policy attaches.
+    # obs-hosts enrolment tag (= its settings.policy.enrollment_tag) and the DSV-reader identity key it attaches
     datadog = optional(object({
       enabled      = optional(bool, true)
       tag_name     = optional(string, "datadog:enabled")

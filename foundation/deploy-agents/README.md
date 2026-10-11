@@ -18,7 +18,7 @@
 
 Preconditions fail the plan if the subnet delegation does not match the mode.
 
-### VMSS requirements implemented (Learn: [scale set agents](https://learn.microsoft.com/azure/devops/pipelines/agents/scale-set-agents), verified 2026-10-09)
+### VMSS requirements implemented ([scale set agents](https://learn.microsoft.com/azure/devops/pipelines/agents/scale-set-agents))
 
 Uniform orchestration (`azurerm_linux_virtual_machine_scale_set`), `overprovision = false` (required), `upgrade_mode = "Manual"`
 (required), no autoscale settings, no instance protection, `single_placement_group = true` (default, ≤ 100 agents),

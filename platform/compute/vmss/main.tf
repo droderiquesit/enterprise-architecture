@@ -11,12 +11,8 @@ locals {
   flex       = var.settings.flexible
   uni        = var.settings.uniform
 
-  # Datadog Agent enrolment (observability 4.0.0): the obs-hosts Azure Policy (DeployIfNotExists) adds the DSV-reader
-  # identity (foundation-identity obs-host-agent, contract output) and the Datadog Agent VM Application to every scale
-  # set tagged <datadog.tag_name> = "true" (ADR-0001 §3 rule 3 amendment). The identity stays in identity_ids here (no
-  # drift); gallery_application is ignored on the uniform set (azurerm has no such block on orchestrated sets). New
-  # instances get the application from the model; existing uniform instances on the next `az vmss update-instances`
-  # of the deployment root (upgrade_mode Manual, see below).
+  # Datadog Agent enrolment as in platform-vm (identity kept, gallery_application ignored on the uniform set; azurerm
+  # has no such block on flexible sets). Existing uniform instances get it on the next `az vmss update-instances`.
   dd_enabled     = var.settings.datadog.enabled
   dd_tags        = local.dd_enabled ? { (var.settings.datadog.tag_name) = "true" } : {}
   dd_identity_id = local.dd_enabled ? try(local.identities[var.settings.datadog.identity_key].id, null) : null
@@ -110,18 +106,14 @@ resource "azurerm_orchestrated_virtual_machine_scale_set" "flexible" {
   boot_diagnostics {}
 
   lifecycle {
-    # instance count is owned by autoscale; extensions are never managed here (legacy owner: observability).
+    # instance count is owned by autoscale; extensions by observability.
     ignore_changes = [instances, extension, os_profile[0].custom_data]
   }
 }
 
 # ---------------------------------------------------------------- Uniform orchestration
-# upgrade_mode = "Manual": there is no load balancer/health probe for this internal adapter and
-# the app is installed after the platform (run command), so a Rolling policy would gate every
-# platform model change on an app health signal the platform does not own. The deployment root
-# performs batch-wise rolling reinstalls via run command and applies model updates per instance
-# (`az vmss update-instances`), which keeps rollouts controlled without coupling the layers. The same per-instance
-# update rolls out the policy-added Datadog Agent VM Application to existing instances (new instances get it at once).
+# upgrade_mode = "Manual": a Rolling policy would gate platform model changes on an app health signal the platform
+# does not own (no LB/probe; the app is installed later by run command). The deployment root rolls instances itself.
 resource "azurerm_linux_virtual_machine_scale_set" "uniform" {
   #checkov:skip=CKV_AZURE_97:encryption_at_host_enabled is a setting (needs the EncryptionAtHost feature registration).
   count = local.uni.enabled ? 1 : 0
@@ -187,7 +179,7 @@ resource "azurerm_linux_virtual_machine_scale_set" "uniform" {
   boot_diagnostics {}
 
   lifecycle {
-    # instances: autoscale; extension: legacy owner observability; gallery_application: the obs-hosts policy
+    # instances: autoscale; extension: observability; gallery_application: the obs-hosts policy
     ignore_changes = [instances, extension, custom_data, gallery_application]
   }
 }

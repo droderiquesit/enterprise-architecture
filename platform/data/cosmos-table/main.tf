@@ -67,8 +67,7 @@ resource "azurerm_cosmosdb_table" "adapterrecords" {
   }
 }
 
-# AzAPI gap: azurerm has no resource for Cosmos DB *Table* data-plane role assignments
-# (tableRoleAssignments); see catalog/provider-gaps.yaml request in README.
+# AzAPI gap: azurerm has no resource for Cosmos DB Table data-plane role assignments (tableRoleAssignments).
 # Built-in "Cosmos DB Built-in Data Contributor" table role definition ID ...0002.
 resource "azapi_resource" "table_data_contributor" {
   count     = local.owner_principal_id == null ? 0 : 1

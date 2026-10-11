@@ -16,11 +16,12 @@ impact) from an infrastructure change (consumers must be re-planned).
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import json
 import posixpath
 import re
-from typing import Dict, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set
 
 import yaml
 
@@ -93,6 +94,7 @@ class Fingerprinter:
         self._versions: Optional[dict] = None
         self._majors: Optional[Dict[str, int]] = None
         self._nested: Dict[str, List[str]] = {}
+        self._paths: Optional[List[str]] = None
 
     # ------------------------------------------------------------- file sets
     def modules(self, cid: str) -> List[str]:
@@ -124,10 +126,27 @@ class Fingerprinter:
                 return True
         return False
 
+    def _under_prefixes(self, prefixes: Iterable[str]) -> Set[str]:
+        if self._paths is None:
+            self._paths = sorted(self.tree.files())
+        out: Set[str] = set()
+        for pre in prefixes:
+            i = bisect.bisect_left(self._paths, pre)
+            while i < len(self._paths) and self._paths[i].startswith(pre):
+                out.add(self._paths[i])
+                i += 1
+        return out
+
     def files(self, cid: str) -> Dict[str, str]:
         if cid not in self._files:
             c = self.registry.get(cid)
-            self._files[cid] = {p: b for p, b in self.tree.files().items() if self.owns(c, p)}
+            # candidates = files below every literal prefix owns() can match; owns() decides exactly
+            prefixes = [c.path, *self.modules(cid)]
+            prefixes += [re.split(r"[*?\[]", g.strip().lstrip("/"), maxsplit=1)[0] for g in c.inputs if not g.startswith("!")]
+            if c.produces:
+                prefixes.append("catalog/contracts/")
+            files = self.tree.files()
+            self._files[cid] = {p: files[p] for p in sorted(self._under_prefixes(prefixes)) if self.owns(c, p)}
         return self._files[cid]
 
     # ----------------------------------------------------------------- parts

@@ -52,8 +52,6 @@ service connection** — no Azure credentials exist in that job. The `validate` 
 
 ### Federated credentials (Azure DevOps workload identity federation)
 
-Verified on Microsoft Learn 2026-10-09 ([troubleshooting table](https://learn.microsoft.com/azure/devops/pipelines/release/troubleshoot-workload-identity#check-the-issuer-url-for-accuracy)):
-
 | | Azure DevOps issuer (**deprecated, retires 2027-07-01**) | Microsoft Entra issuer (default for new connections) |
 |---|---|---|
 | Issuer | `https://vstoken.dev.azure.com/<organization-id>` | `https://login.microsoftonline.com/<tenant-id>/v2.0` |
@@ -64,18 +62,15 @@ Create the service connection as *Azure Resource Manager → App registration or
 identity federation*, "Keep as draft", copy **Issuer** and **Subject identifier** into `settings.federated_credentials`
 (`identity = plan|apply|build`), apply bootstrap, then "Verify and save". Use one service connection per identity
 (e.g. `sc-eh-dev-plan`, `sc-eh-dev-apply`, `sc-eh-dev-build`), authorize pipelines individually (never "grant access to all pipelines"), and
-protect the apply connection with an environment approval. `azure_devops_legacy` generates the deprecated-issuer form
-only for connections not yet converted.
+protect the apply connection with an environment approval. A connection still on the deprecated issuer goes into
+`federated_credentials` with that issuer/subject.
 
 ## Datadog Azure integration app registration (optional)
 
 `datadog_integration.enabled = true` creates the app registration + service principal and grants **Monitoring Reader** on
-the lab subscription (+ `extra_subscription_ids`). Finding (Datadog docs, [manual setup](https://docs.datadoghq.com/integrations/guide/azure-manual-setup/),
-checked 2026-10-09): Datadog supports **Secretless Auth** — an Entra federated identity credential trusting Datadog's OIDC
-issuer (audience `api://AzureADTokenExchange`), marked *recommended*, requires azuread provider ≥ 3.7.0 (we pin `~> 3.10`;
-3.10.0 published 2026-09-24). Copy issuer + subject from the Datadog Azure integration tile into
-`federated_issuer`/`federated_subject`; Datadog's side (`datadog_integration_azure` with `secretless_auth_enabled = true`,
-`client_id`/`tenant_name` from this contract) is owned by `obs-azure-integration`.
+the lab subscription (+ `extra_subscription_ids`). Datadog's recommended **Secretless Auth** is a federated identity
+credential: copy issuer + subject from the Datadog Azure integration tile into `federated_issuer`/`federated_subject`.
+Datadog's side (`datadog_integration_azure`, `client_id`/`tenant_name` from this contract) is owned by `obs-azure-integration`.
 Secretless Auth is not available on US1-FED/US2-FED or sovereign clouds. There, create the secret **out of band** so it
 never enters Terraform state, straight into Delinea DSV (ADR-0001 section 14; path `<prefix>/<env>/datadog-azure-client-secret`):
 
@@ -109,14 +104,9 @@ secret exists anywhere. One-time operator steps per environment (DSV CLI `dsv`, 
    dsv config edit --encoding yaml   # add the subject below to the administrative policy, e.g. the Default Admin Policy
    #   subjects: [..., 'users:<azure-eh:<prefix>-<env>-deploy-agent>']
    ```
-   This is exactly Delinea's documented Azure flow ("Authentication: Azure"); Delinea notes that the Default Admin
-   Policy is broad, so prefer a dedicated admin policy limited to `users`, `config:auth:<azure-eh>`,
-   `config:policies:secrets:<prefix>:<env>` and `secrets:<prefix>:<env>:<.*>` if your tenant has one.
-   The username must be exactly `<prefix>-<env>-deploy-agent`: `foundation-secrets` then recognises it as the same user
-   (it never modifies or deletes users it did not create). `tools/secrets/dsv_apply.py` (plan stage = diff, apply stage
-   = converge) runs with this identity on the self-hosted deploy pool and creates every other DSV user and the
-   least-privilege permissions. Narrow or extend the admin policy to your tenant's conventions; DSV validates policy
-   resources against the policy path (Delinea "Policy" docs).
+   The Default Admin Policy is broad: prefer a dedicated admin policy limited to the paths above. The username must be
+   exactly `<prefix>-<env>-deploy-agent` so `foundation-secrets` recognises it (it never modifies users it did not
+   create); `tools/secrets/dsv_apply.py` runs with this identity and creates every other DSV user and permission.
 4. **Seed the operator-owned values** listed in [`foundation/identity/secrets.yaml`](../foundation/identity/secrets.yaml)
    (`source: operator`): `datadog-api-key`, `datadog-app-key`, `datadog-client-token`, `fault-token`,
    `fluentbit-shared-key`, the adapter/DBM passwords of enabled engines and the platform apply inputs
@@ -147,12 +137,10 @@ Resource Policy Contributor) on the subscription; Entra rights to create app reg
        operator_principal_ids: ["<your group object id>"]
        federated_credentials: []                     # fill after creating the draft service connections (step 4)
    ```
-2. `az login --tenant <tenant-id>` then `bootstrap/scripts/bootstrap.sh --env <env>`. The script:
-   checks login/subscription/tenant, registers resource providers, renders `bootstrap/terraform.tfvars.json`,
-   writes a temporary `backend_override.tf` (`backend "local"`), `terraform init` + plan + (confirm) apply with local state,
-   waits for data-plane RBAC, deletes the override and runs
-   `terraform init -migrate-state -force-copy -backend-config=resource_group_name=… -backend-config=storage_account_name=… -backend-config=container_name=tfstate -backend-config=key=<env>/bootstrap.tfstate -backend-config=use_azuread_auth=true`,
-   verifies the blob exists, renames the local state file to `bootstrap.local.tfstate.migrated-<ts>` and runs a drift check.
+2. `az login --tenant <tenant-id>` then `bootstrap/scripts/bootstrap.sh --env <env>`. The script registers resource
+   providers, applies with local state (temporary `backend_override.tf`), waits for data-plane RBAC, migrates the state
+   into the new account (`init -migrate-state`), renames the local file to `bootstrap.local.tfstate.migrated-<ts>` and
+   runs a drift check.
 3. Delete the `.migrated-*` file once `terraform plan` is clean (it contains state).
 4. Create the draft service connections, put their issuer/subject into `federated_credentials`, re-run the script
    (it now finds the state blob and uses the azurerm backend directly), then "Verify and save" in Azure DevOps.
@@ -211,7 +199,7 @@ remain recoverable for 30 days unless purged.
 
 `replication_type` (ZRS), `public_network_access` (Enabled), `operator_ip_ranges`, `agent_subnet_ids`, `private_endpoint`,
 `blob_soft_delete_days` (30), `container_soft_delete_days` (30), `change_feed_retention_days` (90), `lock_enabled` (true),
-`operator_principal_ids`, `create_validate_identity` (true), `federated_credentials`, `azure_devops_legacy`,
+`operator_principal_ids`, `promotion_reader_principal_ids`, `create_validate_identity` (true), `federated_credentials`,
 `apply_rbac_mode` (constrained), `apply_role_allowlist`, `apply_policy_contributor` (true), `plan_extra_role_names`,
 `datadog_integration.{enabled, display_name, owners, federated_issuer, federated_subject, extra_subscription_ids}`.
 
@@ -224,10 +212,7 @@ Phase 2 adds a private endpoint (≈ 7.3/month).
 
 - State account names come from the naming module (subscription hash suffix); changing `name_prefix` or environment name
   means a new account and a state migration.
-- Checkov skips (documented inline): CMK (CKV2_AZURE_1), queue logging (CKV_AZURE_33), private endpoint in phase 1
-  (CKV2_AZURE_33), public network in phase 1 (CKV_AZURE_59), SAS expiry with keys disabled (CKV2_AZURE_41), replication
-  variable (CKV_AZURE_206), blob read logging owned by observability diagnostics (CKV2_AZURE_21), GitHub OIDC check on the
-  Datadog credential (CKV_AZURE_249).
+- Checkov skips are justified inline.
 
 ### Promotion readers (multi-environment)
 

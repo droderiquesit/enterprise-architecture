@@ -13,9 +13,7 @@ locals {
     adapter = { owner = "hello-dbadapter", boundary = "db adapter (hello-dbadapter-postgresql)", schema = "adapter" }
   }
 
-  # Server parameters required by Datadog Database Monitoring on Flexible Server
-  # (https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/). pg_stat_statements is
-  # preloaded by default on Flexible Server, so shared_preload_libraries is left at the service default.
+  # Server parameters required by Datadog DBM; pg_stat_statements is preloaded by default on Flexible Server.
   server_parameters = {
     "azure.extensions"                 = join(",", distinct(concat(["PG_STAT_STATEMENTS"], [for e in var.settings.extra_extensions : upper(e)])))
     "track_activity_query_size"        = "4096"

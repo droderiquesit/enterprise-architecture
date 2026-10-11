@@ -19,8 +19,7 @@ variable "settings" {
   type = object({
     # ---------------------------------------------------------------- state storage
     replication_type = optional(string, "ZRS") # Standard_ZRS by default; GZRS/RAGZRS for regional DR
-    # Phase 1 (bootstrap, Microsoft-hosted agents): "Enabled" + firewall default Deny + operator_ip_ranges.
-    # Phase 2 (private agents exist): "Disabled" + private_endpoint set. See README "Network phases".
+    # "Enabled" (phase 1, firewall default Deny) or "Disabled" + private_endpoint (phase 2); README "Network phases".
     public_network_access = optional(string, "Enabled")
     operator_ip_ranges    = optional(list(string), []) # public IPs/CIDRs of operators / temporary hosted-agent IPs
     agent_subnet_ids      = optional(list(string), []) # deploy-agents subnet (needs Microsoft.Storage service endpoint)
@@ -32,21 +31,14 @@ variable "settings" {
     container_soft_delete_days = optional(number, 30)
     change_feed_retention_days = optional(number, 90)
     lock_enabled               = optional(bool, true)
-    # Entra object IDs (user or group) of operators who run bootstrap/break-glass. They get Storage Blob Data
-    # Contributor on tfstate + contracts: needed for `terraform init -migrate-state` with Entra auth (Owner has no
-    # data-plane rights) and for state restore. Use a group; scripts/bootstrap.sh checks you are covered.
+    # Operators (prefer a group) get data-plane access for `init -migrate-state` and state restore (Owner has none).
     operator_principal_ids = optional(list(string), [])
-    # Promotion (environments/promotion.yaml): principal ids of DOWNSTREAM environments' pipeline identities
-    # (e.g. test/prod build + apply) that read this environment's deployment records and packages to promote
-    # the exact artifacts. The registry side is granted by platform-shared settings.acr_pull_principal_ids.
+    # Downstream environments' pipeline identities that promote this environment's artifacts (README "Promotion readers").
     promotion_reader_principal_ids = optional(list(string), [])
 
     # ---------------------------------------------------------------- pipeline identities
     create_validate_identity = optional(bool, true)
-    # Federated credentials for Azure DevOps workload identity federation. Copy issuer + subject from the
-    # service connection ("App registration or Managed identity (manual)" -> Workload identity federation).
-    # New connections use the Entra issuer: https://login.microsoftonline.com/<tenant-id>/v2.0 with subject
-    # "<entra-prefix>/sc/<organization-id>/<service-connection-id>".
+    # Issuer + subject copied from each Azure DevOps service connection (README "Federated credentials").
     federated_credentials = optional(list(object({
       identity  = string # plan | apply | build | validate
       name      = string
@@ -54,23 +46,12 @@ variable "settings" {
       subject   = string
       audiences = optional(list(string), ["api://AzureADTokenExchange"])
     })), [])
-    # Legacy Azure DevOps issuer (https://vstoken.dev.azure.com/<org-id>, subject sc://<org>/<project>/<sc>).
-    # Deprecated by Microsoft, retires 2027-07-01; only for existing connections not yet converted.
-    azure_devops_legacy = optional(object({
-      organization_name   = string
-      organization_id     = string
-      project             = string
-      service_connections = map(string) # identity key (plan|apply) => service connection name
-    }))
-    # Apply identity role-assignment rights: "constrained" = Role Based Access Control Administrator with an ABAC
-    # condition that forbids assigning/removing Owner, User Access Administrator and RBAC Administrator;
-    # "allowlist" = only the role definition GUIDs in apply_role_allowlist may be assigned.
+    # "constrained": RBAC Administrator that cannot grant Owner/UAA/RBAC Admin; "allowlist": only apply_role_allowlist GUIDs.
     apply_rbac_mode      = optional(string, "constrained")
     apply_role_allowlist = optional(list(string), [])
     # foundation-governance assigns Azure Policy: Contributor cannot, so apply also gets Resource Policy Contributor.
     apply_policy_contributor = optional(bool, true)
-    # Extra roles for the plan identity at subscription scope (e.g. a custom role with specific listKeys actions
-    # when a root's refresh needs it). Default none: Reader only.
+    # Extra subscription-scope roles for the plan identity (e.g. a narrow listKeys custom role); default Reader only.
     plan_extra_role_names = optional(list(string), [])
 
     # ---------------------------------------------------------------- Datadog Azure integration (optional)
@@ -78,12 +59,10 @@ variable "settings" {
       enabled      = optional(bool, false)
       display_name = optional(string)
       owners       = optional(list(string), []) # Entra object IDs of app owners
-      # Datadog "Secretless Auth" (recommended): issuer + subject shown in the Datadog Azure integration tile.
-      # When empty, no federated credential is created and a client secret must be created out-of-band
-      # (az ad app credential reset ... | dsv secret create ..., Delinea DSV) - never through Terraform.
+      # Datadog "Secretless Auth" issuer/subject; empty = client secret created out-of-band into DSV, never by Terraform.
       federated_issuer  = optional(string, "")
       federated_subject = optional(string, "")
-      # Additional subscription IDs to grant Monitoring Reader on (the lab subscription is always included).
+      # Monitoring Reader on these besides the lab subscription.
       extra_subscription_ids = optional(list(string), [])
     }), {})
   })

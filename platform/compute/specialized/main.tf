@@ -5,7 +5,7 @@ locals {
   any        = local.s.confidential_vm.enabled || local.s.dedicated_host.enabled || local.s.gpu_vm.enabled || local.s.automation.enabled || local.s.ml.enabled
   ssh_key    = local.s.admin_ssh_public_key
 
-  # Datadog Agent enrolment (observability 4.0.0, ADR-0001 §3 rule 3 amendment): see platform/compute/vm/main.tf.
+  # Datadog Agent enrolment: see platform/compute/vm/main.tf.
   dd_enabled     = local.s.datadog.enabled
   dd_tags        = local.dd_enabled ? { (local.s.datadog.tag_name) = "true" } : {}
   dd_identity_id = local.dd_enabled ? try(local.identities[local.s.datadog.identity_key].id, null) : null

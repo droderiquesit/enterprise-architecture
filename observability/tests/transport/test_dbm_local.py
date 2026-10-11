@@ -20,7 +20,7 @@ import time
 import pytest
 import yaml
 
-from dockerutil import HERE, PACKAGE, PYTHON_IMAGE, REPO, Stack, ensure_dsv_fetch_image, sh, wait_for
+from dockerutil import HERE, PACKAGE, PYTHON_IMAGE, REPO, Stack, ensure_dsv_fetch_image, sh, tf_console, wait_for
 
 AGENT_IMAGE = "datadog/agent:7.84.2"
 PG_IMAGE = os.environ.get("PG_IMAGE", "postgres:17-alpine")
@@ -31,12 +31,7 @@ pytestmark = pytest.mark.skipif(shutil.which("docker") is None, reason="docker n
 
 
 def _render(expr: str):
-    tf = os.environ.get("TERRAFORM_BIN", "terraform")
-    mod = PACKAGE / "modules" / "dbm"
-    subprocess.run([tf, "init", "-backend=false", "-input=false"], cwd=mod, check=True, capture_output=True)
-    out = subprocess.run([tf, "console", f"-var-file={HERE / 'dbm' / 'databases.tfvars.json'}"], cwd=mod,
-                         input=f"jsonencode({expr})", capture_output=True, text=True, check=True).stdout.strip()
-    return json.loads(json.loads(out))
+    return tf_console(PACKAGE / "modules" / "dbm", expr, HERE / "dbm" / "databases.tfvars.json")
 
 
 def _render_confd() -> dict:

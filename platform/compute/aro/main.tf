@@ -5,8 +5,7 @@ locals {
   worker  = try(local.subnets["aro-worker"].id, null)
   vnet_id = var.foundation_network.spoke_vnet_id
 
-  # Platform workload identities (operator name => role definition GUID + scope kind), per
-  # https://learn.microsoft.com/azure/openshift/howto-create-openshift-cluster (managed identities).
+  # Platform operator identities (operator name => role definition GUID + scope kind).
   operators = {
     "cloud-controller-manager" = { role = "a1f96423-95ce-4224-ab27-4e3dc72facd4", scope = "subnets" }
     "ingress"                  = { role = "0336e1d3-7a87-462b-b6db-342b63f7802c", scope = "subnets" }
@@ -158,10 +157,8 @@ resource "azurerm_redhat_openshift_cluster" "this" {
   ]
 }
 
-# Managed OIDC issuer of the managed-identity cluster (Learn: "Deploy and configure an application using workload
-# identity on an ARO managed identity cluster" - `az aro show --query clusterProfile.oidcIssuer`). azurerm 5.9 does not
-# expose it, so it is read (GET only) with azapi; consumers federate their user-assigned identities with service
-# accounts of this issuer (e.g. obs-kubernetes-aro: Datadog Agents -> Delinea DSV). Not a credential.
+# The cluster's managed OIDC issuer is not exposed by azurerm, so it is read (GET only) with azapi; consumers
+# federate their identities with it. Not a credential.
 data "azapi_resource" "cluster" {
   count                  = local.enabled ? 1 : 0
   type                   = "Microsoft.RedHatOpenShift/openShiftClusters@2025-07-25"
@@ -170,13 +167,8 @@ data "azapi_resource" "cluster" {
 }
 
 # ---------------------------------------------------------------- application workload identity federation
-# Same ownership as platform-aks (ADR-0001 section 3): the credential binds a foundation-identity user-assigned identity
-# to THIS cluster's OIDC issuer, so it lives with the cluster (meaningless without the issuer, replaced with it). The
-# OpenShift pod-identity webhook (openshift-cloud-credential-operator) injects AZURE_CLIENT_ID / AZURE_TENANT_ID /
-# AZURE_FEDERATED_TOKEN_FILE and the projected token into pods whose service account carries
-# azure.workload.identity/client-id and that are labelled azure.workload.identity/use=true (Learn: "Deploy and configure
-# an application using workload identity on an ARO managed identity cluster"). Observability identities are federated
-# by their own root (obs-kubernetes-aro), as on AKS (obs-kubernetes).
+# As on AKS: the credential binds an identity to THIS cluster's issuer, so it lives (and is replaced) with the cluster.
+# Observability identities are federated by obs-kubernetes-aro.
 resource "azurerm_federated_identity_credential" "workload" {
   for_each = local.federated
 

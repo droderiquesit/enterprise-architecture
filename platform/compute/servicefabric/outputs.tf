@@ -14,7 +14,7 @@ output "contract" {
     node_count          = local.nt.instance_count
     app_port            = var.settings.app_port
     byo_vnet            = local.byovnet
-    # 1.1.0 (observability 4.1.0): node types for obs-hosts (Datadog Agent VM Application on the node type)
+    # for obs-hosts (Datadog Agent VM Application on the node type)
     node_types = local.enabled ? {
       (local.nt.name) = {
         id              = azapi_resource.node_type[0].id
