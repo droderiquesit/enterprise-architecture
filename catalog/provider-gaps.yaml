@@ -230,10 +230,10 @@ gaps:
       - {type: Microsoft.ServiceFabric/managedClusters/nodeTypes, api_version: "2026-02-01"}
     azurerm_status: partial
     resolution: azapi
-    reason: "azurerm_service_fabric_managed_cluster 5.9.0 node_type has no vmManagedIdentity, vmApplications or vmExtensions (checked with `terraform providers schema -json`: application_port_range, capacities, data_disk_*, ephemeral_port_range, multiple_placement_groups_enabled, name, placement_properties, primary, stateless, vm_image_*, vm_instance_count, vm_secrets, vm_size), and its Update re-PUTs every node type from its own node_type blocks (go-azure-sdk servicefabricmanagedcluster 2024-04-01, no GET/merge), which would drop identity and VM Applications set by anyone else. Node types are VMSS in the Microsoft-managed SFC_ resource group, changed only through the node type API (Learn: manually changing managed-cluster resources is not supported), so the obs-hosts Azure Policy cannot enrol them either. platform-servicefabric therefore manages the cluster and its node type with azapi (2026-02-01 = latest GA, embedded in azapi 2.13.0): vmManagedIdentity carries the obs-host-agent DSV-reader identity, ignore_body_changes keeps properties.vmApplications; obs-hosts sets that list with azapi_update_resource on the node type (same Datadog Agent VM Application version as every other host)."
+    reason: >-
+      azurerm 5.9.0 node_type lacks vmManagedIdentity / vmApplications and its update re-PUTs every node type, dropping
+      settings made elsewhere; node type VMSS can only change through the node type API, so platform-servicefabric uses
+      azapi (ignore_body_changes on vmApplications, which obs-hosts sets with azapi_update_resource).
     owner_component: platform-servicefabric
     references:
       - https://learn.microsoft.com/en-us/azure/templates/microsoft.servicefabric/2026-02-01/managedclusters/nodetypes
-      - https://learn.microsoft.com/en-us/azure/templates/microsoft.servicefabric/2026-02-01/managedclusters
-      - https://learn.microsoft.com/en-us/azure/service-fabric/how-to-managed-identity-managed-cluster-virtual-machine-scale-sets
-      - https://learn.microsoft.com/en-us/azure/service-fabric/managed-cluster-deny-assignment

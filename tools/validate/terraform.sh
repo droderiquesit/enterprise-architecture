@@ -50,6 +50,8 @@ fi
 if command -v tflint >/dev/null 2>&1; then
   step "tflint"
   tflint_cfg="$(cd "$(dirname "${BASH_SOURCE[0]}")/../ci" && pwd)/tflint.hcl"   # bundled terraform ruleset, recommended
-  tflint --chdir="$dir" --config="$tflint_cfg" --minimum-failure-severity=error --no-color
+  severity=error   # application roots declare consumed-contract variables they may not read yet
+  case "${dir#./}" in bootstrap*|foundation/*|platform/*) severity=warning ;; esac
+  tflint --chdir="$dir" --config="$tflint_cfg" --minimum-failure-severity="$severity" --no-color
 fi
 step "OK"
