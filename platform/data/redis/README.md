@@ -8,10 +8,7 @@
 Azure Managed Redis (`azurerm_managed_redis`, Microsoft.Cache/redisEnterprise) `Balanced_B0`, HA off, TLS (`Encrypted`), access keys disabled, `AllKeysLRU` eviction (cache semantics), **no persistence**, `EnterpriseCluster` policy (single endpoint for non-cluster-aware clients). Boundaries are key prefixes: `catalog:` (hello-catalog-api cache-aside) and `adapter:` (hello-dbadapter-redis). `azurerm_redis_cache` (Azure Cache for Redis, retiring) is deliberately not used.
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-redis` v1 — schema `catalog/contracts/platform-db-redis.v1.schema.json` (output `contract`, no secrets).
@@ -26,7 +23,7 @@ Cache (id, hostname, port 10000, TLS, eviction, persistence `none`), `auth_mode 
 | `clustering_policy` | `EnterpriseCluster` |
 | `private_endpoint_enabled` | `true` |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 ~USD 15-25: Balanced_B0 (non-HA) plus private endpoint (~7.3).
 
 ## Private networking
@@ -37,19 +34,6 @@ Access keys disabled; Entra ID via `azurerm_managed_redis_access_policy_assignme
 
 ## Teardown and data retention
 Destroy deletes the cache; no data is persisted (by design).
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - Key-prefix boundaries are not enforced by ACL (custom access policies are not modelled by azurerm).
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py redis                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/redis/overview
-- https://learn.microsoft.com/azure/redis/entra-for-authentication
-- https://learn.microsoft.com/azure/redis/private-link

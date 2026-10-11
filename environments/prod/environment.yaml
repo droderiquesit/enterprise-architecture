@@ -29,9 +29,8 @@ network:
   hub_address_space: 10.60.0.0/20
   spoke_address_space: 10.61.0.0/16
 budget:
-  # Rendered into foundation-governance (var.budget). Monthly cost estimates per profile: docs/guides/deployment-profiles.md
-  # (cost table; the minimal profile with the 4.0.0 Observability Pipelines Worker and APM/OTel gateways is estimated at
-  # roughly USD 600-650/month). Azure budgets alert only; they never cap spend.
+  # Rendered into foundation-governance (var.budget); cost estimates per profile: docs/guides/deployment-profiles.md.
+  # Azure budgets alert only; they never cap spend. The minimal profile is estimated at USD 600-650/month.
   monthly_amount: 800
   currency: USD
   contact_emails: [platform-team@example.com]
@@ -43,8 +42,5 @@ self_healing:
   drift_auto_remediate: false      # never in prod unless this is explicitly set to true here
   auto_rollback: true
   notify: {work_item: true, work_item_type: Bug, datadog_event: true}
-# Per-component overrides of each root's `settings` defaults (see <root>/variables.tf).
-# Observability settings (3.0.0: obs-telemetry-transport fleet / op_* / apm_gateway_*, obs-kubernetes ssi_namespaces,
-# obs-prereqs rum_applications; 4.0.0: obs-kubernetes values_overrides / dbm, obs-hosts mode / package_version,
-# obs-dbm hosting): environments/profiles/README.md. The 2.x obs-azure-integration log_management is ignored.
+# Per-component overrides of each root's `settings` defaults (<root>/variables.tf; observability: environments/profiles/README.md).
 components: {}

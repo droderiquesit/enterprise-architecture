@@ -1,0 +1,25 @@
+{
+  "first": {
+    "status": 202,
+    "order_id": "0306162c-ce88-4e2f-b878-edda4a5ed6bb"
+  },
+  "replay": {
+    "status": 202,
+    "order_id": "0306162c-ce88-4e2f-b878-edda4a5ed6bb",
+    "replayed_header": {
+      "Idempotent-Replayed": "true"
+    }
+  },
+  "same_key_different_body": {
+    "status": 409,
+    "body": {
+      "type": "urn:enterprise-hello:problem:idempotency-key-reused",
+      "title": "Idempotency-Key reused",
+      "status": 409,
+      "detail": "The Idempotency-Key was already used with a different request body.",
+      "instance": "/orders",
+      "trace_id": "b4f0b857704987a2551c8b3d6fef1062"
+    }
+  },
+  "orders_with_customer_ref": 1
+}

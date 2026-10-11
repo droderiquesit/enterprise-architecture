@@ -48,16 +48,3 @@ running (~USD 250+/month); keep it on Consumption to avoid that.
 
 Destroy deletes the environment (all apps in it must be destroyed first by their roots), the infrastructure
 resource group `…-infra` and the private DNS zone. No persistent data.
-
-## Validation
-
-```bash
-tools/validate/terraform.sh platform/compute/containerapps   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-```
-
-## Docs
-
-- https://learn.microsoft.com/azure/container-apps/networking
-- https://learn.microsoft.com/azure/container-apps/workload-profiles-overview
-- https://learn.microsoft.com/azure/container-apps/private-endpoints-with-dns
-- https://learn.microsoft.com/azure/container-apps/log-options

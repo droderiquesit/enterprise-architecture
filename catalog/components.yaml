@@ -159,7 +159,7 @@ components:
     layer: platform
     kind: terraform
     path: platform/compute/servicefabric
-    # foundation-identity: the DSV-reader identity obs-host-agent on the node type (vmManagedIdentity; observability 4.1.0)
+    # foundation-identity: the DSV-reader identity obs-host-agent on the node type (vmManagedIdentity)
     consumes: [foundation-network, foundation-identity]
     produces: [platform-servicefabric]
     catalog_refs: [service-fabric-managed]
@@ -366,11 +366,11 @@ components:
     kind: terraform
     path: observability/lab/hosts
     scope: applications         # after the platform VMs / VMSS exist: the remediation tasks enrol them right away
-    # 4.0.0: Azure VM Applications + Azure Policy (DeployIfNotExists on VMs / VMSS tagged datadog:enabled) - no
-    # per-host Terraform. foundation-identity: the per-environment DSV-reader identity obs-host-agent.
+    # Azure VM Applications + Azure Policy (DeployIfNotExists on VMs / VMSS tagged datadog:enabled), no per-host
+    # Terraform. foundation-identity: the per-environment DSV-reader identity obs-host-agent.
     consumes: [obs-telemetry-transport, foundation-identity]
     # settings.mode = direct only (no Azure Policy rights): the hosts come from these contracts.
-    # platform-servicefabric (4.1.0, any mode): node types get the VM Application on their own vmApplications (Azure
+    # platform-servicefabric (any mode): node types get the VM Application on their own vmApplications (Azure
     # Policy cannot modify the node type VMSS in the managed SFC_ resource group)
     optional_consumes: [platform-vm, platform-vmss, platform-db-sqlvm, platform-servicefabric]
     artifacts: [img-dsv-fetch]  # zip-package: the dsv-fetch release files are the VM Application packages (.dsv-fetch-release)
@@ -409,7 +409,7 @@ components:
     layer: observability
     kind: terraform
     path: observability/extras/content/lab/monitoring   # optional monitoring-as-code content (observability extras)
-    optional: true              # not in any built-in profile since observability 3.0.0 (profile custom to enable)
+    optional: true              # in no built-in profile (profile custom to enable)
     scope: applications         # needs application endpoints/contracts
     consumes: [obs-prereqs]
     secret_env:                 # Datadog Terraform provider keys (DSV, fetched with the deploy agent identity)
@@ -425,7 +425,7 @@ components:
     kind: artifact
     path: observability/images/dsv-fetch
     scope: platform             # built by the platform pipeline; applications roots consume its recorded digest
-    # 2.x: static Go binary. container-image = distroless image (/opt/dsv-fetch/dsv-fetch, linux/amd64+arm64);
+    # static Go binary. container-image = distroless image (/opt/dsv-fetch/dsv-fetch, linux/amd64+arm64);
     # zip-package = release files dsv-fetch-linux-amd64, -linux-arm64, -windows-amd64.exe + SHA256SUMS
     # (pipelines/templates/build-dsv-fetch.yml; artifacts["img-dsv-fetch"].package_url / package_sha256)
     artifact: {type: container-image, name: dsv-fetch, also: [zip-package]}

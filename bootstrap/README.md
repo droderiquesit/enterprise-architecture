@@ -229,22 +229,6 @@ Phase 2 adds a private endpoint (≈ 7.3/month).
   variable (CKV_AZURE_206), blob read logging owned by observability diagnostics (CKV2_AZURE_21), GitHub OIDC check on the
   Datadog credential (CKV_AZURE_249).
 
-## Validation
-
-```bash
-tools/validate/terraform.sh bootstrap   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-```
-
-## References
-
-- Terraform azurerm backend: https://developer.hashicorp.com/terraform/language/backend/azurerm
-- Workload identity service connections: https://learn.microsoft.com/azure/devops/pipelines/release/configure-workload-identity
-- Blob versioning restore: https://learn.microsoft.com/azure/storage/blobs/versioning-overview
-- Delegated role assignment conditions: https://learn.microsoft.com/azure/role-based-access-control/delegate-role-assignments-overview
-- Datadog Azure manual setup / Secretless Auth: https://docs.datadoghq.com/integrations/guide/azure-manual-setup/
-- Delinea DSV Azure authentication: https://docs.delinea.com/dsv/current/usage/auth-general/authazure
-- Delinea DSV policies: https://docs.delinea.com/online-help/devops-secrets-vault/tutorials/policy.htm
-
 ### Promotion readers (multi-environment)
 
 When `environments/promotion.yaml` promotes artifacts from this environment to a downstream one, list the downstream

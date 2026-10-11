@@ -12,10 +12,7 @@ separate data (F:) and log (G:) disks, daily auto-shutdown, and database `adapte
 `dbadapter` created by `scripts/init-adapter-db.ps1` (VM run command).
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}`, `secrets.{base_path, refs}` (Delinea DSV references) |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-sqlvm` v1 — schema `catalog/contracts/platform-db-sqlvm.v1.schema.json` (output `contract`, no secrets).
@@ -30,7 +27,7 @@ VM (id, private IP, principal ID), server (port, auth `sql-login`, admin passwor
 | `auto_shutdown.{enabled,time,timezone}` | `true`, `1900`, `UTC` |
 | `admin_secret_name`, `dbadapter_secret_name`, `dbm_secret_name`, `secret_version` | `sqlvm-admin-password`, `sqlvm-dbadapter-password`, `dbm-sqlvm-password`, 1 |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 ~USD 40-90: B2ms Windows ~USD 0.1/h (≈75 always-on; less with auto-shutdown — the VM is not auto-started), 3 StandardSSD disks ~10. SQL Developer edition has no license charge.
 
 ## Private networking
@@ -51,23 +48,9 @@ containers; `docs/known-limitations.md`). The contract carries only `dsv://` ref
 
 ## Teardown and data retention
 Destroy removes VM, disks and the SQL VM registration; the DSV secrets are not touched (delete them with the dsv CLI if the environment is gone).
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - Entra auth not implemented (see above). Encryption at host requires the `EncryptionAtHost` subscription feature (checkov skip annotated).
 - Auto-shutdown does not auto-start; the deploy-vm-workloads pipeline or an operator must start the VM.
 - The Datadog Agent is observability-owned: the `obs-hosts` Azure Policy adds it as a VM Application to the VM tagged
   `datadog:enabled` (this root ignores `gallery_application`).
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py sqlvm                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/create-sql-vm-powershell
-- https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/sql-server-iaas-agent-extension-automate-management
-- https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/configure-azure-ad-authentication-for-sql-vm
-- https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/

@@ -9,10 +9,7 @@ Serverless NoSQL account with database `inventory` / container `items` (partitio
 Built with the shared module `platform/modules/data-cosmos-account` (account, capabilities, backup, private endpoint).
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-cosmos-nosql` v1 — schema `catalog/contracts/platform-db-cosmos-nosql.v1.schema.json` (output `contract`, no secrets).
@@ -26,7 +23,7 @@ Account (id, endpoint, host, port, capacity mode, local auth false), `auth_mode 
 | `autoscale_max_throughput` | 1000 | provisioned only (autoscale floor = 10% of max) |
 | `private_endpoint_enabled` | `true` | |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 Serverless: pay per RU consumed (~USD 0.25 per million RU) + storage (~0.25/GB) — typically < USD 5 for lab traffic — plus a private endpoint (~7.3). Provisioned autoscale 1000 RU/s max: ~USD 60/month per container minimum.
 
 ## Private networking
@@ -37,20 +34,6 @@ Local (key) authentication **disabled**. Data-plane RBAC: *Cosmos DB Built-in Da
 
 ## Teardown and data retention
 Destroy deletes the account. Continuous-backup accounts can be restored for the 7-day tier window after deletion (restorable deleted accounts). Backup policy: Continuous (7-day tier).
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - The architecture matrix names the dbadapter boundary "container adapter"; this root implements database `adapter` / container `records` as specified for the data platform (flagged to the coordinator).
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py cosmos-nosql                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/cosmos-db/serverless
-- https://learn.microsoft.com/azure/cosmos-db/how-to-configure-private-endpoints
-- https://learn.microsoft.com/azure/cosmos-db/continuous-backup-restore-introduction
-- https://learn.microsoft.com/azure/cosmos-db/how-to-connect-role-based-access-control

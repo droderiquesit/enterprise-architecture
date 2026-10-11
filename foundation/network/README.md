@@ -119,19 +119,3 @@ take hours to release after the instance is deleted. Do not put a Delete lock on
   relying on firewall-only egress (default outbound is disabled).
 - ARO subnets get no NSG unless `aro_preconfigured_nsg` (ARO "bring your own NSG"); ARO needs outbound via its LB.
 - Bastion/App Gateway subnets live in the hub only for hub-spoke; single-spoke places them in the spoke.
-
-## Validation
-
-```bash
-tools/validate/terraform.sh foundation/network   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-```
-
-## References
-
-- Container Apps subnet sizing: https://learn.microsoft.com/azure/container-apps/custom-virtual-networks#subnet
-- Flex Consumption networking: https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#configure-virtual-network-integration
-- Private DNS zone names: https://learn.microsoft.com/azure/private-link/private-endpoint-dns
-- Default outbound access: https://learn.microsoft.com/azure/virtual-network/ip-services/default-outbound-access
-- Bastion NSG: https://learn.microsoft.com/azure/bastion/bastion-nsg · App Gateway infra: https://learn.microsoft.com/azure/application-gateway/configuration-infrastructure
-- ARO networking: https://learn.microsoft.com/azure/openshift/concepts-networking · MDP networking: https://learn.microsoft.com/azure/devops/managed-devops-pools/configure-networking
-- API Management v2 VNet integration: https://learn.microsoft.com/azure/api-management/integrate-vnet-outbound

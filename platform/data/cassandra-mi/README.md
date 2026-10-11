@@ -8,10 +8,7 @@
 Cassandra 5.0 managed cluster + datacenter `dc1` (3 × `Standard_D8s_v4`, 1 P30 disk each) in the `cassandra-mi` subnet; keyspace `adapter` for hello-dbadapter-cassandra-mi (created over CQL by `scripts/create-keyspace.cql` — there is no ARM keyspace resource for Managed Instance). **Disabled by default (high cost).**
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}`, `secrets.{base_path, refs}` (Delinea DSV references) |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-cassandra-mi` v1 — schema `catalog/contracts/platform-db-cassandra-mi.v1.schema.json` (output `contract`, no secrets).
@@ -27,7 +24,7 @@ Cassandra 5.0 managed cluster + datacenter `dc1` (3 × `Standard_D8s_v4`, 1 P30 
 | `network_contributor_scope` | `subnet` (`vnet` matches Microsoft's quickstart) |
 | `admin_secret_name`, `secret_version` | `cassandra-mi-admin-password`, 1 |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 Disabled: 0. Enabled: roughly USD 1,500+/month (3 × D8s_v4 VMs + P30 disks + service fee); deallocate (NonProduction cluster type) or destroy when idle.
 
 ## Private networking
@@ -38,20 +35,7 @@ Cassandra native authentication (`authentication_method = Cassandra`); Entra ID 
 
 ## Teardown and data retention
 Destroy deletes the datacenter and cluster (and the Network Contributor assignment). Snapshot backups (24 h) are deleted with the cluster.
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - No ARM keyspace resource; CQL bootstrap runs from a private agent.
 - SKU list per region varies; verify `Standard_D8s_v4` availability.
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py cassandra-mi                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/managed-instance-apache-cassandra/create-cluster-cli
-- https://learn.microsoft.com/azure/managed-instance-apache-cassandra/add-service-principal
-- https://learn.microsoft.com/azure/managed-instance-apache-cassandra/network-rules

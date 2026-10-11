@@ -76,15 +76,4 @@ None in Azure. The deploy pool needs HTTPS egress to `<tenant>.secretsvaultcloud
   displayName): changing an identity's resource id is a conflict that needs an operator.
 
 ## Validation
-
-```bash
-tools/validate/terraform.sh foundation/secrets   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-python3 -m pytest tests/tools/test_secrets_tools.py -q   # dsv_apply plan/apply against tools/secrets/mock_dsv.py
-```
-
-## References
-
-- https://docs.delinea.com/dsv/current/usage/auth-general/authazure
-- https://docs.delinea.com/online-help/devops-secrets-vault/tutorials/policy.htm
-- https://github.com/DelineaXPM/dsv-cli
-- https://registry.terraform.io/providers/DelineaXPM/dsv/latest/docs
+Extra check: `python3 -m pytest tests/tools/test_secrets_tools.py -q` (dsv_apply against the mock DSV).

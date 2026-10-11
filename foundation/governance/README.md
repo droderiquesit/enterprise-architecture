@@ -76,19 +76,6 @@ retention period). Destroy last so cost alerts cover the teardown of everything 
   `policy.not_scopes` or keep audit mode.
 - Budget currency is the billing account currency; the `budget.currency` value in environment.yaml is informational.
 
-## Validation
-
-```bash
-tools/validate/terraform.sh foundation/governance   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-```
-
-## References
-
-- Budgets: https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets
-- Tag policies: https://learn.microsoft.com/azure/azure-resource-manager/management/tag-policies
-- Built-in policies: https://learn.microsoft.com/azure/governance/policy/samples/built-in-policies
-- Resource Graph: https://learn.microsoft.com/azure/governance/resource-graph/overview
-
 ### GitHub Copilot code review budget
 
 `settings.copilot_review_budget` (on by default, USD 100/month) creates an alert-only budget filtered to meter

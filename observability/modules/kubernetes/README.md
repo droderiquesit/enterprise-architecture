@@ -35,7 +35,7 @@ Output `datadog_values` is that list; `datadog_postrender_args` the post-rendere
   `datadog-cluster-agent`, runners `restricted-v2`) and the SCC gives every container of the pod the same UID; the
   DaemonSet keeps uid 0 (SCC `datadog` is RunAsAny, the Agent runs as root). The Fluent Bit fallback and `op_worker`
   fail the plan on OpenShift. Same secret path and workload identity (managed-identity ARO clusters have a managed OIDC
-  issuer and the pod-identity webhook). Sources: `../../lab/kubernetes-aro/README.md`.
+  issuer and the pod-identity webhook).
 
 ## API key: one secret path (Delinea DSV, ADR-0001 section 14)
 * The chart Secret `datadog` holds only `ENC[<dsv.api_key_ref>]`: no existing-Secret mode, no synced Secret.

@@ -85,17 +85,3 @@ Outbound calls go to `dev.azure.com`, `vssps`, Entra ID, Delinea DSV and (option
   service-hook senders of your organization's region before relying on it (set `restrict_to_azure_devops = false` to fall back
   to secret-only authentication).
 - One Flex app per plan (FC1). Replay protection's event-id cache is per instance (processing is idempotent per PR iteration).
-
-## Validation
-
-```bash
-tools/validate/terraform.sh foundation/pr-reviewer   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-```
-
-## Docs
-
-- Flex Consumption: https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan
-- Identity-based connections: https://learn.microsoft.com/azure/azure-functions/functions-reference#configure-an-identity-based-connection
-- Service principals & managed identities in Azure DevOps: https://learn.microsoft.com/azure/devops/integrate/get-started/authentication/service-principal-managed-identity
-- Allowed IP addresses / service tag: https://learn.microsoft.com/azure/devops/organizations/security/allow-list-ip-url
-- Web Hooks consumer: https://learn.microsoft.com/azure/devops/service-hooks/consumers#webhooks

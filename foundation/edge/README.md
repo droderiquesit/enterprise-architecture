@@ -63,20 +63,3 @@ its password **are stored in Terraform state and in the saved plan** (both in th
 Microsoft-managed certificate and custom domains can use Front Door managed certificates
 (`azurerm_cdn_frontdoor_custom_domain` `tls { certificate_type = "ManagedCertificate" }`), so no certificate secret
 exists at all. Use App Gateway only when you need regional WAF in the VNet.
-
-## Validation
-
-```bash
-tools/validate/terraform.sh foundation/edge   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-```
-
-## References
-
-- App Gateway infrastructure + NSG: https://learn.microsoft.com/azure/application-gateway/configuration-infrastructure
-- App Gateway SSL certificates (`ssl_certificate` data/password): https://learn.microsoft.com/azure/application-gateway/ssl-overview
-- Front Door managed certificates: https://learn.microsoft.com/azure/frontdoor/domain
-- Front Door private link origins: https://learn.microsoft.com/azure/frontdoor/private-link
-- API Management v2 tiers: https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview
-- APIM VNet integration (v2): https://learn.microsoft.com/azure/api-management/integrate-vnet-outbound
-- Azure Firewall Basic: https://learn.microsoft.com/azure/firewall/basic-features
-- Bastion SKUs: https://learn.microsoft.com/azure/bastion/configuration-settings

@@ -96,18 +96,3 @@ The node type update that adds the identity is a rolling (per upgrade domain) no
 ## Cost when enabled (approx.)
 
 3 × D2s_v5 Windows ≈ USD 410/month + Standard LB/public IP ~20 + disks ~30. Disabled: 0. Datadog bills the 3 Agent hosts.
-
-## Validation
-
-```bash
-python3 tools/validate/all_terraform.py --only platform-servicefabric   # fmt, init -backend=false, validate, terraform test (mock providers)
-```
-
-## Docs
-
-- https://learn.microsoft.com/azure/service-fabric/overview-managed-cluster
-- https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-vnet
-- https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-azure-active-directory-client
-- https://learn.microsoft.com/azure/service-fabric/how-to-managed-identity-managed-cluster-virtual-machine-scale-sets
-- https://learn.microsoft.com/azure/service-fabric/managed-cluster-deny-assignment
-- https://learn.microsoft.com/azure/templates/microsoft.servicefabric/2026-02-01/managedclusters/nodetypes

@@ -19,10 +19,7 @@ Germany West Central, Sweden Central, Australia East, Korea Central — enforced
 private endpoint.
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-horizondb` v1 — schema `catalog/contracts/platform-db-horizondb.v1.schema.json` (output `contract`, no secrets).
@@ -39,7 +36,7 @@ private endpoint.
 | `private_endpoint_group_id` | `null` |
 | `admin_password_version` | 1 |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 Disabled: 0. Enabled: preview pricing per vCore × replicas; verify before enabling.
 
 ## Private networking
@@ -50,22 +47,8 @@ HorizonDB preview supports public access with IP firewall (no rules by default �
 
 ## Teardown and data retention
 Destroy deletes the cluster; preview backup retention is a fixed 7 days.
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - AzAPI gap: no azurerm resources. `schema_validation_enabled = false` because azapi 2.13 embeds only 2026-01-20-preview (no `authConfig`).
 - Database `adapter` is created by the app/migration (no ARM database resource documented).
 - Not a Datadog DBM deployment type.
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py horizondb                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/horizondb/overview
-- https://learn.microsoft.com/azure/horizondb/configure-maintain/quickstart-create-cluster
-- https://learn.microsoft.com/azure/templates/microsoft.horizondb/2026-05-01-preview/clusters
-- https://learn.microsoft.com/azure/horizondb/network/concepts-network-public

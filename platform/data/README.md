@@ -57,9 +57,12 @@ limitation). Key-based Cosmos APIs (Mongo RU, Cassandra, Gremlin) expect operato
 
 ## Validation
 ```bash
-for d in platform/data/*/; do (cd $d && terraform init -backend=false && terraform validate && terraform test); done
 python3 platform/data/tests/validate_contracts.py        # contract outputs vs catalog/contracts/*.schema.json + static policy
 python3 platform/data/tests/gen_contract_schemas.py      # regenerate the contract schemas after contract changes
-checkov -d platform/data --framework terraform           # every skip carries an inline justification
 ```
-Mocked tests cannot catch Azure-side errors (quota, region/SKU availability, preview gating, API behaviour).
+Repo-wide Terraform checks: [root README](../../README.md). Mocked tests cannot catch Azure-side errors (quota,
+region/SKU availability, preview gating, API behaviour).
+
+## Conventions
+- Cost figures are approximate list prices, not verified against the pricing API.
+- `prevent_destroy` is intentionally **not** set (lab): destroying a root deletes its resource group and all synthetic data in it.

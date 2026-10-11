@@ -31,14 +31,11 @@ Shared code modules (not components): `modules/compute-runtime-storage` (hardene
 
 ## Conventions
 
-- Layout per ADR §12: `versions.tf`, `backend.tf` (partial `azurerm` backend), `providers.tf`
-  (`storage_use_azuread = true`, `resource_provider_registrations = "none"` / azapi `skip_provider_registration = true`:
-  the Reader-only plan identity cannot register providers; `bootstrap/scripts/bootstrap.sh` does), `variables.tf` (`environment`, upstream contracts with only used fields,
-  typed `settings` with `optional()` defaults and validations), `locals.tf` (naming + tags), `main.tf`,
-  `outputs.tf` (`contract`), `tests/*.tftest.hcl` (mock providers, `command = plan`).
-- Upstream contracts arrive as `foundation_network`, `foundation_identity`, `platform_shared` variables.
-  Missing optional keys are handled with `try()`/`lookup()` (e.g. DNS zones, `aro-*` subnets); identities absent
-  from the identity contract are skipped and reported in the contract where grants are optional.
+- Layout per ADR §12; the plan identity cannot register providers (`bootstrap/scripts/bootstrap.sh` does), hence
+  `resource_provider_registrations = "none"` / azapi `skip_provider_registration = true`.
+- Upstream contracts (`foundation_network`, `foundation_identity`, `platform_shared`) are typed with only the fields used.
+  Optional keys (DNS zones, `aro-*` subnets) use `try()`/`lookup()`; identities missing from the identity contract are
+  skipped and reported in the contract.
 - No secrets in contracts. VM/SF break-glass passwords come from `random_password` and live only in state.
 - Every root's planned `contract` output is validated against `catalog/contracts/<name>.v1.schema.json` from
   the `terraform test -json -verbose` plan output.
@@ -49,14 +46,9 @@ Shared code modules (not components): `modules/compute-runtime-storage` (hardene
 |---|---|---|---|
 | `Microsoft.DurableTask/schedulers`, `…/schedulers/taskHubs` | `2026-02-01` (GA) | `compute/functions` | azurerm 5.9 has no Durable Task Scheduler resources |
 
-## Validation
+## Validation and status
 
-```bash
-python3 tools/validate/all_terraform.py --workers 4 --only platform-shared,platform-messaging,platform-aks,platform-containerapps,platform-appservice,platform-functions,platform-vm,platform-vmss,platform-batch,platform-servicefabric,platform-aro,platform-specialized-compute
-# or one root: tools/validate/terraform.sh platform/compute/aks
-checkov -d platform/shared -d platform/messaging -d platform/compute --framework terraform
-```
-
+Repo-wide Terraform checks are in the [root README](../README.md); additionally `checkov -d platform --framework terraform`.
 Nothing here has been deployed (no Azure credentials in the build sandbox): status is `implemented` at most.
 
 ## Cross-layer requirements (owned elsewhere)

@@ -8,10 +8,7 @@
 StorageV2 account (LRS, TLS 1.2, shared key disabled, OAuth default, public network access disabled) with tables `notifications` (hello-worker) and `adapterrecords` (hello-dbadapter-table-storage).
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-table-storage` v1 — schema `catalog/contracts/platform-db-table-storage.v1.schema.json` (output `contract`, no secrets).
@@ -23,7 +20,7 @@ Account (id, table endpoint), `auth_mode = entra-rbac`, tables with owners, `rba
 | `replication_type` | `LRS` |
 | `private_endpoint_enabled` | `true` |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 < USD 1 for storage/transactions + private endpoint (~7.3).
 
 ## Private networking
@@ -34,18 +31,6 @@ Shared key disabled. *Storage Table Data Contributor* assigned per table (table-
 
 ## Teardown and data retention
 Destroy deletes the account and tables (no soft delete for tables).
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - Storage logging is a diagnostic setting owned by obs-diagnostics (checkov skips annotated).
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py table-storage                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/storage/tables/authorize-access-azure-active-directory
-- https://learn.microsoft.com/azure/storage/common/shared-key-authorization-prevent

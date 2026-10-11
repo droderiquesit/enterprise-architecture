@@ -46,17 +46,3 @@ manual starts, compute drops proportionally; disks are always billed.
 ## Teardown / retention
 
 Destroy deletes VMs, NICs and OS disks (no data disks; app state lives in Table Storage/Cosmos).
-
-## Validation
-
-```bash
-tools/validate/terraform.sh platform/compute/vm   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-```
-
-## Docs
-
-- https://learn.microsoft.com/azure/virtual-machines/linux/using-cloud-init
-- https://learn.microsoft.com/entra/identity/devices/howto-vm-sign-in-azure-ad-linux
-- https://learn.microsoft.com/entra/identity/devices/howto-vm-sign-in-azure-ad-windows
-- https://learn.microsoft.com/azure/virtual-machines/windows/run-command
-- https://learn.microsoft.com/azure/virtual-machines/sizes/lifecycle/retirements-and-capacity-restrictions

@@ -39,44 +39,24 @@ bootstrap (manual, once)            -> state storage, pipeline identities
 platform-* -> applications -> observability lab roots
 ```
 
-`foundation-identity` and `foundation-governance` have no contract inputs and may run in parallel with network;
-`foundation-secrets` follows identity, `foundation-deploy-agents` needs network + identity, `foundation-edge` needs network. Switching egress to Azure Firewall is a two-pass change (see [network README](network/README.md#switching-egress-to-azure-firewall)).
+Switching egress to Azure Firewall is a two-pass change (see [network README](network/README.md#switching-egress-to-azure-firewall)).
 
 ## Conventions every foundation root follows
 
-- Layout per ADR §12: `versions.tf`, `backend.tf` (`backend "azurerm" {}` partial config, key `<env>/<component>.tfstate`),
-  `providers.tf` (`storage_use_azuread = true`, `resource_provider_registrations = "none"` — providers are registered by
-  `bootstrap/scripts/bootstrap.sh`), `variables.tf` (`environment`, typed `settings`, upstream contracts), `outputs.tf`
-  (`output "contract"`), `tests/*.tftest.hcl` (mock providers, `command = plan`).
-- Upstream contracts arrive as variables named after the contract (`foundation_network`, `foundation_identity`) with only the
-  fields used; `terraform_remote_state` is never used.
+- Layout per ADR §12; `resource_provider_registrations = "none"` because `bootstrap/scripts/bootstrap.sh` registers providers.
+- Upstream contracts arrive as variables named after the contract, typed with only the fields used (ADR §5).
 - Tags from `modules/tags` on every taggable resource; names from `modules/naming`; no `random_*` names.
 - Private by default: PaaS behind private endpoints, default outbound access disabled on every subnet,
   explicit egress (NAT Gateway or firewall) only for subnets that need it, inbound internet denied by NSG.
 - No secret values in contracts: Delinea DSV holds every value (set out-of-band or by `tools/secrets/publish.py`); contracts carry `dsv://` references (ADR-0001 section 14).
-- Provider pins: `azurerm ~> 5.9`, `time ~> 0.14` (governance). **No AzAPI is used in foundation**: Managed DevOps Pools,
-  Dev Center and every other resource here are covered by azurerm 5.9 (`azurerm_managed_devops_pool` exists).
+- No AzAPI in foundation: azurerm 5.9 covers everything here (including `azurerm_managed_devops_pool`).
 
-## Validation (what was actually run)
+## Validation and status
 
-```bash
-python3 tools/validate/all_terraform.py --workers 4 \
-  --only bootstrap,foundation-network,foundation-identity,foundation-secrets,foundation-governance,foundation-deploy-agents,foundation-edge,foundation-pr-reviewer
-python3 -m pytest foundation/identity/tests -q
-checkov -d bootstrap --framework terraform --quiet --compact
-checkov -d foundation --framework terraform --quiet --compact
-```
+Repo-wide Terraform checks are in the [root README](../README.md); additionally `checkov -d bootstrap -d foundation --framework terraform`.
+All foundation roots are **implemented** (ADR §11: static validation + mock-provider tests); nothing has been deployed yet.
 
-Status (ADR §11): all foundation roots are **implemented** (static validation + mock-provider tests). Nothing here has been
-deployed from this repository yet; no evidence files exist.
+## Cost at defaults
 
-## Cost profile at defaults (approximate list prices, USD/month, swedencentral, Oct 2026 — verify with the pricing calculator)
-
-| Component | Default footprint | ≈ USD/month |
-|---|---|---|
-| network | single spoke, 1 NAT Gateway + 1 Standard public IP, ~27 private DNS zones | 33 (NAT) + 4 (IP) + 14 (zones) + data processing ≈ **50** |
-| identity | 18 user-assigned identities (free) | **0** |
-| secrets | no Azure resources (Delinea DSV subscription is separate) | **0** |
-| governance | budget, action group (email), 5 policy assignments | **0** |
-| deploy-agents | VMSS at 0 instances (Azure DevOps scales it) | **0 idle**; ≈ 70 per always-on D2s_v5 agent |
-| edge | everything disabled | **0** (see edge README for per-component prices) |
+≈ USD 50/month, almost all `foundation-network` (NAT Gateway, public IP, ~27 private DNS zones); the other roots are ≈ 0 idle.
+Per-root figures (including edge components when enabled) are in each root README.

@@ -12,10 +12,7 @@ block: 2 nodes `GP_Standard_D2ds_v5`, default database `adapter`) for hello-dbad
 distributed table `adapter.records` (`scripts/elastic-distribute.sql`).
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-postgresql` v1 — schema `catalog/contracts/platform-db-postgresql.v1.schema.json` (output `contract`, no secrets).
@@ -31,7 +28,7 @@ Server (fqdn, version, network mode, Entra admin, server parameters), per-databa
 | `extra_extensions` | `[]` | appended to `azure.extensions` |
 | `elastic_cluster.{enabled,node_count,sku_name,storage_mb,pe_group_id}` | `false`, 2, `GP_Standard_D2ds_v5`, 32768, `postgresqlServer` | Burstable SKUs rejected |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 ~USD 17: B1ms (~13) + 32 GB storage (~4); backup within free allowance. Elastic cluster (disabled) ~USD 300+ for 2 GP nodes + PE.
 
 ## Private networking
@@ -50,23 +47,8 @@ Server default (which preloads pg_stat_statements); Datadog's Azure guide does n
 
 ## Teardown and data retention
 Destroy deletes the server; Azure keeps backups of a deleted server only for the documented deleted-server restore window.
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - `track_activity_query_size` requires a server restart to take effect (not automated).
 - Elastic-cluster Private Link group ID is assumed `postgresqlServer` (setting) — verify with `az network private-link-resource list` when enabling.
 - Geo-redundant backup off (cost).
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py postgresql                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/postgresql/configure-maintain/concepts-supported-versions
-- https://learn.microsoft.com/azure/postgresql/elastic-clusters/concepts-elastic-clusters-limitations
-- https://learn.microsoft.com/azure/postgresql/security/security-entra-configure
-- https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/
-- https://docs.datadoghq.com/database_monitoring/guide/managed_authentication/

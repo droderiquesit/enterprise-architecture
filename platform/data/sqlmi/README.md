@@ -11,10 +11,7 @@ create (timeouts set to 8 h) and the paid instance is expensive. Optional **free
 one GP instance per subscription, 4 or 8 vCores, 720 vCore-hours/month, 64 GB, 12 months).
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}` |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-sqlmi` v1 — schema `catalog/contracts/platform-db-sqlmi.v1.schema.json` (output `contract`, no secrets).
@@ -31,7 +28,7 @@ When `enabled = false` the contract is `{enabled: false, server: null, databases
 | `pitr_retention_days` | 7 | |
 | `stop_schedule_enabled`, `start_time`, `stop_time`, `schedule_timezone` | `true`, 07:00, 19:00, UTC | weekday start/stop schedule |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 Disabled: 0. Enabled (paid, GP 4 vCore, license included): ~USD 700-800/month always-on; the weekday 07-19 schedule cuts compute to roughly 35% of hours (storage still billed). Free offer: 0 within the monthly vCore-hour credit.
 
 ## Private networking
@@ -44,22 +41,8 @@ Entra-only (`azuread_authentication_only_enabled`). Workload users via `platform
 
 ## Teardown and data retention
 Deleting the instance can itself take hours; databases are deleted with it. Free-offer instances are deleted by Azure 30 days after the 12-month offer ends unless upgraded.
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - AzAPI gap: `azurerm_mssql_managed_instance` cannot set `pricingModel`; the free offer uses `azapi_resource` (Microsoft.Sql/managedInstances@2025-01-01).
 - Free offer: no zone redundancy, failover groups or LTR; one per subscription.
 - Subnet sizing/NSG/route table are foundation-network responsibilities.
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py sqlmi                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/azure-sql/managed-instance/free-offer
-- https://learn.microsoft.com/azure/azure-sql/managed-instance/vnet-subnet-determine-size
-- https://learn.microsoft.com/azure/azure-sql/managed-instance/instance-stop-start-how-to
-- https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/

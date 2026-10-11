@@ -70,7 +70,6 @@ Set and rotate values with the DSV CLI (`dsv secret create|update --path <prefix
 [docs/runbooks/secret-rotation.md](../../docs/runbooks/secret-rotation.md). The former `scripts/set-secrets.sh` (Key Vault)
 was removed.
 
-
 ## Settings (`components.foundation-identity`)
 
 | Key | Default |
@@ -107,14 +106,4 @@ default allow-list (`foundation-edge`) includes `*.secretsvaultcloud.*`.
 - `hello-frontend` gets no secret access; the RUM client token is injected by the deployment pipeline.
 
 ## Validation
-
-```bash
-tools/validate/terraform.sh foundation/identity   # fmt, init -backend=false, validate, terraform test (mock providers, no credentials)
-python3 -m pytest foundation/identity/tests -q                 # static guards (no secret values / Key Vault)
-```
-
-## References
-
-- Delinea DSV Azure authentication: https://docs.delinea.com/dsv/current/usage/auth-general/authazure
-- Delinea DSV policies: https://docs.delinea.com/online-help/devops-secrets-vault/tutorials/policy.htm
-- User-assigned managed identities: https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview
+Extra check: `python3 -m pytest foundation/identity/tests -q` (no secret values / Key Vault).

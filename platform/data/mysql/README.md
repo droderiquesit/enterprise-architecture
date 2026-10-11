@@ -8,10 +8,7 @@
 Flexible Server **MySQL 8.4** (GA since 2025-09), `B_Standard_B1ms`, 20 GB, 7-day backups, Entra administrator, database `adapter` for hello-dbadapter-mysql, `performance_schema=ON` for Datadog DBM.
 
 ## Consumed contracts
-| Contract | Fields used |
-|---|---|
-| `foundation-network` v1 | `resource_group_name`, `location`, `spoke_vnet_id`, `subnets[*].id`, `private_dns_zones[*].id` (each zone optional, `lookup`/`try`) |
-| `foundation-identity` v2 | `identities[<name>].{principal_id, client_id, name}`, `secrets.{base_path, refs}` (Delinea DSV references) |
+`foundation-network` v1, `foundation-identity` v2 (fields: `variables.tf`).
 
 ## Produced contract
 `platform-db-mysql` v1 — schema `catalog/contracts/platform-db-mysql.v1.schema.json` (output `contract`, no secrets).
@@ -27,7 +24,7 @@ Server (fqdn, version, Entra admin, server UAMI), database `adapter` with grant 
 | `admin_password_version` | 1 | bump to rotate the write-only break-glass password |
 | `dbm_password_secret_name` | `dbm-mysql-password` | fallback convention only |
 
-## Cost at defaults (approximate, USD/month, list prices, not verified against the pricing API)
+## Cost at defaults (approx. USD/month)
 ~USD 15: B1ms (~12) + 20 GB storage (~2.3).
 
 ## Private networking
@@ -45,21 +42,8 @@ by obs-dbm with the password from Delinea DSV (`dbm-mysql-password`).
 
 ## Teardown and data retention
 Destroy deletes the server and database.
-`prevent_destroy` is intentionally **not** set (lab). Destroying the root deletes the resource group and all
-synthetic data in it.
 
 ## Known limitations / exceptions
 - Datadog: Query Activity and Wait Event collection are not supported on Flexible Server.
 - Graph permissions for the server UAMI are an out-of-band Entra step.
 - `performance_schema` is static (restart).
-
-## Validation
-```bash
-terraform init -backend=false && terraform validate && terraform test   # mocked providers, no credentials
-python3 platform/data/tests/validate_contracts.py mysql                 # contract output vs JSON schema
-```
-
-## References
-- https://learn.microsoft.com/azure/mysql/concepts-version-policy
-- https://learn.microsoft.com/azure/mysql/flexible-server/concepts-azure-ad-authentication
-- https://docs.datadoghq.com/database_monitoring/setup_mysql/azure/
