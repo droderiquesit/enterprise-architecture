@@ -1,13 +1,6 @@
-# Datadog Agent (Helm chart via modules/kubernetes, distribution = "openshift") on the lab Azure Red Hat OpenShift
-# cluster: node Agent DaemonSet (container logs -> Observability Pipelines Worker, metrics, APM host port 8126, OTLP,
-# Single Step Instrumentation), Cluster Agent and cluster-checks runners - the same chart, layers, post-renderer and
-# secret path as obs-kubernetes on AKS (no copy of the module).
-#
-# The Datadog API key never passes through this root (ADR-0001 section 14): the three Agent components resolve
-# api_key ENC[dsv://...] at run time with the static dsv-fetch binary as secret backend, authenticating to Delinea DSV
-# with Microsoft Entra workload identity: platform-aro is a managed-identity cluster whose managed OIDC issuer
-# (contract oidc_issuer_url) this root federates with the obs-collector identity for the Datadog service accounts.
-# No Kubernetes Secret holds the key, no Key Vault, nothing secret in state (cluster credentials: providers.tf).
+# Datadog Agent on the lab ARO cluster via modules/kubernetes (distribution = "openshift"). The API key never passes
+# through this root: Agents resolve ENC[dsv://...] with workload identity federated with the cluster's managed OIDC
+# issuer (cluster credentials: providers.tf).
 locals {
   enabled   = try(var.platform_aro.enabled, false) && try(var.platform_aro.cluster_id, null) != null
   collector = var.foundation_identity.identities[var.settings.collector_identity_key]

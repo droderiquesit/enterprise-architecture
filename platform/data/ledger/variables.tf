@@ -17,12 +17,7 @@ variable "environment" {
 variable "foundation_identity" {
   description = "foundation-identity contract v2 (catalog/contracts/foundation-identity.v2.schema.json), only the fields used here."
   type = object({
-    identities = map(object({
-      id           = string
-      principal_id = string
-      client_id    = string
-      name         = string
-    }))
+    identities = map(object({ principal_id = string }))
   })
 }
 

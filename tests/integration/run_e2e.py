@@ -26,12 +26,12 @@ import shutil
 import subprocess
 import sys
 import time
-import urllib.error
 import urllib.request
 import uuid
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+from e2elib import http, image_exists, logger, poll, sh, utc_iso, utc_stamp
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
@@ -41,9 +41,7 @@ WORK = Path(os.environ.get("E2E_WORK_DIR", HERE / ".work")).resolve()
 EVIDENCE_ROOT = REPO / "docs" / "evidence" / "local"
 VERSION = os.environ.get("E2E_VERSION", "0.1.0-e2e")
 LABEL = "locally-verified (docker, mock Datadog intake)"
-# Log pipeline of this run (fleet policy `log_pipeline`). The local stack ships logs with Fluent Bit straight to the
-# mock intake (fluent_bit_direct), whose eh_finalize filter tags `telemetry.pipeline:fluent-bit`. A stack routed through
-# the Observability Pipelines Worker (E2E_LOG_PIPELINE=observability_pipelines) carries the OP VRL tag instead.
+# Log pipeline of this run (fleet policy `log_pipeline`): the tag each pipeline's final filter adds to every log.
 PIPELINE_TAGS = {
     "fluent_bit_direct": "telemetry.pipeline:fluent-bit",
     "observability_pipelines": "telemetry.pipeline:observability-pipelines",
@@ -92,17 +90,8 @@ APPS = {
 }
 IMAGES = ["bff", "orders-api", "inventory-api", "durable", "catalog-api", "dbadapter", "worker", "partner-sim", "frontend"]
 SPAN_KIND = {1: "internal", 2: "server", 3: "client", 4: "producer", 5: "consumer"}
-REQUIRED_RESOURCE_ATTRS = [
-    "service.name",
-    "service.version",
-    "deployment.environment.name",
-    "deployment.environment",
-    "service.namespace",
-    "team",
-    "domain",
-    "tier",
-    "application",
-]
+REQUIRED_RESOURCE_ATTRS = ["service.name", "service.version", "deployment.environment.name", "deployment.environment",
+                           "service.namespace", "team", "domain", "tier", "application"]
 
 CHECKS = [
     ("rum", "1. RUM view + resource + action events captured (Playwright route -> mock intake)"),
@@ -121,15 +110,7 @@ CHECKS = [
 
 
 # ----------------------------------------------------------------------------------------------- helpers
-def log(msg: str) -> None:
-    print(f"[e2e {dt.datetime.now(dt.UTC).strftime('%H:%M:%S')}] {msg}", flush=True)
-
-
-def sh(*args: str, check: bool = True, env: dict | None = None, timeout: float | None = None) -> subprocess.CompletedProcess:
-    res = subprocess.run(list(args), capture_output=True, text=True, env=env, timeout=timeout, check=False)  # noqa: S603
-    if check and res.returncode != 0:
-        raise RuntimeError(f"command failed ({res.returncode}): {' '.join(args)}\n{res.stdout[-3000:]}\n{res.stderr[-3000:]}")
-    return res
+log = logger("e2e")
 
 
 def compose_env() -> dict:
@@ -149,42 +130,6 @@ def git_commit() -> str:
         return sh("git", "-C", str(REPO), "rev-parse", "--short", "HEAD").stdout.strip()
     except Exception:
         return "unknown"
-
-
-def http(method: str, url: str, body: Any = None, headers: dict | None = None, timeout: float = 15.0) -> tuple[int, dict, Any]:
-    data = None
-    hdrs = dict(headers or {})
-    if body is not None:
-        data = json.dumps(body).encode()
-        hdrs.setdefault("content-type", "application/json")
-    req = urllib.request.Request(url, data=data, method=method, headers=hdrs)  # noqa: S310 - http://localhost only
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - local test endpoints only
-            raw = r.read()
-            return r.status, dict(r.headers), _json_or_text(raw)
-    except urllib.error.HTTPError as exc:
-        return exc.code, dict(exc.headers), _json_or_text(exc.read())
-
-
-def _json_or_text(raw: bytes) -> Any:
-    try:
-        return json.loads(raw or b"null")
-    except ValueError:
-        return raw.decode(errors="replace")
-
-
-def poll(fn: Callable[[], Any], timeout: float, interval: float = 2.0, what: str = "condition") -> Any:
-    deadline = time.time() + timeout
-    last: Any = None
-    while time.time() < deadline:
-        try:
-            last = fn()
-            if last:
-                return last
-        except Exception as exc:
-            last = exc
-        time.sleep(interval)
-    raise TimeoutError(f"timed out after {timeout:.0f}s waiting for {what}; last={str(last)[:500]}")
 
 
 def new_traceparent() -> tuple[str, str, str]:
@@ -287,21 +232,14 @@ def intake() -> dict:
     return http("GET", f"{INTAKE}/_received", timeout=30)[2]
 
 
-def mask(s: str) -> str:
-    return s[:4] + "***" if s else s
-
-
 # ----------------------------------------------------------------------------------------------- stack lifecycle
 def ensure_images(rebuild: bool) -> None:
-    missing = [s for s in IMAGES if sh("docker", "image", "inspect", f"hello-{s}:{VERSION}", check=False).returncode != 0]
-    todo = IMAGES if rebuild else missing
-    if rebuild or sh("docker", "image", "inspect", DSV_FETCH_IMAGE, check=False).returncode != 0:
+    todo = IMAGES if rebuild else [s for s in IMAGES if not image_exists(f"hello-{s}:{VERSION}")]
+    if rebuild or not image_exists(DSV_FETCH_IMAGE):
         todo = [*todo, "dsv-fetch"]
     if todo:
         log(f"building images from source: {', '.join(todo)}")
-        res = subprocess.run([str(HERE / "build_images.sh"), *todo], env={**os.environ, "E2E_VERSION": VERSION}, check=False)  # noqa: S603
-        if res.returncode != 0:
-            raise RuntimeError("image build failed")
+        sh(str(HERE / "build_images.sh"), *todo, capture=False, env={**os.environ, "E2E_VERSION": VERSION})
 
 
 def stack_up() -> None:
@@ -555,8 +493,9 @@ class Results:
     def __init__(self) -> None:
         self.items: dict[str, dict] = {}
 
-    def set(self, cid: str, result: str, detail: Any, evidence: str | None = None) -> None:
+    def set(self, cid: str, ok: Any, detail: Any, evidence: str | None = None) -> None:
         name = dict(CHECKS)[cid]
+        result = "pass" if ok else "fail"
         self.items[cid] = {"id": cid, "check": name, "result": result, "detail": detail, "evidence": evidence}
         log(f"{result.upper():5} {name}")
 
@@ -564,7 +503,7 @@ class Results:
 def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Results) -> None:
     order_id = journey["order_id"]
     tp = journey.get("traceparent") or ""
-    T = tp.split("-")[1] if tp.count("-") == 3 else None
+    T = _tid(tp)
     browser_span = tp.split("-")[2] if T else None
     ctx["trace_id"] = T
 
@@ -637,7 +576,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     ok = by_type.get("view", 0) >= 1 and len(res_events) >= 1 and by_type.get("action", 0) >= 1 and sum(forwarded_paths.values()) >= 1
     res.set(
         "rum",
-        "pass" if ok else "fail",
+        ok,
         {
             "event_types": dict(by_type),
             "bff_resource_events": len(res_events),
@@ -662,8 +601,8 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     bff_server = [s for s in tspans if s["service"] == "hello-bff" and s["kind"] == "server" and s["name"].startswith("POST")]
     parent_ok = any(s["parent_span_id"] == browser_span for s in bff_server)
     # PostgreSQL client spans of the browser's product-list trace (cache-aside may serve the order's price from Redis)
-    ptp = journey.get("products_traceparent") or ""
-    PT = ptp.split("-")[1] if ptp.count("-") == 3 else None
+    ptp = journey.get("products_traceparent")
+    PT = _tid(ptp)
     pg_products = [s for s in spans if PT and s["trace_id"] == PT and ("psycopg" in s["scope"])]
     redis_t = [s for s in tspans if "redis" in s["scope"]]
     need = {"hello-bff", "hello-orders-api", "hello-catalog-api"}
@@ -685,7 +624,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "trace_correlation",
-        "pass" if ok else "fail",
+        ok,
         {
             "trace_id": T,
             "services_in_trace": services_in_t,
@@ -736,7 +675,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "durable_workflow",
-        "pass" if ok else "fail",
+        ok,
         {
             "instance_id": inst,
             "orchestration_spans": len(orch),
@@ -761,7 +700,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "worker_consumer",
-        "pass" if ok else "fail",
+        ok,
         {
             "servicebus_process_spans": len(wspans),
             "linked_to_browser_trace": len(wlinked),
@@ -820,7 +759,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "logs_fluentbit",
-        "pass" if ok else "fail",
+        ok,
         {
             "per_service": per_svc,
             "journey_log_services_with_trace_id": jl_services,
@@ -896,7 +835,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "no_duplicates",
-        "pass" if ok else "fail",
+        ok,
         {
             "marker_counts": markers,
             "identical_structured_app_events": sum(v - 1 for v in dup_json.values()),
@@ -966,7 +905,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "tags",
-        "pass" if ok else "fail",
+        ok,
         {
             "span_problems": bad,
             "metrics_resource_missing": m_missing,
@@ -988,7 +927,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     r_ev = write(
         "redaction.json",
         {
-            "fake_secret_masked": mask(ctx["fake_secret"]),
+            "fake_secret_masked": ctx["fake_secret"][:4] + "***",
             "fake_secret_found_at_intake": leaked_secret,
             "app_path_events": [_trim_log(e) for e in app_ev][:5],
             "transport_path_events": [_trim_log(e) for e in tr_ev_][:5],
@@ -996,7 +935,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "redaction",
-        "pass" if ok else "fail",
+        ok,
         {
             "fake_secret_found_at_intake": leaked_secret,
             "app_path_events": len(app_ev),
@@ -1026,7 +965,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "faults",
-        "pass" if ok else "fail",
+        ok,
         {k: f[k] for k in ("wrong_token", "missing_token", "disabled_service_catalog")}
         | {
             "activate": f["activate"]["status"],
@@ -1049,7 +988,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
         and i["orders_with_customer_ref"] == 1
     )
     i_ev = write("idempotency.json", i)
-    res.set("idempotency", "pass" if ok else "fail", i, i_ev)
+    res.set("idempotency", ok, i, i_ev)
 
     # ---------- 11. exporter transport
     others = collections.Counter(o["path"] for o in rcv["others"])
@@ -1067,7 +1006,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     )
     res.set(
         "exporter_transport",
-        "pass" if ok else "fail",
+        ok,
         {"other_requests_by_path": dict(others), "gateway_otlp_log_records_accepted_then_dropped_by_nop": accepted_logs},
         x_ev,
     )
@@ -1075,7 +1014,7 @@ def run_checks(ctx: dict, journey: dict, actions: dict, ev_dir: Path, res: Resul
     # ---------- 12. secrets from DSV
     res_dsv = check_secrets_dsv(rcv)
     d_ev = write("secrets-dsv.json", res_dsv)
-    res.set("secrets_dsv", "pass" if res_dsv["ok"] else "fail", {k: v for k, v in res_dsv.items() if k not in ("dsv_calls",)}, d_ev)
+    res.set("secrets_dsv", res_dsv["ok"], {k: v for k, v in res_dsv.items() if k != "dsv_calls"}, d_ev)
 
 
 def _secret_values() -> dict[str, str]:
@@ -1180,36 +1119,11 @@ def _tid(tp: str | None) -> str | None:
 
 
 def _trim_span(s: dict) -> dict:
-    keep = (
-        "http.request.method",
-        "http.route",
-        "http.response.status_code",
-        "url.full",
-        "server.address",
-        "db.system",
-        "db.system.name",
-        "db.namespace",
-        "db.operation.name",
-        "messaging.system",
-        "messaging.destination.name",
-        "messaging.operation.type",
-        "messaging.message.id",
-        "durabletask.task.instance_id",
-        "durabletask.type",
-        "durabletask.task.name",
-        "order.id",
-    )
-    return {
-        "service": s["service"],
-        "scope": s["scope"],
-        "name": s["name"],
-        "kind": s["kind"],
-        "trace_id": s["trace_id"],
-        "span_id": s["span_id"],
-        "parent_span_id": s["parent_span_id"],
-        "links": s["links"],
-        "attributes": {k: v for k, v in s["attributes"].items() if k in keep or k.startswith("durabletask")},
-    }
+    keep = ("http.request.method", "http.route", "http.response.status_code", "url.full", "server.address", "db.system",
+            "db.system.name", "db.namespace", "db.operation.name", "messaging.system", "messaging.destination.name",
+            "messaging.operation.type", "messaging.message.id", "order.id")
+    return {k: s[k] for k in ("service", "scope", "name", "kind", "trace_id", "span_id", "parent_span_id", "links")} | {
+        "attributes": {k: v for k, v in s["attributes"].items() if k in keep or k.startswith("durabletask")}}
 
 
 def _trim_log(e: dict) -> dict:
@@ -1232,16 +1146,9 @@ def _trim_rum(e: dict | None) -> dict | None:
 # ----------------------------------------------------------------------------------------------- evidence
 def image_info() -> dict:
     out = {}
+    fmt = '{{.Id}} {{index .Config.Labels "org.opencontainers.image.revision"}} {{.Created}}'
     for s in IMAGES:
-        r = sh(
-            "docker",
-            "image",
-            "inspect",
-            f"hello-{s}:{VERSION}",
-            "--format",
-            '{{.Id}} {{index .Config.Labels "org.opencontainers.image.revision"}} {{.Created}}',
-            check=False,
-        )
+        r = sh("docker", "image", "inspect", f"hello-{s}:{VERSION}", "--format", fmt, check=False)
         out[f"hello-{s}:{VERSION}"] = r.stdout.strip() if r.returncode == 0 else "missing"
     return out
 
@@ -1301,9 +1208,7 @@ def write_evidence(ev_dir: Path, meta: dict, res: Results) -> None:
 
 # ----------------------------------------------------------------------------------------------- main
 def run(keep: bool = False, rebuild: bool = False, reuse: bool = False) -> dict:
-    started = dt.datetime.now(dt.UTC)
-    stamp = started.strftime("%Y%m%dT%H%M%SZ")
-    ev_dir = EVIDENCE_ROOT / stamp
+    ev_dir = EVIDENCE_ROOT / utc_stamp()
     ev_dir.mkdir(parents=True, exist_ok=True)
     rnd = uuid.uuid4().hex[:8]
     ctx: dict = {
@@ -1317,7 +1222,7 @@ def run(keep: bool = False, rebuild: bool = False, reuse: bool = False) -> dict:
     }
     res = Results()
     meta: dict = {
-        "started_utc": started.isoformat(timespec="seconds"),
+        "started_utc": utc_iso(),
         "git_commit": git_commit(),
         "version": VERSION,
         "command": (
@@ -1340,19 +1245,8 @@ def run(keep: bool = False, rebuild: bool = False, reuse: bool = False) -> dict:
                 "order_id": journey["order_id"],
                 "order_status": journey["status"],
                 "trace_id": _tid(journey.get("traceparent")),
-                "journey": {
-                    k: journey[k]
-                    for k in (
-                        "timeline",
-                        "footer",
-                        "product_rows",
-                        "seconds_to_terminal_status",
-                        "adapter_result",
-                        "console_errors",
-                        "traceparent",
-                        "adapter_traceparent",
-                    )
-                },
+                "journey": {k: journey[k] for k in ("timeline", "footer", "product_rows", "seconds_to_terminal_status",
+                                                    "adapter_result", "console_errors", "traceparent", "adapter_traceparent")},
             }
         )
         meta["journey"]["api_requests"] = [{**r, "url": r["url"].replace(BFF, "")} for r in journey["api_requests"]]
@@ -1372,7 +1266,7 @@ def run(keep: bool = False, rebuild: bool = False, reuse: bool = False) -> dict:
             stack_down()
         elif not keep and reuse:
             log("--reuse without --keep: leaving the stack running (it was not started by this run)")
-        meta["finished_utc"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+        meta["finished_utc"] = utc_iso()
         write_evidence(ev_dir, meta, res)
         log(f"evidence: {ev_dir.relative_to(REPO)} ; summary: docs/evidence/local/LATEST.md")
     return {"meta": meta, "results": res.items, "evidence_dir": str(ev_dir)}

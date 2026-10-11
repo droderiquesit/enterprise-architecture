@@ -8,16 +8,7 @@ variable "cluster_name" {
 }
 
 variable "distribution" {
-  description = <<-EOT
-    Kubernetes distribution of the cluster:
-      aks       Azure Kubernetes Service (default): providers.aks, kubelet TLS per features.kubelet_tls_mode, APM socket + port
-      openshift OpenShift 4 / Azure Red Hat OpenShift: adds values/openshift.yaml (SecurityContextConstraints for the node
-                Agent and the Cluster Agent, CRI-O socket, DogStatsD / APM host ports instead of Unix sockets, admission
-                controller hostip mode, worker-node selector), kubelet tlsVerify false by default, and runs the
-                post-renderer with --distribution openshift (Cluster Agent / runner init containers take the
-                SCC-assigned UID). The Fluent Bit fallback and the in-cluster OP Worker are not supported there.
-    The secret path (DSV + dsv-fetch + workload identity) is the same for both.
-  EOT
+  description = "aks (default) or openshift (adds values/openshift.yaml and the OpenShift post-renderer mode; no Fluent Bit fallback or in-cluster OP Worker)."
   type        = string
   default     = "aks"
   validation {
@@ -36,20 +27,7 @@ variable "datadog" {
 }
 
 variable "dsv" {
-  description = <<-EOT
-    Delinea DSV settings (non-secret) - the ONE secret path of the Datadog Agents (ADR-0001 section 14):
-      api_key_ref        dsv:// reference of the Datadog API key; the chart Secret holds only ENC[<api_key_ref>]
-      tenant/tld|base_url DSV endpoint (DSV_* env of dsv-fetch)
-      fetch_image        digest-pinned dsv-fetch image (registry artifact img-dsv-fetch, >= 2.0.0: static binary at
-                         /opt/dsv-fetch/dsv-fetch). Init container dsv-fetch-install copies it into an in-memory emptyDir
-                         of the node Agent, Cluster Agent and cluster-checks runner pods (secret_backend_command,
-                         `agent-backend`); `init` containers of the Fluent Bit fallback / OP Worker run it directly.
-      identity_client_id user-assigned identity (Entra workload identity: AKS, or managed-identity ARO) of the service accounts datadog/datadog,
-                         datadog/datadog-cluster-agent (and fluent-bit/fluent-bit, the OP Worker's) - mapped to a DSV
-                         user with read on the API key path
-      cluster_checks_identity_client_id  optional identity of datadog/datadog-cluster-checks (null = identity_client_id),
-                         e.g. the DBM identity that reads the DB password paths and logs in to Entra-enabled databases
-  EOT
+  description = "Non-secret Delinea DSV settings: api_key_ref (dsv://), endpoint, digest-pinned dsv-fetch image and the workload identities of the Agent service accounts (cluster_checks_identity_client_id defaults to identity_client_id)."
   type = object({
     api_key_ref                       = string
     tenant                            = optional(string)

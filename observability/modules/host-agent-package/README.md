@@ -108,37 +108,6 @@ Nothing in the package is secret: the API key reference, the DSV endpoint and th
 Outputs: `gallery`, `applications` (`id`, `version`, `version_id`, composed and therefore known at plan), `versions`,
 `agent_version`, `content_sha256`, `installers` (for golden images), `otlp_endpoint`, `storage`.
 
-## Tests
-
-* `tests/package.tftest.hcl` (mock providers): the content assertions above, plus:
-  * `fluent_bit_direct`;
-  * a missing Worker URL;
-  * a tampered or missing release;
-  * a literal key;
-  * arm64 and retained versions;
-  * the immutability guard (publish, change the content without a bump, then bump).
-* `tests/test_installers.py` (pytest):
-  * renders both scripts and checks them for secret material;
-  * runs `bash -n` and shellcheck on the Linux script;
-  * runs the Linux script twice in `ubuntu:24.04` without network (stubbed IMDS, install script and systemd; fake
-    dsv-fetch fixture) and checks `datadog.yaml`, the log config, permissions, idempotency, the checksum guard and
-    `remove`;
-  * runs the PowerShell parser on the Windows script and executes its configuration part under `pwsh`, checking the
-    rendered `datadog.yaml` and the Event Log config. This is not executed on Windows.
-
-## References (Microsoft Learn, checked 2026-10-10)
-
-* VM Applications overview: limits, `packageFileName` / `configFileName`, download directory, `order`, update
-  semantics, `treatFailureAsDeploymentFailure`, deleting the SAS after replication:
-  https://learn.microsoft.com/azure/virtual-machines/vm-applications
-* Create and deploy: install / remove commands are strings of at most 4,096 characters, run in the download
-  directory, and deploy with a PUT of `applicationProfile` on the VM / VMSS:
-  https://learn.microsoft.com/azure/virtual-machines/vm-applications-how-to
-* Publish with a managed identity: plain blob URLs, Storage Blob Data Contributor, trusted service, works only for
-  publishing: https://learn.microsoft.com/azure/virtual-machines/vm-applications-publish-with-managed-identity
-* Gallery ARM schema (identity in 2025-12-03): https://learn.microsoft.com/azure/templates/microsoft.compute/galleries
-* Datadog: secrets management (`secret_backend_command` permissions on Linux and Windows):
-  https://docs.datadoghq.com/agent/configuration/secrets-management/
-* Datadog: OTLP ingest in the Agent: https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest_in_the_agent/
-* Datadog: Windows Event Log collection (`type: windows_event`, `channel_path`):
-  https://docs.datadoghq.com/integrations/win32_event_log/
+Gotchas: the Windows installer is parsed and its configuration part runs under `pwsh` in the tests, but it has
+never run on Windows. Limits and update semantics:
+[VM Applications](https://learn.microsoft.com/azure/virtual-machines/vm-applications).

@@ -32,15 +32,12 @@ sys.path.insert(0, str(REPO))
 
 from tools.changeset.registry import load_registry  # noqa: E402
 from tools.changeset.trees import WorkTree  # noqa: E402
+from tools.common import utc_now  # noqa: E402
 
 from . import balance, catalog, impact  # noqa: E402
 from .cache import ResultCache  # noqa: E402
 
 LOCAL_CACHE = ".ci-cache"
-
-
-def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def compute_selection(repo: Path, env: str, base: Optional[str], target: str, worktree: bool, scope: Optional[str]) -> dict:
@@ -87,7 +84,7 @@ def build_plan(repo: Path, selection: dict, *, scope: Optional[str] = None, full
     legs = balance.pack(units, target, legs_cap)
     overhead = balance.DEFAULTS["leg_overhead"]
     plan = {
-        "schema_version": 1, "generated_at": _now(), "scope": scope or "all",
+        "schema_version": 1, "generated_at": utc_now(), "scope": scope or "all",
         "mode": "full" if full else ("deploy" if "changed_files" not in selection else "changed"),
         "base": selection.get("base"), "head": selection.get("head"), "use_cache": bool(use_cache and not full),
         "suites": dict(sorted(suites.items())),
@@ -132,7 +129,7 @@ def execute(repo: Path, plan: dict, legs: list, *, jobs: int, out_dir: Path, cac
     start = time.monotonic()
     results = run_units(units, suites, repo, jobs=jobs, out_dir=out_dir, env_name=env_name, cache=cache,
                         fingerprints=fps, enable_env_suites=enable_env_suites)
-    doc = {"leg": leg_name, "started_at": _now(), "seconds": round(time.monotonic() - start, 2), "jobs": jobs,
+    doc = {"leg": leg_name, "started_at": utc_now(), "seconds": round(time.monotonic() - start, 2), "jobs": jobs,
            "results": results}
     (out_dir / "ci-results.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
     return doc

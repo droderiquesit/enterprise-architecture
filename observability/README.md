@@ -6,7 +6,8 @@ A portable, versioned package that **connects Azure resources and workloads to D
 the same tags. Telemetry flows through the most mature Datadog path each resource type supports:
 
 * the Datadog Agent wherever it can run (AKS nodes, VM / VMSS hosts via Azure Policy + VM Applications, Service Fabric
-  managed cluster node types via the node type's own VM Applications (4.1.0), a sidecar in ACI container groups) and Datadog serverless-init on Container Apps - one log collector per architecture;
+  managed cluster node types, a sidecar in ACI container groups) and Datadog serverless-init on Container Apps - one
+  log collector per architecture;
 * Datadog tracing libraries with Single Step Instrumentation and the Continuous Profiler;
 * Datadog Observability Pipelines as the central log pipeline;
 * RUM for browsers;
@@ -15,9 +16,9 @@ the same tags. Telemetry flows through the most mature Datadog path each resourc
 The package works against existing enterprise infrastructure. It never creates networks, compute platforms,
 databases or applications, and it needs nothing outside this directory.
 
-Monitors, SLOs and dashboards are **not** part of the package (since 3.0.0). They already exist in your
-organisation and select on the tags this package makes consistent. The 2.x monitoring content lives on, optional
-and unreleased, in `extras/content/` of the source repository.
+Monitors, SLOs and dashboards are **not** part of the package. They already exist in your organisation and select on
+the tags this package makes consistent. Optional, unreleased monitoring content: `extras/content/` of the source
+repository.
 
 | What | Where |
 |---|---|
@@ -40,6 +41,10 @@ Status vocabulary:
   the post-renderer and the VM Application Linux installer are **locally verified** with docker / helm
   (`tests/transport/`, `tests/kubernetes/`, `modules/host-agent-package/tests/`).
 * Nothing has been deployed or verified against a live Datadog organisation by these tests.
+
+Tests: every module and lab root has `tests/*.tftest.hcl` (mock providers, no credentials): `terraform init
+-backend=false && terraform test` in the directory, or `tools/validate/terraform.sh <dir>` from the source repository.
+Functional docker / helm tests: `tests/`.
 
 ## 1. How it works
 
@@ -89,12 +94,12 @@ Adopt it in this order:
 
 `config/fleet-policy.yaml` is the single switch board:
 
-* `log_pipeline`: `observability_pipelines` (default) or `fluent_bit_direct` (2.x).
-* `logs.collector` per architecture (4.0.0): `agent` (AKS, VM, VMSS), `agent_sidecar` (ACI), `serverless_init`
+* `log_pipeline`: `observability_pipelines` (default) or `fluent_bit_direct` (fallback).
+* `logs.collector` per architecture: `agent` (AKS, VM, VMSS), `agent_sidecar` (ACI), `serverless_init`
   (Container Apps), `azure` (App Service, Functions, Logic Apps: diagnostic settings), `fluent_bit` (Batch).
   `fluent_bit_direct` replaces the Agent-side collectors on AKS, Container Apps and ACI by Fluent Bit; VM / VMSS
-  hosts keep the Agent (shipping to the Datadog intake), because 4.0.0 installs no Fluent Bit on hosts. The 3.x key
-  `logs.node_collector` (`agent` | `fluent_bit`) is still honoured on aks.
+  hosts keep the Agent (shipping to the Datadog intake). The legacy key `logs.node_collector` (`agent` | `fluent_bit`)
+  is still honoured on aks.
 * `logs.hosts`: files the host Agent tails (Linux, Windows) and Windows Event Log channels.
 * `apm.mode`: `datadog` (default), `otel` or `none`. Exceptions: Azure Functions and Durable Functions stay on
   OpenTelemetry, and Windows services fall back to OpenTelemetry.
@@ -178,7 +183,7 @@ Reference the templates from the package repository pinned to a release tag.
 * Both write to Event Hubs. The **Observability Pipelines Worker** reads the hubs through the Kafka endpoint, then
   unwraps, splits, shapes (Datadog Azure forwarder shape), dedupes, samples and applies quotas, and adds the
   resource-scope tags of the owning service (`modules/fleet-inventory` `scope_tags`). With `fluent_bit_direct`, the
-  2.x Fluent Bit aggregator does the same.
+  Fluent Bit aggregator does the same.
 
 Guide: `docs/guides/azure-logs-to-datadog.md` (source repository).
 
@@ -198,8 +203,7 @@ No secret value is an input, output or state value of this package. Every secret
 | Applications | Env values that are `dsv://` references, plus `DSV_*`. |
 | Pipelines | `pipelines/templates/dsv-secrets.yml`. |
 
-Datadog serverless-init 1.10.4 does not resolve `ENC[]` (verified locally: it sent the literal value); since 4.0.0
-its start wrapper reads the key with dsv-fetch instead, so there is no Container Apps secret (verified locally).
+Datadog serverless-init 1.10.4 does not resolve `ENC[]` (verified locally), hence its dsv-fetch start wrapper.
 
 ## 10. Known limitations
 
@@ -214,8 +218,8 @@ its start wrapper reads the key with dsv-fetch instead, so there is no Container
   metrics there.
 * Windows hosts and Azure Functions stay on OpenTelemetry. The Datadog profiler supports neither .NET Function Apps
   nor Python on Functions (preview).
-* AKS workload-identity tokens with DSV are not verified. 4.0.0 removed the synced-Secret fallback
-  (`api_key.mode = existing`); the documented alternative is the node pool's kubelet identity via IMDS.
+* AKS workload-identity tokens with DSV are not verified; the documented alternative is the node pool's kubelet
+  identity via IMDS.
 * Not verified on Azure: the policy remediation's partial PUT on VMSS, the Service Fabric node type
   `vmApplications` update (GET + PUT by `azapi_update_resource`) and its per-upgrade-domain rollout, gallery publishing with the publisher identity,
   the Windows MSI + `dsv-fetch.exe` ACLs on a real Windows host, the ACI `emptyDir` written by the uid 65532 init

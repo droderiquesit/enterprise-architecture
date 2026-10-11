@@ -30,17 +30,7 @@ variable "activity_log" {
 }
 
 variable "entra" {
-  description = <<-EOT
-    OPTIONAL (default off) Microsoft Entra ID (tenant) logs -> Event Hubs via azurerm_monitor_aad_diagnostic_setting.
-    Prerequisites (you must confirm them with acknowledge_prerequisites = true):
-      * the identity running Terraform holds the Entra role Security Administrator (least privileged; Global
-        Administrator also works) - Attribute Log Administrator in addition for CustomSecurityAttributeAuditLogs;
-      * Microsoft Entra ID P1 or P2 to export sign-in logs (Free/O365 exports AuditLogs only; ProvisioningLogs
-        and MicrosoftGraphActivityLogs need P1/P2);
-      * the Event Hubs namespace is in a subscription associated with the SAME Entra tenant.
-    The setting is TENANT-wide: create it once per tenant (one root), never per environment.
-    NonInteractiveUserSignInLogs / ServicePrincipalSignInLogs can be 5-10x the interactive sign-in volume.
-  EOT
+  description = "Optional tenant-wide Entra ID logs -> Event Hubs; acknowledge_prerequisites = true confirms Security Administrator, Entra ID P1/P2 for sign-in logs and a namespace in the same tenant (README)."
   type = object({
     enabled                   = optional(bool, false)
     acknowledge_prerequisites = optional(bool, false)

@@ -1,43 +1,31 @@
 """Selection: decide what each pipeline run validates, plans, applies, builds and retires.
 
 Modes
-  pr         merge-base(origin/<target>, HEAD)..HEAD (rename-aware). Fingerprints of base and head are
-             compared per component; changed paths are attributed to owners (old and new paths).
-             validate = changed ∪ transitive consumers of infrastructure changes; plan flags are
-             informational (PR builds never receive credentials); nothing is applied.
-  deploy     current deploy_fp of every enabled component vs its last deployment record
-             (<env>/<component>.json). No record / status != succeeded / fp differs → selected.
-             Consumers of infrastructure changes are planned; apply happens only when the plan has
-             changes (terraform -detailed-exitcode == 2).
+  pr         merge-base(origin/<target>, HEAD)..HEAD (rename-aware): base/head fingerprints compared per component,
+             changed paths attributed to owners (old and new paths). validate = changed + transitive consumers of
+             infrastructure changes; plan flags are informational (PR builds have no credentials); nothing applied.
+  deploy     deploy_fp of every enabled component vs its last record (<env>/<component>.json): no record, status
+             != succeeded or fp differs -> selected. Consumers of infrastructure changes are planned; apply only
+             when the plan has changes.
   manual     explicit list (+ upstream planned without apply; --with-consumers adds consumers).
   reconcile  every enabled component planned, applied only where the plan has changes.
-  drift      every enabled component planned, nothing applied; the run reports drift.
+  drift      every enabled component planned, nothing applied (except additive-only drift auto-remediation).
   retire     only scheduled retirements.
-  heal       scheduled self-healing: only components whose last record is failed / partial / canceled
-             or whose post-deployment verification failed (smoke / telemetry); quarantined and rolled_back
-             components are skipped (they need a new commit or a manual run). Normal approvals apply.
-  hotfix     promote from a release/<yyyy.mm> branch (cherry-picked fixes): every component must either be
-             unchanged against THIS environment's record or run identical code successfully in the source
-             environment (the fix landed on main and was deployed there first); select_promote(hotfix=True)
-  promote    deploy-mode selection for a later environment of a promotion chain, refused unless the
-             source environment successfully deployed the same code (select_promote).
-Held records (status rolled_back | quarantined, tools/deploy/record.py HELD) are never auto-selected again
-for the SAME deploy fingerprint (deploy / heal / reconcile); a new commit touching the component (deploy_fp
-changes) or a manual run clears the hold. Drift runs may re-apply additive-only drift of components with
-registry `drift.auto_remediate` when the environment's `self_healing.drift_auto_remediate` is true
-(entry `remediate: additive-only`; tf-plan.sh refuses deletes/replaces and only reports them).
+  heal       only components whose last record failed / partial / canceled or whose verification failed.
+  promote    deploy-mode selection, refused unless the source environment deployed the same code.
+  hotfix     promote from a release branch: each component unchanged here or proven in the source environment.
+Held records (rolled_back | quarantined) are never auto-selected again for the SAME deploy fingerprint.
 Every mode can be restricted to one pipeline scope (platform | applications); see _scope_filter.
-
-A change that only touches a deploy root's artifact digests (new image of an app) re-deploys
-that root but does not re-plan its consumers: artifacts do not change Terraform contracts.
+Artifact-digest-only changes re-deploy the root but do not re-plan its consumers (contracts are unchanged).
 """
 
 from __future__ import annotations
 
-import datetime as _dt
 import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
+
+from tools.common import utc_now
 
 from . import globs
 from .fingerprint import Fingerprinter, changed_parts, deploy_relevant, is_doc
@@ -59,12 +47,8 @@ class SelectionError(Exception):
     pass
 
 
-def _now() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _load_env(tree: Tree, registry: Registry, graph: Graph, env: str):
-    from tools.config.lib import resolve_for_env
+    from tools.config.lib import resolve_for_env  # lazy: tools.config imports this package
 
     return resolve_for_env(tree, registry, graph, env)
 
@@ -207,7 +191,7 @@ def _base_doc(ctx: Context, mode: str) -> dict:
         "enabled": sorted(ctx.enabled),
         "base": None,
         "head": ctx.head,
-        "generated_at": _now(),
+        "generated_at": utc_now(),
         "notes": list(ctx.notes),
         "components": {c.id: _entry(ctx, c.id) for c in ctx.registry if c.pipeline != "manual"},
         "removed_components": [],
@@ -269,29 +253,23 @@ def select_pr(repo: Path, env: str, target: str = "main", head: str = "HEAD", ba
         doc["notes"].append(f"base registry unreadable ({exc}); every component treated as changed")
 
     all_paths = [p for ch in changes for p in ch.paths]
-    doc["tooling_changed"] = any(p.startswith(TOOLING_PATHS) or p == "azure-pipelines.yml" for p in all_paths)
+    doc["tooling_changed"] = any(p.startswith(TOOLING_PATHS) for p in all_paths)
     comps = doc["components"]
 
     # 1. direct ownership of changed paths (old path → owner at base, new path → owner at head)
+    owners = [(ctx.registry, ctx.fp, "")]
+    if base_registry is not None and base_fp is not None:
+        owners.append((base_registry, base_fp, " (owned at base)"))
     for ch in changes:
         for p in ch.paths:
-            for c in ctx.registry:
-                if c.id in comps and ctx.fp.owns(c, p):
-                    _add_reason(comps[c.id], f"{ch.status}: {p}")
-                    comps[c.id]["validate"] = True
-                    comps[c.id]["direct"] = True
-                    if p not in comps[c.id]["changed_paths"]:
-                        comps[c.id]["changed_paths"].append(p)
-            if base_registry is not None and base_fp is not None:
-                for c in base_registry:
-                    if c.id not in comps or p in comps[c.id]["changed_paths"]:
+            for registry, fp, suffix in owners:
+                for c in registry:
+                    e = comps.get(c.id)
+                    if e is None or p in e["changed_paths"] or not fp.owns(c, p):
                         continue
-                    if base_fp.owns(c, p):
-                        _add_reason(comps[c.id], f"{ch.status}: {p} (owned at base)")
-                        comps[c.id]["validate"] = True
-                        comps[c.id]["direct"] = True
-                        if p not in comps[c.id]["changed_paths"]:
-                            comps[c.id]["changed_paths"].append(p)
+                    _add_reason(e, f"{ch.status}: {p}{suffix}")
+                    e["validate"] = e["direct"] = True
+                    e["changed_paths"].append(p)
 
     # 1b. changed Terraform module directories nobody consumes yet still get validated
     owned = {p for e in comps.values() for p in e["changed_paths"]}
@@ -365,22 +343,17 @@ def _retirements(ctx: Context, doc: dict, store: Optional[Store]) -> None:
         return
     from tools.config.lib import load_retirements
 
-    approved = {}
-    for r in load_retirements(ctx.tree, ctx.env):
-        approved[r["component"]] = r
+    approved = {r["component"]: r for r in load_retirements(ctx.tree, ctx.env)}
     records = {}
     for key in store.list(f"{ctx.env}/"):
         if not key.endswith(".json") or key.count("/") != 1:
             continue
         cid = key.split("/", 1)[1][:-5]
-        rec = store.get_json(key) or {}
-        if rec.get("status") == "retired":
-            continue
-        if rec.get("kind") == "artifact":
-            continue
         if cid in ctx.enabled:
             continue
-        records[cid] = rec
+        rec = store.get_json(key) or {}
+        if rec.get("status") != "retired" and rec.get("kind") != "artifact":
+            records[cid] = rec
     entries = []
     for cid, rec in sorted(records.items()):
         in_registry = cid in ctx.registry.components
@@ -745,10 +718,10 @@ def select_promote(repo: Path, env: str, store: Optional[Store], source_env: str
             continue
         mine = ctx.fp.parts(c.id)
         if hotfix and store is not None:
-            here = store.get_json(f"{env}/{c.id}.json") or {}
+            here = _record(store, env, c.id) or {}
             if all((here.get("fp_parts") or {}).get(k) == mine.get(k) for k in PROMOTION_PARTS if k in mine):
                 continue  # unchanged on the release branch: what this environment already runs
-        rec = source_store.get_json(f"{source_env}/{c.id}.json")
+        rec = _record(source_store, source_env, c.id)
         if not rec or rec.get("status") != SUCCEEDED:
             problems.append(f"{c.id}: no successful deployment in '{source_env}'"
                             + (" (land the fix on main and deploy it there first)" if hotfix else ""))

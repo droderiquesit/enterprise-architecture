@@ -81,21 +81,11 @@ Container Apps active usage is about $63 per vCPU and $8 per GiB per month.
 
 ## Teardown / retention
 Destroy removes the namespace, which discards its retained events (1 day), and the Container Apps. Worker disk
-buffers on EmptyDir (and the Fluent Bit buffer) are ephemeral and are lost on scale-in. Retries bound the in-flight loss. The DSV secret `eventhub-fluentbit-listen` is not touched by Terraform
+buffers on EmptyDir (and the Fluent Bit buffer) are ephemeral and are lost on scale-in. Retries bound the in-flight loss.
+The DSV secret `eventhub-fluentbit-listen` is not touched by Terraform
 (delete it in DSV when the namespace is gone; its key no longer works anyway).
 
 ## Secrets in state
 No secret is an input or output value except `generated_secrets` (sensitive). The two namespace authorization rules
 necessarily hold their primary/secondary keys and connection strings in state as computed attributes (azurerm has no
 way to omit them) - protect the state account accordingly.
-
-## References
-- https://docs.datadoghq.com/logs/guide/fluentbit/ and https://docs.fluentbit.io/manual/pipeline/outputs/datadog
-- https://docs.fluentbit.io/manual/pipeline/inputs/kafka and https://learn.microsoft.com/azure/event-hubs/azure-event-hubs-apache-kafka-overview
-- https://learn.microsoft.com/azure/event-hubs/authenticate-shared-access-signature ; librdkafka CONFIGURATION.md (`sasl.oauthbearer.metadata.authentication.type`)
-- https://learn.microsoft.com/azure/container-apps/ingress-overview#additional-tcp-ports ; https://learn.microsoft.com/azure/templates/microsoft.app/2025-07-01/containerapps
-- https://learn.microsoft.com/azure/container-apps/managed-identity#control-managed-identity-availability (init containers + managed identity)
-- https://docs.datadoghq.com/opentelemetry/setup/collector_exporter/
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/transport.tftest.hcl`. Container-level behaviour (Worker bootstrap, APM gateway, OTel gateway) is in `observability/tests/transport/` (docker).

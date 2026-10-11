@@ -87,17 +87,8 @@ Container: `docker build -f applications/services/orders-api/Dockerfile -t hello
 (context = `applications/`; image `mcr.microsoft.com/dotnet/aspnet:10.0.12-noble-chiseled-extra`, uid 1654).
 `LOG_FILE_PATH` must point to a mounted writable volume (the root filesystem is read-only friendly).
 
-## Test
-
-```bash
-cd applications/dotnet && dotnet test --project ../services/orders-api/tests/Hello.OrdersApi.Tests
-```
-
-WebApplicationFactory tests: health/ready/version, POST idempotency (replay + key reuse 409), validation problems,
-status transitions, publish failure → `PublishFailed` → republish, catalog-not-configured 503, fault auth (404/403/400),
-`http_500` expiry with a fake clock, `db_error` 503 and `DELETE` clear.
-Locally verified against SQL Server 2022 in docker (migration on first start and again after restart, idempotent create,
-409 on key reuse, PATCH status) — see the .NET README.
+## Verification
+Locally verified against SQL Server 2022 in docker (migration, idempotent create, 409 on key reuse, PATCH status).
 
 ## Limitations
 

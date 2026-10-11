@@ -20,9 +20,7 @@
   Hubs path of `obs-diagnostics` is authoritative.
 * `eventhub_log_forwarding`: mirror of what `obs-diagnostics` exports (`activity_logs = true`,
   `resource_logs = true`, `entra = false`). Validation fails when `native_logs` would forward the same source.
-* `log_management`: accepted and ignored since package 3.0.0. The 2.x dashboard / log-based metrics / index /
-  pipeline moved to `extras/content/modules/log-management` (optional); parsing, tags, dedupe and quotas of the
-  Azure platform logs happen in the Observability Pipelines pipeline of `obs-telemetry-transport`.
+* `log_management`: accepted and ignored (optional content: `extras/content/modules/log-management`).
 
 ## Providers
 * The Datadog provider reads `DD_API_KEY` and `DD_APP_KEY` from the pipeline environment (Delinea DSV, masked variables).
@@ -39,10 +37,4 @@ No Azure cost. Datadog bills the Azure-monitored hosts and containers it discove
 ## Teardown
 Destroy removes the Datadog integration and the role assignments. The Entra app stays (bootstrap owns it).
 
-## Duplicate prevention
-* Native log forwarding (subscription, resource and Entra logs) is off. It is mutually exclusive with the Event Hubs
-  path (validation).
-* Datadog automated log forwarding is not used. See `modules/azure-integration/README.md`.
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-azure-integration` (fmt, validate, test).
+Duplicate prevention: see `modules/azure-integration/README.md`.

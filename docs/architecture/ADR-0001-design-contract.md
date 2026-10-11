@@ -270,83 +270,57 @@ Run checks with `tools/validate/terraform.sh <root>` (fmt -check, init -backend=
 
 ## 13. Amendments
 
+Dated amendments; where they differ from sections 1-12 they win. None has been deployed or verified live.
+
 - 2026-10-09: plan identity may write to the `plans` container (the plan stage persists the saved plan); apply identity reads it.
 - 2026-10-09: Azure DevOps workload identity federation uses the Entra issuer `https://login.microsoftonline.com/<tenant>/v2.0`
-  (the `vstoken.dev.azure.com` issuer is deprecated, retiring 2027-07-01); issuer/subject are copied from the service connection.
+  (the `vstoken.dev.azure.com` issuer is deprecated); issuer/subject are copied from the service connection.
 - 2026-10-09: Batch node log collection (Fluent Bit) is observability-owned content: `obs-telemetry-transport` publishes
-  `batch_log_setup` (gzip+base64 Linux installer: pinned Fluent Bit, `linux-host` config tailing Batch task
-  `$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt`, Datadog API key read from Key Vault on the node with the pool
-  identity; no secret in the contract). It is run by the **job preparation task** of the Batch job that the application
-  deployment root submits (`deploy-jobs` contract `batch.job_preparation`, `scripts/submit-batch-job.sh`), not by the pool
-  start task: Batch pools have no VM extensions, and platform-batch is upstream of obs-telemetry-transport, so a
-  start-task reference would create a platform → observability dependency cycle. platform-batch's start task installs
-  only the runtime (Python 3.13). (Supersedes the earlier "start task references the script" wording of this amendment.)
+  `batch_log_setup` (installer; no secret in the contract), run by the **job preparation task** of the Batch job that
+  the application deployment root submits (`deploy-jobs` contract `batch.job_preparation`), not by the pool start task:
+  Batch pools have no VM extensions, and a start-task reference would create a platform -> observability dependency
+  cycle. platform-batch's start task installs only the runtime.
 - 2026-10-09: Secrets move from Key Vault to Delinea DSV (section 14). Rules in sections 5, 9 and 10 that mention Key Vault
   secret IDs now mean DSV references (`dsv://`).
 - 2026-10-09: `foundation-identity` contract is **v2** (v1 removed: no `key_vault_*`, no `secret_ids`); new component
-  `foundation-secrets`; platform-scope artifact `img-dsv-fetch` is consumed by applications roots by its recorded digest
-  (cross-scope artifacts, `tools/deploy/artifacts.py tfvars --recorded`). Pipelines use no variable groups for secrets.
+  `foundation-secrets`; platform-scope artifact `img-dsv-fetch` is consumed by applications roots by its recorded digest.
+  Pipelines use no variable groups for secrets.
 - 2026-10-09: Static Web Apps is not available in swedencentral; the frontend SWA resource uses a separate `swa_location` (default westeurope).
-- 2026-10-10: Section 10 amended for observability package 3.0.0 (fleet collection configuration; `config/fleet-policy.yaml`,
-  tag policy `config/tag-policy.yaml`). **Logs:** the Datadog Agent collects application logs wherever it runs (AKS nodes,
-  VM/VMSS hosts; the Fluent Bit DaemonSet / host service is not installed there); Fluent Bit remains the edge collector
-  only where no Agent runs (ACA/ACI sidecars, Batch nodes). **Datadog Observability Pipelines** (OP Worker on Container
-  Apps or AKS) is the central log pipeline: Agents, Fluent Bit edge collectors and the Event Hubs path ship to the Worker,
-  which applies the tag policy and sends to Datadog (`telemetry.pipeline:observability-pipelines`). Still one collector per
-  log source (no double shipping); `log_pipeline = fluent_bit_direct` keeps the 2.x paths. **APM:** Datadog tracing
-  libraries (Single Step Instrumentation on AKS and Linux hosts; library in the image plus the in-VNet Datadog Agent APM
-  gateway or, on Container Apps, the Datadog serverless-init managed runtime path) with the Continuous Profiler;
-  Functions and Durable Functions remain on OpenTelemetry (OTLP -> OTel gateway), Logic Apps have no tracer.
-  **Monitoring content** (monitors, SLOs, dashboards, synthetics, service catalog) is out of the core package: optional
-  in `observability/extras/content` (component `obs-monitoring`, `optional: true`, in no built-in profile). Contract
-  `obs-telemetry-transport` is **v3** (formalises `aggregator.{kind, pipeline_id, agent_logs_url}`, `env.fleet`,
-  `env.apm_gateway`; v2 kept for 2.x producers / rollback). Secrets stay in Delinea DSV (section 14).
-- 2026-10-10: **Observability package 4.0.0 (Datadog Agent deployment v4)**, amending sections 3, 10 and 14:
-  - **One application-log collector per architecture** (fleet policy `architectures.<arch>.logs.collector`): Datadog
-    Agent on AKS nodes and VM/VMSS hosts (Linux files; Windows files + Event Log channels), Datadog Agent **sidecar** in
-    ACI container groups (traces `localhost:8126`, DogStatsD `localhost:8125`, logs tailed from the shared `emptyDir`
-    file), Datadog **serverless-init** on Container Apps (`DD_LOGS_ENABLED=true`, tails `DD_SERVERLESS_LOG_PATH`), Azure
-    diagnostic settings -> Event Hubs for App Service / Functions / Logic Apps. **Fluent Bit remains only** for
-    `log_pipeline = fluent_bit_direct` (fallback) and on **Azure Batch** nodes (job preparation task, amendment above;
-    the Batch installer is now `lab/telemetry-transport/scripts/batch-log-setup.sh.tftpl`). The Observability Pipelines
-    Worker stays the central log hop.
-  - **dsv-fetch is a static Go binary** (`img-dsv-fetch` 2.0.0; distroless image, release zip with
-    `dsv-fetch-linux-{amd64,arm64}`, `dsv-fetch-windows-amd64.exe`, `SHA256SUMS`); the 1.x Python `dsv_fetch.py` and
-    every embedding of it are removed. Containers copy it with an init container (`install --dest`) and the Agent uses
-    it as `secret_backend_command` (`agent-backend`); refresher containers run `init --refresh-seconds 3600`; hosts,
-    Batch nodes and pipelines take the sha256-pinned release zip.
-  - **Kubernetes**: the Datadog Helm chart with **layered values** (`values/base.yaml` + a computed fleet layer +
-    per-cluster `values_overrides`) and a **Helm post-renderer** that injects the dsv-fetch init container (deploy agents
-    need `sh` and `awk`). One secret path: node Agent, Cluster Agent and cluster-checks runners all resolve
-    `ENC[dsv://...]` with the binary (no synced Secret, no `cluster_agent_secret_name`, no unauthenticated DCA).
-  - **VM / VMSS**: no per-host Terraform, no run command / CustomScript: Azure Policy DeployIfNotExists (subscription or
-    management-group scope, least-privilege custom remediation role) enrols hosts tagged `datadog:enabled` with the
-    per-environment DSV-reader identity and the pinned **Azure VM Application** (Compute Gallery, Linux + Windows);
-    `package_version` is promoted dev -> test -> prod; Fleet Automation for inventory only (remote updates off).
-    Section 3 rule 3 amended accordingly.
-  - **DBM**: `obs-dbm` `settings.hosting = auto` runs the checks as **cluster checks** when a cluster exists (platform-aks
-    / obs-kubernetes, runners' workload identity `obs-dbm`); the separate ACI DBM Agent only when there is none.
-  - Contract `obs-kubernetes` is **v2** (actual outputs incl. `logs_enabled` per fleet policy; v1 kept for rollback).
-    Nothing here has been deployed or verified live (status: implemented / locally verified).
-- 2026-10-10: **Observability package 4.1.0** (minor): Service Fabric managed cluster nodes run the same pinned Datadog
-  Agent VM Application as VMs / VMSS (metrics, `LOG_FILE_PATH` + Windows Event Log, OTLP / APM on localhost, key from
-  DSV via the dsv-fetch secret backend), set on the node type's `vmApplications` by `obs-hosts` (optional contract
-  `platform-servicefabric` 1.1.0 `node_types`); section 3 rule 3 amended. `platform-servicefabric` manages the cluster
-  and node type with azapi 2026-02-01 (catalog/provider-gaps.yaml `service-fabric-managed`). Not deployed or verified live.
-- 2026-10-10: **Observability package 4.1.0** (minor), amending section 10: **ARO** application logs, traces and
-  metrics follow the AKS path - Datadog node Agent DaemonSet (logs -> Observability Pipelines Worker), Cluster Agent,
-  cluster-checks runners, SSI - installed by the new component `obs-kubernetes-aro` with `modules/kubernetes`
-  `distribution = "openshift"` (chart SCCs, CRI-O, host ports instead of Unix sockets). One secret path (section 14):
-  `ENC[dsv://...]` resolved by dsv-fetch with Entra workload identity through the managed-identity cluster's OIDC issuer
-  (platform-aro contract `oidc_issuer_url`); the cluster's admin kubeconfig is read only as an ephemeral value (never in
-  plan or state). Contract `obs-kubernetes-aro` v1. Not deployed or verified live.
-- 2026-10-10: **ARO application workloads read Delinea DSV directly** (section 14; replaces the dsv-k8s synced-Secret
-  path of `deploy-specialized`): `platform-aro` (now consuming `foundation-identity`) federates each application
-  user-assigned identity with the managed-identity cluster's OIDC issuer (`system:serviceaccount:<ns>:<sa>`) and publishes
-  contract `workload_identities` (platform-aro 1.1.0) - the section 3 rule applied to AKS (federated credentials live
-  with the cluster whose issuer they trust; observability identities stay with their own root). `deploy-specialized`
-  renders the hello-service chart with workload identity and `secretsMode: dsv` as core-aks does; the OpenShift
-  pod-identity webhook injects the token. Not deployed or verified live.
+- 2026-10-10: Section 10 amended for observability package 3.0.0 (`config/fleet-policy.yaml`, `config/tag-policy.yaml`).
+  **Logs:** the Datadog Agent collects application logs wherever it runs; **Datadog Observability Pipelines** (Worker on
+  Container Apps or AKS) is the central log pipeline: every collector and the Event Hubs path ship to the Worker, which
+  applies the tag policy. Still one collector per log source; `log_pipeline = fluent_bit_direct` keeps the 2.x paths.
+  **APM:** Datadog tracing libraries with the Continuous Profiler; Functions and Durable Functions remain on
+  OpenTelemetry, Logic Apps have no tracer. **Monitoring content** is out of the core package (optional
+  `observability/extras/content`, component `obs-monitoring`, `optional: true`, in no built-in profile). Contract
+  `obs-telemetry-transport` is **v3** (v2 kept for 2.x producers / rollback).
+- 2026-10-10: **Observability package 4.0.0**, amending sections 3, 10 and 14:
+  - **One application-log collector per architecture** (`architectures.<arch>.logs.collector`): Datadog Agent on AKS
+    nodes and VM/VMSS hosts, Agent **sidecar** in ACI container groups, **serverless-init** on Container Apps, diagnostic
+    settings -> Event Hubs for App Service / Functions / Logic Apps. **Fluent Bit remains only** for
+    `fluent_bit_direct` and on **Azure Batch** nodes (job preparation task above). Per-platform paths:
+    [datadog-fleet-collection.md](../guides/datadog-fleet-collection.md).
+  - **dsv-fetch is a static Go binary** (`img-dsv-fetch` 2.x: image + sha256-pinned release zip); containers copy it
+    with an init container, Agents use it as `secret_backend_command`; hosts, Batch nodes and pipelines take the zip.
+  - **Kubernetes**: the Datadog Helm chart with layered values and a Helm post-renderer that injects the dsv-fetch init
+    container; node Agent, Cluster Agent and cluster-checks runners all resolve `ENC[dsv://...]` (no synced Secret, no unauthenticated Cluster Agent).
+  - **VM / VMSS**: no per-host Terraform, run command or CustomScript: Azure Policy DeployIfNotExists (least-privilege custom remediation role) enrols hosts tagged
+    `datadog:enabled` with the DSV-reader identity and the pinned **Azure VM Application** (`package_version` promoted
+    dev -> test -> prod); Fleet Automation for inventory only (remote updates off). Section 3 rule 3 amended.
+  - **DBM**: `obs-dbm` runs the checks as cluster checks when a cluster exists, else as a separate ACI Agent.
+  - Contract `obs-kubernetes` is **v2** (v1 kept for rollback).
+- 2026-10-10: **Observability package 4.1.0**: Service Fabric managed cluster node types are enrolled through the node
+  type resource (section 3 rule 3 amendment; optional contract `platform-servicefabric` 1.1.0 `node_types`);
+  `platform-servicefabric` manages cluster and node types with azapi (`catalog/provider-gaps.yaml`).
+- 2026-10-10: **Observability package 4.1.0**, amending section 10: **ARO** follows the AKS path (node Agent -> Worker,
+  Cluster Agent, cluster-checks runners, SSI), installed by the new component `obs-kubernetes-aro` (contract v1) with
+  `modules/kubernetes` `distribution = "openshift"`. One secret path (section 14): `ENC[dsv://...]` with Entra workload
+  identity through the managed-identity cluster's OIDC issuer; the admin kubeconfig is only an ephemeral value (never
+  in plan or state).
+- 2026-10-10: **ARO application workloads read Delinea DSV directly** (replaces the dsv-k8s synced-Secret path):
+  `platform-aro` federates each application identity with the cluster's OIDC issuer and publishes contract
+  `workload_identities` (platform-aro 1.1.0) - federated credentials live with the cluster whose issuer they trust,
+  observability identities stay with their own root; `deploy-specialized` uses `secretsMode: dsv` like core-aks.
 
 ## 14. Secret management: Delinea DevOps Secrets Vault (DSV)
 

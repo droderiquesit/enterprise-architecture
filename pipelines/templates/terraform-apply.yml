@@ -1,9 +1,6 @@
-# Apply deployment job of the apply stage C_<x> (APPLY identity) behind the approvals/checks of
-# environment lab-<env>. Checks are evaluated when C_<x> starts, i.e. AFTER P_<x> published the plan
-# summary, so approvers review a real plan. Not compiled when dryRun is true (C_<x> is then skipped by
-# its condition). The stage runs only when the plan reported changes and the component is an apply
-# candidate. Writes a succeeded record only after apply,
-# code deploy, smoke and contract publication succeeded; any failure writes failed/partial/canceled.
+# Apply deployment job of C_<x> (APPLY identity) behind the checks of environment lab-<env>, evaluated when C_<x>
+# starts, i.e. AFTER P_<x> published the plan summary. Not compiled when dryRun is true. Writes a succeeded record
+# only after apply, code deploy, smoke and contract publication succeeded; any failure writes failed/partial/canceled.
 parameters:
   - name: component
     type: string

@@ -38,8 +38,7 @@ needs `Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredent
 in bootstrap's subscription-scope Contributor of the apply identity; a narrower setup grants *Managed Identity
 Contributor* on the foundation-identity resource group). With DBM checks on the cluster the `obs-dbm` identity is
 federated with `datadog/datadog-cluster-checks` instead (the runners read the `dbm-*-password` paths; foundation
-`secrets.yaml` lists obs-kubernetes in their `required_by`). There is no synced-Secret / existing-Secret mode any
-more (observability 4.0.0). **To verify on a real cluster**: DSV accepting AKS workload-identity tokens (`xms_mirid`).
+`secrets.yaml` lists obs-kubernetes in their `required_by`). **To verify on a real cluster**: DSV accepting AKS workload-identity tokens (`xms_mirid`).
 
 ## DBM (settings.dbm = auto)
 The optional platform-db contracts are rendered by `modules/dbm/contracts` + `modules/dbm` (`hosting =
@@ -70,6 +69,3 @@ recycled.
 ## Limitations
 The Fluent Bit kubernetes filter is not exercised locally because it needs an API server; only the dry-run is
 done.
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-kubernetes` (fmt, validate, test).

@@ -22,9 +22,7 @@ Every instance has:
 
 Passwords are **never literal** and have one source: `password_ref = {kind = "dsv", name = "dsv://<path>#<element>"}`
 renders `ENC[dsv://...]`, resolved by the Agent's `secret_backend_command` = the static dsv-fetch binary
-(`agent-backend`, Delinea DSV with the managed / workload identity). `k8s_secret`, `file` and `env` references were
-removed in observability 4.0.0 (they bypass DSV, and `ENC[file@]` / `ENC[k8s_secret@]` do not work with the dsv-fetch
-backend anyway).
+(`agent-backend`, Delinea DSV with the managed / workload identity).
 
 ## Hosting
 * `cluster_checks` (**default**; whenever a cluster exists): `cluster_check_confd` feeds `modules/kubernetes`
@@ -77,13 +75,4 @@ Platform prerequisites, owned by the database platform roots: PostgreSQL `azure.
 Deviations from Azure: no TLS on the local servers; DSV auth with `client_credentials` against the mock instead of the
 group's managed identity (IMDS).
 
-References:
-- https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/
-- https://docs.datadoghq.com/database_monitoring/setup_mysql/azure/
-- https://docs.datadoghq.com/database_monitoring/setup_sql_server/azure/
-- https://docs.datadoghq.com/database_monitoring/guide/managed_authentication/
-- https://docs.datadoghq.com/agent/configuration/secrets-management/
-- https://docs.datadoghq.com/containers/cluster_agent/clusterchecks/
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/dbm.tftest.hcl`. The rendered checks run against local databases in `observability/tests/transport/test_dbm_local.py` (docker).
+Reference: [managed authentication](https://docs.datadoghq.com/database_monitoring/guide/managed_authentication/).

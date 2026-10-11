@@ -18,7 +18,7 @@ Evidence is written to `docs/evidence/local/<UTC timestamp>/` and summarised in 
 |---|---|
 | Docker Engine + Compose v2 | ~25 containers, ~6 GB RAM, ~8 GB disk for images (SQL Server 2.3 GB, Functions base 1.3 GB) |
 | python3.13, `pip install playwright==1.56.0` | Python Playwright 1.56 drives Chromium revision 1194; no browser download needed when one is installed |
-| Chromium | `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` (default used by the runner) or `PW_CHROMIUM_EXECUTABLE=/path/to/chrome` |
+| Chromium | `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` (default; falls back to the newest local `chromium-*` build when Playwright expects another revision) or `PW_CHROMIUM_EXECUTABLE=/path/to/chrome` |
 | Images `hello-<svc>:0.1.0-e2e`, `dsv-fetch:0.1.0-e2e` | built from the current source by `build_images.sh` (automatically when missing; dsv-fetch from `observability/images/dsv-fetch`, base `gcr.io/distroless/python3-debian13` pinned by digest) |
 
 No Playwright docker image is used. Infrastructure images: `mcr.microsoft.com/mssql/server:2022-latest`,
@@ -148,13 +148,6 @@ tracer 3.55.1 home downloaded at build time from the GitHub release, SHA-256 pin
 key, `DD_SITE=e2e.invalid`, every intake URL → `tap`), `tap` (`datadog_agent/tap_intake.py`, Python 3.14 for stdlib
 zstd: records + decodes the Agent's payloads — trace AgentPayload incl. the 7.8x string-table format, series strings,
 profile multipart — and forwards them unchanged) → `intake` (the existing mock intake, unmodified; stores the logs).
-Checks dd-1..dd-10 (see the runner docstring): both tracers' traces through the Agent, one .NET → Python distributed
-trace, Activity span recorded by the .NET tracer, probes not traced (Python), log correlation against received trace
-ids, `hello.*` DogStatsD metrics, Python + .NET profiles via the Agent's profiling proxy, no OTel SDK/OTLP in datadog mode,
-API key on every payload. Evidence: `docs/evidence/local/<UTC>-datadog-agent/`, `docs/evidence/local/LATEST-datadog-agent.md`.
+Checks dd-1..dd-10: `CHECKS` in `run_dd_agent_e2e.py`. Evidence: `docs/evidence/local/<UTC>-datadog-agent/`, `docs/evidence/local/LATEST-datadog-agent.md`.
 Not covered: SSI itself (admission controller / host injector), serverless-init, App Service sidecar — the variant
 emulates their result (tracer in-process + Agent reachable).
-
-Browser: if the installed Playwright expects a Chromium revision that is not under `PLAYWRIGHT_BROWSERS_PATH`
-(e.g. playwright upgraded to 1.63 without `playwright install`), `run_e2e.py` falls back to the newest local
-`chromium-*/chrome-linux*/chrome` build (`PW_CHROMIUM_EXECUTABLE` still wins).

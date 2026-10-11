@@ -3,7 +3,7 @@
 **Owner:** observability.
 
 **Purpose:** puts the Datadog Agent on the lab VMs and VMSS, Linux and Windows, through
-[`modules/host-agents`](../../modules/host-agents/README.md) (observability 4.0.0). It publishes the VM Applications
+[`modules/host-agents`](../../modules/host-agents/README.md). It publishes the VM Applications
 `datadog-agent-linux` / `datadog-agent-windows` in this environment's Compute Gallery. An **Azure Policy**
 initiative, assigned at the subscription by default, enrols every VM / VMSS tagged `datadog:enabled = true`. There is
 no per-host Terraform and no run command or CustomScript.
@@ -22,7 +22,7 @@ no per-host Terraform and no run command or CustomScript.
   * `platform_db_sqlvm.vm.id`.
 
   In policy mode these contracts are not read: hosts are enrolled by tag.
-* **Optional (any mode, 4.1.0):** `platform_servicefabric` (contract 1.1.0) `node_types[*].{id, os_type,
+* **Optional (any mode):** `platform_servicefabric` (contract 1.1.0) `node_types[*].{id, os_type,
   datadog_enabled}`: every node type of the Service Fabric managed cluster gets the VM Application on its own
   `vmApplications` (enrolled ones) or an empty list (not enrolled, or `settings.service_fabric.enabled = false`).
 * **Produces:** no contract. Outputs: `mode`, `enrollment_tag`, `applications` (pinned version), `agent_version`,
@@ -82,7 +82,7 @@ The pipeline apply identity of this root needs at the policy scope (`settings.po
   `publisher_principal_ids` (apply identity: blob upload with Entra ID), `package_network`.
 * **Other:** `agent_identity_key` (`obs-host-agent`), `sqlvm_os_type` (direct mode).
 
-## Service Fabric managed cluster nodes (4.1.0)
+## Service Fabric managed cluster nodes
 
 Node types of a managed cluster are VMSS in the Microsoft-managed `SFC_` resource group; Microsoft Learn says to change
 them only through the managed cluster / node type API (deny assignment on the resource group, "manually making changes
@@ -108,7 +108,7 @@ Agent's secret backend is the dsv-fetch binary, which uses the `obs-host-agent` 
 read on the **ingest-only** API key only. Accepted risk: any process on an enrolled host can use the identity. See
 the module README.
 
-## Platform roots (done in 4.0.0)
+## Platform roots
 
 `platform-vm`, `platform-vmss` and `platform-db-sqlvm` tag their VMs / VMSS with `datadog:enabled = "true"`
 (`settings.datadog.tag_name`, keep it equal to `settings.policy.enrollment_tag.name` here), keep the `obs-host-agent`
@@ -142,11 +142,8 @@ The package storage needs no host access.
 
 ## Limitations
 
-* Not deployed or verified live from this change.
+* Not deployed or verified live.
 * The Windows installer is parse-checked and its configuration part executed under pwsh on Linux; it was not run on
   Windows.
 * The remediation template's lambda functions and the partial-body PUT of VMSS models follow Microsoft Learn but were
   not exercised against Azure.
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-hosts` (fmt, validate, test).

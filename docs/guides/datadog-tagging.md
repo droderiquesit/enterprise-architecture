@@ -1,18 +1,10 @@
 # Datadog tagging with the observability package
 
-The observability package (4.0.0; since 3.0.0) does not create monitors, SLOs or dashboards. Its job is to connect Azure resources
-and workloads to Datadog and to put **the same tags on every signal**, so that the monitors, SLOs and dashboards that
-already exist in your organisation match:
-
-* metrics, traces, logs and profiles;
-* RUM;
-* Azure resource tags and platform logs;
-* DBM checks.
-
-The tag policy is the contract; `modules/tagging` is the only code that renders it.
-
-Status: implemented and tested offline (Terraform tests per path, Python parity tests, recorded API responses). Not
-verified against a live Datadog organisation.
+The package creates no monitors, SLOs or dashboards; it puts **the same tags on every signal** (metrics, traces, logs,
+profiles, RUM, Azure resource tags and platform logs, DBM checks) so the monitors that already exist in your
+organisation match. The tag policy is the contract; `modules/tagging` is the only code that renders it. Status:
+implemented and tested offline (Terraform tests per path, Python parity tests, recorded API responses); not verified
+against a live Datadog organisation.
 
 ## 1. The policy
 
@@ -27,29 +19,12 @@ verified against a live Datadog organisation.
 | `team`, `owner`, `application`, `domain`, `tier`, `region`, `managed_by` | yes | `managed_by: terraform` | manifest metadata / Azure location | `owner` e-mail addresses normalise to `orders_example.com` |
 | `cost_center`, `component` | no | - | manifest / environment | |
 
-Fields per key:
-
-* `key`: renames the key. It cannot be changed for `env`, `service` and `version`.
-* `aliases`: the value is also emitted under extra keys, for example `environment`.
-* `value_map`, `allowed_values`, `default`, `required`.
-* `otel_attributes`: the OTel resource attributes read and written for the key.
-* `azure_tag_keys`: the Azure resource tags that carry the value (first match wins).
-* `k8s_label`.
-
-Top-level fields:
-
-* `static_tags`: tags on every signal.
-* `environments.<env>.static_tags`.
-* `enforce_required`: when on, a missing required value fails `terraform plan`.
-
-Normalisation (`normalize: datadog`) is exactly Datadog's:
-
-* lower case;
-* characters other than letters, digits and `_-:./` become `_`;
-* repeated `_` collapse, and leading or trailing `_` are removed;
-* at most 200 characters.
-
-The value you emit is therefore the value a monitor scope sees.
+Per key: `key` (rename; fixed for `env`, `service`, `version`), `aliases` (also emitted under extra keys, e.g.
+`environment`), `value_map`, `allowed_values`, `default`, `required`, `otel_attributes`, `azure_tag_keys` (first match
+wins), `k8s_label`. Top level: `static_tags`, `environments.<env>.static_tags`, `enforce_required` (a missing required
+value fails `terraform plan`). Normalisation (`normalize: datadog`) is exactly Datadog's - lower case, characters other
+than letters, digits and `_-:./` become `_`, repeated / leading / trailing `_` removed, at most 200 characters - so the
+value you emit is the value a monitor scope sees.
 
 ## 2. Adopt it from your existing monitors
 
@@ -96,10 +71,8 @@ reads (`ReadOnlyViolation`). Offline, `--fixtures <dir>` replays recorded respon
 | Azure platform logs | resource-scope tags (`fleet-inventory` `scope_tags`: resource id prefix -> owner tags) | `observability-pipeline` |
 | RUM | `service`, `env`, `version` + `globalContext` (`setGlobalContextProperty`) | `rum` |
 
-Tests per path: `modules/tagging/tests`, `modules/instrumentation/tests`, `modules/kubernetes/tests`,
-`modules/host-agents/tests`, `modules/host-agent-package/tests`, `modules/dbm/tests`, `modules/fluent-bit/tests`, `modules/otel-collector/tests`,
-`modules/rum/tests`, `observability/tests/tags`, `observability/tests/transport` (Lua, VRL and OTel overlays executed
-with the real binaries), `tests/charts/test_datadog_tags.py`.
+Each path has tests in its module's `tests/`, plus `observability/tests/tags`, `observability/tests/transport` (Lua,
+VRL and OTel overlays run with the real binaries) and `tests/charts/test_datadog_tags.py`.
 
 ## 4. Rules that keep tags clean
 

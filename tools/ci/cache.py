@@ -9,18 +9,14 @@ Full runs (nightly, release/*) ignore hits and re-run everything (cache poisonin
 
 from __future__ import annotations
 
-import datetime as dt
 import hashlib
 import os
 from typing import Iterable, List, Optional
 
 from tools.changeset.store import Store, open_store
+from tools.common import utc_now
 
 DEFAULT_DIR = ".ci-cache/testcache"
-
-
-def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def part_id(files: Optional[Iterable[str]]) -> str:
@@ -48,7 +44,7 @@ class ResultCache:
         key = f"{fingerprint}.json" if files is None else f"{fingerprint}.part-{part_id(files)}.json"
         self.store.put_json(key, {"suite": suite, "fingerprint": fingerprint, "result": "passed",
                                   "seconds": round(seconds, 2), "files": sorted(files) if files else None,
-                                  "run": run or os.environ.get("BUILD_BUILDID", "local"), "at": _now()})
+                                  "run": run or os.environ.get("BUILD_BUILDID", "local"), "at": utc_now()})
 
     def promote(self, suite: str, fingerprint: str, parts: List[List[str]], run: str = "") -> bool:
         """All shard parts passed -> suite-level entry. Returns True when promoted."""

@@ -5,15 +5,9 @@ must be recorded (change record + a note in the `evidence` container) and follow
 re-establishes provenance. Procedures are implemented in scripts and documented by their owners; none has been
 exercised against Azure.
 
-The authoritative state procedures are in [`bootstrap/README.md`](../../bootstrap/README.md#break-glass):
-
-| Situation | Procedure |
-|---|---|
-| Corrupted / deleted state file | blob versioning + soft delete: list versions, `az storage blob undelete`, promote a previous version with `az storage blob copy start ...?versionId=<v>`, then `terraform plan` in the root |
-| Deleted `tfstate` container | `az storage container restore --name tfstate --deleted-version <v>` within 30 days |
-| Stuck state lock | confirm no run is active, `terraform force-unlock <lock-id>` or `az storage blob lease break` |
-| Emergency local apply | from a host in `operator_ip_ranges` (or temporarily `--public-network-access Enabled`, re-apply bootstrap afterwards): `terraform init -reconfigure -backend-config=...key=<env>/<component>.tfstate ... -backend-config=use_azuread_auth=true`, `terraform plan -out emergency.tfplan && terraform apply emergency.tfplan` |
-| Bootstrap state lost, resources exist | re-run with local state and `terraform import` RG, storage account, containers, lock, identities, role assignments before applying |
+State procedures (corrupted or deleted state file or container, stuck lock, emergency local apply, lost bootstrap
+state) are in [`bootstrap/README.md`](../../bootstrap/README.md#break-glass); stuck locks also in
+[lock-recovery.md](lock-recovery.md).
 
 Pipeline-level break-glass ([`pipelines/README.md`](../../pipelines/README.md#operating)):
 

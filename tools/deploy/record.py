@@ -19,7 +19,6 @@ fingerprint), which makes re-runs resumable.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import os
 import subprocess
@@ -29,6 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.changeset.store import open_store  # noqa: E402
+from tools.common import utc_now  # noqa: E402
 
 STATUSES = ("succeeded", "failed", "partial", "canceled", "retired", "rolled_back", "quarantined")
 FAILURES = ("failed", "partial", "canceled", "rolled_back")
@@ -95,7 +95,7 @@ def make_record(env: str, component: str, status: str, selection: dict, previous
         "fp_parts": entry.get("fp_parts"),
         "commit": commit,
         "run_id": run_id,
-        "finished_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "finished_at": utc_now(),
         "artifact_digests": digests or {},
         "contract_versions": entry.get("contract_versions", {}),
         "upstream": entry.get("upstream", []),
@@ -199,7 +199,7 @@ def cmd_verify(args, store) -> int:
     if not per_source and args.verification:
         per_source.append(("manual", {args.component: args.verification}))
     run_id = args.run_id or os.environ.get("BUILD_BUILDID", "local")
-    at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    at = utc_now()
     for source, outcomes in per_source:
         for cid, status in sorted(outcomes.items()):
             if args.component not in ("*", cid):

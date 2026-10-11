@@ -97,35 +97,5 @@ Outputs: `assignment_id`, `policy_set_definition_id`, `policy_definition_ids`, `
 Promotion: the same definitions and initiative in every environment. Only the assignment parameter
 `<app>Version` differs. The pipeline bumps it in dev, then test, then prod.
 
-Tests: `tests/policy.tftest.hcl` (mock provider) covers:
-
-* the rule shape;
-* the existence condition;
-* the remediation template (VM `properties.applicationProfile`, VMSS
-  `properties.virtualMachineProfile.applicationProfile`);
-* the preserved applications and identities;
-* the least-privilege role;
-* subscription and management-group scope;
-* arm64;
-* audit mode;
-* a gallery in another subscription;
-* a version bump creating a new remediation task.
-
-Not verified live: no Azure deployment from this change.
-
-## References (Microsoft Learn, checked 2026-10-10)
-
-* VM Applications and Azure Policy (audit; `modify` inject with Virtual Machine Contributor; gradual remediation per
-  region): https://learn.microsoft.com/azure/virtual-machines/vm-applications-inject-with-policy
-* Deploy VM Applications (partial-body PUT of `applicationProfile` for VM and VMSS):
-  https://learn.microsoft.com/azure/virtual-machines/vm-applications-how-to
-* DeployIfNotExists effect (template deployment; nested templates only):
-  https://learn.microsoft.com/azure/governance/policy/concepts/effect-deploy-if-not-exists
-* Modify effect (only `identity.type` and modifiable aliases):
-  https://learn.microsoft.com/azure/governance/policy/concepts/effect-modify
-* Adding user-assigned identities with Azure Policy (enforcement DoNotEnforce):
-  https://learn.microsoft.com/azure/governance/policy/tutorials/modify-virtual-machine-identity
-* Remediation (`roleDefinitionIds`, manual grants for SDK assignments, identity used for deployments):
-  https://learn.microsoft.com/azure/governance/policy/how-to/remediate-resources
-* Assignment identity: https://learn.microsoft.com/azure/governance/policy/concepts/assignment-structure#identity
-* Built-in reference pattern: `Managed Identity/VM_UAI_DINE.json` (Azure/azure-policy on GitHub).
+Key references: [DeployIfNotExists](https://learn.microsoft.com/azure/governance/policy/concepts/effect-deploy-if-not-exists),
+[remediation](https://learn.microsoft.com/azure/governance/policy/how-to/remediate-resources).

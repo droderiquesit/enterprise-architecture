@@ -1,6 +1,4 @@
-# One App Service web app (Linux or Windows; code or container) with user-assigned identity (ACR pull; the app reads
-# Delinea DSV with it at start-up - secret settings carry dsv:// references), VNet integration, health check, private endpoint or deny-by-default access restrictions, and an
-# optional `staging` slot for swap-based rollback. Logs: diagnostic settings (obs-diagnostics) - no sidecar.
+# One App Service web app (see README). Logs: diagnostic settings (obs-diagnostics), no sidecar.
 locals {
   linux       = var.os_type == "Linux"
   container   = var.mode == "container"

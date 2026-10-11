@@ -9,6 +9,3 @@ onboarding tools and the read-only verification tools; the monitoring-content te
   reported as notices, v1 manifests rejected with the migration hint, `migrate_v1.py`, contract reference resolution.
 * `test_telemetry_verify.py` - verifier against recorded API responses (`fixtures/datadog-api/`), no network.
 * `test_markers.py` - DORA deployment marker payload/retries.
-
-Terraform modules are tested per directory with `tools/validate/terraform.sh <dir>` (source repository) or
-`terraform init -backend=false && terraform validate && terraform test`.

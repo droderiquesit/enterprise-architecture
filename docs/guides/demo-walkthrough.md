@@ -20,23 +20,17 @@ telemetry diagram: [04-telemetry](../diagrams/svg/04-telemetry.svg).
 * `CORS_ALLOWED_ORIGINS` of the BFF must contain the SWA origin (two-pass, `deploy-core-aca` README).
 * RUM needs `obs-prereqs` applied before `deploy-frontend` (client token + application id in `config.json`).
 
-## Unified tags on every signal
+## Tags and log shape
 
-| Key | Value source |
-|---|---|
-| `env`, `service`, `version` | `DD_ENV`, `DD_SERVICE`, `DD_VERSION` from `observability/modules/instrumentation` (`OTEL_SERVICE_NAME` only for OpenTelemetry workloads such as hello-durable) |
-| `team`, `domain`, `tier`, `application`, `owner`, `region` | `DD_TAGS` (Datadog tracer, serverless-init, Agent sidecar); `OTEL_RESOURCE_ATTRIBUTES` for OpenTelemetry workloads; the Observability Pipelines tag processor fills missing keys on logs |
-| `service.namespace` | `enterprise-hello` (resource attribute) |
-| `cloud.provider` / `cloud.platform` | `azure` / `azure_container_apps`, `azure_app_service`, `azure_functions`, `azure_vm`, ... |
+Every signal carries the [tag policy](datadog-tagging.md) keys (`DD_ENV` / `DD_SERVICE` / `DD_VERSION` / `DD_TAGS` from
+`observability/modules/instrumentation`; `OTEL_*` only for OpenTelemetry workloads such as hello-durable).
 
 Team/domain/tier per service (`applications/deployments/modules/service-meta`): hello-frontend web/storefront/high,
 hello-bff web/storefront/critical, hello-orders-api orders/orders/critical, hello-catalog-api catalog/catalog/high,
 hello-durable fulfillment/fulfillment/critical, hello-partner-sim fulfillment/payments/low, hello-inventory-api
 orders/inventory/high, hello-worker fulfillment/notifications/medium.
 
-Every JSON log line (ADR section 9) carries `timestamp, level, message, logger, service, env, version, trace_id (32 hex),
-span_id (16 hex), dd.trace_id, dd.span_id (decimal low 64 bits), dd.service, dd.env, dd.version` - this is what links
-logs to traces in Datadog.
+Every JSON log line has the ADR-0001 section 9 shape; `dd.trace_id` / `dd.span_id` link it to the trace.
 
 ## The journey
 
@@ -58,23 +52,12 @@ logs to traces in Datadog.
 
 ## Where each signal arrives
 
-Observability package 4.0.0 defaults (`log_pipeline = observability_pipelines`, `apm.mode = datadog`; Functions stay on
-OpenTelemetry). Per-platform reference: [datadog-fleet-collection.md](datadog-fleet-collection.md).
-
-| Signal | Path (minimal / ACA) | AKS variant |
-|---|---|---|
-| BFF / orders / catalog logs | app writes `LOG_FILE_PATH=/var/log/app/app.log` on a shared EmptyDir -> Datadog **serverless-init sidecar** (`DD_SERVERLESS_LOG_PATH`) -> Observability Pipelines Worker -> Datadog Logs | stdout -> Datadog node Agent (container logs) -> Worker -> Datadog Logs |
-| partner-sim logs | ACI **Datadog Agent sidecar** tails the shared emptyDir file -> Worker | - |
-| durable logs | FunctionAppLogs diagnostic setting -> Event Hubs `app-logs` -> Worker (Kafka source) -> Datadog Logs | - |
-| BFF / orders / catalog traces + metrics | Datadog tracer in the image -> serverless-init on `localhost:8126`, DogStatsD `udp://localhost:8125` (`hello.*` custom and runtime metrics) -> Datadog | Single Step Instrumentation -> node Agent (`DD_AGENT_HOST` = node IP) |
-| partner-sim traces + metrics | tracer -> ACI Agent sidecar (`localhost:8126` / `:8125`) -> Datadog | - |
-| durable traces + metrics | OTLP http/protobuf -> OTel gateway (ACA internal ingress) -> Datadog exporter; the gateway accepts OTLP logs and drops them (so durable host logs are not duplicated) | same |
-| platform metrics | Datadog Azure integration (`azure.app_containerapps.*`, `azure.sql_servers_databases.*`, `azure.servicebus_namespaces.*`, ...) | same |
-| DB query samples | `obs-dbm` DBM checks: ACI Datadog Agent in `minimal` (no cluster); cluster checks on AKS when a cluster exists (`settings.hosting = auto`) | cluster checks |
-| pipeline health | Observability Pipelines Worker status in Datadog (throughput, errors, buffers). The Fluent Bit canary (`service:telemetry-canary`) exists only with `log_pipeline = fluent_bit_direct` | same |
-
-The tag values on these signals come from `DD_ENV` / `DD_SERVICE` / `DD_VERSION` / `DD_TAGS` set by
-`modules/instrumentation`; the Worker's tag processor fills missing policy tags and never overwrites them.
+Package defaults per platform: [datadog-fleet-collection.md](datadog-fleet-collection.md#2-matrix-per-resource-type).
+In `minimal`: BFF / orders / catalog logs, traces and DogStatsD metrics go through the serverless-init sidecar,
+partner-sim through the ACI Agent sidecar, durable logs through FunctionAppLogs -> Event Hubs, and durable traces over
+OTLP to the OTel gateway (which drops OTLP logs, so host logs are not duplicated). Logs pass the Observability Pipelines
+Worker, whose tag processor fills missing policy tags and never overwrites them. On AKS the node Agent and SSI replace
+the sidecars. Platform metrics come from the Azure integration, query samples from `obs-dbm` (ACI Agent in `minimal`).
 
 ## Checking it in Datadog
 

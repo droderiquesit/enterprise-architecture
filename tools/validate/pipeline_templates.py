@@ -25,13 +25,10 @@ Secrets (Delinea DSV, ADR-0001 section 14)
   SEC002 the PR-reachable templates (Select/Validate/Security: universal-stages.yml Select stage, validate.yml,
          security-scan.yml, helm-charts.yml) never call a tools/secrets tool that talks to DSV
   SEC003 every tools/secrets/fetch.py call names --env and wraps a command (exec) or emits masked variables (ado)
-Azure Pipelines limits (Learn, "Templates - imposed limits"; "Stages" - a stage can have up to 256 jobs)
-  LIM001 distinct YAML files per pipeline        limit 100   -> fail above 80
-  LIM002 template nesting depth                  limit 100   -> fail above 20
-  LIM003 expanded YAML size (estimate)           limit 20 MB parse memory, "typically 600 KB - 2 MB on disk"
-                                                             -> fail above 1,000,000 bytes, warn above 600,000
-  LIM004 jobs per stage (incl. validate matrix legs) limit 256 -> fail above 200
-  LIM005 stages per run: no documented limit -> warn above 300 (UI and queueing become unwieldy)
+Azure Pipelines limits (Learn "Templates - imposed limits"; budgets in LIMITS below the documented limits)
+  LIM001 distinct YAML files per pipeline (ADO 100)     LIM002 template nesting depth (ADO 100)
+  LIM003 expanded YAML size estimate (ADO 20 MB parse memory, typically 600 KB - 2 MB on disk)
+  LIM004 jobs per stage incl. validate matrix legs (ADO 256)   LIM005 stages per run (no limit; warning)
 Entry pipelines
   ENT001 exactly two entry pipelines exist: azure-pipelines.yml (platform) and azure-pipelines.applications.yml
   ENT002 both only `extends:` pipelines/templates/universal.yml with their scope
@@ -62,9 +59,10 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-ENTRY_FILES = ("azure-pipelines.yml", "azure-pipelines.applications.yml")
 ENTRY_SCOPES = {"azure-pipelines.yml": "platform", "azure-pipelines.applications.yml": "applications"}
-TEMPLATE_DIRS = ("pipelines/templates",)
+ENTRY_FILES = tuple(ENTRY_SCOPES)
+ENTRY_KEYS = {"name", "trigger", "pr", "schedules", "resources", "lockBehavior", "parameters", "extends",
+              "appendCommitMessageToRunName"}
 LIMITS = {"files": 80, "depth": 20, "size_fail": 1_000_000, "size_warn": 600_000, "jobs_per_stage": 200,
           "stages_warn": 300}
 PARAM_USE_RE = re.compile(r"parameters(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*'([^']+)'\s*\])")
@@ -114,12 +112,14 @@ class Report:
 
 
 # ------------------------------------------------------------------ loading
+_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 _cache: Dict[Path, object] = {}
+_sizes: Dict[Path, int] = {}
 
 
 def load_yaml(path: Path):
     if path not in _cache:
-        _cache[path] = yaml.safe_load(path.read_text())
+        _cache[path] = yaml.load(path.read_text(), Loader=_LOADER)  # noqa: S506 - safe loader
     return _cache[path]
 
 
@@ -127,31 +127,24 @@ def strip_comments(text: str) -> str:
     return "\n".join(l for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#"))
 
 
-def body_size(doc) -> int:
-    """Approximate expanded size contributed by one inclusion: the document without its `parameters`
-    declarations (they do not appear in the expanded pipeline), normalised YAML without comments."""
-    if isinstance(doc, dict):
-        doc = {k: v for k, v in doc.items() if k != "parameters"}
-    return len(yaml.safe_dump(doc, sort_keys=False, width=100000, default_flow_style=False))
+def body_size(path: Path) -> int:
+    """Approximate expanded size of one inclusion: normalised YAML without comments and `parameters` declarations."""
+    if path not in _sizes:
+        doc = load_yaml(path)
+        if isinstance(doc, dict):
+            doc = {k: v for k, v in doc.items() if k != "parameters"}
+        _sizes[path] = len(yaml.safe_dump(doc, sort_keys=False, width=100000, default_flow_style=False))
+    return _sizes[path]
 
 
-def expand_ref(repo: Path, ref: str, scope: Optional[str] = None) -> List[str]:
-    """Template paths containing ${{ parameters.environment }} are checked for every environment;
-    ${{ parameters.scope }} is the scope of the entry pipeline being walked."""
+def expand_ref(ref: str, scope: Optional[str], envs: List[str]) -> List[str]:
+    """${{ parameters.environment }} expands to every environment; ${{ parameters.scope }} is the entry's scope."""
     if scope:
         ref = re.sub(r"\$\{\{\s*parameters\.scope\s*\}\}", scope, ref)
     if "${{" not in ref:
         return [ref]
     m = re.search(r"\$\{\{\s*parameters\.environment\s*\}\}", ref)
-    if not m:
-        return []
-    try:
-        from tools.config.promotion import load
-
-        envs = sorted(load(repo))
-    except Exception:  # noqa: BLE001 - promotion problems are reported by check_environments
-        envs = [p.stem for p in sorted((repo / "pipelines/variables").glob("*.yml")) if p.stem != "tools"]
-    return [ref[:m.start()] + e + ref[m.end():] for e in envs]
+    return [ref[:m.start()] + e + ref[m.end():] for e in envs] if m else []
 
 
 def resolve_ref(repo: Path, including: Path, ref: str) -> Optional[Path]:
@@ -179,16 +172,16 @@ def declared_params(doc) -> Dict[str, dict]:
     return out
 
 
-def iter_template_refs(node, path=()):
-    """Yield (mapping_with_template_key, parent_list_kind) for every `template:` reference."""
+def iter_template_refs(node):
+    """Yield every mapping that has a `template:` reference."""
     if isinstance(node, dict):
-        if "template" in node and isinstance(node["template"], str):
-            yield node, path
-        for k, v in node.items():
-            yield from iter_template_refs(v, path + (str(k),))
+        if isinstance(node.get("template"), str):
+            yield node
+        for v in node.values():
+            yield from iter_template_refs(v)
     elif isinstance(node, list):
         for v in node:
-            yield from iter_template_refs(v, path)
+            yield from iter_template_refs(v)
 
 
 def is_expr(v) -> bool:
@@ -219,9 +212,10 @@ def type_ok(value, spec: dict) -> Optional[str]:
 
 # --------------------------------------------------------------- the walker
 class Walker:
-    def __init__(self, repo: Path, report: Report):
+    def __init__(self, repo: Path, report: Report, envs: List[str]):
         self.repo = repo
         self.report = report
+        self.envs = envs
 
     def rel(self, p: Path) -> str:
         try:
@@ -232,7 +226,6 @@ class Walker:
     def walk(self, entry: Path, scope: Optional[str] = None) -> dict:
         files = set()
         max_depth = 0
-        size = 0
 
         def visit(path: Path, depth: int) -> int:
             nonlocal max_depth
@@ -240,11 +233,10 @@ class Walker:
             max_depth = max(max_depth, depth)
             if depth > LIMITS["depth"] + 5:
                 return 0
-            doc = load_yaml(path)
-            total = body_size(doc)
-            for ref_node, _ctx in iter_template_refs(doc):
+            total = body_size(path)
+            for ref_node in iter_template_refs(load_yaml(path)):
                 targets = []
-                for ref in expand_ref(self.repo, ref_node["template"], scope):
+                for ref in expand_ref(ref_node["template"], scope, self.envs):
                     target = resolve_ref(self.repo, path, ref)
                     if target is None:
                         continue
@@ -286,13 +278,14 @@ class Walker:
                 self.report.add("TC003", where, f"required parameter '{name}' (no default) is not passed")
 
 
-def _registry_secret_vars(repo: Path) -> List[str]:
+def _registry(repo: Path) -> list:
+    """Registry components, [] when the registry is invalid (reported by tools/changeset)."""
     try:
         from tools.changeset.registry import load_registry
         from tools.changeset.trees import WorkTree
 
-        return sorted({v for c in load_registry(WorkTree(repo)) for v in c.secret_env})
-    except Exception:  # noqa: BLE001 - registry errors are reported by tools/changeset
+        return list(load_registry(WorkTree(repo)))
+    except Exception:  # noqa: BLE001
         return []
 
 
@@ -310,20 +303,17 @@ def _scan_secrets(rel: str, body: str, report: Report, echo_re) -> None:
                 report.add("SEC003", rel, f"fetch.py needs `exec ... --env <env> ... -- <cmd>` or `ado --env`: {line.strip()}")
 
 
-def check_template_files(repo: Path, report: Report) -> None:
+def check_template_files(repo: Path, report: Report, registry: list) -> None:
     """TC005 (undeclared parameters used), TC009/SEC00x (secrets/xtrace) for every template/entry file."""
-    echo_re = secret_echo_re(_registry_secret_vars(repo))
+    echo_re = secret_echo_re(sorted({v for c in registry for v in c.secret_env}))
     paths = [repo / f for f in ENTRY_FILES if (repo / f).exists()]
-    for d in TEMPLATE_DIRS:
-        paths += sorted((repo / d).glob("*.yml"))
+    paths += sorted((repo / "pipelines/templates").glob("*.yml"))
     paths += sorted((repo / "pipelines/generated").glob("*.yml"))
     paths += sorted((repo / "pipelines/variables").glob("*.yml"))
     for p in paths:
         rel = p.relative_to(repo).as_posix()
-        text = p.read_text()
-        doc = load_yaml(p)
-        declared = declared_params(doc)
-        body = strip_comments(text)
+        declared = declared_params(load_yaml(p))
+        body = strip_comments(p.read_text())
         for m in PARAM_USE_RE.finditer(body):
             name = m.group(1) or m.group(2)
             if name not in declared:
@@ -351,7 +341,7 @@ def check_settings_keys(repo: Path, report: Report) -> None:
     if not universal.exists():
         return
     provided = set()
-    for ref, _ in iter_template_refs(load_yaml(universal)):
+    for ref in iter_template_refs(load_yaml(universal)):
         s = (ref.get("parameters") or {}).get("settings")
         if isinstance(s, dict):
             provided |= set(s)
@@ -422,7 +412,7 @@ def expanded_stages(repo: Path, scope: str = "platform") -> List[Tuple[dict, Pat
     return result
 
 
-def check_structure(repo: Path, report: Report) -> dict:
+def check_structure(repo: Path, report: Report, registry: list) -> dict:
     metrics = {}
     max_jobs_all = 0
     for scope in ("platform", "applications"):
@@ -451,26 +441,18 @@ def check_structure(repo: Path, report: Report) -> dict:
                         report.add("TC008", f"{scope} pipeline", f"stage '{st['stage']}' job '{j}' dependsOn unknown job '{d}'")
             max_jobs = max(max_jobs, len(jobs))
         if len(names) > LIMITS["stages_warn"]:
-            report.add("LIM005", f"{scope} pipeline", f"{len(names)} stages: split further (README 'Scaling')", "warning")
+            report.add("LIM005", f"{scope} pipeline", f"{len(names)} stages: split further (pipelines/README.md 'Scaling and limits')", "warning")
         metrics[scope] = {"stages": len(names), "max_jobs_per_stage": max_jobs}
         max_jobs_all = max(max_jobs_all, max_jobs)
-    max_jobs = max_jobs_all
     # validate matrix legs: tools/ci packs suites into at most `ciMaxLegs` legs (pipelines/variables/<env>.yml)
     legs = 0
     for vf in sorted((repo / "pipelines/variables").glob("*.yml")):
         v = (load_yaml(vf) or {}).get("variables") or {}
         if isinstance(v, dict) and str(v.get("ciMaxLegs", "")).isdigit():
             legs = max(legs, int(v["ciMaxLegs"]) + 2)          # + matrix relay + report job
-    if not legs:
-        from tools.changeset.registry import load_registry
-        from tools.changeset.trees import WorkTree
-
-        try:
-            legs = sum(1 for c in load_registry(WorkTree(repo)) if c.pipeline != "manual")
-        except Exception:  # noqa: BLE001 - registry problems are reported by other linters
-            legs = 0
-    if max(max_jobs, legs) > LIMITS["jobs_per_stage"]:
-        report.add("LIM004", "expanded pipeline", f"{max(max_jobs, legs)} jobs in one stage (ADO limit 256, budget "
+    legs = legs or sum(1 for c in registry if c.pipeline != "manual")
+    if max(max_jobs_all, legs) > LIMITS["jobs_per_stage"]:
+        report.add("LIM004", "expanded pipeline", f"{max(max_jobs_all, legs)} jobs in one stage (ADO limit 256, budget "
                    f"{LIMITS['jobs_per_stage']}): split the Build stage / shard the validate matrix")
     metrics["validate_matrix_max_legs"] = legs
     return metrics
@@ -489,14 +471,7 @@ def _param_values(doc: dict, name: str) -> Tuple[list, object]:
     return [], None
 
 
-def check_environments(repo: Path, report: Report) -> None:
-    from tools.config.promotion import PromotionError, load
-
-    try:
-        envs = load(repo)
-    except PromotionError as exc:
-        report.add("ENV001", "environments/promotion.yaml", str(exc))
-        return
+def check_environments(repo: Path, report: Report, envs: dict) -> None:
     for name in envs:
         if not (repo / f"environments/{name}/environment.yaml").exists():
             report.add("ENV001", f"environments/{name}", "missing environment.yaml")
@@ -528,9 +503,8 @@ def check_environments(repo: Path, report: Report) -> None:
             report.add("ENT002", entry, "must extend pipelines/templates/universal.yml (Required template check)")
         elif (ext.get("parameters") or {}).get("scope") != scope:
             report.add("ENT002", entry, f"must pass scope: {scope}")
-        if set(doc) - {"name", "trigger", "pr", "schedules", "resources", "lockBehavior", "parameters", "extends",
-                        "appendCommitMessageToRunName"}:
-            report.add("ENT002", entry, f"thin entry may not define {sorted(set(doc) - {'name', 'trigger', 'pr', 'schedules', 'resources', 'lockBehavior', 'parameters', 'extends', 'appendCommitMessageToRunName'})}")
+        if set(doc) - ENTRY_KEYS:
+            report.add("ENT002", entry, f"thin entry may not define {sorted(set(doc) - ENTRY_KEYS)}")
     apps = load_yaml(repo / "azure-pipelines.applications.yml") if (repo / "azure-pipelines.applications.yml").exists() else {}
     res = [p for p in ((apps or {}).get("resources") or {}).get("pipelines", []) if p.get("pipeline") == "platform"]
     if not res or not (res[0].get("trigger") or {}).get("branches"):
@@ -570,13 +544,7 @@ def check_environments(repo: Path, report: Report) -> None:
                     report.add("ENV003", f"pipelines/variables/{name}.yml", f"{k} must be empty for a building environment")
 
 
-def check_dsv_variables(repo: Path, report: Report) -> None:
-    from tools.config.promotion import PromotionError, load
-
-    try:
-        envs = load(repo)
-    except PromotionError:
-        return
+def check_dsv_variables(repo: Path, report: Report, envs: dict) -> None:
     for name in envs:
         env_file = repo / f"environments/{name}/environment.yaml"
         if not env_file.exists():
@@ -592,10 +560,21 @@ def check_dsv_variables(repo: Path, report: Report) -> None:
 
 # ------------------------------------------------------------------- driver
 def run(repo: Path) -> Report:
+    from tools.config.promotion import PromotionError, load
+
     _cache.clear()
+    _sizes.clear()
     repo = Path(repo).resolve()
     report = Report()
-    walker = Walker(repo, report)
+    try:
+        envs = load(repo)
+    except PromotionError as exc:
+        report.add("ENV001", "environments/promotion.yaml", str(exc))
+        envs = None
+    env_names = sorted(envs) if envs is not None else [
+        p.stem for p in sorted((repo / "pipelines/variables").glob("*.yml")) if p.stem != "tools"]
+    registry = _registry(repo)
+    walker = Walker(repo, report, env_names)
     for entry in ENTRY_FILES:
         p = repo / entry
         if not p.exists():
@@ -608,15 +587,16 @@ def run(repo: Path) -> Report:
             report.add("LIM002", entry, f"template nesting depth {m['depth']} (ADO limit 100, budget {LIMITS['depth']})")
         if m["expanded_bytes"] > LIMITS["size_fail"]:
             report.add("LIM003", entry, f"estimated expanded size {m['expanded_bytes']:,} bytes > {LIMITS['size_fail']:,} "
-                       "(ADO: 20 MB parse memory, typically 600 KB-2 MB on disk); see README 'Scaling'")
+                       "(ADO: 20 MB parse memory, typically 600 KB-2 MB on disk); see pipelines/README.md 'Scaling and limits'")
         elif m["expanded_bytes"] > LIMITS["size_warn"]:
             report.add("LIM003", entry, f"estimated expanded size {m['expanded_bytes']:,} bytes > {LIMITS['size_warn']:,} "
                        "(approaching the documented range)", "warning")
-    check_template_files(repo, report)
+    check_template_files(repo, report, registry)
     check_settings_keys(repo, report)
-    report.metrics["structure"] = check_structure(repo, report)
-    check_environments(repo, report)
-    check_dsv_variables(repo, report)
+    report.metrics["structure"] = check_structure(repo, report, registry)
+    if envs is not None:
+        check_environments(repo, report, envs)
+        check_dsv_variables(repo, report, envs)
     return report
 
 

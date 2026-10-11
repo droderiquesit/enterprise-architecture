@@ -45,11 +45,8 @@ Resilience settings:
 * health check (`/api/v1/health`, `hc_*`)
 * `/api/v2/metrics/prometheus` on 2020
 
-Validation:
-* `observability/tests/transport/dryrun.sh` runs `fluent-bit --dry-run` (the flag exists in 5.1.3 and validates
-  plugin properties and Lua loading) on every config, plus the journald add-on.
-* `winevtlog` exists only in Windows builds, so it is not dry-run.
-* The functional tests are in `observability/tests/transport/`.
+Validation: `observability/tests/transport/` (`dryrun.sh` runs `fluent-bit --dry-run` on every config; `winevtlog`
+exists only in Windows builds, so it is not dry-run).
 
 Entra (OAUTHBEARER) for the kafka input: on VM or AKS hosts you can replace the SAS settings with the following.
 This needs the VM IMDS endpoint, so it does not work on ACA. Not locally verified.
@@ -60,8 +57,3 @@ This needs the VM IMDS endpoint, so it does not work on ACA. Not locally verifie
       rdkafka.sasl.oauthbearer.metadata.authentication.type: azure_imds
       rdkafka.sasl.oauthbearer.config: query=api-version=2018-02-01&resource=https://eventhubs.azure.net&client_id=<uami-client-id>
 ```
-References:
-- https://docs.fluentbit.io/manual/pipeline/outputs/datadog
-- https://docs.datadoghq.com/logs/guide/fluentbit/
-- https://docs.fluentbit.io/manual/pipeline/inputs/kafka
-- https://docs.fluentbit.io/manual/administration/configuring-fluent-bit/yaml

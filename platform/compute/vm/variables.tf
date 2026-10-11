@@ -18,13 +18,8 @@ variable "environment" {
 variable "foundation_network" {
   description = "foundation-network contract v1 (only the fields this root uses)."
   type = object({
-    resource_group_name = string
-    location            = string
-    subnets = map(object({
-      id             = string
-      name           = string
-      address_prefix = string
-    }))
+    location = string
+    subnets  = map(object({ id = string }))
   })
 }
 
@@ -35,7 +30,6 @@ variable "foundation_identity" {
       id           = string
       principal_id = string
       client_id    = string
-      name         = string
     }))
   })
 }

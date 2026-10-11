@@ -25,7 +25,6 @@ as configured by environments/<env>/environment.yaml self_healing.notify.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import os
 import sys
@@ -38,6 +37,8 @@ from typing import Callable, Dict, List, Optional
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
+
+from tools.common import utc_now  # noqa: E402
 
 METRICS = ("selected", "retries", "retries_recovered", "healed", "rolled_back", "quarantined", "lock_recoveries",
            "drift_remediated", "drift_refused", "failed_components")
@@ -64,10 +65,6 @@ MONITOR_ARCHETYPES = [
      "query": "max(last_1d):max:pipeline.heal.drift_refused{*} by {env} > 0",
      "why": "drift that would delete/replace resources needs a reviewed change"},
 ]
-
-
-def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _jsonl(path: Path) -> List[dict]:
@@ -135,7 +132,7 @@ def summarize(run_dir: Path, env: str, run_id: str, records=None, scope: Optiona
     failed = sorted(c for c, s in statuses.items() if s in ("failed", "partial", "canceled", "rolled_back", "quarantined"))
     doc = {
         "schema_version": 1, "env": env, "run_id": str(run_id), "scope": scope or selection.get("scope"),
-        "mode": selection.get("mode"), "generated_at": _now(),
+        "mode": selection.get("mode"), "generated_at": utc_now(),
         "selected": planned,
         "heal_candidates": sorted(c for c in planned if comps[c].get("heal")),
         "retries": retries, "recovered": recovered,

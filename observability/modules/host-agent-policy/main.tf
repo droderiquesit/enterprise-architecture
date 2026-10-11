@@ -1,16 +1,5 @@
-# Azure Policy enrolment of VMs / VM scale sets into the Datadog Agent VM Application (no per-host Terraform):
-#   two custom DeployIfNotExists definitions (virtualMachines, virtualMachineScaleSets), parameterised by OS,
-#   architecture, application and version -> one initiative (one member per application x kind) -> one assignment
-#   at subscription or management-group scope with a user-assigned remediation identity holding a least-privilege
-#   custom role (+ Managed Identity Operator on the DSV-reader identity only) -> optional remediation tasks.
-# Targets: resources tagged <enrollment_tag.name> = <enrollment_tag.value> with the matching OS. Compliant when the
-# model carries the pinned application version AND the per-environment DSV-reader identity. Otherwise the policy
-# deploys an ARM template that reads the current model (identity, applicationProfile) and PUTs it back with the
-# identity added and the application set to the pinned version (other applications and identities are kept).
-# Microsoft Learn: Azure Policy DeployIfNotExists cannot set fields itself - it always deploys a template; the
-# `modify` effect can append applicationProfile.galleryApplications but cannot replace an older version of the same
-# application, and adding a user-assigned identity with `modify` must run with enforcement disabled
-# (see README "Why DeployIfNotExists").
+# Azure Policy (DeployIfNotExists) enrolment of tagged VMs / VMSS into the Agent VM Application and the DSV-reader
+# identity. Why not `modify`: README "Why DeployIfNotExists".
 locals {
   mg_scope  = var.scope.type == "management_group"
   gallery_s = element(split("/", var.gallery_id), 2)
@@ -125,10 +114,7 @@ locals {
   } }
 
   # ------------------------------------------------------------------ remediation template (ARM)
-  # 1. nested deployment `read`: the resource's current model (reference(..., 'Full'): identity + properties)
-  # 2. nested deployment `apply` (inner scope): PUT of the resource with ONLY location, identity and the
-  #    applicationProfile - Compute keeps every other property (the pattern of the built-in "Assign Built-In
-  #    User-Assigned Managed Identity" policies and of the Microsoft Learn VM Application deployment templates).
+  # `read` gets the current model; `apply` PUTs only location, identity and applicationProfile (Compute keeps the rest).
   model_expr  = "reference(variables('readName')).outputs.model.value"
   app_profile = { applicationProfile = { galleryApplications = "[concat(variables('others'), createArray(variables('ours')))]" } }
   apps_path = {

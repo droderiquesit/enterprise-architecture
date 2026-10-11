@@ -16,7 +16,7 @@ locals {
   meta     = module.meta.services[local.svc]
   artifact = local.meta.artifact
   identity = var.foundation_identity.identities[local.svc]
-  suffix   = module.naming.suffix
+  suffix   = module.common.suffix
 
   private = var.settings.network_mode == "private-endpoint" || (var.settings.network_mode == "auto" && var.foundation_network != null)
   pe = local.private ? {

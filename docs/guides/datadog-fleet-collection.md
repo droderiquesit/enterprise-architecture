@@ -1,10 +1,9 @@
-# Datadog fleet collection: one path per platform (package 4.0.0; Service Fabric nodes and ARO 4.1.0)
+# Datadog fleet collection: one path per platform
 
-This guide shows how every resource type of the fleet sends its telemetry to Datadog with the observability package
-defaults, which Datadog features apply, and which combinations Datadog does not support. Version 4.0.0 has **one
-Datadog collection path per platform**: the Datadog Agent wherever an Agent can run (nodes, hosts, and as a sidecar in
-ACI container groups), serverless-init on Container Apps, and Azure diagnostic settings where neither can run.
-Fluent Bit is only the `log_pipeline = fluent_bit_direct` fallback (and the Batch node collector).
+How every resource type sends telemetry to Datadog with the observability package defaults (4.x), which Datadog
+features apply, and which combinations are unsupported. **One collection path per platform**: the Datadog Agent
+wherever it can run (nodes, hosts, a sidecar in ACI), serverless-init on Container Apps, Azure diagnostic settings
+where neither can run. Fluent Bit is only the `log_pipeline = fluent_bit_direct` fallback and the Batch node collector.
 
 | Default | Policy setting (`observability/config/fleet-policy.yaml`) |
 |---|---|
@@ -16,33 +15,14 @@ Fluent Bit is only the `log_pipeline = fluent_bit_direct` fallback (and the Batc
 | One Agent pin for the whole fleet | `agent.image` + `agent.version` (7.84.2; same version as `versions.yaml` `images.datadog_agent`), `agent.serverless_init` (1.10.4) |
 | Remote Configuration on, remote updates off | `agent.remote_configuration = true`, `agent.remote_updates = false` |
 
-The machine-readable version is [`catalog/telemetry-capabilities.yaml`](../../catalog/telemetry-capabilities.yaml),
-rendered to [`docs/coverage/telemetry-capability-matrix.md`](../coverage/telemetry-capability-matrix.md).
-Module-level rules (duplicate prevention, robustness per hop) are in
-[`observability/modules/README-transport.md`](../../observability/modules/README-transport.md).
+Machine-readable version: [`catalog/telemetry-capabilities.yaml`](../../catalog/telemetry-capabilities.yaml), rendered
+to the [telemetry capability matrix](../coverage/telemetry-capability-matrix.md). Duplicate prevention and robustness per
+hop: [`observability/modules/README-transport.md`](../../observability/modules/README-transport.md).
 
-Status: implemented and tested offline (Terraform tests with mock providers, local docker tests). Locally verified with
-docker (synthetic data, mock intake, mock Delinea DSV):
-
-* ACI Datadog Agent sidecar (Agent 7.84.2, `observability/tests/transport/test_agent_sidecar.py`): the rendered
-  `datadog.yaml` / log config and the module's start command; the API key `ENC[dsv://...]` resolved by the dsv-fetch
-  secret backend from a mock DSV; a trace on `localhost:8126`, a DogStatsD metric on `localhost:8125` and lines of the
-  shared log file arrive (logs at an Observability Pipelines Worker stand-in, the Worker's Datadog Agent source engine);
-* Container Apps serverless-init 1.10.4 (same test file): its start command resolves `DD_API_KEY` with dsv-fetch, the
-  sidecar tails `DD_SERVERLESS_LOG_PATH` and ships to the Worker stand-in via `DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_*`;
-* Fluent Bit 5.1.3 -> the Worker's fluent source (fallback), the VRL programs, the Worker 2.22.0 bootstrap, the APM
-  gateway Agent (DSV secret backend, non-local traces, health), `helm template` of the datadog chart and the Worker chart.
-
-The application libraries were verified by the app tracer builder against a real Agent 7.84.2: ddtrace 4.15.6 and
-dd-trace-dotnet 3.55.1 traces, a .NET -> Python 128-bit trace, log correlation, DogStatsD custom metrics, and Python
-and .NET profiles through the Agent profiling proxy.
-
-**Not verified live (no Azure, no Datadog org):**
-
-* the Worker running the pipeline (it needs a Datadog org and Remote Configuration);
-* the ACI Agent sidecar and serverless-init on Azure (IMDS / `IDENTITY_ENDPOINT` tokens from the sidecars, uid 65532
-  init containers writing into ACI / Container Apps EmptyDir volumes);
-* Kafka SASL to Event Hubs; SSI and profiler injection in a real cluster; the APM gateway on Azure Container Apps.
+Status: implemented; locally verified with docker (ACI Agent sidecar and serverless-init with the key from a mock DSV,
+Fluent Bit fallback, VRL, Worker bootstrap, APM gateway, Datadog chart render; ddtrace 4.15.6 and dd-trace-dotnet
+3.55.1 traces, log correlation, DogStatsD and profiles against a real Agent 7.84.2). Not verified live:
+[known limitations](../known-limitations.md#application-and-telemetry-limitations).
 
 ## 1. One fleet inventory input
 
@@ -92,31 +72,19 @@ the Fluent Bit DaemonSet on AKS ship to the Datadog intake, the Fluent Bit aggre
 Agents ship their logs directly to the Datadog intake** (VMs / VMSS never get Fluent Bit in 4.0.0). With `apm.mode = otel` traces follow the 2.x OpenTelemetry path, and Datadog profiling is off;
 the Container Apps / ACI sidecars still collect the logs.
 
-### ACI Agent sidecar: design notes and cost
+### ACI Agent sidecar and Container Apps serverless-init
 
-* **Logs through a shared file, not a socket.** The app writes JSON lines to `LOG_FILE_PATH` (`/var/log/app/app.log`
-  on the `app-logs` emptyDir) and the Agent tails it (`conf.d/app.d` file source with `service` / `source`). The apps
-  already implement `LOG_FILE_PATH` for every file tailer (serverless-init, hosts, the Fluent Bit fallback), the file
-  buffers across Agent restarts, and the Agent TCP/UDP log listener would need a network log handler in every app.
-* **Localhost only.** `apm_non_local_traffic` and `dogstatsd_non_local_traffic` are off: containers of a group share one
-  network namespace, nothing outside the group can send to the sidecar.
-* **Sizing.** Default 0.25 vCPU / 0.5 GB (`agent.sidecar` in the fleet policy, `agent_sidecar` per workload). ACI bills
-  vCPU-seconds and GB-seconds of every container: at Linux pay-as-you-go rates the sidecar costs about USD 11 per
-  always-on group per month (check current Azure pricing for the region). Datadog bills each group as one
-  infrastructure host and, with traces, one APM host (the Agent hostname is the container group name).
-* **No container runtime socket.** Datadog documents no ACI-specific Agent integration; the standard image runs without
-  container autodiscovery or live containers (Azure integration metrics `azure.containerinstance_*` cover the group).
-
-### Container Apps serverless-init: logs
-
-In **sidecar mode** serverless-init collects logs by tailing a file on a shared volume (`DD_SERVERLESS_LOG_PATH`,
-Datadog docs "Azure Container Apps - sidecar"); it cannot read another container's stdout/stderr (that is the
-in-container wrapper mode, where the image's entrypoint is `/datadog-init`). The package therefore sets
-`DD_LOGS_ENABLED=true`, `DD_SERVERLESS_LOG_PATH=$LOG_FILE_PATH`, `DD_SOURCE` / `DD_SERVICE` / `DD_TAGS` on the sidecar and
-mounts the `app-logs` EmptyDir in both containers. In Observability Pipelines mode the sidecar sends to the Worker
-(`DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED` / `_URL`; not documented by Datadog for serverless-init, verified
-locally with 1.10.4). Without the Worker URL in the transport contract (`aggregator.agent_logs_url`) the sidecars do not
-collect logs and the plan warns - there is no direct-to-intake bypass of the Worker.
+* **Logs through a shared file.** The app writes JSON lines to `LOG_FILE_PATH` (`/var/log/app/app.log` on the
+  `app-logs` emptyDir); the ACI Agent tails it (`conf.d/app.d`), serverless-init tails it via `DD_SERVERLESS_LOG_PATH`.
+  In sidecar mode serverless-init cannot read another container's stdout. Without the Worker URL in the transport
+  contract (`aggregator.agent_logs_url`) the sidecars collect no logs and the plan warns (no bypass of the Worker).
+* **Localhost only.** `apm_non_local_traffic` / `dogstatsd_non_local_traffic` are off; containers of a group share one
+  network namespace.
+* **ACI sizing and billing.** Default 0.25 vCPU / 0.5 GB (`agent.sidecar`, per workload `agent_sidecar`), about USD 11
+  per always-on group-month at Linux pay-as-you-go rates. Datadog bills each group as one infrastructure host (and one
+  APM host with traces); the Agent hostname is the container group name.
+* **No container runtime socket on ACI**: no autodiscovery or live containers; `azure.containerinstance_*` metrics come
+  from the Azure integration.
 
 ## 3. APM library contract (`apm.mode = datadog`)
 
@@ -146,11 +114,7 @@ traces the health probes.
 
 ## 4. Continuous Profiler support
 
-Datadog documentation was checked on 2026-10-09/10:
-
-* the per-language enabling pages;
-* the supported versions page;
-* the Azure App Service, Container Apps and Functions serverless pages.
+Per Datadog's profiler enabling, supported-versions and Azure serverless pages (checked 2026-10-09):
 
 | Runtime / hosting | Supported | Package setting | Profile types (fleet policy defaults) |
 |---|---|---|---|
@@ -170,20 +134,11 @@ Profiles carry `DD_ENV` / `DD_SERVICE` / `DD_VERSION` and `DD_TAGS`, so they joi
 tag-policy scopes. They upload through the same Agent as the traces: the node Agent, the host Agent, the ACI Agent
 sidecar, serverless-init or the APM gateway (trace-agent profiling proxy).
 
-Overhead guardrails:
-
-* Allocation, heap and lock profiling stay off by default.
-* SSI uses `auto`.
-* `profiling.enabled: false` turns profiling off per environment, architecture or workload.
-
-What applications must provide:
-
-* the Datadog library: SSI injects it on AKS and Linux hosts; the image carries `dd-trace-dotnet` (`/opt/datadog`) or
-  `ddtrace` elsewhere, and App Service and Functions use `Datadog.Trace.Bundle`;
-* for Python, `import ddtrace.auto` or `ddtrace-run`;
-* on Container Apps and ACI: JSON log lines to `LOG_FILE_PATH`.
-
-The `app_requirements` output of `modules/instrumentation` lists them per workload.
+Overhead guardrails: allocation, heap and lock profiling off by default; SSI uses `auto`; `profiling.enabled: false`
+per environment, architecture or workload. Applications must provide the Datadog library (SSI injects it on AKS and
+Linux hosts; elsewhere `dd-trace-dotnet` in `/opt/datadog`, `Datadog.Trace.Bundle` on App Service, `ddtrace` with
+`import ddtrace.auto` / `ddtrace-run`) and, on Container Apps and ACI, JSON log lines to `LOG_FILE_PATH`; the
+`app_requirements` output of `modules/instrumentation` lists them per workload.
 
 ## 5. Unsupported or excluded combinations
 
@@ -213,24 +168,17 @@ The `app_requirements` output of `modules/instrumentation` lists them per worklo
 * **Fleet Automation** is used for inventory (which Agents run where, with which configuration). **Remote updates**
   stay off by default (`agent.remote_updates`, `DD_REMOTE_UPDATES`); turn them on only together with an upgrade
   window (`agent.upgrade_schedule`, `modules/fleet-automation` -> `datadog_fleet_schedule`).
-* Consistent Agent configuration everywhere:
-  * tags from the tag policy;
-  * logs to the Worker;
-  * OTLP receivers, APM and DogStatsD only on localhost / host IP;
-  * process collection off unless enabled;
-  * `apm.ignore_resources`;
-  * the API key only as `ENC[dsv://...]` through the dsv-fetch secret backend.
-* **Golden image (optional).** Baking the Agent and dsv-fetch into a VM image is supported but not required: the
-  Azure Policy + VM Application path installs the pinned Agent on every tagged VM / VMSS instance (new VMSS instances
-  get it from the scale set model). A golden image only shortens first boot; it must carry the same pin and still
-  read the key from DSV (no key in the image), and the policy keeps the application version authoritative.
+* Every Agent gets the same configuration: tag-policy tags, logs to the Worker, OTLP / APM / DogStatsD only on
+  localhost or host IP, process collection off unless enabled, `apm.ignore_resources`, the API key only as
+  `ENC[dsv://...]` through the dsv-fetch secret backend.
+* **Golden image (optional):** only shortens first boot; it must carry the same pin, read the key from DSV, and the
+  policy keeps the VM Application version authoritative.
 
 ## 7. Remote Configuration governance
 
 Remote Configuration stays **on** for every Agent: the Observability Pipelines Worker requires it, and it carries
-Fleet Automation inventory, remote APM sampling and Agent flares. Components poll Datadog over HTTPS (443) with their
-API key; Datadog returns only changes relevant to the requesting component, and the component validates their
-signature (Datadog docs, Remote Configuration). What can change remotely is governed in Datadog, not in this repository:
+Fleet Automation inventory, remote APM sampling and Agent flares (components poll over HTTPS and verify signed
+changes). What can change remotely is governed in Datadog, not in this repository:
 
 * **Org and key level:** Remote Configuration is enabled in Organization Settings (`org_management`) and per API key
   (`api_keys_write`). The fleet's ingest key needs it (the Worker refuses to start otherwise). Prefer opting out per

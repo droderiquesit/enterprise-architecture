@@ -1,8 +1,9 @@
 # Prerequisites and bootstrap
 
-What must exist before the two pipelines (`lab-platform`, `lab-applications`) can run, and how the lab gets from "empty subscription" to "pipeline
-on private agents". The authoritative procedure is [`bootstrap/README.md`](../../bootstrap/README.md); this page
-collects the prerequisites from every layer. None of these steps has been executed from this repository.
+What must exist before the two pipelines (`lab-platform`, `lab-applications`) can run, collected from every layer.
+The bootstrap procedure itself is [`bootstrap/README.md`](../../bootstrap/README.md); the Azure DevOps setup is the
+[pipelines checklist](../../pipelines/README.md#one-time-azure-devops-setup-checklist). None of these steps has been
+executed from this repository.
 
 ## 1. Azure prerequisites
 
@@ -58,26 +59,10 @@ resource mode of `observability/modules/azure-integration`), and the `Microsoft.
 
 ## 2. Azure DevOps prerequisites
 
-From [`pipelines/README.md`](../../pipelines/README.md#one-time-azure-devops-setup-checklist):
-
-* Project + Azure Repos repository with this code and **two pipelines**: `lab-platform` (`azure-pipelines.yml`, IaC
-  platform + observability package release) and `lab-applications` (`azure-pipelines.applications.yml`, artifacts,
-  Helm charts, application deployments; triggered by successful platform runs). Branch policy *Build validation* on
-  `main` for **both** (Azure Repos ignores YAML `pr:`).
-* Three ARM service connections with **workload identity federation**, one per bootstrap identity:
-  `sc-lab-<env>-plan`, `sc-lab-<env>-apply`, `sc-lab-<env>-build`; names and ids in `pipelines/variables/<env>.yml`.
-  Create them as *draft*, copy issuer (`https://login.microsoftonline.com/<tenant>/v2.0`) and subject into
-  `components.bootstrap.federated_credentials`, re-run bootstrap, then *Verify and save*.
-* Environments `lab-<env>` (approvals + exclusive lock) and `lab-<env>-retire` (approvals by a different group), for
-  every environment of `environments/promotion.yaml` (dev, test, prod).
-* *Required template* check (`pipelines/templates/universal.yml`) on the service connections, environments and the
-  deploy agent pool.
-* **No variable groups for secrets** (no Key Vault-linked groups, lint SEC001/PL015): every secret a step needs comes
-  from Delinea DSV through `tools/secrets/fetch.py` on the self-hosted deploy pool, authenticated with the agents'
-  `deploy-agent` managed identity. `pipelines/variables/<env>.yml` carries only identifiers (`dsvTenant`, `dsvTld`,
-  `dsvAuthProvider`, equal to `environments/<env>/environment.yaml` `secrets`).
-* Agent pool `foundation-deploy-agents` (created in Azure DevOps after `foundation-deploy-agents` applies; VMSS mode:
-  *Agent pools -> Add pool -> Azure virtual machine scale set*).
+Project + repository with **two pipelines** (`lab-platform`, `lab-applications`, both as build validation on `main`),
+three workload-identity-federation service connections per environment (`sc-lab-<env>-{plan,apply,build}`),
+environments `lab-<env>` and `lab-<env>-retire`, the *Required template* check, **no variable groups for secrets**,
+and the `foundation-deploy-agents` pool. Steps: [pipelines/README.md](../../pipelines/README.md#one-time-azure-devops-setup-checklist).
 
 ## 3. Datadog prerequisites
 
@@ -92,52 +77,24 @@ From [`pipelines/README.md`](../../pipelines/README.md#one-time-azure-devops-set
 
 ## 3b. Delinea DevOps Secrets Vault prerequisites
 
-All keys and secrets live in DSV (ADR-0001 section 14); Azure Key Vault is not used for secrets. Full steps:
-[bootstrap/README.md "Delinea DSV prerequisites"](../../bootstrap/README.md#delinea-dsv-prerequisites-all-keys-and-secrets).
+All keys and secrets live in DSV (ADR-0001 section 14). Needed: a DSV tenant and the dsv CLI, the Azure auth provider,
+one manual mapping of the `deploy-agent` identity after `foundation-identity` applies, the operator-seeded values
+(`foundation/identity/secrets.yaml`, `source: operator`; `python3 tools/secrets/check.py --env <env>` lists what is
+missing) and HTTPS egress to `<tenant>.secretsvaultcloud.<tld>` from every reader subnet. Steps:
+[bootstrap/README.md](../../bootstrap/README.md#delinea-dsv-prerequisites-all-keys-and-secrets).
 
-1. A DSV tenant (`<tenant>.secretsvaultcloud.<tld>`, tld `com`/`eu`/`com.au`/`ca`) and the dsv CLI for operators.
-   Set `environments/<env>/environment.yaml` → `secrets: {provider: delinea-dsv, tenant, tld, auth_provider}` and the
-   same identifiers in `pipelines/variables/<env>.yml`.
-2. The **Azure auth provider** bound to the lab tenant:
-   `dsv config auth-provider create --name azure-eh --type azure --azure-tenant-id <tenant-id>`.
-3. After `foundation-identity` applies: the **one manual mapping** - DSV user `<prefix>-<env>-deploy-agent` (provider
-   `azure-eh`, external id = the `deploy-agent` identity's resource id) with DSV administration rights. From then on the
-   pipeline's `foundation-secrets` stage (`tools/secrets/dsv_apply.py`) creates every other user and permission.
-4. Seed the operator-owned values (`foundation/identity/secrets.yaml`, `source: operator`), then
-   `python3 tools/secrets/check.py --env <env>` (names only). Generated values (`eventhub-fluentbit-listen`, the Event
-   Hubs listen connection string read by the Observability Pipelines Worker or, in `fluent_bit_direct` mode, the Fluent
-   Bit aggregator) are written by the pipeline after `obs-telemetry-transport` applies.
-5. Egress to `<tenant>.secretsvaultcloud.<tld>:443` from every subnet with readers (Azure Firewall default allow-list
-   includes `*.secretsvaultcloud.*`).
+## 4. Bootstrap
 
-## 4. Bootstrap sequence (local state first, then migrate)
-
-```bash
-az login --tenant <tenant-id>
-bootstrap/scripts/bootstrap.sh --env dev            # --plan-only to preview, --skip-providers on re-runs
-```
-
-The script (idempotent): checks tools/login/subscription; registers providers; renders `bootstrap/terraform.tfvars.json`;
-if `<env>/bootstrap.tfstate` does not exist yet it writes a temporary `backend_override.tf` (`backend "local"`), plans and
-(after confirmation) applies with **local state**, waits for data-plane RBAC, removes the override and runs
-`terraform init -migrate-state` into the new account, verifies the blob and renames the local state file to
-`bootstrap.local.tfstate.migrated-<ts>`. Delete that file once `terraform plan` is clean - it contains state.
-Re-runs use the azurerm backend directly.
-
-Result: state account (versioning, soft delete, change feed, shared keys off, `prevent_destroy`, CanNotDelete lock) with
-containers `tfstate`, `contracts`, `plans`, `deployments`, `evidence`, `packages`; identities `plan`, `apply`, `build`
-(and `validate` with no roles); optional Datadog app registration.
+`az login --tenant <tenant-id>` then `bootstrap/scripts/bootstrap.sh --env dev` (`--plan-only` to preview): local state
+first, then migrated into the new state account; details in [bootstrap/README.md](../../bootstrap/README.md#first-run-local-state--migrate).
 
 ## 5. Before private agents exist
 
-Microsoft-hosted agents are outside the VNet and **cannot reach private endpoints** (diagram:
-[foundation](../diagrams/README.md)). The order is therefore:
-
-| Phase | State account network | Who runs | What can be deployed |
-|---|---|---|---|
-| 1 | public access Enabled, firewall Deny + `operator_ip_ranges` (+ temporary hosted-agent egress IP) | operator workstation; Microsoft-hosted agents with the temporary IP | `bootstrap`, `foundation-network`, `foundation-identity`, `foundation-governance`, `foundation-deploy-agents` (ARM + state blob only) |
-| 1b | + `agent_subnet_ids = [deploy-agents subnet]` (service endpoint), temporary IPs removed | private agents (`deployPool`) | everything; set the pool in `pipelines/variables/<env>.yml` |
-| 2 | `private_endpoint = {...}` + `public_network_access = "Disabled"` | VNet-connected agents / Bastion only | everything |
+Microsoft-hosted agents are outside the VNet and **cannot reach private endpoints**. State account network phases:
+[bootstrap/README.md](../../bootstrap/README.md#network-phases-of-the-state-account). In phase 1 (operator workstation
+and hosted agents with a temporary IP allowlist) only `bootstrap`, `foundation-network`, `foundation-identity`,
+`foundation-governance` and `foundation-deploy-agents` can be deployed; from phase 1b set `deployPool` in
+`pipelines/variables/<env>.yml` to the private pool and deploy everything.
 
 Notes:
 
@@ -149,7 +106,5 @@ Notes:
   push, AKS is not enabled, and roots that need data-plane access to private resources (Flex deployment container,
   SQL grant scripts) require an agent with VNet access - see [known limitations](../known-limitations.md#deployment-and-networking).
 * PR validation always stays on Microsoft-hosted agents without any service connection.
-
-## 6. After bootstrap
 
 Continue with [quick-start.md](quick-start.md#phase-2---first-deployment-needs-azure-azure-devops-and-datadog) step 4.

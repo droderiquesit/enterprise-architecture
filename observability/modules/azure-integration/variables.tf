@@ -57,14 +57,7 @@ variable "settings" {
 
 # ------------------------------------------------------------------ app_registration mode
 variable "app_registration" {
-  description = <<-EOT
-    Existing Entra app registration (created outside azurerm, e.g. azuread or the portal).
-    auth = secretless -> (default) Datadog workload-identity federation (federated credential on the app): no secret.
-    auth = secret     -> client_secret is required: the pipeline reads it from Delinea DSV just in time
-                         (tools/secrets/fetch.py -> TF_VAR_*, masked) - never stored in tfvars or the repo. The
-                         provider has no write-only argument, so it is persisted (encrypted) in state.
-    service_principal_object_id enables the per-subscription "Monitoring Reader" role assignments.
-  EOT
+  description = "Existing Entra app: auth = secretless (default, federated credential) or secret (client_secret from DSV, kept in state); service_principal_object_id enables Monitoring Reader assignments."
   type = object({
     client_id                   = string
     auth                        = optional(string, "secretless")

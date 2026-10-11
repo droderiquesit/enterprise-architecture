@@ -160,15 +160,7 @@ variable "azure_integration" {
 }
 
 variable "kubernetes" {
-  description = <<-EOT
-    Existing AKS cluster for the Datadog Agent (DaemonSet + Cluster Agent + cluster-checks runners; collects the pod
-    logs and sends them to the Observability Pipelines Worker, Single Step Instrumentation of ssi_namespaces) and the
-    Worker itself (modules/kubernetes, package 4.0.0). One secret path: every Agent component reads the key from
-    Delinea DSV with workload identity identity_client_id (REQUIRED; federated by your identity team with the service
-    accounts datadog/datadog, datadog/datadog-cluster-agent, datadog/datadog-cluster-checks and
-    observability-pipelines/opw-observability-pipelines-worker). No key passes through Terraform or a Kubernetes Secret.
-    values_overrides: per-cluster chart values documents (e.g. [file("clusters/aks-prod-weu.yaml")]), applied last.
-  EOT
+  description = "Existing AKS cluster for the Datadog Agent and the OP Worker; identity_client_id (required) is the workload identity federated with the Datadog and Worker service accounts; values_overrides are applied last."
   type = object({
     enabled                = optional(bool, true)
     identity_client_id     = optional(string)

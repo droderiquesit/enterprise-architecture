@@ -83,23 +83,13 @@ Recommendation (ADR-0001 §10/§13 — logs only via FunctionAppLogs → Event H
 service (no `logs` pipeline, or a filter on `service.name=hello-durable`). Alternative: per-signal endpoints only (no
 duplicate logs, no host/orchestration spans).
 
-### `TELEMETRY_SDK=datadog` for Functions — keep `otel` (the default) for hello-durable
+### `TELEMETRY_SDK=datadog` — not used for hello-durable
 
-Datadog's Azure Functions guidance (docs.datadoghq.com/serverless/azure_functions, checked 2026-10-09) covers .NET
-isolated on Consumption, Flex Consumption, Premium and Dedicated plans: add the `Datadog.AzureFunctions` NuGet package,
-call `Datadog.Serverless.CompatibilityLayer.Start()` in `Program.cs`, set `CORECLR_ENABLE_PROFILING=1`,
-`CORECLR_PROFILER={846F5F1C-F9AE-4B07-969E-05C26BC060D8}`, `CORECLR_PROFILER_PATH=/home/site/wwwroot/datadog/linux-x64/
-Datadog.Trace.ClrProfiler.Native.so`, `DD_DOTNET_TRACER_HOME=/home/site/wwwroot/datadog`, `DD_API_KEY`, `DD_SITE`
-(`DD_AZURE_RESOURCE_GROUP` on Flex), and **not** `DD_AGENT_HOST`. The page does **not** say whether the Functions
-*host* process is traced or how Durable Functions are handled. The Durable distributed-tracing V2 spans
-(`orchestration:*`, `activity:*`) are emitted by the Durable extension **in the host** and today reach Datadog only via
-the host's OTLP export (item 2 above). In datadog mode Hello.Common would register no OTel SDK in the worker
-(`AddHelloOpenTelemetry` returns null; `UseFunctionsWorkerDefaults` is skipped), worker Activities would become
-Datadog spans only with the profiler attached and `DD_TRACE_OTEL_ENABLED=true`, and the host-side Durable spans
-would be lost or duplicated depending on host OTLP settings — none of which is verified. Therefore: **hello-durable
-stays on `TELEMETRY_SDK=otel`** (unset) until a deployed check shows the host-side Durable spans in Datadog;
-`Datadog.AzureFunctions` is deliberately not referenced (it would also put `DD_API_KEY` into app settings). The code
-path is ready: setting `TELEMETRY_SDK=datadog` plus the settings above (and adding the package + `Start()`) is the switch.
+The Durable V2 spans (`orchestration:*`, `activity:*`) are emitted by the Durable extension **in the host** and reach
+Datadog only via the host's OTLP export; Datadog's Functions guidance
+([docs](https://docs.datadoghq.com/serverless/azure_functions/)) does not cover host-side Durable spans. hello-durable
+therefore stays on `TELEMETRY_SDK=otel` until a deployed check proves otherwise; `Datadog.AzureFunctions` is not
+referenced (it would also put `DD_API_KEY` into app settings).
 
 ### Workflow metrics (monitors depend on these)
 
@@ -114,17 +104,11 @@ Meter `Hello.App` (`System.Diagnostics.Metrics` via `IMeterFactory`), registered
 BatchProcessing all items OK → `succeeded`, any failed item or failed RecordBatchRun → `failed`; Reconciliation run
 completed → `succeeded` (drift is in the run summary), activity failure → `failed` (recorded, then the exception is rethrown).
 
-**Why an activity (`RecordWorkflowOutcome`) and not the orchestrator or the client:** orchestrator code is replayed many
-times, so a counter there would double count (replay-safe logging has no metric equivalent). The client side only sees
-completion if something polls or subscribes, which the Service Bus starter does not. Each orchestrator therefore calls
-a final `RecordWorkflowOutcome` activity once, as its last step. Durable checkpoints the completed activity in history,
-so replays never run it again. Duration is `context.CurrentUtcDateTime(at outcome) − context.CurrentUtcDateTime(at start)`.
-That is replay-safe and deterministic, and covers the whole run including durable timers and retries. The activity does
-no I/O and cannot fail after recording, and the orchestrator calls it without a RetryPolicy, so at-least-once activity
-delivery cannot double count either. The only exception is a host crash between recording and checkpointing, which is
-rare and accepted. A failure of this activity never changes the workflow result (best effort, caught).
-Unit tests: `WorkflowMetricsTests` (outcome per path, duration from context time, the orchestrator never emits
-measurements itself, and the activity emits the counter and histogram with exact attributes and unit).
+**Why an activity (`RecordWorkflowOutcome`)**: orchestrator code is replayed, so a counter there would double count,
+and the client does not observe completion. Each orchestrator calls `RecordWorkflowOutcome` once as its last step
+(no RetryPolicy, best effort); Durable checkpoints it, so replays never re-run it. Duration uses
+`context.CurrentUtcDateTime`, so it is replay-safe and includes timers and retries. A host crash between recording and
+checkpointing can double count (accepted).
 
 Other telemetry: `hello.faults.injected{fault.type=activity_failure}`, `hello.http.dependency.duration`; logs carry `order_id`, `workflow_instance_id`, `workflow_outcome`, `workflow_reason`.
 In FunctionAppLogs the worker lines are host-formatted (not the ADR JSON line); correlation is via the host's
@@ -150,18 +134,6 @@ Container: `docker build -f applications/services/durable/Dockerfile -t hello-du
 (base `mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated10.0`, listens on 8080, sets
 `WEBSITE_HOSTNAME=localhost:8080` because the Durable client binding requires it outside App Service). The Functions
 base image runs as root.
-
-## Test
-
-```bash
-cd applications/dotnet && dotnet test --project ../services/durable/tests/Hello.Durable.Tests
-```
-
-Orchestrators are tested with a hand-written `TaskOrchestrationContext` fake (honours `RetryPolicy` attempts,
-controllable timers): happy path ordering, payment declined → compensation + Failed, retries exhausted → compensation,
-retry then success, timeout (timer wins) → compensation, insufficient stock, reserve failure, batch fan-out/fan-in with a
-failing item + enqueue, 50-item cap, reconciliation diff classification and persistence. Starter tests: deterministic
-instance id, duplicate skip, invalid payload, consumer span with producer **link** (not parent).
 
 ## Limitations
 

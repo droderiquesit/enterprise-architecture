@@ -1,7 +1,4 @@
-# obs-prereqs: Datadog objects that must exist BEFORE applications deploy: the RUM application(s) whose id + client
-# token are baked into the frontend's runtime config.json by deploy-frontend. Default: created here
-# (datadog_rum_application); settings.rum_applications.<key>.mode = existing uses an application the organisation
-# already has (application_id + client_token) and creates nothing.
+# obs-prereqs: RUM application(s) that must exist before deploy-frontend bakes their id + client token into config.json.
 locals {
   rum_names = {
     for k, a in var.settings.rum_applications : k => "${var.environment.name_prefix}-${var.environment.name}-${k}"

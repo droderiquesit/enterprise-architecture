@@ -18,25 +18,15 @@ variable "environment" {
 variable "foundation_network" {
   description = "foundation-network contract v1 (only the fields this root uses)."
   type = object({
-    resource_group_name = string
-    location            = string
-    subnets = map(object({
-      id             = string
-      name           = string
-      address_prefix = string
-    }))
+    location = string
+    subnets  = map(object({ id = string, name = string }))
   })
 }
 
 variable "foundation_identity" {
   description = "foundation-identity contract v2 (fields used): the DSV-reader identity of the host Agents (identities[settings.datadog.identity_key]) attached to the node type."
   type = object({
-    identities = map(object({
-      id           = string
-      principal_id = string
-      client_id    = string
-      name         = string
-    }))
+    identities = map(object({ id = string, name = string }))
   })
 }
 

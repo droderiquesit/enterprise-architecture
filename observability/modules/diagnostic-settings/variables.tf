@@ -1,12 +1,5 @@
 variable "resources" {
-  description = <<-EOT
-    Existing resources to export logs from, keyed by a STABLE caller-chosen key (renaming a key recreates
-    its settings). app_log_route says who collects the resource's APPLICATION logs:
-      eventhub  -> app-log categories are exported to the app-logs hub (the Observability Pipelines Worker, or the
-                   Fluent Bit aggregator with fluent_bit_direct, ships them)
-      sidecar | daemonset | host | none -> app-log categories are NOT exported (no duplicates)
-    Platform (non-application) categories from the allow-list go to the platform-logs hub when platform_logs = true.
-  EOT
+  description = "Existing resources keyed by a stable caller-chosen key; app_log_route = eventhub exports app-log categories, any other route exports none (no duplicates)."
   type = map(object({
     id            = string
     app_log_route = optional(string, "none")

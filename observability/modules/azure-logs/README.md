@@ -40,16 +40,3 @@ Outputs: `activity_log_settings`, `activity_log_categories`, `entra_setting_id`,
 ## Removal
 Removing a subscription, `activity_log.enabled = false`, `entra.enabled = false` or destroy deletes **only** the
 diagnostic settings. Azure keeps its own Activity Log (90 days) and Entra history.
-
-## Tests
-`tests/azure_logs.tftest.hcl`: one setting per subscription with all categories, disable, Entra with
-acknowledgement, and negative tests (Entra without acknowledgement, unknown Entra / Activity Log category, resource
-id instead of a GUID, overlap with native subscription logs, overlap with native Entra logs).
-
-## References (checked 2026-10-09)
-- https://learn.microsoft.com/azure/azure-monitor/platform/activity-log-schema
-- https://learn.microsoft.com/azure/azure-monitor/platform/diagnostic-settings
-- https://learn.microsoft.com/entra/identity/monitoring-health/howto-configure-diagnostic-settings
-- https://learn.microsoft.com/entra/identity/monitoring-health/concept-diagnostic-settings-logs-options
-- https://learn.microsoft.com/entra/fundamentals/licensing#microsoft-entra-monitoring-and-health
-- https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/monitor_aad_diagnostic_setting

@@ -2,15 +2,14 @@
 
 Installs the Datadog Agent (Helm chart `datadog` **3.253.2**: node Agent DaemonSet, Cluster Agent, cluster-checks
 runners) on an **existing** cluster, optionally the Observability Pipelines Worker (`op_worker`) and - only for the
-fallback log path - the Fluent Bit DaemonSet (chart `fluent-bit` **0.58.3**, image `fluent/fluent-bit:5.1.3`). Chart
-versions from the chart indexes on 2026-10-09. The Agent / Cluster Agent version is **not** an input: it is the fleet
+fallback log path - the Fluent Bit DaemonSet (chart `fluent-bit` **0.58.3**, image `fluent/fluent-bit:5.1.3`). The Agent / Cluster Agent version is **not** an input: it is the fleet
 policy `agent.version` (single pin, = `versions.yaml` `images.datadog_agent`); a policy without it fails the plan.
 
 Only `helm` and `kubernetes` resources are used. **The caller configures the providers** (host, CA, kubelogin exec
 plugin; the repository's lab Kubernetes root is one example). The deploy agent needs `/bin/sh` and `awk` (post-renderer).
 
 ## Inputs (Terraform passes only these)
-`cluster_name`, `distribution` (`aks` | `openshift`, 4.1.0), `identity` (tag values), `datadog {site, env, extra_tags}`, `dsv {api_key_ref, tenant|base_url, tld,
+`cluster_name`, `distribution` (`aks` | `openshift`), `identity` (tag values), `datadog {site, env, extra_tags}`, `dsv {api_key_ref, tenant|base_url, tld,
 fetch_image, identity_client_id, cluster_checks_identity_client_id}`, `charts` (chart pins), `features` (flags:
 `apm`, `process_collection`, `cluster_checks_runner`, `operator_subchart`, `service_discovery`, `kubelet_tls_mode`,
 `is_aks`), `fleet_policy` / `tag_policy` / `log_pipeline` / `op_logs_url` / `apm`, `cluster_checks`, `op_worker`,
@@ -26,9 +25,9 @@ fetch_image, identity_client_id, cluster_checks_identity_client_id}`, `charts` (
 
 Output `datadog_values` is that list; `datadog_postrender_args` the post-renderer arguments.
 
-## Distribution (4.1.0)
-* `aks` (default): unchanged 4.0.0 output (`providers.aks`, kubelet TLS per `features.kubelet_tls_mode`, null =
-  `aks_rotation`, APM socket + port).
+## Distribution
+* `aks` (default): `providers.aks`, kubelet TLS per `features.kubelet_tls_mode` (null = `aks_rotation`), APM socket
+  + port.
 * `openshift` (Azure Red Hat OpenShift, lab component `obs-kubernetes-aro`): the layer above plus distribution-aware
   fleet keys - `providers.aks` off, kubelet `tlsVerify: false` (default; `aks_*` modes rejected), APM `socketEnabled:
   false` (host port 8126 only) - and the post-renderer with `--distribution openshift`: the Cluster Agent / runner
@@ -36,14 +35,10 @@ Output `datadog_values` is that list; `datadog_postrender_args` the post-rendere
   `datadog-cluster-agent`, runners `restricted-v2`) and the SCC gives every container of the pod the same UID; the
   DaemonSet keeps uid 0 (SCC `datadog` is RunAsAny, the Agent runs as root). The Fluent Bit fallback and `op_worker`
   fail the plan on OpenShift. Same secret path and workload identity (managed-identity ARO clusters have a managed OIDC
-  issuer and the pod-identity webhook). Sources: Datadog Kubernetes distributions (OpenShift) and
-  `examples/datadog/agent_on_openshift_values.yaml` of DataDog/helm-charts; Datadog Admission Controller
-  troubleshooting (OpenShift: hostip mode); Microsoft Learn ARO service definition (CRI-O, DaemonSet node selector) and
-  "workload identity on an ARO managed identity cluster" (OIDC issuer, pod-identity webhook) - links below.
+  issuer and the pod-identity webhook). Sources: `../../lab/kubernetes-aro/README.md`.
 
 ## API key: one secret path (Delinea DSV, ADR-0001 section 14)
-* The chart Secret `datadog` holds only `ENC[<dsv.api_key_ref>]`. There is **no** existing-Secret mode, no synced
-  Secret for the Cluster Agent and no `DD_SECRET_BACKEND_COMMAND=""` opt-out any more.
+* The chart Secret `datadog` holds only `ENC[<dsv.api_key_ref>]`: no existing-Secret mode, no synced Secret.
 * **Node Agent (all containers), Cluster Agent and cluster-checks runners** run `secret_backend_command =
   /opt/dsv-fetch/dsv-fetch` `agent-backend` (chart-generated `DD_SECRET_BACKEND_*` env, `DSV_*` env per component).
   The binary is the static Go `dsv-fetch` (image `dsv-fetch` >= 2.0.0, `dsv.fetch_image` digest-pinned) - no Python, so
@@ -71,12 +66,9 @@ Output `datadog_values` is that list; `datadog_postrender_args` the post-rendere
   `observability-pipelines-worker run`. Workload identity `dsv.identity_client_id` on the service account
   `opw-observability-pipelines-worker` (federate it in the caller).
 
-Verified by rendering (`observability/tests/kubernetes/test_datadog_chart.py`: the module's layers from `terraform
-console`, `helm template` of datadog 3.253.2, then the post-renderer): init container in all three workloads, backend
-env + DSV env + read-only mount in every Agent container, exactly one `DD_API_KEY` (chart Secret) and no duplicate env
-entries, service-account annotations, image tags = fleet pin, overrides applied last. Locally (docker) the 2.0.0 binary
-installed this way (uid 0, `--cap-drop ALL`, read-only rootfs) runs `agent-backend` inside `datadog/cluster-agent:7.84.2`.
-**To verify on a real cluster**: DSV accepting AKS workload-identity tokens (users mapped by `xms_mirid`).
+Verified by rendering (`observability/tests/kubernetes/test_datadog_chart.py`: module layers, `helm template`, then
+the post-renderer) and locally with docker. **To verify on a real cluster**: DSV accepting AKS workload-identity tokens
+(users mapped by `xms_mirid`).
 
 ## Other values
 * Kubelet TLS (`features.kubelet_tls_mode`, null = distribution default): `aks_rotation` (AKS default, `providers.aks.enabled`), `aks_hostca`
@@ -86,18 +78,7 @@ installed this way (uid 0, `--cap-drop ALL`, read-only rootfs) runs `agent-backe
 * SSI (fleet `apm.mode = datadog`): target namespaces `apm.namespaces`, library majors of the fleet policy, profiler
   `auto`, restricted-PSS securityContext for injected init containers.
 
-Output `contract` = obs-kubernetes **v2** (`catalog/contracts/obs-kubernetes.v2.schema.json`; 4.0.0: `logs_enabled` follows the fleet policy - true when the node Agent collects container logs - plus `log_pipeline`, `log_collector`, `fluent_bit.enabled`, SSI fields; v1 with `logs_enabled: false` kept for rollback).
+Output `contract` = obs-kubernetes **v2** (`catalog/contracts/obs-kubernetes.v2.schema.json`; `logs_enabled` is true
+when the node Agent collects container logs).
 
-References:
-- https://docs.datadoghq.com/containers/kubernetes/distributions/?tab=helm#AKS (and #Openshift)
-- https://github.com/DataDog/helm-charts/tree/main/charts/datadog ; https://helm.sh/docs/topics/advanced/#post-rendering
-- https://docs.datadoghq.com/agent/configuration/secrets-management/
-- https://docs.datadoghq.com/containers/cluster_agent/clusterchecks/
-- https://learn.microsoft.com/azure/aks/workload-identity-overview
-- https://github.com/DataDog/helm-charts/blob/main/examples/datadog/agent_on_openshift_values.yaml
-- https://docs.datadoghq.com/containers/troubleshooting/admission-controller/?tab=helm
-- https://learn.microsoft.com/azure/openshift/openshift-service-definitions
-- https://learn.microsoft.com/azure/openshift/howto-deploy-configure-application
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/kubernetes.tftest.hcl`. The chart render with the post-renderer is checked by `observability/tests/kubernetes/test_datadog_chart.py` (helm).
+Reference: [post-rendering](https://helm.sh/docs/topics/advanced/#post-rendering).

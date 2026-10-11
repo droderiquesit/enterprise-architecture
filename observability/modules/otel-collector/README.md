@@ -35,12 +35,5 @@ nothing there.
   label) + optional Fluent Bit scrape.
 * `logs`: accepted, then dropped with `nop` by default (README-transport.md §2.4).
 
-References:
-- https://docs.datadoghq.com/opentelemetry/compatibility/
-- https://docs.datadoghq.com/opentelemetry/setup/ddot_collector/ and https://docs.datadoghq.com/opentelemetry/setup/ddot_collector/install/kubernetes_gateway
-- https://docs.datadoghq.com/opentelemetry/setup/collector_exporter/
-- https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/serverless/ (direct OTLP intake: HTTP only, `dd-api-key` header on every client, so it is not used by default; it would put the API key in every app)
-- https://opentelemetry.io/docs/collector/configuration/
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/render.tftest.hcl`. The rendered configuration runs in `observability/tests/transport/test_otel_gateway.py` (docker).
+The direct OTLP intake is not used: it is HTTP only and needs the `dd-api-key` header in every app.
+Reference: [OpenTelemetry compatibility](https://docs.datadoghq.com/opentelemetry/compatibility/).

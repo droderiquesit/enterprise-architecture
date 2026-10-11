@@ -30,6 +30,3 @@
   are lab inputs and are excluded from the package tarball.
 - **Regenerate**: `python3 observability/tools/onboarding/render.py render --manifests observability/onboarding/dev --env dev --out observability/onboarding/rendered/dev`
   (CI: same with `--check`).
-- **Docs**: https://registry.terraform.io/providers/DataDog/datadog/latest/docs , https://docs.datadoghq.com/monitors/ ,
-  https://docs.datadoghq.com/service_management/service_level_objectives/burn_rate/
-- **Checks**: `terraform init -backend=false && terraform validate && terraform test` (mock provider).

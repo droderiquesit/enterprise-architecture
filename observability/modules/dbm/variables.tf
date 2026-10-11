@@ -1,13 +1,5 @@
 variable "databases" {
-  description = <<-EOT
-    Database endpoints to monitor with Datadog Database Monitoring (keyed by a stable name).
-      engine          : postgres | mysql | sqlserver   (DBM-supported engines only)
-      deployment_type : postgres/mysql -> flexible_server ; sqlserver -> sql_database | managed_instance | virtual_machine
-      auth            : password (password_ref required) | managed_identity (postgres + sqlserver only)
-      password_ref    : the password as a Delinea DSV reference - NEVER a literal, one secret path everywhere:
-                          {kind = "dsv", name = "dsv://<path>#<element>"} -> ENC[dsv://...], resolved by the Agent's
-                          secret_backend_command = dsv-fetch agent-backend (ACI Agent, cluster-checks runners, host Agent)
-  EOT
+  description = "Databases to monitor, keyed by a stable name: engine, deployment_type, auth (password | managed_identity) and password_ref (a dsv:// reference, never a literal)."
   type = map(object({
     engine                     = string
     deployment_type            = string
@@ -55,16 +47,7 @@ variable "databases" {
 }
 
 variable "hosting" {
-  description = <<-EOT
-    Where the DBM checks run (always from inside the VNet):
-      cluster_checks : whenever a Kubernetes cluster with the Datadog Cluster Agent exists - cluster_check_confd feeds
-                       modules/kubernetes (cluster_checks input); the Cluster Agent dispatches the checks to the
-                       cluster-checks runners, whose dsv-fetch secret backend resolves the ENC[dsv://...] passwords and
-                       whose workload identity logs in to Entra-enabled databases
-      aci            : only when there is no cluster - a Datadog Agent container group in the observability subnet
-                       (created by this module)
-      none           : only render configs (e.g. drop confd into an existing host Agent's conf.d)
-  EOT
+  description = "Where the checks run: cluster_checks (a cluster exists), aci (no cluster; Agent container group created here) or none (render only)."
   type        = string
   default     = "cluster_checks"
   validation {
@@ -74,7 +57,7 @@ variable "hosting" {
 }
 
 variable "aci" {
-  description = "ACI hosting (hosting = aci): existing subnet (delegated to Microsoft.ContainerInstance/containerGroups), RG, user-assigned identity mapped to a DSV user with read on the API key / DB password paths, DSV endpoint, the digest-pinned dsv-fetch image (registry artifact img-dsv-fetch >= 2.0.0, static binary at /opt/dsv-fetch/dsv-fetch). image: null = the fleet policy <agent.image>:<agent.version>."
+  description = "ACI hosting: delegated subnet, resource group, user-assigned identity (DSV reader), DSV endpoint and dsv-fetch image; image null = the fleet policy Agent pin."
   type = object({
     name                = string
     resource_group_name = string

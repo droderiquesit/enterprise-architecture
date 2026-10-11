@@ -12,10 +12,10 @@ edit their sources, never the pages. Diagrams are rendered by `tools/docs/render
 | Document | Use it for |
 |---|---|
 | [Repository README](../README.md) | what the lab is, layers, profiles, status summary |
-| [ADR-0001 - design contract](architecture/ADR-0001-design-contract.md) | the binding rules: layers and ownership, state, contracts, naming, telemetry paths, Delinea DSV (sections 13-14 hold the dated amendments, including observability 4.0.0) |
+| [ADR-0001 - design contract](architecture/ADR-0001-design-contract.md) | the binding rules: layers and ownership, state, contracts, naming, telemetry paths, Delinea DSV (section 13: dated amendments) |
 | [Quick start](guides/quick-start.md) | local validation without credentials, then the first deployment |
 | [Prerequisites and bootstrap](guides/prerequisites-and-bootstrap.md) | Azure, Azure DevOps, Datadog and Delinea DSV prerequisites; bootstrap before private agents exist |
-| [Deployment profiles](guides/deployment-profiles.md) | `minimal`, `enterprise`, `full`, `specialized`, `observability-only`, `custom`; cost per profile |
+| [Deployment profiles and cost](guides/deployment-profiles.md) | the six profiles, cost estimates, budgets, default SKUs, auto-stop, retention |
 | [Diagrams](diagrams/README.md) | foundation, platform, application, telemetry and delivery pictures |
 
 ## Architecture and ownership
@@ -27,15 +27,14 @@ edit their sources, never the pages. Diagrams are rendered by `tools/docs/render
 | [Service coverage matrix](coverage/coverage-matrix.md) (*generated*) | the Azure service catalog with status and lifecycle |
 | [Telemetry capability matrix](coverage/telemetry-capability-matrix.md) (*generated*) | which Datadog signals each architecture and database family supports |
 
-## Observability (package 4.0.0)
+## Observability
 
 | Document | Use it for |
 |---|---|
 | [Datadog fleet collection](guides/datadog-fleet-collection.md) | the authoritative collection path per resource type: one log collector per architecture, APM library contract, profiler support, how each Agent gets its key from DSV |
 | [Datadog tagging](guides/datadog-tagging.md) | the tag policy and where each signal gets its tags |
 | [Azure platform logs](guides/azure-logs-to-datadog.md) | Activity Log, resource logs and Entra ID logs through Event Hubs to the Observability Pipelines Worker |
-| [Service onboarding tutorial](guides/service-onboarding-tutorial.md) | onboarding one service with a v2 manifest |
-| [Production adoption](guides/observability-production-adoption.md) | using a package release against existing infrastructure; upgrade, rollback, removal |
+| [Service onboarding and adoption](guides/service-onboarding-tutorial.md) | adoption order for a package release; onboarding one service with a v2 manifest |
 | [Demo walkthrough](guides/demo-walkthrough.md) | one order traced from the browser to the durable workflow |
 | Package reference | [observability/README.md](../observability/README.md), [CHANGELOG](../observability/CHANGELOG.md), [UPGRADING](../observability/UPGRADING.md), [transport rules](../observability/modules/README-transport.md) |
 
@@ -48,13 +47,12 @@ edit their sources, never the pages. Diagrams are rendered by `tools/docs/render
 | [Automated PR review](guides/automated-pr-review.md) | GitHub Copilot code review for Azure Repos plus the `eh-review/policy` bot |
 | [Graphify knowledge graph](guides/graphify.md) | local, keyless codebase graph for "what depends on X" / impact queries (`tools/graphify/build.sh`) |
 | [CONTRIBUTING](../CONTRIBUTING.md) | before you push, branch names, rules CI enforces |
-| [Cost and lifecycle](guides/cost-and-lifecycle.md) | budgets, default SKUs, auto-stop, retention, teardown order |
 
 ## Operations
 
 | Document | Use it for |
 |---|---|
-| [Runbooks](runbooks/README.md) | secret rotation, rollback, lock recovery, quarantine, CI speed, teardown, break-glass, fault injection |
+| [Runbooks](runbooks/README.md) | secret rotation, rollback, lock recovery, quarantine, CI speed, teardown (incl. data deletion), break-glass, fault injection |
 | [Alert response](runbooks/alert-response.md) (*generated*) and [per-service alert pages](runbooks/alerts/README.md) (*generated*) | procedures behind the optional monitoring content's runbook links |
 
 ## Status and evidence

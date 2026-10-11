@@ -1,12 +1,5 @@
-# Datadog Database Monitoring check configs for Azure databases + where they run:
-#   cluster_checks (whenever a cluster exists): cluster_check_confd for modules/kubernetes - the Cluster Agent dispatches
-#                  the checks to the cluster-checks runners, whose dsv-fetch secret backend resolves ENC[dsv://...]
-#   aci            (no cluster): a Datadog Agent container group created here (same dsv-fetch binary backend)
-#   none           render only
-# Docs (2026-10): https://docs.datadoghq.com/database_monitoring/setup_postgres/azure/ ,
-# .../setup_mysql/azure/ , .../setup_sql_server/azure/ , .../guide/managed_authentication/
-# instance tags from the tag policy (env / team / owner / region / ... + service of the owning application, so DBM
-# matches APM's database spans and the org's existing monitors); db_key + per-database tags as extras
+# Datadog Database Monitoring check configs for Azure databases, run as cluster checks (modules/kubernetes), on an
+# ACI Agent created here, or render only. Instance tags carry the owning service so DBM matches APM database spans.
 module "fleet" {
   source       = "../fleet-policy"
   policy       = var.fleet_policy
@@ -92,11 +85,8 @@ locals {
     })
   }
 
-  # ACI host: the Agent resolves every ENC[dsv://...] (API key, DB passwords) itself with the static dsv-fetch binary
-  # (`agent-backend`), authenticating to Delinea DSV with the container group's user-assigned identity (IMDS). The
-  # init container only copies the binary out of the dsv-fetch image (no identity needed - ACI init containers cannot
-  # use managed identities); the Agent container re-installs it as root, mode 0500 (owner = the Agent user). No
-  # secret values in this config, the container group definition or Terraform state.
+  # ACI host: the Agent resolves every ENC[dsv://...] with the dsv-fetch binary and the group's identity; the init
+  # container (no identity on ACI) only copies the binary.
   # single Agent pin: fleet policy <agent.image>:<agent.version> (no fallback)
   agent_version = try(tostring(module.fleet.agent.version), null)
   aci_image     = try(coalesce(try(var.aci.image, null), "${module.fleet.agent.image}:${module.fleet.agent.version}"), null)
@@ -168,8 +158,7 @@ resource "azurerm_container_group" "dbm" {
     environment_variables = {
       DD_SITE     = var.datadog.site
       DD_HOSTNAME = var.aci.name
-      # the image's init script requires a non-empty DD_API_KEY; an ENC[] reference is resolved by the
-      # secret backend like any config value (observability/tests/transport/test_dbm_local.py)
+      # the image's init script requires a non-empty DD_API_KEY
       DD_API_KEY = "ENC[${var.aci.api_key_ref}]"
     }
 

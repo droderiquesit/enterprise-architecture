@@ -55,7 +55,7 @@ output "container_app_patch_json" {
 
 output "app_settings" {
   description = "App Service / Functions / Logic Apps Standard app settings: plain values; secret settings carry dsv:// references the app resolves (no @Microsoft.KeyVault references)."
-  value       = local.app_settings
+  value       = local.env
 }
 
 output "aci_sidecar" {

@@ -1,11 +1,7 @@
 # modules/fluent-bit
 
-> **Fallback only (observability 4.0.0).** Datadog collects application logs natively on every platform: the Datadog
-> Agent on AKS nodes, Linux and Windows VMs / VMSS and as a sidecar in ACI container groups, serverless-init on Container
-> Apps, diagnostic settings -> Event Hubs -> Observability Pipelines Worker for App Service / Functions / Logic Apps
-> (`config/fleet-policy.yaml` `logs.collector`). The configs rendered here are used only with
-> `log_pipeline = fluent_bit_direct` (sidecar / DaemonSet / host service / Event Hubs aggregator) and on Batch nodes,
-> where no Agent runs.
+> **Fallback only.** Datadog collectors handle application logs everywhere (`config/fleet-policy.yaml`
+> `logs.collector`); these configs are used only with `log_pipeline = fluent_bit_direct` and on Batch nodes.
 
 A pure function module with no providers and no resources. For each role, it renders the **validated** Fluent
 Bit configs from `observability/config/fluent-bit/`:
@@ -28,5 +24,4 @@ Outputs:
 `tls = false` is rejected. Only the docker tests point at a plain-HTTP mock intake, and they do so through env
 vars, not through this module.
 
-Used by `telemetry-transport` (aggregator), `kubernetes` (DaemonSet) and `host-agents` (VM/VMSS). Tests are in
-`tests/render.tftest.hcl`. The functional proof is in `observability/tests/transport/`.
+Used by `telemetry-transport` (aggregator) and `kubernetes` (DaemonSet). Functional tests: `observability/tests/transport/`.

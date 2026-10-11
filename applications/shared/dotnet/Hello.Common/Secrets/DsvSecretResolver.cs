@@ -358,30 +358,15 @@ public sealed class DsvSecretResolver : IDisposable
                 throw new DsvSecretException($"DSV secret read failed ({reason}{ex.Message})", ex.Status);
             }
 
-            using (response)
+            using var doc = await ReadJsonAsync(response, "DSV secret response malformed", cancellationToken).ConfigureAwait(false);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object || !doc.RootElement.TryGetProperty("data", out var d) || d.ValueKind != JsonValueKind.Object)
             {
-                Dictionary<string, JsonElement>? data = null;
-                try
-                {
-                    using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false), cancellationToken: cancellationToken).ConfigureAwait(false);
-                    if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object)
-                    {
-                        data = d.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.Ordinal);
-                    }
-                }
-                catch (JsonException)
-                {
-                    data = null;
-                }
-
-                if (data is null)
-                {
-                    throw new DsvSecretException("DSV secret response malformed");
-                }
-
-                _cache[path] = (data, _time.GetUtcNow() + _options.CacheTtl);
-                return data;
+                throw new DsvSecretException("DSV secret response malformed");
             }
+
+            var data = d.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.Ordinal);
+            _cache[path] = (data, _time.GetUtcNow() + _options.CacheTtl);
+            return data;
         }
         finally
         {
@@ -442,7 +427,7 @@ public sealed class DsvSecretResolver : IDisposable
         HttpResponseMessage response;
         try
         {
-            response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Post, new Uri("token", UriKind.Relative)) 
+            response = await SendAsync(() => new HttpRequestMessage(HttpMethod.Post, new Uri("token", UriKind.Relative))
             {
                 // Buffered (Content-Length) rather than JsonContent's chunked stream: not every DSV-compatible endpoint
                 // (e.g. tools/secrets/mock_dsv.py) reads chunked request bodies.
@@ -454,20 +439,33 @@ public sealed class DsvSecretResolver : IDisposable
             throw new DsvSecretException($"DSV authentication failed ({ex.Message})", ex.Status);
         }
 
+        const string malformed = "DSV token response malformed";
+        using var doc = await ReadJsonAsync(response, malformed, cancellationToken).ConfigureAwait(false);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("accessToken", out var t) || t.ValueKind != JsonValueKind.String)
+        {
+            throw new DsvSecretException(malformed);
+        }
+
+        var expiresIn = root.TryGetProperty("expiresIn", out var e) && e.TryGetDouble(out var s) && s > 0 ? s : 3600;
+        _token = t.GetString()!;
+        _tokenRefreshAt = _time.GetUtcNow() + TimeSpan.FromSeconds(expiresIn * RefreshFraction);
+        return _token;
+    }
+
+    /// <summary>Parses (and disposes) a successful response; invalid JSON becomes a value-free <see cref="DsvSecretException"/>.</summary>
+    private static async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response, string malformed, CancellationToken cancellationToken)
+    {
         using (response)
         {
             try
             {
-                using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false), cancellationToken: cancellationToken).ConfigureAwait(false);
-                var token = doc.RootElement.GetProperty("accessToken").GetString() ?? throw new DsvSecretException("DSV token response malformed");
-                var expiresIn = doc.RootElement.TryGetProperty("expiresIn", out var e) && e.TryGetDouble(out var s) && s > 0 ? s : 3600;
-                _token = token;
-                _tokenRefreshAt = _time.GetUtcNow() + TimeSpan.FromSeconds(expiresIn * RefreshFraction);
-                return token;
+                var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+            catch (JsonException)
             {
-                throw new DsvSecretException("DSV token response malformed");
+                throw new DsvSecretException(malformed);
             }
         }
     }

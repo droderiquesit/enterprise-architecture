@@ -10,9 +10,8 @@ governed template that deploy only the components that changed (plus what they n
 > providers, unit tests, local docker integration tests for the services). **Nothing has been deployed to Azure or
 > verified against a Datadog organisation** from this repository: no credentials were available while it was built,
 > and no evidence file exists under [`docs/evidence/`](docs/evidence/README.md). Status words follow
-> [ADR-0001 section 11](docs/architecture/ADR-0001-design-contract.md#11-testing-levels-and-evidence-vocabulary).
-
-- Validation summary: [docs/evidence/validation-results.md](docs/evidence/validation-results.md)
+> [ADR-0001 section 11](docs/architecture/ADR-0001-design-contract.md#11-testing-levels-and-evidence-vocabulary);
+> validation summary: [validation results](docs/evidence/validation-results.md).
 
 ## What is in it
 
@@ -22,7 +21,7 @@ governed template that deploy only the components that changed (plus what they n
 | foundation | [`foundation/`](foundation/README.md) | hub/spoke or single-spoke network, subnet catalogue with delegations, NSGs, NAT/firewall egress, private DNS zones, workload identities + Delinea DSV secret access (users/policies as code; no Key Vault), budget + policy, private deployment agents, optional edge (App Gateway, Front Door, APIM, Firewall, Bastion) |
 | platform | [`platform/`](platform/README.md), [`platform/data/`](platform/data/README.md) | compute platforms (AKS, Container Apps, App Service, Functions, VM, VMSS, Batch, Service Fabric, ARO, specialized), ACR, Service Bus, 17 database/data-store roots |
 | applications | [`applications/`](applications/deployments/README.md) | Enterprise Hello services (React frontend, .NET BFF/orders/inventory/durable, Python catalog/adapters/worker/jobs/functions/partner-sim/traffic, Logic Apps) and one deployment root per hosting group |
-| observability | [`observability/`](observability/README.md) | portable package for fleet collection configuration ([4.0.0](observability/CHANGELOG.md)): tag policy, fleet collection policy, Datadog Observability Pipelines (central log pipeline, OP Worker), one log collector per architecture (Datadog Agent on AKS via Helm and on VM/VMSS via Azure Policy + VM Applications, Agent sidecar on ACI, serverless-init on Container Apps; Fluent Bit only on Batch and as the `fluent_bit_direct` fallback), DBM, APM via Datadog tracers / Single Step Instrumentation, profiling, RUM, Azure integration and diagnostic settings, static Go `dsv-fetch` for every Datadog API key read from Delinea DSV + lab roots under `observability/lab/`. Monitors, SLOs and dashboards are not in the package; the optional content is in [`observability/extras/content/`](observability/extras/content/README.md) |
+| observability | [`observability/`](observability/README.md) | portable, versioned package for fleet collection configuration ([CHANGELOG](observability/CHANGELOG.md)): tag policy, fleet policy, Observability Pipelines, one log collector per architecture, APM / profiling / RUM / DBM, Azure integration and diagnostic settings, `dsv-fetch` for every Datadog key read from Delinea DSV; lab roots under `observability/lab/`. Optional monitors / SLOs / dashboards: [`observability/extras/content/`](observability/extras/content/README.md) |
 | delivery | [`azure-pipelines.yml`](azure-pipelines.yml) (platform), [`azure-pipelines.applications.yml`](azure-pipelines.applications.yml) (applications), [`pipelines/`](pipelines/README.md), [`tools/`](tools/README.md) | two pipelines on one governed template: change detection, generated plan/apply stages, promotion dev -> test -> prod, plan binding, contracts, smoke, telemetry verification, evidence, observability package release |
 | catalog | [`catalog/`](catalog/) | component registry, Azure service catalog (100 entries), architecture matrix, telemetry capabilities, contract schemas, provider gaps |
 
@@ -43,26 +42,15 @@ Selected with `profile:` in `environments/<env>/environment.yaml` (details: [dep
 
 ## Quick start
 
-Full walk-through: [docs/guides/quick-start.md](docs/guides/quick-start.md).
+Local validation needs no credentials; the first deployment needs Azure, Azure DevOps, Datadog and Delinea DSV
+([prerequisites](docs/guides/prerequisites-and-bootstrap.md)). Walk-through: [docs/guides/quick-start.md](docs/guides/quick-start.md).
 
 ```bash
-# 1. local validation (no credentials)
 pip install -r pipelines/requirements-tools.txt pytest
-python3 -m tools.changeset graph                      # registry valid + acyclic
-python3 tools/config/resolve.py --env dev             # what the dev profile enables
 python3 tools/validate/all_terraform.py --workers 4   # fmt/init/validate/test for every root and module
 python3 -m pytest -q tests
-python3 tools/docs/generate.py --check && tools/docs/render_diagrams.sh --check && python3 tools/docs/check_links.py
-
-# 2. bootstrap (operator workstation, Owner on the subscription)
-bootstrap/scripts/bootstrap.sh --env dev              # local state -> migrated to the state account
-
-# 3. Azure DevOps: service connections, environments, branch policy, no variable groups (pipelines/README.md),
-#    then run azure-pipelines.yml (platform, mode auto) - it triggers azure-pipelines.applications.yml on success.
+bootstrap/scripts/bootstrap.sh --env dev              # then the Azure DevOps setup in pipelines/README.md
 ```
-
-Prerequisites, provider registrations, quotas and the bootstrap sequence before private agents exist:
-[prerequisites-and-bootstrap.md](docs/guides/prerequisites-and-bootstrap.md).
 
 ## Repository map
 
@@ -92,23 +80,10 @@ tests/                          tooling tests (changeset, pipeline, tools, catal
 Components in `catalog/components.yaml`: **74** (15 artifact, 1 docs, 58 terraform; 26 applications, 1 bootstrap, 1 docs, 7 foundation, 10 observability, 29 platform). Non-GA lifecycle entries in the service catalog: 13.
 <!-- END STATUS -->
 
-Live validation: **not-run** for every component and service. Per-requirement status with links to the implementing
-files: [IMPLEMENTATION_CHECKLIST.md](docs/IMPLEMENTATION_CHECKLIST.md). Exact blockers and limitations:
-[known-limitations.md](docs/known-limitations.md). Generated coverage: [service coverage matrix](docs/coverage/coverage-matrix.md),
-[telemetry capability matrix](docs/coverage/telemetry-capability-matrix.md).
+Per-requirement status: [IMPLEMENTATION_CHECKLIST.md](docs/IMPLEMENTATION_CHECKLIST.md); blockers and limitations:
+[known-limitations.md](docs/known-limitations.md).
 
 ## Documentation
 
-Full index: [docs/README.md](docs/README.md).
-
-| Topic | Document |
-|---|---|
-| Design contract (binding) | [ADR-0001](docs/architecture/ADR-0001-design-contract.md) |
-| Getting started | [quick start](docs/guides/quick-start.md), [prerequisites and bootstrap](docs/guides/prerequisites-and-bootstrap.md), [deployment profiles](docs/guides/deployment-profiles.md) |
-| Ownership | [component ownership](docs/guides/component-ownership.md) (generated), [architecture deployment matrix](docs/guides/architecture-deployment-matrix.md) (generated) |
-| Observability | [fleet collection paths](docs/guides/datadog-fleet-collection.md), [tagging](docs/guides/datadog-tagging.md), [Azure platform logs](docs/guides/azure-logs-to-datadog.md), [service onboarding tutorial](docs/guides/service-onboarding-tutorial.md), [production adoption of the package](docs/guides/observability-production-adoption.md), [demo walkthrough](docs/guides/demo-walkthrough.md) |
-| Development | [branching and development](docs/guides/branching-and-development.md), [automated PR review (Copilot + policy bot)](docs/guides/automated-pr-review.md), [CONTRIBUTING.md](CONTRIBUTING.md), [pipelines](pipelines/README.md) |
-| Cost | [cost and lifecycle](docs/guides/cost-and-lifecycle.md) |
-| Operations | [runbooks](docs/runbooks/README.md): secret rotation, rollback, teardown, break-glass, lock recovery, quarantine, CI speed, alert response, fault injection |
-| Limitations | [known limitations](docs/known-limitations.md), [implementation checklist](docs/IMPLEMENTATION_CHECKLIST.md) |
-| Evidence | [docs/evidence](docs/evidence/README.md) |
+Start at the [documentation index](docs/README.md); the binding design contract is
+[ADR-0001](docs/architecture/ADR-0001-design-contract.md).

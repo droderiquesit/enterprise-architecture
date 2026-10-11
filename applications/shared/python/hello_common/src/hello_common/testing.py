@@ -1,4 +1,4 @@
-"""Test utilities: throwaway docker containers for `integration`-marked tests (docker CLI only)."""
+"""Test utilities: shared pytest fixtures and throwaway docker containers for `integration`-marked tests (docker CLI only)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,41 @@ import time
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def clear_faults():
+    """Isolates the process-wide fault registry; import it into conftest.py."""
+    from hello_common.faults import REGISTRY
+
+    REGISTRY.clear()
+    yield
+    REGISTRY.clear()
+
+
+def span_capture(service: str):
+    """Sets up telemetry with an in-memory exporter. Returns (exporter, provider, `spans` fixture)."""
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from hello_common.config import service_info
+    from hello_common.telemetry import setup_telemetry
+
+    exporter = InMemorySpanExporter()
+    provider = setup_telemetry(service_info(service), span_exporter=exporter)
+
+    @pytest.fixture
+    def spans():
+        exporter.clear()
+
+        def _get():
+            provider.force_flush()
+            return exporter.get_finished_spans()
+
+        return _get
+
+    return exporter, provider, spans
 
 
 class DockerUnavailable(RuntimeError):

@@ -1,15 +1,5 @@
 variable "resources" {
-  description = <<-EOT
-    The fleet: every Azure resource / workload to collect from, keyed by a stable key. Sources: onboarding manifests
-    (rendered resources + identity, tools/onboarding render) and/or discovered contracts (lab diagnostics discovery).
-      id            : Azure resource id (literal)
-      type          : ARM type (Microsoft.Web/sites, Microsoft.Compute/virtualMachines, ...)
-      architecture  : hosting of the workload on it (aks | aca | aci | appservice | functions | logicapp | vm | vmss | swa) - for app resources
-      runtime       : dotnet | python | node | java | browser (app resources)
-      os_type       : linux | windows
-      tags          : rendered Datadog tag set of the owning service (modules/tagging / onboarding rendered tags)
-      app_log_route : explicit override of the application-log route
-  EOT
+  description = "The fleet keyed by a stable key: literal id, ARM type, architecture / runtime / os_type (app resources), rendered tags of the owning service, optional app_log_route."
   type = map(object({
     id            = string
     type          = string

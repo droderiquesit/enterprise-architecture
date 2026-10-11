@@ -18,20 +18,14 @@ variable "foundation_network" {
   description = "foundation-network contract v1 (fields used here)."
   type = object({
     spoke_vnet_id = string
-    subnets = map(object({
-      id         = string
-      delegation = optional(string)
-    }))
+    subnets       = map(object({ id = string, delegation = optional(string) }))
   })
 }
 
 variable "foundation_identity" {
   description = "foundation-identity contract v2 (fields used here): identities[\"deploy-agent\"]."
   type = object({
-    identities = map(object({
-      id        = string
-      client_id = string
-    }))
+    identities = map(object({ id = string, client_id = string }))
   })
 }
 

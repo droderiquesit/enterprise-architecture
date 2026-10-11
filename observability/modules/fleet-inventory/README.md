@@ -32,6 +32,3 @@ The plan gives each signal exactly one authoritative collector. Log collector an
 | `scope_tags` | `modules/observability-pipeline` `azure.scope_tags` / Fluent Bit aggregator `FLB_AZURE_SCOPE_TAGS`: platform logs of a resource carry its owner's tags |
 | `dbm_candidates` | `modules/dbm` (host and auth still per database) |
 | `matrix` | reports / the per-resource matrix in `docs/guides/datadog-fleet-collection.md` |
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/inventory.tftest.hcl`.

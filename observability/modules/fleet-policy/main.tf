@@ -1,6 +1,5 @@
-# Fleet policy resolution (pure function, no providers): defaults -> architectures.<arch> -> environments.<env> ->
-# per-workload overrides, then the Datadog support matrix (verified against docs.datadoghq.com on 2026-10-09; see
-# docs/guides/datadog-fleet-collection.md in the source repository) decides the EFFECTIVE collection method.
+# Fleet policy resolution (pure): defaults -> architectures.<arch> -> environments.<env> -> overrides, then the Datadog
+# support matrix decides the effective collection method.
 locals {
   # (tuple + index: a conditional would force both policies to the same object type)
   policy = [for p in [var.policy, yamldecode(file("${path.module}/../../config/fleet-policy.yaml"))] : p if p != null][0]
@@ -104,10 +103,8 @@ locals {
     AZURE_EXPERIMENTAL_ENABLE_ACTIVITY_SOURCE = "true"
   } : {}
   sample_rate = try(local.apm.sample_rate, null)
-  # Datadog-mode library contract agreed with the application libraries (applications/shared/python/hello_common,
-  # applications/dotnet): one tracer per process, the OTel API bridged into the Datadog tracer (manual
-  # Activity / OTel-API spans), custom hello.* metrics over DogStatsD. NEVER OTEL_EXPORTER_OTLP_* / OTEL_SDK_DISABLED
-  # here (the apps read TELEMETRY_SDK) and no OTEL_RESOURCE_ATTRIBUTES (Datadog maps it to DD_TAGS -> duplicates).
+  # Datadog-mode library contract: one tracer per process, OTel API bridged into it. Never OTEL_* here (the apps read
+  # TELEMETRY_SDK; Datadog maps OTEL_RESOURCE_ATTRIBUTES to DD_TAGS -> duplicates).
   apm_env = local.effective_mode != "datadog" ? {} : merge(
     {
       TELEMETRY_SDK                                     = "datadog"
@@ -116,27 +113,21 @@ locals {
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = "true"
       DD_LOGS_INJECTION                                 = tostring(try(local.apm.logs_injection, true))
       DD_METRICS_OTEL_ENABLED                           = "false"
-      # runtime metrics travel over DogStatsD (UDP/UDS): only where an Agent runs next to the process (node Agent,
-      # host Agent, ACI Agent sidecar, serverless-init); the APM gateway's TCP ingress cannot carry them
+      # runtime metrics need DogStatsD, i.e. an Agent next to the process (the APM gateway ingress is TCP only)
       DD_RUNTIME_METRICS_ENABLED = tostring(local.dogstatsd_local)
     },
     local.sample_rate == null ? {} : { DD_TRACE_SAMPLE_RATE = tostring(local.sample_rate) },
     local.dbm_env, local.dsm_env,
   )
-  # DogStatsD target of the Datadog libraries (hello.* custom metrics, runtime metrics). AKS: DD_AGENT_HOST =
-  # status.hostIP (modules/instrumentation k8s_patch) + port; hosts / ACI Agent sidecar / serverless-init sidecar:
-  # localhost (containers of an ACI group / Container Apps replica share one network namespace).
+  # DogStatsD target: AKS DD_AGENT_HOST = status.hostIP (+ port); elsewhere localhost (shared network namespace).
   dogstatsd_local = contains(["ssi_kubernetes", "ssi_host", "serverless_init", "agent_sidecar"], coalesce(local.method, "none"))
   dogstatsd_env = local.effective_mode != "datadog" ? {} : (
     local.method == "ssi_kubernetes" ? { DD_DOGSTATSD_PORT = "8125" } :
     contains(["ssi_host", "serverless_init", "agent_sidecar"], coalesce(local.method, "none")) ? { DD_DOGSTATSD_URL = "udp://localhost:8125" } : {}
   )
 
-  # ------------------------------------------------------------------ application-log collector (4.0.0)
-  # One Datadog collection path per platform. Defaults per architecture (config/fleet-policy.yaml architectures.*,
-  # repeated here for custom policies that omit them); Fluent Bit only with log_pipeline = fluent_bit_direct on AKS /
-  # ACA / ACI (and on Batch nodes, where no Agent runs). VM / VMSS hosts always use the Agent: 4.0.0 installs no
-  # Fluent Bit on hosts (modules/host-agent-package), so fluent_bit_direct only makes their Agent ship to the intake.
+  # ------------------------------------------------------------------ application-log collector
+  # Defaults repeated for custom policies that omit them. Hosts always use the Agent (no Fluent Bit on hosts).
   default_collector = lookup({
     aks        = "agent", vm = "agent", vmss = "agent", aci = "agent_sidecar", aca = "serverless_init",
     appservice = "azure", functions = "azure", logicapp = "azure", batch = "fluent_bit",
@@ -148,7 +139,7 @@ locals {
   }
   host_arch   = contains(["vm", "vmss"], local.arch)
   legacy_node = try(local.section.logs.node_collector, null)
-  # 3.x key: logs.node_collector = fluent_bit still selects the Fluent Bit DaemonSet on AKS (hosts keep the Agent)
+  # legacy key: logs.node_collector = fluent_bit still selects the Fluent Bit DaemonSet on AKS
   requested_collector = local.arch == "aks" && local.legacy_node == "fluent_bit" ? "fluent_bit" : coalesce(try(local.section.logs.collector, null), local.default_collector)
   collector_valid     = contains(lookup(local.allowed_collectors, local.arch, ["none"]), local.requested_collector)
   chosen_collector    = local.collector_valid ? local.requested_collector : local.default_collector

@@ -43,11 +43,9 @@ Steps: (1) code AST: `graphify update .` when `graphify-out/graph.json` exists, 
 layer in place (idempotent); (3) `graphify cluster-only . --no-label` (communities, `GRAPH_REPORT.md`, `graph.html`).
 At the end the script prints the paths of `graph.html` and `GRAPH_REPORT.md`.
 
-Why not `graphify merge-graphs`? It is the **cross-repo** merge: it prefixes every node id with a repo tag, forces an
-undirected graph and offsets communities. That would break `graphify update`'s incremental id matching and the links
-from the IaC layer to graphify's own Terraform nodes. The adapter merges same-repo instead. Its nodes carry
-`_origin: "iac"`, which `graphify update` (and the git hooks below) treat as non-AST and preserve, so a code-only
-update never drops the IaC layer. It only goes stale until the next `build.sh`.
+The adapter merges in place rather than with `graphify merge-graphs` (a cross-repo merge that re-prefixes ids and
+would break incremental updates). Its nodes carry `_origin: "iac"`, which `graphify update` preserves, so a code-only
+update never drops the IaC layer; it is refreshed by the next `build.sh`.
 
 ## Use
 
@@ -115,54 +113,16 @@ today.
 
 ## What is committed
 
-**Nothing generated.** `graphify-out/` is in `.gitignore`:
-
-- `graph.json` is 15-20 MB and changes on almost every commit (line numbers, ids, community ids). Committing it would
-  bloat history, create merge conflicts on every branch, and go stale anyway. Graphify ships a `graph.json` union
-  merge driver for repos that do commit it; this is not worth the complexity here.
-- `cache/` (~30 MB) is per-machine. `manifest.json` holds absolute mtimes. `graph.html` and `GRAPH_REPORT.md` are
-  derived and rebuilt in under a minute.
-- What *is* committed is what makes the build reproducible: the pin (`tools/graphify/VERSION`), `.graphifyignore`,
-  `build.sh`, the adapter and its tests.
-
-Build on demand locally, and (optionally) publish the graph as a pipeline artifact from `main` (below), so reviewers
-and assistants without the tool can download it.
+Nothing generated: `graphify-out/` is git-ignored (`graph.json` is 15-20 MB and changes on almost every commit; `cache/`
+is per-machine). Committed is what makes the build reproducible: the pin, `.graphifyignore`, `build.sh`, the adapter
+and its tests.
 
 ## CI
 
-- **Tests:** suite `py-graphify` ([`tools/ci/suites.yaml`](../../tools/ci/suites.yaml); about 5 s, Python only, no
-  graphify CLI needed). It covers a synthetic tree pinning every node/relation kind, the graph.json schema,
-  determinism, merge idempotency and `.graphifyignore` handling, plus a smoke run over the real catalog: every
-  registry component, every produced contract, the obs-telemetry-transport consumers. When the pinned CLI is
-  installed, the synthetic output is also loaded by `graphify god-nodes`.
-- **Optional artifact on main:** a job the pipeline owners can add to `azure-pipelines.yml` (not added yet).
-  It needs no secrets or service connection, so run it on a hosted agent, never in a job that holds deployment
-  credentials. The CLI is version-pinned but not hash-pinned.
-
-```yaml
-- job: graphify
-  displayName: Knowledge graph (Graphify)
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-  pool: {vmImage: ubuntu-24.04}
-  timeoutInMinutes: 10
-  steps:
-    - checkout: self
-      fetchDepth: 1
-    - template: pipelines/templates/steps-setup.yml   # hash-pinned venv (pyyaml, uv) + install-tools.sh graphify
-      parameters: {tools: graphify}
-    - bash: |
-        set -euo pipefail
-        tools/graphify/build.sh --full
-        mkdir -p "$(Build.ArtifactStagingDirectory)/graphify"
-        cp graphify-out/{graph.json,graph.html,GRAPH_REPORT.md,iac-graph.json} "$(Build.ArtifactStagingDirectory)/graphify/"
-      displayName: Build graph
-    - publish: $(Build.ArtifactStagingDirectory)/graphify
-      artifact: graphify
-      displayName: Publish graphify-out
-```
-
-To use the published graph: download the `graphify` artifact into `graphify-out/` and run
-`graphify query ... --graph graphify-out/graph.json`.
+Suite `py-graphify` ([`tools/ci/suites.yaml`](../../tools/ci/suites.yaml); about 5 s, no graphify CLI needed) pins every
+node/relation kind on a synthetic tree, the graph.json schema, determinism, merge idempotency and `.graphifyignore`
+handling, plus a smoke run over the real catalog. No pipeline publishes the graph; a job that does would need no
+secrets and belongs on a hosted agent, never in a job holding deployment credentials.
 
 ## AI assistant integration (opt-in, run these yourself)
 

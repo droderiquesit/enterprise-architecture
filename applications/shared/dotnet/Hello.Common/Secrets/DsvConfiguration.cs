@@ -73,23 +73,18 @@ public sealed class DsvConfigurationSource(DsvConfigurationSourceOptions options
 
         // ConfigurationManager is the live configuration (this source is not part of it yet while Build runs);
         // a plain ConfigurationBuilder is snapshotted from the sources added before this one.
-        IConfiguration input = builder is IConfigurationRoot root
-            ? root
-            : new ConfigurationBuilder().AddRange(builder.Sources.TakeWhile(s => !ReferenceEquals(s, this))).Build();
-        return new DsvConfigurationProvider(input, SourceOptions);
-    }
-}
-
-internal static class ConfigurationBuilderRange
-{
-    public static IConfigurationBuilder AddRange(this IConfigurationBuilder builder, IEnumerable<IConfigurationSource> sources)
-    {
-        foreach (var s in sources)
+        if (builder is IConfigurationRoot root)
         {
-            builder.Add(s);
+            return new DsvConfigurationProvider(root, SourceOptions);
         }
 
-        return builder;
+        var snapshot = new ConfigurationBuilder();
+        foreach (var s in builder.Sources.TakeWhile(s => !ReferenceEquals(s, this)))
+        {
+            snapshot.Add(s);
+        }
+
+        return new DsvConfigurationProvider(snapshot.Build(), SourceOptions);
     }
 }
 
@@ -99,6 +94,7 @@ public sealed class DsvConfigurationProvider : ConfigurationProvider, IDisposabl
     private readonly DsvConfigurationSourceOptions _sourceOptions;
     private readonly ILogger _logger;
     private Dictionary<string, string>? _references;
+    private DsvOptions? _options;
     private DsvSecretResolver? _resolver;
     private ITimer? _timer;
 
@@ -138,16 +134,15 @@ public sealed class DsvConfigurationProvider : ConfigurationProvider, IDisposabl
     private Dictionary<string, string?> Resolve()
     {
         var keys = _references!.Keys.Order(StringComparer.Ordinal).ToList();
-        DsvOptions options;
         try
         {
-            options = _sourceOptions.Options ?? DsvOptions.FromConfiguration(_input);
-            if (options.Auth == DsvAuthMode.None)
+            _options ??= _sourceOptions.Options ?? DsvOptions.FromConfiguration(_input);
+            if (_options.Auth == DsvAuthMode.None)
             {
                 throw new DsvConfigurationException("DSV_AUTH=none but configuration values hold dsv:// references");
             }
 
-            _resolver ??= new DsvSecretResolver(options, _sourceOptions.Credential, _sourceOptions.Handler, _sourceOptions.TimeProvider);
+            _resolver ??= new DsvSecretResolver(_options, _sourceOptions.Credential, _sourceOptions.Handler, _sourceOptions.TimeProvider);
         }
         catch (DsvConfigurationException ex)
         {
@@ -187,7 +182,7 @@ public sealed class DsvConfigurationProvider : ConfigurationProvider, IDisposabl
 
     private void StartRefreshTimer()
     {
-        var interval = (_sourceOptions.Options ?? DsvOptions.FromConfiguration(_input)).RefreshInterval;
+        var interval = _options!.RefreshInterval;
         if (_timer is not null || interval <= TimeSpan.Zero)
         {
             return;

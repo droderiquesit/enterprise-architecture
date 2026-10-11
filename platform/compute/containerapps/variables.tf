@@ -18,25 +18,16 @@ variable "environment" {
 variable "foundation_network" {
   description = "foundation-network contract v1 (only the fields this root uses)."
   type = object({
-    resource_group_name = string
-    location            = string
-    spoke_vnet_id       = string
-    hub_vnet_id         = optional(string)
-    subnets = map(object({
-      id             = string
-      name           = string
-      address_prefix = string
-    }))
+    location      = string
+    spoke_vnet_id = string
+    hub_vnet_id   = optional(string)
+    subnets       = map(object({ id = string, name = string }))
   })
 }
 
 variable "platform_shared" {
   description = "platform-shared contract v1 (only the fields this root uses)."
-  type = object({
-    acr_id                     = string
-    acr_login_server           = string
-    log_analytics_workspace_id = string
-  })
+  type        = object({ log_analytics_workspace_id = string })
 }
 
 variable "settings" {

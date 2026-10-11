@@ -1,13 +1,5 @@
 variable "mode" {
-  description = <<-EOT
-    How VMs / VMSS get the Datadog Agent VM Application:
-      policy : (default) Azure Policy DeployIfNotExists enrols every VM / VMSS tagged <enrollment_tag> in the scope -
-               no per-host Terraform; new VMSS instances and new VMs get it automatically (modules/host-agent-policy).
-      direct : escape hatch for environments WITHOUT Azure Policy rights: one
-               azurerm_virtual_machine_gallery_application_assignment per VM in var.hosts (same VM Application, same
-               version); VMSS models are set by their platform root from output vmss_gallery_applications; the hosts
-               must already carry the DSV-reader identity (agent_identity).
-  EOT
+  description = "policy (default: Azure Policy enrols tagged VMs / VMSS) or direct (no policy rights: one assignment per VM in var.hosts; hosts must already carry the DSV-reader identity)."
   type        = string
   default     = "policy"
   validation {

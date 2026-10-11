@@ -1,4 +1,8 @@
-# The universal lab pipeline (extends template). Exactly two thin entry points pass typed parameters:
+# The universal lab pipeline (extends template) of the two thin entries (scope platform | applications; see
+# pipelines/README.md). Protected resources carry a "Required template" check pointing at THIS file.
+# PR builds (Build.Reason == PullRequest) compile ONLY Select/Validate/Security on Microsoft-hosted agents with no
+# service connection or self-hosted pool: untrusted PR code never runs with credentials.
+parameters:
 #   azure-pipelines.yml                scope: platform     IaC platform: foundation, platform, observability
 #                                                          infrastructure; observability package release on
 #                                                          tags observability-v*; nightly drift

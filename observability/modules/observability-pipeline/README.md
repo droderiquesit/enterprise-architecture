@@ -27,6 +27,3 @@ Where the Worker runs:
 The Worker needs a live Datadog organisation at start-up: it validates the API key and pulls the pipeline by
 `DD_OP_PIPELINE_ID` through Remote Configuration. The VRL programs and the Fluent Bit forward path are tested locally
 with the Vector CLI and Vector's `fluent` source (`tests/transport/test_observability_pipelines.py`).
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/pipeline.tftest.hcl`. The VRL programs and the forward path run in `observability/tests/transport/test_observability_pipelines.py` (docker).

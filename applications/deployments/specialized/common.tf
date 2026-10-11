@@ -1,4 +1,4 @@
-# Generated common inputs (environment, artifacts), naming and required tags (ADR-0001 §6, §7).
+# Common inputs (ADR-0001 §6); naming, tags and artifact metadata via modules/deploy-common.
 variable "environment" {
   description = "Environment globals rendered by tools/config/render.py (ADR-0001 §6)."
   type = object({
@@ -16,11 +16,7 @@ variable "environment" {
 }
 
 variable "artifacts" {
-  description = <<-EOT
-    Immutable build outputs keyed by artifact component id (svc-bff, ...), written by
-    `tools/deploy/artifacts.py tfvars` into artifacts.auto.tfvars.json. Images are ALWAYS digest-pinned
-    (<registry>/<repo>@sha256:<digest>); tags such as :latest are rejected.
-  EOT
+  description = "Build outputs keyed by artifact component id (tools/deploy/artifacts.py tfvars); images must be digest-pinned."
   type = map(object({
     name           = optional(string)
     image          = optional(string)
@@ -46,43 +42,19 @@ variable "artifacts" {
   }
 }
 
-module "naming" {
-  source          = "../../../foundation/modules/naming"
-  prefix          = var.environment.name_prefix
-  environment     = var.environment.name
-  location        = var.environment.location
-  subscription_id = var.environment.subscription_id
-  workload        = "special"
-}
-
-module "tags" {
-  source    = "../../../foundation/modules/tags"
-  component = "deploy-specialized"
-  layer     = "applications"
-  domain    = "applications"
-  tier      = "application"
-  environment = {
-    name        = var.environment.name
-    location    = var.environment.location
-    owner       = var.environment.owner
-    team        = var.environment.team
-    cost_center = var.environment.cost_center
-    expires_on  = var.environment.expires_on
-    tags        = var.environment.tags
-  }
+module "common" {
+  source      = "../modules/deploy-common"
+  component   = "deploy-specialized"
+  workload    = "special"
+  environment = var.environment
+  artifacts   = var.artifacts
 }
 
 locals {
-  component = "deploy-specialized"
-  tags      = module.tags.tags
-  names     = module.naming.names
-  location  = var.environment.location
-  env_name  = var.environment.name
-  prefix    = var.environment.name_prefix
-
-  # Artifact metadata: version = explicit version, else the immutable build tag, else the digest prefix.
-  artifact_version = {
-    for k, a in var.artifacts : k => replace(coalesce(a.version, a.tag, try(substr(split("@sha256:", coalesce(a.image, ""))[1], 0, 12), null), try(substr(a.package_sha256, 0, 12), null), "unknown"), "/[,= ]/", "-")
-  }
-  artifact_commit = { for k, a in var.artifacts : k => coalesce(a.commit, "unknown") }
+  component        = "deploy-specialized"
+  tags             = module.common.tags
+  location         = var.environment.location
+  env_name         = var.environment.name
+  artifact_version = module.common.artifact_version
+  artifact_commit  = module.common.artifact_commit
 }

@@ -13,7 +13,7 @@ locals {
   as     = var.platform_appservice
   rg     = local.as.resource_group_name
   as_loc = coalesce(local.as.location, local.location)
-  suffix = module.naming.suffix
+  suffix = module.common.suffix
 
   private = var.settings.network_mode == "private-endpoint" || (var.settings.network_mode == "auto" && var.foundation_network != null)
   pe = local.private ? {

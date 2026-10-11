@@ -1,7 +1,7 @@
 # Runbook: teardown
 
 Remove lab components in **reverse dependency order**, through the pipeline wherever possible. Not executed against
-Azure yet. Data deletion behaviour per component: [cost-and-lifecycle.md](../guides/cost-and-lifecycle.md#5-teardown-order-and-data-deletion).
+Azure yet.
 
 ## Option A - pipeline retire mode (preferred)
 
@@ -70,6 +70,19 @@ python3 tools/deploy/record.py write --env <env> --component <id> --status retir
 ```
 
 Same order as above. Disable the component in the profile in the same change, or the next deploy run recreates it.
+
+## Data behaviour on destroy
+
+| Components | What is lost |
+|---|---|
+| `obs-monitoring`, `obs-diagnostics` | Datadog objects / diagnostic settings only; ingested telemetry stays in Datadog |
+| `deploy-*`, `obs-hosts`, `obs-kubernetes`, `obs-dbm` | app resources only (data lives in platform databases) |
+| `obs-telemetry-transport` | Event Hubs buffer (<= 1 day) |
+| `platform-aks`, `platform-containerapps`, `platform-batch` | nothing persistent |
+| `platform-db-*`, `platform-data-analytics`, `platform-messaging`, `platform-functions`, `platform-shared` | **databases deleted** (synthetic data); in-flight / dead-lettered messages; ACR images (rebuildable); Functions packages and Durable task hub |
+| `foundation-identity`, `foundation-secrets` | identities at once; DSV objects remain (below) |
+| `foundation-network` | nothing; subnets with service association links (ACA, SQL MI, MDP, Flexible Servers) release slowly |
+| `foundation-governance` | retire last, so budget alerts cover the teardown |
 
 ## What is retained
 

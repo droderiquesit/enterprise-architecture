@@ -14,14 +14,12 @@ and hands the values over in the form each consumer understands:
 | systemd units / anything reading env files | `EnvironmentFile=/run/dsv/.env` | `init --format dotenv` |
 | Datadog Agent (VM/VMSS, AKS) | `secret_backend_command`, `api_key: ENC[dsv://eh/dev/datadog-api-key#value]` | `agent-backend` (installed by `install`) |
 
-**2.x is a static Go binary** (no interpreter, no libc: `CGO_ENABLED=0`, Go standard library only — `go.mod` has no
-`require`, enforced by `tests/test_stdlib_only.py`). Same CLI, environment, config file, output formats, messages, exit
-codes, timeouts/retries and Agent protocol as the retired 1.x Python script `dsv_fetch.py` (removed in observability
-package 4.0.0, together with every Python caller); the Python test suite under `tests/` is the black-box
-**conformance suite** that proved the port identical and now runs against the binary (see *Build, test*). The binary runs in the distroless image,
-copied into the Datadog Agent container (any distro), on Linux VMs (amd64/arm64) and as a Win32 executable on Windows.
+A static Go binary (`CGO_ENABLED=0`, standard library only - `go.mod` has no `require`, enforced by
+`tests/test_stdlib_only.py`). The Python suite under `tests/` is a black-box **conformance suite** run against the
+binary. The binary runs in the distroless image, copied into the Datadog Agent container (any distro), on Linux VMs
+(amd64/arm64) and as a Win32 executable on Windows.
 
-## Distribution contract (2.0.0 — other components rely on it)
+## Distribution contract (other components rely on it)
 
 | Deliverable | Where | Details |
 |---|---|---|
@@ -34,21 +32,12 @@ to `VERSION`, the `Dockerfile` and `build.sh` by `tests/test_pins.py`.
 
 Consumers:
 
-* **Kubernetes / ACI / ACA (Agent secret backend)**: an init container from the image runs
-  `dsv-fetch install --dest /dsv-bin/dsv-fetch` (as the Agent's uid — root in the Agent container — or with
-  `--owner <user>` as root) into a shared in-memory volume (`emptyDir: {medium: Memory}`; must not be `noexec`), the Agent
-  container mounts it read-only and sets `DD_SECRET_BACKEND_COMMAND=/dsv-bin/dsv-fetch`,
-  `DD_SECRET_BACKEND_ARGUMENTS=agent-backend`. The image has no `cp`; `install` copies the running binary itself.
+* **Datadog Agent secret backend** (containers, VMs, Windows): see *Datadog Agent `secret_backend_command`* below. The
+  image has no `cp`; `install` copies the running binary itself.
 * **Init containers for third-party tools** (Fluent Bit, OTel collector, serverless-init): `dsv-fetch init ...`
   (entrypoint is the binary; `args: ["init", ...]`). **Refresher container** (ACI, ACA dedicated profiles: init
   containers get no managed identity): `args: ["init", ..., "--refresh-seconds", "3600"]` keeps running and re-resolves
-  every hour (after a failure every `--retry-seconds`, default 30) with a fresh token (it replaced the 1.x Python
-  refresher stub; the flag is `--refresh-seconds`, there is no `--refresh`).
-* **Linux VM/VMSS**: as root `./dsv-fetch-linux-<arch> install --dest /opt/dsv-fetch/dsv-fetch --owner dd-agent`
-  (verify `sha256sum --check --ignore-missing SHA256SUMS` first).
-* **Windows**: as Administrator `dsv-fetch-windows-amd64.exe install --dest "C:\ProgramData\dsv-fetch\dsv-fetch.exe" [--owner ddagentuser]`
-  then `secret_backend_command: C:\ProgramData\dsv-fetch\dsv-fetch.exe`, `secret_backend_arguments: [agent-backend, --config, ...]`,
-  `api_key: ENC[dsv://...]` — the key is never written into `datadog.yaml`.
+  every hour (after a failure every `--retry-seconds`, default 30) with a fresh token.
 
 ## Interface (stable — deployments and modules rely on it)
 
@@ -56,7 +45,7 @@ Consumers:
 dsv-fetch init --out DIR --format files|env-yaml|dotenv
                [--map NAME=dsv://path#element]... [--map-file FILE.json] [--from-env]
                [--env-yaml-name fluentbit-env.yaml] [--dotenv-name .env] [--file-mode 0400|0440|0444] [--config FILE.json]
-               [--refresh-seconds N [--retry-seconds 30]]                                    (2.x addition)
+               [--refresh-seconds N [--retry-seconds 30]]
 dsv-fetch agent-backend [--config FILE.json]
 dsv-fetch install --dest PATH [--owner dd-agent] [--python IGNORED]
 dsv-fetch version
@@ -72,8 +61,7 @@ dsv-fetch version
   (temp file in DIR + rename), so a restarted init container replaces its 0400 files. DIR is created 0700 if missing.
 * stderr: one JSON summary line on success (`names`, `files`, `mode` — never values); `dsv-fetch: NAME: <reason>` per
   failure (reason = status/error class, e.g. `DSV secret read failed (access denied, HTTP 403)`).
-* **agent-backend** implements the Datadog Agent secret-backend protocol (verified on docs.datadoghq.com
-  "Secrets Management", 2026-10-09): stdin `{"version": "1.0", "secrets": ["<handle>", ...]}` → stdout
+* **agent-backend** implements the Datadog Agent secret-backend protocol: stdin `{"version": "1.0", "secrets": ["<handle>", ...]}` → stdout
   `{"<handle>": {"value": "<secret>"|null, "error": null|"<message>"}}`. Handles are the text inside `ENC[...]`, i.e.
   `dsv://...` references. Per-handle failures are returned in `error` with exit 0 (the Agent ignores only the affected
   settings); a malformed request exits 1 with a value-free stderr line. Nothing is ever written to stderr that contains a
@@ -84,7 +72,7 @@ dsv-fetch version
   with inheritance removed and exactly three grants — `--owner` (default `ddagentuser`) read+execute, SYSTEM and
   Administrators full control — set with `icacls.exe` (`/inheritance:r /grant:r <owner>:(RX) *S-1-5-18:(F) *S-1-5-32-544:(F)`;
   `icacls` instead of `golang.org/x/sys/windows` keeps the module standard-library only) on the temp file before the
-  rename; needs an elevated installer. `--python` is accepted and **ignored** (1.x compatibility). stderr: one JSON line
+  rename; needs an elevated installer. `--python` is accepted and ignored. stderr: one JSON line
   `{"dsv_fetch": "install", "dest": ..., "mode": "0500"|"acl", "owner": <name or uid>}`. Unknown user: exit 2.
 * Exit codes: `0` ok, `1` resolution failure / malformed Agent request, `2` usage or configuration error.
 
@@ -134,7 +122,7 @@ containers:
   Fluent Bit as 65532 with files owned by 65532); OTel collector-contrib image runs as **10001** → `runAsUser: 10001`
   for dsv-fetch (verified). Alternative for a different uid: `--file-mode 0440` + shared `fsGroup`.
 * The init container needs no writable root filesystem (`readOnlyRootFilesystem: true` verified), no capabilities, no shell.
-* Fluent Bit facts verified with `fluent/fluent-bit:5.1.3` (docker, 2026-10-09): a YAML file holding only an `env:` section
+* Fluent Bit facts verified with `fluent/fluent-bit:5.1.3` (docker): a YAML file holding only an `env:` section
   can be listed under `includes:` (top or bottom of the main file — position does not matter) and `${DD_API_KEY}` anywhere
   in the main config resolves from it; the included `env:` value **wins over a process environment variable of the same
   name**; `includes:` paths are **not** variable-expanded (`${VAR}` in an include path → "No such file or directory");
@@ -148,12 +136,12 @@ containers:
 
 ## Datadog Agent `secret_backend_command`
 
-Agent requirements (docs.datadoghq.com "Secrets Management", re-read 2026-10-10): Linux — the executable must belong to
+Agent requirements ([Secrets Management](https://docs.datadoghq.com/agent/configuration/secrets-management/)): Linux — the executable must belong to
 the user running the Agent (`dd-agent`, or `root` inside a container), have **no rights for group or other**, and at least
 execute for the owner; Windows — a valid **Win32 application**, read or execute for `ddagentuser`, and no rights for any
 other user or group except Administrators and LocalSystem. `dsv-fetch install` produces exactly that:
 
-* **VM / VMSS (Linux)**: bootstrap (as root):
+* **VM / VMSS (Linux)**: bootstrap (as root, after `sha256sum --check --ignore-missing SHA256SUMS`):
   `dsv-fetch-linux-amd64 install --dest /opt/dsv-fetch/dsv-fetch --owner dd-agent`
   then in `datadog.yaml`: `secret_backend_command: /opt/dsv-fetch/dsv-fetch`, `secret_backend_arguments: ["agent-backend", "--config", "/etc/datadog-agent/dsv-fetch.json"]`,
   `api_key: ENC[dsv://eh/dev/datadog-api-key#value]`. `/etc/datadog-agent/dsv-fetch.json` (`{"DSV_TENANT": "...", "AZURE_CLIENT_ID": "..."}`,
@@ -163,10 +151,10 @@ other user or group except Administrators and LocalSystem. `dsv-fetch install` p
   read-only in the agent container; `DD_SECRET_BACKEND_COMMAND=/dsv-bin/dsv-fetch`, `DD_SECRET_BACKEND_ARGUMENTS=agent-backend`.
   The emptyDir must not be mounted `noexec`.
 * **Windows hosts**: `dsv-fetch-windows-amd64.exe install --dest <dir>\dsv-fetch.exe --owner ddagentuser` (elevated), then
-  `secret_backend_command: <dir>\dsv-fetch.exe` (see *Distribution contract*). Check with `& "$env:ProgramFiles\Datadog\Datadog Agent\bin\agent.exe" secret`.
+  `secret_backend_command: <dir>\dsv-fetch.exe`; the key is never written into `datadog.yaml`. Check with `& "$env:ProgramFiles\Datadog\Datadog Agent\bin\agent.exe" secret`.
   Cross-compiled and `go vet`-ed for windows/amd64 here; **not executed on Windows** in this repository's tests.
 
-Verified locally with `datadog/agent:7.84.2` (docker, internal network, mock DSV + fake IMDS; 2.0.0 Go binary, 2026-10-10):
+Verified locally with `datadog/agent:7.84.2` (docker, internal network, mock DSV + fake IMDS):
 `install` wrote `/dsv-bin/dsv-fetch` as `500 root`, and the Agent's series/sketches requests to the fake intake carried the
 key resolved through the binary as `secret_backend_command` (no request with another key).
 
@@ -199,7 +187,7 @@ Layout: `cmd/dsv-fetch` (main, `-X main.version`), `internal/dsvfetch` (CLI with
 client, Python-`json.dumps`-compatible output, platform files for install/ACL), `build.sh`, `VERSION`.
 Module path `enterprise-hello/dsv-fetch` (neutral: no hosting-specific prefix, so the vendored package stays portable).
 
-### Callers (package 4.0.0 — all use the binary; the 1.x Python script and its embedding are gone)
+### Callers
 
 | Caller | How |
 |---|---|
@@ -218,10 +206,3 @@ Module path `enterprise-hello/dsv-fetch` (neutral: no hosting-specific prefix, s
 * Windows: built and vetted, not executed in CI here; no Azure Arc managed identity.
 * Workload-identity tokens with DSV: not verified (see above).
 * Nothing here has run against real DSV or Azure (status: implemented / locally-verified).
-
-Docs: [Datadog secrets management](https://docs.datadoghq.com/agent/configuration/secrets-management/),
-[Azure IMDS managed identity](https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/how-to-use-vm-token),
-[App Service managed identity endpoint](https://learn.microsoft.com/azure/app-service/overview-managed-identity),
-[Fluent Bit YAML configuration](https://docs.fluentbit.io/manual/administration/configuring-fluent-bit/yaml),
-[OTel collector config providers](https://opentelemetry.io/docs/collector/configuration/#environment-variables),
-Delinea DSV "Authentication: Azure".

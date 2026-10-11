@@ -69,15 +69,7 @@ variable "obs_telemetry_transport" {
 }
 
 variable "resources" {
-  description = <<-EOT
-    Resources to export diagnostics from, assembled by the PIPELINE (no state reads) from every enabled
-    platform-* / deploy-* contract: tools/contracts/materialize.py emits resources.auto.tfvars.json with one
-    entry per resource id found in those contracts, keyed "<contract>.<path>", with
-      type          : informational (the module re-derives it from the id)
-      app_log_route : eventhub for App Service / Functions / Logic Apps Standard sites, sidecar for ACA
-                      environments (apps use the Fluent Bit sidecar), daemonset for AKS, host for VMs, else none
-      location      : the resource region (cross-region resources are rejected - Event Hub must be local)
-  EOT
+  description = "Explicit resources (keyed \"<contract>.<path>\", from tools/contracts/materialize.py) with type, app_log_route and location; merged last over the discovered targets."
   type = map(object({
     id            = string
     type          = optional(string)

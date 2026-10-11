@@ -1,10 +1,5 @@
-# Specialized compute workloads:
-#   Service Fabric managed cluster  hello-inventory-api guest executable  (azurerm has no SF application resources:
-#                                   manifests rendered here, deployed by scripts/deploy-sf.sh with sfctl)
-#   ARO                             hello-catalog-api                    (Helm values rendered here for applications/charts/hello-service;
-#                                   scripts/deploy-aro.sh: helm upgrade --install, rollback on failure)
-#   Confidential VM                 hello-worker                         (managed run command)
-#   Automation                      python3 health-probe runbook          (azurerm_automation_runbook + job schedule)
+# Specialized compute: Service Fabric guest executable (manifests for scripts/deploy-sf.sh), ARO (Helm values for
+# scripts/deploy-aro.sh), confidential VM worker (run command) and an Automation health-probe runbook.
 module "meta" {
   source = "../modules/service-meta"
 }
@@ -72,15 +67,8 @@ locals {
 }
 
 # ---------------------------------------------------------------- ARO (Helm values for the shared chart)
-# The same chart and secrets mode as core-aks on AKS (applications/charts/hello-service) with OpenShift values: no fixed
-# runAsUser (the restricted-v2 SCC assigns the UID; it allows the projected service account token volume), a Route
-# instead of an Ingress. Secrets (ADR-0001 section 14): secretsMode=dsv - secret settings are dsv:// references the app
-# resolves at start-up with its Entra workload identity: platform-aro federates the foundation-identity
-# hello-catalog-api identity with the managed-identity cluster's OIDC issuer for the service account published in its
-# contract (workload_identities), and the OpenShift pod-identity webhook (openshift-cloud-credential-operator) injects
-# AZURE_* env + the projected token into pods of an annotated service account labelled azure.workload.identity/use.
-# No Key Vault, no Kubernetes Secret. Terraform renders the values; scripts/deploy-aro.sh installs them (the ARO API
-# needs an OpenShift login, which Terraform does not hold).
+# Same chart and secretsMode=dsv as core-aks, with OpenShift values (SCC-assigned UID, Route). The workload identity is
+# federated by platform-aro; scripts/deploy-aro.sh installs (Terraform holds no OpenShift login).
 locals {
   aro_wi          = try(local.aro.workload_identities["hello-catalog-api"], null)
   aro_client_id   = try(local.aro_wi.client_id, null)

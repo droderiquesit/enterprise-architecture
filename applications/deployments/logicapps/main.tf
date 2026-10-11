@@ -39,7 +39,7 @@ locals {
   identity = var.foundation_identity.identities[local.svc]
   sb       = var.platform_messaging
   as       = var.platform_appservice
-  suffix   = module.naming.suffix
+  suffix   = module.common.suffix
 
   consumption = var.settings.consumption_enabled
   la_plan     = try(local.as.plans["logicapps"], null)

@@ -20,9 +20,7 @@ variable "foundation_network" {
     topology            = optional(string, "single-spoke")
     spoke_vnet_id       = string
     spoke_address_space = optional(list(string), ["10.41.0.0/16"])
-    subnets = map(object({
-      id = string
-    }))
+    subnets             = map(object({ id = string }))
   })
 }
 

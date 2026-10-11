@@ -1,8 +1,5 @@
-# The Datadog API key never passes through this root: the node Agents, the Cluster Agent and the cluster-checks runners
-# resolve api_key ENC[dsv://...] at run time with the static dsv-fetch binary as secret backend (init container
-# dsv-fetch-install, image = registry artifact img-dsv-fetch), and the Fluent Bit fallback reads it through a dsv-fetch
-# init container - all with AKS workload identity, which this root federates with the service accounts below
-# (platform-aks federates only one service account per identity). ADR-0001 section 14.
+# The API key never passes through this root: Agents and the Fluent Bit fallback read DSV with AKS workload identity,
+# federated below (platform-aks federates only one service account per identity).
 locals {
   collector = var.foundation_identity.identities[var.settings.collector_identity_key]
   # DBM (settings.dbm = auto): the platform-db contracts of this environment become cluster checks of the Cluster

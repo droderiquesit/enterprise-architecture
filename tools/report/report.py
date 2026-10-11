@@ -21,7 +21,6 @@ Component status (ADR §11 vocabulary, per this run's evidence only):
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import re
 import sys
@@ -30,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.changeset.store import open_store  # noqa: E402
+from tools.common import utc_now  # noqa: E402
 
 
 def _latest(run_dir: Path, pattern: str) -> dict:
@@ -109,7 +109,7 @@ def cmd_deployment(args) -> int:
         }
     evidence = {
         "schema_version": 1, "environment": args.env, "run_id": args.run_id, "commit": args.commit,
-        "mode": sel.get("mode"), "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "mode": sel.get("mode"), "generated_at": utc_now(),
         "components": comps, "retirements": sel.get("retirements", []),
         "telemetry": (run["telemetry"] or {}).get("status", "not-run"),
     }

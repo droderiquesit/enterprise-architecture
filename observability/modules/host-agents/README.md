@@ -1,6 +1,6 @@
 # modules/host-agents
 
-Installs the Datadog Agent on VMs and VM scale sets, Linux and Windows (observability 4.0.0). It uses **Azure VM
+Installs the Datadog Agent on VMs and VM scale sets, Linux and Windows. It uses **Azure VM
 Applications** and **Azure Policy**. There is no per-host Terraform: no run commands, no CustomScript extensions,
 no `for_each` over hosts.
 
@@ -9,15 +9,14 @@ no `for_each` over hosts.
 | Package | [`host-agent-package`](../host-agent-package/README.md) | Compute Gallery, VM Applications `datadog-agent-linux` / `datadog-agent-windows` (optional `-linux-arm64`), one immutable version per `package.version`, private package storage (managed identity, no SAS) |
 | Enrolment (default `mode = "policy"`) | [`host-agent-policy`](../host-agent-policy/README.md) | DeployIfNotExists initiative on VMs / VMSS tagged `datadog:enabled = true`: attaches the per-environment **DSV-reader identity** and the **pinned version**; least-privilege custom role; remediation tasks |
 | Escape hatch `mode = "direct"` | this module | for environments **without Azure Policy rights**: one `azurerm_virtual_machine_gallery_application_assignment` per VM in `hosts` (same application, same version). Scale sets have no assignment resource in azurerm, so `vmss_gallery_applications` gives each one's `gallery_application {version_id, order}` block for its platform root. In this mode the hosts must already carry the DSV-reader identity. |
-| Service Fabric managed cluster node types (4.1.0, any mode) | this module | one `azapi_update_resource` per entry of `service_fabric_node_types`: sets the node type's own `properties.vmApplications` (`Microsoft.ServiceFabric/managedClusters/nodeTypes@2026-02-01`) to the same pinned version (`order = 10`, no automatic upgrade, an install failure does not fail the node type upgrade); `enabled = false` sends an empty list (Agent removed). Node types are VMSS in the Microsoft-managed `SFC_` resource group that only the node type API may change, so the policy cannot enrol them. The node type must already carry the DSV-reader identity (`vmManagedIdentity`, set by the cluster's owner). |
+| Service Fabric managed cluster node types (any mode) | this module | one `azapi_update_resource` per entry of `service_fabric_node_types`: sets the node type's own `properties.vmApplications` (`Microsoft.ServiceFabric/managedClusters/nodeTypes@2026-02-01`) to the same pinned version (`order = 10`, no automatic upgrade, an install failure does not fail the node type upgrade); `enabled = false` sends an empty list (Agent removed). Node types are VMSS in the Microsoft-managed `SFC_` resource group that only the node type API may change, so the policy cannot enrol them. The node type must already carry the DSV-reader identity (`vmManagedIdentity`, set by the cluster's owner). |
 
 ## Why VM Applications instead of run command / CustomScript
 
 * A scale set can carry only one CustomScript extension, which conflicts with application owners. VM Applications
   are separate entries in `applicationProfile`, up to 25 per VM, with an install `order`.
 * Versions are immutable and promoted dev -> test -> prod by bumping the version per environment. One version of an
-  application per VM; update and remove commands exist (Microsoft Learn,
-  https://learn.microsoft.com/azure/virtual-machines/vm-applications).
+  application per VM; update and remove commands exist.
 * New VMSS instances get the application from the scale-set model, and new VMs get it from the policy.
 * Packages come from Azure-managed replicas, so hosts need no access to the package storage.
 
@@ -61,11 +60,9 @@ one per host, which per-host Terraform would need.
 * Windows Event Log: `host_logs.windows.event_channels` (default `System`, `Application`; add `Security` if
   needed) as `type: windows_event`.
 * Destination: the Observability Pipelines Worker (`observability_pipelines_worker.logs.url`) in
-  `observability_pipelines` mode, otherwise the Datadog intake. With `log_pipeline = fluent_bit_direct` hosts still
-  use the Agent; Fluent Bit is not installed on VMs in 4.0.
-* Migration from 3.x: the setup script disables and removes the 3.x `fluent-bit-eh` service, the 3.x
-  `eh-observability.conf` drop-ins (Linux) or Machine `DD_*` variables (Windows) that would override
-  `datadog.yaml`, and the old `eh-applogs.d` config. This keeps one collector per log line.
+  `observability_pipelines` mode, otherwise the Datadog intake. Hosts use the Agent even with
+  `log_pipeline = fluent_bit_direct`; the setup script removes the 3.x `fluent-bit-eh` service and overrides
+  (see `UPGRADING.md`).
 
 ## Traces and metrics
 
@@ -127,13 +124,3 @@ Outputs: `mode`, `gallery`, `applications`, `agent_version`, `enrollment_tag`, `
   `vmManagedIdentity.userAssignedIdentities` (the SF resource provider needs *Managed Identity Operator* on it) and
   never send `properties.vmApplications` from the cluster's root (azapi `ignore_body_changes`; azurerm 5.9
   `azurerm_service_fabric_managed_cluster` re-PUTs node types without it). The lab's `platform-servicefabric` does both.
-
-## Tests
-
-* `tests/hosts.tftest.hcl` (mock providers): policy mode by default; direct mode (VM assignments, VMSS blocks);
-  arm64 without an arm64 application; resource-id / kind validation; literal API key; Service Fabric node types
-  (same version id, disabled = empty list, VMSS id rejected).
-* The package and policy modules have their own tests (installer execution in ubuntu:24.04 and pwsh, policy rule and
-  RBAC).
-
-Status: implemented (static validation, mock-provider tests, local installer runs). Not deployed or verified live.

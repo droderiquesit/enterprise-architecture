@@ -38,6 +38,7 @@ from typing import Callable, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.changeset.store import Store, open_store  # noqa: E402
+from tools.common import utc_now  # noqa: E402
 
 RUNNING = {"notstarted", "inprogress", "cancelling", "postponed"}
 
@@ -90,7 +91,7 @@ def current_job() -> dict:
     return {"build_id": os.environ.get("BUILD_BUILDID", "local"), "job_id": os.environ.get("SYSTEM_JOBID", ""),
             "job_name": os.environ.get("SYSTEM_JOBNAME", ""), "job_attempt": int(os.environ.get("SYSTEM_JOBATTEMPT", "1") or 1),
             "stage": os.environ.get("SYSTEM_STAGENAME", ""),
-            "started_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+            "started_at": utc_now()}
 
 
 def ado_build_status(build_id: str) -> tuple[str, str]:

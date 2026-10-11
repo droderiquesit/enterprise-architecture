@@ -17,18 +17,8 @@ variable "environment" {
 variable "foundation_network" {
   description = "foundation-network contract v1 (catalog/contracts/foundation-network.v1.schema.json), only the fields used here."
   type = object({
-    resource_group_name = string
-    location            = string
-    spoke_vnet_id       = string
-    subnets = map(object({
-      id             = string
-      name           = string
-      address_prefix = string
-    }))
-    private_dns_zones = optional(map(object({
-      id   = string
-      name = string
-    })), {})
+    subnets           = map(object({ id = string, name = string }))
+    private_dns_zones = optional(map(object({ id = string, name = string })), {})
   })
 }
 
@@ -38,7 +28,6 @@ variable "foundation_identity" {
     identities = map(object({
       id           = string
       principal_id = string
-      client_id    = string
       name         = string
     }))
   })

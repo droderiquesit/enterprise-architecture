@@ -17,7 +17,7 @@ locals {
   rg       = local.fx.resource_group_name
   fx_loc   = coalesce(local.fx.location, local.location)
   identity = var.foundation_identity.identities[try(local.fx.premium.identity, "hello-functions")]
-  suffix   = module.naming.suffix
+  suffix   = module.common.suffix
   fn       = var.settings.function_names
 
   private = var.settings.network_mode == "private-endpoint" || (var.settings.network_mode == "auto" && var.foundation_network != null)

@@ -14,7 +14,7 @@ Datadog-side configuration for the Azure platform / control-plane logs shipped b
 
 ## Index order (read before `index.enabled = true`)
 Datadog stores each log in the **first** index whose filter matches (Datadog docs). Datadog's docs do not say where
-an index created through the API is placed (checked 2026-10-09). Assume it lands **behind** existing indexes. If a
+an index created through the API is placed. Assume it lands **behind** existing indexes. If a
 catch-all index (filter `*`, usually `main`) comes first, the new index receives nothing and its retention, quota and
 exclusion filters never apply. Use one of these:
 1. `index_order = { manage = true, indexes = [<every index of the org, in order>] }`. This module then owns the
@@ -38,15 +38,3 @@ archive definition.
 
 ## Removal
 Destroy removes the Datadog objects. Indexed logs follow the index retention, and archived files stay in storage.
-
-## Tests
-`tests/log_management.tftest.hcl` (mock Datadog provider): defaults create only the dashboard; everything enabled
-(index filter, retention, quota, exclusions, order, metrics with bounded group-bys, preserve-source pipeline,
-archive, Entra widgets); negative tests (index order without the index, archive without a target, invalid retention).
-
-## References (checked 2026-10-09)
-- https://docs.datadoghq.com/logs/log_configuration/indexes/
-- https://docs.datadoghq.com/logs/log_configuration/logs_to_metrics/
-- https://docs.datadoghq.com/logs/log_configuration/archives/
-- https://registry.terraform.io/providers/DataDog/datadog/4.25.0/docs/resources/logs_index
-- https://github.com/DataDog/integrations-core/blob/master/azure_active_directory/assets/logs/azure.activedirectory.yaml

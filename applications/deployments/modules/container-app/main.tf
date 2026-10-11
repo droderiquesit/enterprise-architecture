@@ -1,10 +1,5 @@
-# One Container App with: user-assigned identity (ACR pull + Delinea DSV reads), digest-pinned image, env (secret
-# settings carry dsv:// references the app resolves at start-up - ADR-0001 §14), /healthz + /readyz probes, HTTP
-# scale rule, the observability sidecar patch (modules/instrumentation container_app_patch): by default the Datadog
-# serverless-init sidecar (traces, DogStatsD, the app log file on a shared EmptyDir) whose Datadog key is read from
-# DSV by the dsv-fetch binary an init container installs; with log_pipeline = fluent_bit_direct a Fluent Bit sidecar
-# whose key a dsv-fetch init / refresher container writes. Multiple-revision traffic weights for rollback.
-# No Key Vault references, no secret values: Container Apps "secrets" carry only the (non-secret) Fluent Bit config files.
+# One Container App (see README): identity, digest-pinned image, probes, scale rule, observability sidecar patch,
+# multiple-revision traffic weights. Container Apps "secrets" carry only non-secret sidecar config files.
 locals {
   patch       = var.sidecar_patch
   has_sidecar = local.patch != null && try(length(local.patch.sidecars), 0) > 0

@@ -1,13 +1,5 @@
-# Datadog Agent for VMs / VM scale sets as Azure VM Applications (Azure Compute Gallery), one application per OS:
-#   package (mediaLink)                     = the dsv-fetch static binary for the OS / architecture (release file,
-#                                             checked against SHA256SUMS here and on the host)
-#   configuration (defaultConfigurationLink) = the rendered, NON-secret setup script (pinned Agent version, site,
-#                                             api_key: ENC[dsv ref], log collection, SSI, OTLP, tags, DSV endpoint
-#                                             and the client id of the environment's DSV-reader identity)
-# A version is immutable: any content change needs a new var.package_version (guarded below). Publishing reads the
-# blobs through the gallery's user-assigned identity (plain blob URLs, no SAS anywhere; storage account without
-# shared keys or anonymous access). Which VMs / VMSS get the application is decided by modules/host-agent-policy
-# (Azure Policy) or, without policy rights, modules/host-agents mode = "direct".
+# Datadog Agent for VMs / VMSS as Azure VM Applications: package = the dsv-fetch binary, configuration = the rendered,
+# non-secret setup script. Versions are immutable (content guard below); blobs are read through the gallery identity.
 locals {
   rg_name         = element(split("/", var.resource_group_id), 4)
   gallery_id      = "${var.resource_group_id}/providers/Microsoft.Compute/galleries/${var.names.gallery}"
@@ -203,8 +195,7 @@ resource "azurerm_user_assigned_identity" "publisher" {
   tags                = merge(var.tags, { purpose = "Azure Compute Gallery publisher (reads Datadog VM Application packages)" })
 }
 
-# Microsoft Learn (vm-applications-publish-with-managed-identity): the gallery identity needs Storage Blob Data
-# Contributor on the package storage; scoped here to the one container.
+# the gallery identity needs Storage Blob Data Contributor; scoped to the one container
 resource "azurerm_role_assignment" "gallery_reads_packages" {
   scope                = azurerm_storage_container.packages.id
   role_definition_name = "Storage Blob Data Contributor"
@@ -243,8 +234,7 @@ resource "azurerm_gallery_application" "agent" {
 }
 
 # ---------------------------------------------------------------------------------------------- blobs (current version)
-# Content-addressed names: a new binary / installer is a new blob; the gallery keeps its own replicas, so blobs of
-# older versions may be removed (Microsoft Learn: the source blob can be deleted after replication).
+# Content-addressed names; the gallery keeps its own replicas, so blobs of older versions may be removed.
 resource "azurerm_storage_blob" "package" {
   for_each             = local.apps
   name                 = "${each.value.name}/${var.package_version}/${substr(coalesce(local.binary_sha256[each.key], "0000000000000000"), 0, 16)}/${each.value.package_file}"

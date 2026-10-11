@@ -25,6 +25,3 @@
   org's retention. Recreating it yields a new application id/token -> redeploy the frontend.
 - **Networking**: Datadog SaaS API only (HTTPS egress from the deployment agent).
 - **Limitations**: one Datadog org/site per environment.
-- **Docs**: https://registry.terraform.io/providers/DataDog/datadog/latest/docs/resources/rum_application ,
-  https://docs.datadoghq.com/real_user_monitoring/browser/setup/ , https://docs.datadoghq.com/account_management/api-app-keys/#client-tokens
-- **Checks**: `terraform init -backend=false && terraform validate && terraform test` (mock provider).

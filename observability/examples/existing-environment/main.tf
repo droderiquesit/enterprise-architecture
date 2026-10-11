@@ -1,13 +1,5 @@
-# Consumer root for an EXISTING environment (package 3.0.0). Uses only the vendored, versioned package release
-# (./vendor.sh -> ./.vendor/observability-<version>/). It CONNECTS existing resources to Datadog with the package tag
-# policy: Datadog-side collection objects (Azure integration, Observability Pipelines pipeline, RUM application),
-# diagnostic settings on the supplied resources, the Datadog Agent / Observability Pipelines Worker on the existing
-# AKS cluster (layered Helm values + dsv-fetch post-renderer, one DSV secret path), DBM cluster checks, optionally
-# the VM / VMSS Agent via Azure Policy + VM Applications (host_agents, policy mode) and the instrumentation settings
-# the application owners apply. Azure resources are
-# referenced by the ids written in manifests/<env>/*.yaml and are never created, changed or destroyed here.
-# Monitors, SLOs and dashboards are not part of the package (they exist in your organisation; extras/content in the
-# source repository holds the optional 2.x content modules).
+# Consumer root for an EXISTING environment, using only the vendored package release (./vendor.sh). Azure resources
+# are referenced by the ids in manifests/<env>/*.yaml and never created, changed or destroyed here.
 locals {
   rendered_dir = "${path.module}/rendered/${var.env}"
   services     = [for f in sort(fileset(local.rendered_dir, "*.json")) : jsondecode(file("${local.rendered_dir}/${f}"))]

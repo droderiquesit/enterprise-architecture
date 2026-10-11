@@ -1,13 +1,5 @@
-# Datadog Agent on VMs and VM scale sets (observability 4.0.0): Azure VM Applications + Azure Policy, no per-host
-# Terraform, no run commands, no CustomScript extensions.
-#   modules/host-agent-package : Azure Compute Gallery, VM Applications datadog-agent-linux / datadog-agent-windows,
-#                                versions = dsv-fetch binary (package) + rendered setup script (configuration)
-#   modules/host-agent-policy  : (mode = policy) DeployIfNotExists initiative on VMs / VMSS tagged datadog:enabled:
-#                                attaches the per-environment DSV-reader identity and the pinned application version
-#   mode = direct              : escape hatch without Azure Policy rights - one gallery application assignment per VM
-#                                (same application, same version); VMSS models are set by their platform root
-# Secrets: the Agent on the host resolves api_key: ENC[dsv://...] with the dsv-fetch binary as secret backend
-# (Linux and Windows); nothing secret in Terraform state, the gallery, the policy or the VM model (ADR-0001 §14).
+# Datadog Agent on VMs / VMSS: host-agent-package + host-agent-policy (mode = policy) or per-VM assignments
+# (mode = direct), plus Service Fabric managed cluster node types.
 module "package" {
   source = "../host-agent-package"
 
@@ -85,14 +77,9 @@ resource "azurerm_virtual_machine_gallery_application_assignment" "direct" {
 }
 
 # ------------------------------------------------------------------- Service Fabric managed cluster node types
-# Node types are VMSS in the Microsoft-managed SFC_ resource group: the RP owns their model and changes to them go
-# through the node type API only (Learn: managed-cluster-deny-assignment, how-to-managed-cluster-configuration), so the
-# Azure Policy above cannot enrol them. The node type's own vmApplications list (Microsoft.ServiceFabric 2026-02-01)
-# gets the SAME VM Application version as every other host, independent of mode. The DSV-reader identity is attached
-# by the platform root (node type vmManagedIdentity); it never sends vmApplications (azapi ignore_body_changes), so
-# this list is owned here (ADR-0001 section 3 rule 3, amended for observability 4.1.0). azapi_update_resource GETs the
-# node type, sets properties.vmApplications and PUTs it back; the RP rolls it out upgrade domain by upgrade domain.
-# enabled = false sends an empty list (the VM Application `remove` action uninstalls the Agent).
+# Node types live in the Microsoft-managed SFC_ resource group and change only through the node type API, so the
+# policy cannot enrol them; this module owns their vmApplications list (ADR-0001 §3 rule 3). enabled = false sends
+# an empty list (the VM Application `remove` action uninstalls the Agent).
 locals {
   sf_app_key = { for k, n in var.service_fabric_node_types : k => n.os_type == "windows" ? "windows" : (n.arch == "arm64" ? "linux_arm64" : "linux") }
 }

@@ -10,23 +10,17 @@
               and the artifact's record (<env>/<component>.json, kind artifact)
   promote     (environments after the first of a promotion chain) copy the image digest / package sha256 the
               `promote_from` environment recorded for the SAME source fingerprint; never builds; fails if missing
-  unpack      for a deploy root that consumes a zip-package as FILES (UNPACK below, e.g. obs-hosts: the img-dsv-fetch
-              release binaries become VM Application packages): resolve the artifact like `tfvars`, download its
-              package_url from the packages store (Entra ID auth), verify package_sha256 and the SHA256SUMS inside,
-              extract into <root>/<dest> (git-ignored). No-op for other roots.
-  tfvars      for a deploy root: write <root>/artifacts.auto.tfvars.json with
-              artifacts = {<artifact component id> = {name, image, digest, package_url, package_sha256,
-              source_fp, tag}} when the root declares `variable "artifacts"`; print the sha256.
-              Artifacts built by the OTHER pipeline scope (--recorded, e.g. img-dsv-fetch of the platform pipeline
-              consumed by applications roots) come from their deployment record <env>/<artifact>.json
-              (artifact_metadata), which must be `succeeded` for the artifact's CURRENT source fingerprint
-              (selection document) - otherwise the plan fails instead of deploying a stale digest.
+  unpack      for a root in UNPACK (consumes a zip-package as files): resolve like `tfvars`, download, verify
+              package_sha256 and SHA256SUMS, extract into <root>/<dest> (git-ignored). No-op for other roots.
+  tfvars      write <root>/artifacts.auto.tfvars.json (artifacts = {<id> = {name, image, digest, package_url,
+              package_sha256, source_fp, tag, version}}) when the root declares `variable "artifacts"`; print the sha256.
+              --recorded artifacts (built by the OTHER pipeline scope) come from their deployment record, which must be
+              `succeeded` for the artifact's CURRENT source fingerprint - otherwise the plan fails (no stale digest).
 """
 
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import hashlib
 import json
 import os
@@ -44,6 +38,7 @@ from tools.changeset.registry import load_registry  # noqa: E402
 from tools.changeset.store import open_store  # noqa: E402
 from tools.changeset.trees import WorkTree  # noqa: E402
 from tools.config.lib import declared_variables  # noqa: E402
+from tools.common import utc_now  # noqa: E402
 
 FIXED_TS = (2020, 1, 1, 0, 0, 0)
 SKIP_DIRS = {"tests", "test", "__pycache__", ".pytest_cache", ".venv", "node_modules", ".git"}
@@ -94,6 +89,13 @@ def _run(cmd) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
+def _write_meta(out: Path, meta: dict) -> Path:
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / "build-metadata.json"
+    path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    return path
+
+
 def cmd_tag(args) -> int:
     print(tag_for(_selection(args.selection), args.component))
     return 0
@@ -108,10 +110,8 @@ def cmd_resolve(args) -> int:
     store = open_store(args.packages_url) if any(f in ZIP_FORMATS for f in formats) else None
     for fmt in formats:
         if fmt == "container-image":
-            proc = _run(["az", "acr", "manifest", "show-metadata", "--registry", args.registry,
-                         "--name", f"{args.name}:{tag}", "--query", "digest", "-o", "tsv", "--only-show-errors"])
-            digest = proc.stdout.strip()
-            if proc.returncode != 0 or not digest.startswith("sha256:"):
+            digest = _acr_digest(args.registry, f"{args.name}:{tag}")
+            if not digest.startswith("sha256:"):
                 print(f"{fmt} {args.name}:{tag} not found - will build")
                 return 0
             repo = f"{args.registry}.azurecr.io/{args.name}"
@@ -123,9 +123,7 @@ def cmd_resolve(args) -> int:
                 print(f"{fmt} {key} not found - will build")
                 return 0
             meta.update({"package_url": side.get("package_url"), "package_sha256": side.get("package_sha256")})
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "build-metadata.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    _write_meta(Path(args.out), meta)
     print(f"reusing existing artifact for {args.component} ({tag})")
     print("##vso[task.setvariable variable=ARTIFACT_EXISTS]true")
     return 0
@@ -158,7 +156,7 @@ def _write_record(args, meta: dict, sel: dict) -> None:
         "deploy_fp": entry["deploy_fp"], "fp_parts": entry.get("fp_parts"),
         "commit": os.environ.get("BUILD_SOURCEVERSION", meta.get("commit", "unknown")),
         "run_id": os.environ.get("BUILD_BUILDID", "local"),
-        "finished_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "finished_at": utc_now(),
         "artifact_digests": {args.component: meta.get("digest") or meta.get("package_sha256")},
         "artifact_metadata": {k: v for k, v in meta.items() if k not in ("reused",)},
         "path": entry.get("path"),
@@ -169,10 +167,9 @@ def _write_record(args, meta: dict, sel: dict) -> None:
 def cmd_finalize(args) -> int:
     sel = _selection(args.selection)
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
     existing = out / "build-metadata.json"
-    if existing.exists() and json.loads(existing.read_text()).get("reused"):
-        meta = json.loads(existing.read_text())
+    meta = json.loads(existing.read_text()) if existing.exists() else {}
+    if meta.get("reused"):
         _write_record(args, meta, sel)
         print("artifact reused; record updated")
         return 0
@@ -180,7 +177,7 @@ def cmd_finalize(args) -> int:
     tag = tag_for(sel, args.component)
     meta = {"component": args.component, "name": args.name, "source_fp": sel["components"][args.component]["deploy_fp"],
             "tag": tag, "reused": False, "commit": os.environ.get("BUILD_SOURCEVERSION", "unknown"),
-            "build_time": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "build_time": utc_now(),
             "build_run": os.environ.get("BUILD_BUILDID", "local")}
     try:  # human version <semver>+<build>.<sha7> (tools/deploy/versioning.py); metadata only, deploys use the digest
         from tools.deploy.versioning import for_component
@@ -203,11 +200,12 @@ def cmd_finalize(args) -> int:
     if not img.exists() and not pkg.exists():
         print("ERROR: build produced neither an image nor a package", file=sys.stderr)
         return 1
+    out.mkdir(parents=True, exist_ok=True)
     for extra in ("sbom.spdx.json", "buildx-metadata.json"):
         if (build / extra).exists():
             shutil.copy(build / extra, out / extra)
             meta.setdefault("attachments", []).append(extra)
-    existing.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    _write_meta(out, meta)
     _write_record(args, meta, sel)
     print(json.dumps(meta, indent=2, sort_keys=True))
     return 0
@@ -250,10 +248,10 @@ def promote(component: str, selection: dict, env: str, source_env: str, source_r
         raise PromotionError(f"{component}: '{source_env}' recorded source fingerprint {str(meta.get('source_fp'))[:12]} but "
                              f"this commit needs {fp[:12]} - promote the same commit through '{source_env}' first")
     tag = meta.get("tag") or ("src-" + fp[:24])
+    name = meta.get("name") or component
     out = {k: v for k, v in meta.items() if k not in ("reused", "attachments")}
     if meta.get("digest"):
         digest = meta["digest"]
-        name = meta.get("name") or component
         if _acr_digest(target_registry, f"{name}:{tag}") != digest:
             _acr_import(target_registry, f"{source_registry}.azurecr.io/{name}@{digest}", f"{name}:{tag}")
             got = _acr_digest(target_registry, f"{name}:{tag}")
@@ -262,7 +260,6 @@ def promote(component: str, selection: dict, env: str, source_env: str, source_r
         repo = f"{target_registry}.azurecr.io/{name}"
         out.update({"image": f"{repo}@{digest}", "repository": repo, "digest": digest})
     if meta.get("package_sha256"):
-        name = meta.get("name") or component
         key = f"{name}/{tag}.zip"
         data = source_packages.get_bytes(key)
         if data is None:
@@ -288,9 +285,7 @@ def cmd_promote(args) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         print(f"##vso[task.logissue type=error]{exc}")
         return 1
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "build-metadata.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    _write_meta(Path(args.out), meta)
     print(f"promoted {args.component} from {args.source_env}: digest={meta.get('digest')} sha256={meta.get('package_sha256')}")
     print("##vso[task.setvariable variable=ARTIFACT_EXISTS]true")
     return 0
@@ -335,7 +330,6 @@ def artifacts_tfvars(repo: Path, component: str, metadata_dir: Path, write: bool
             missing.append(a)
             continue
         entries[a] = {k: m.get(k) for k in ("name", "image", "digest", "package_url", "package_sha256", "source_fp", "tag", "commit")}
-        # Deployment roots set DD_VERSION / build metadata from these (version = immutable tag derived from source_fp).
         entries[a]["version"] = m.get("version") or m.get("tag")
     if missing:
         raise SystemExit(f"ERROR: artifact metadata missing for {', '.join(missing)} (Build stage output)")
@@ -403,16 +397,20 @@ def unpack_package(package_url: str, package_sha256: str, dest: Path, store=None
     return names
 
 
+def _tfvars_args(args, write: bool = True):
+    recorded = [a for a in (args.recorded or "").split(",") if a]
+    records = open_store(args.records_url) if recorded and args.records_url else None
+    selection = _selection(args.selection) if args.selection and Path(args.selection).exists() else None
+    return artifacts_tfvars(Path(args.repo).resolve(), args.component, Path(args.metadata_dir), write=write,
+                            recorded=recorded, records=records, env=args.env, selection=selection)
+
+
 def cmd_unpack(args) -> int:
     targets = UNPACK.get(args.component, [])
     if not targets:
         return 0
-    recorded = [a for a in (args.recorded or "").split(",") if a]
-    records = open_store(args.records_url) if recorded and args.records_url else None
-    selection = _selection(args.selection) if args.selection and Path(args.selection).exists() else None
     repo = Path(args.repo).resolve()
-    entries, _ = artifacts_tfvars(repo, args.component, Path(args.metadata_dir), write=False,
-                                  recorded=recorded, records=records, env=args.env, selection=selection)
+    entries, _ = _tfvars_args(args, write=False)
     comp = load_registry(WorkTree(repo)).get(args.component)
     for artifact, rel in targets:
         e = entries.get(artifact) or {}
@@ -422,12 +420,7 @@ def cmd_unpack(args) -> int:
 
 
 def cmd_tfvars(args) -> int:
-    recorded = [a for a in (args.recorded or "").split(",") if a]
-    records = open_store(args.records_url) if recorded and args.records_url else None
-    selection = _selection(args.selection) if args.selection and Path(args.selection).exists() else None
-    _entries, digest = artifacts_tfvars(Path(args.repo).resolve(), args.component, Path(args.metadata_dir),
-                                        recorded=recorded, records=records, env=args.env, selection=selection)
-    print(digest)
+    print(_tfvars_args(args)[1])
     return 0
 
 
@@ -447,14 +440,11 @@ def main(argv=None) -> int:
     for a in ("--out", "--repository", "--digest", "--tag"):
         i.add_argument(a, required=True)
     i.set_defaults(func=cmd_image_meta)
-    z = sub.add_parser("zip")
-    z.add_argument("--src", required=True)
-    z.add_argument("--out", required=True)
-    z.set_defaults(func=cmd_zip)
-    s = sub.add_parser("stage")
-    s.add_argument("--src", required=True)
-    s.add_argument("--out", required=True)
-    s.set_defaults(func=cmd_stage)
+    for name, func in (("zip", cmd_zip), ("stage", cmd_stage)):
+        z = sub.add_parser(name)
+        z.add_argument("--src", required=True)
+        z.add_argument("--out", required=True)
+        z.set_defaults(func=func)
     f = sub.add_parser("finalize")
     for a in ("--component", "--selection", "--build-dir", "--packages-url", "--name", "--out", "--env"):
         f.add_argument(a, required=True)
@@ -465,22 +455,15 @@ def main(argv=None) -> int:
               "--registry", "--source-registry", "--packages-url", "--out"):
         pr.add_argument(a, required=True)
     pr.set_defaults(func=cmd_promote)
-    v = sub.add_parser("tfvars")
-    v.add_argument("--component", required=True)
-    v.add_argument("--metadata-dir", required=True)
-    v.add_argument("--recorded", default="", help="comma separated artifacts read from deployment records (other scope)")
-    v.add_argument("--records-url", default="")
-    v.add_argument("--selection", default="")
-    v.add_argument("--env", default="")
-    v.set_defaults(func=cmd_tfvars)
-    u = sub.add_parser("unpack", help="extract a zip-package next to a root that consumes it as files (UNPACK)")
-    u.add_argument("--component", required=True)
-    u.add_argument("--metadata-dir", required=True)
-    u.add_argument("--recorded", default="")
-    u.add_argument("--records-url", default="")
-    u.add_argument("--selection", default="")
-    u.add_argument("--env", default="")
-    u.set_defaults(func=cmd_unpack)
+    for name, func, help_ in (("tfvars", cmd_tfvars, None),
+                              ("unpack", cmd_unpack, "extract a zip-package next to a root that consumes it as files")):
+        v = sub.add_parser(name, help=help_)
+        v.add_argument("--component", required=True)
+        v.add_argument("--metadata-dir", required=True)
+        v.add_argument("--recorded", default="", help="comma separated artifacts read from deployment records (other scope)")
+        for a in ("--records-url", "--selection", "--env"):
+            v.add_argument(a, default="")
+        v.set_defaults(func=func)
     args = ap.parse_args(argv)
     return args.func(args)
 

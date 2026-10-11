@@ -25,9 +25,8 @@ Architecture picture: [docs/diagrams/svg/05-delivery.svg](../docs/diagrams/svg/0
    tag build: ObservabilityRelease only (test, package, sha256, Universal Package)
 ```
 
-Status (ADR-0001 §11): **implemented** - YAML, templates and tools pass the repository's static checks and
-unit tests. Neither pipeline has been run in an Azure DevOps organisation from this repository; nothing has
-been deployed by them. See [What only a real Azure DevOps organisation can prove](#what-only-a-real-azure-devops-organisation-can-prove).
+Status (ADR-0001 §11): **implemented**, statically checked and unit-tested; never run in an Azure DevOps
+organisation, nothing deployed ([what only a real organisation can prove](#what-only-a-real-azure-devops-organisation-can-prove)).
 
 ## How a run works
 
@@ -218,14 +217,10 @@ between jobs except through these caches, and `workspace: clean: all` still appl
 
 ## Scaling and limits
 
-Azure Pipelines limits (Learn, *Templates*: at most 100 included YAML files, 100 nesting levels, 20 MB parse
-memory - "typically 600 KB-2 MB of on-disk YAML"; *Stages*: up to 256 jobs per stage). No limit on the number
-of stages is documented. `tools/validate/pipeline_templates.py` fails before them: >80 files, depth >20,
-estimated expanded size >1,000,000 bytes (warning above 600,000), >200 jobs in a stage (including the
-validate matrix legs). Current estimate: platform ~540 KB, applications ~380 KB (self-healing steps included). When a budget is exceeded:
-split the scope further (another `scope` value and generated file, chained by a pipeline resource trigger),
-shard the Build stage, and keep parallelism bounded by the `deployPool` size (`validateMaxParallel` bounds
-the validation matrix; `ciMaxLegs` bounds how many legs one run plans).
+`tools/validate/pipeline_templates.py` (LIM001-LIM005) fails below the Azure Pipelines template limits (100 files,
+100 nesting levels, 20 MB parse memory, 256 jobs per stage) and prints the current size estimate. When a budget is
+exceeded: split the scope further (another `scope` value and generated file, chained by a pipeline resource
+trigger), shard the Build stage, and keep parallelism bounded (`validateMaxParallel`, `ciMaxLegs`).
 
 ## One-time Azure DevOps setup checklist
 
@@ -261,13 +256,10 @@ the validation matrix; `ciMaxLegs` bounds how many legs one run plans).
    reviewer, protected path classes and registry owners as required reviewers, work items, comments, squash only.
    PR builds compile only Select/Validate/Security on hosted agents without credentials; each validates its own
    scope; a docs-only PR runs only the gates and the link check.
-7. **GitHub Copilot code review for Azure Repos** (public preview; the toggles have no documented REST API - UI
-   only): Organization settings -> enable Copilot code review (and its billing: meter "GitHub Copilot for AzDO"),
-   Project settings -> Repos -> enable for the project, Repository settings -> enable for `enterprise-architecture`.
-   Afterwards `branch_policies.py apply` finds the "Automatically request Copilot code review" policy type by name
-   and enables it on `main` and `release/*` (until then it is skipped with a warning). Copilot reviews run on the
-   organization's default Microsoft-hosted pool or a Managed DevOps Pool with the latest Ubuntu image -
-   self-hosted pools such as `deployPool` are not supported.
+7. **GitHub Copilot code review for Azure Repos** (public preview, UI only): enable it in Organization (incl.
+   billing), Project and Repository settings; afterwards `branch_policies.py apply` enables the "Automatically
+   request Copilot code review" policy on `main` and `release/*` (skipped with a warning until then). It runs on
+   Microsoft-hosted or Managed DevOps Pools only, not on `deployPool`.
 8. **Agent pools**: Microsoft-hosted for Validate/Security/PR/release; self-hosted `foundation-deploy-agents`
    (VNet) for everything that reaches private endpoints (needs `python3`, `az`, `git`, `docker` or
    `useAcrBuild`, `curl`).
@@ -305,8 +297,7 @@ conditions, ordering, promotion gates, lint) with tests and static checks only.
 | `pipelines/templates/universal.yml` | governed template: release dispatch vs lab stages |
 | `pipelines/templates/universal-stages.yml` | Select, Validate, Security, include of the generated stages |
 | `pipelines/generated/{platform,applications}-stages.yml` | GENERATED (Build, P_/C_ stages, Retire, Verify, Drift, Evidence) |
-| `pipelines/templates/*.yml` | plan, apply, build-artifact, container-image, build-*, helm-charts, security-scan, validate, smoke, telemetry-verify, deployment-marker, retire, drift, evidence, observability-release, steps-* |
-| `pipelines/scripts/*.sh` | Terraform env/init/prepare/plan/apply/failure-record, agent setup, pinned tool installer |
+| `pipelines/templates/*.yml`, `pipelines/scripts/*.sh` | stage/job/step templates and the Terraform / agent scripts they call |
 | `pipelines/variables/` | compile-time settings per environment, tool versions |
 | `environments/promotion.yaml` | promotion chains |
 | `environments/branching.yaml` | branching model, branch policies (tools/ado/branch_policies.py), owners (CODEOWNERS) |

@@ -28,30 +28,18 @@ Platforms, databases, RBAC data-plane grants, diagnostic settings and telemetry 
 
 | Module | Kind | Purpose |
 |---|---|---|
-| `app-env` | pure | Wraps `observability/modules/instrumentation` (instrumentation contract) and adds identity (`AZURE_CLIENT_ID`, `AZURE_CREDENTIAL_MODE`), `FAULTS_ENABLED` (default false), `FAULT_TOKEN` as a Delinea DSV reference (`dsv://...`, resolved by the app), the DSV runtime env (`DSV_TENANT/TLD/BASE_URL/AUTH`), `PORT`, `LOG_LEVEL`, `GIT_COMMIT`. Outputs env (incl. `dsv://` values), secret env (name → `dsv://` reference), App Service settings (same map, no Key Vault references), Container Apps sidecar patch (serverless-init sidecar + dsv-fetch-install init container; Fluent Bit + dsv-fetch init/refresher with `fluent_bit_direct`), ACI sidecar (Datadog Agent), Kubernetes labels/annotations, the effective log collector and APM decision. |
-| `container-app` | azurerm | One Container App: user-assigned identity (ACR pull; the app and dsv-fetch read DSV with it), no Container Apps secrets except non-secret sidecar config files, digest-pinned image, `/healthz` liveness/startup + `/readyz` readiness, HTTP scale rule, the observability sidecar on a shared EmptyDir (Datadog serverless-init by default, its key read by the dsv-fetch binary an identity-free init container installs; Fluent Bit with `fluent_bit_direct`, its key written by a dsv-fetch init container on the Consumption profile or a refresher container on Dedicated profiles), multiple-revision traffic weights. |
-| `web-app` | azurerm | Linux/Windows web app (code or container), user-assigned identity (no Key Vault reference identity; `@Microsoft.KeyVault(` values are rejected), VNet integration, health check, private endpoint or deny-by-default access restrictions, `staging` slot when the SKU supports slots. |
-| `vm-script` | pure | Renders the Linux install script for run commands / CustomScript: package read with the host's managed identity (IMDS token, no SAS), sha256 check, env file (secret settings as `dsv://` references the service resolves at start-up), health check + rollback. |
+| `app-env` | pure | Instrumentation + identity/DSV/fault env for every app; per-runtime outputs (env, App Service settings, ACA sidecar patch, ACI sidecar, Kubernetes labels). |
+| `container-app` | azurerm | One Container App with user-assigned identity, digest-pinned image, probes, scale rule and the observability sidecar. |
+| `web-app` | azurerm | Linux/Windows web app (code or container), VNet integration, health check, private endpoint or deny-by-default access, `staging` slot. |
+| `vm-script` | pure | Linux install script for run commands / CustomScript (IMDS package read, sha256, env file, health check + rollback). |
 | `service-meta` | pure | Team/domain/tier/owner/runtime/artifact per service (mirrors observability onboarding metadata). |
+| `deploy-common` | pure | Naming, required tags and artifact version/commit per root (used by every root's `common.tf`). |
 
 ## Helm (Kubernetes workloads)
 
-Every Enterprise Hello workload on Kubernetes is deployed with the generic chart
-[`applications/charts/hello-service`](../charts/hello-service/README.md) (kinds `deployment`, `worker`, `cronjob`;
-values contract in `values.schema.json`: digest-only images, required identity client id and resources, no plaintext
-secrets, faults off by default).
-
-| Where | How |
-|---|---|
-| AKS (`core-aks`) | `helm_release` per workload (hashicorp/helm 3.3), values = `yamlencode` of a typed object from the contracts; `atomic`, `wait`, `cleanup_on_fail`, `max_history 10`, `lint`; chart from the repo or `oci://<acr>/helm/hello-service:<version>` |
-| ARO (`specialized`) | values rendered into the contract; `scripts/deploy-aro.sh` → `oc login` + `helm upgrade --install --rollback-on-failure --wait` |
-| kind (tests) | `tests/charts/test_kind_smoke.py` (opt-in `HELLO_KIND_SMOKE=1`) |
-
-Where Helm is **not** used, and why: Container Apps, App Service/Functions, ACI, Static Web Apps, VM/VMSS, Logic Apps,
-Service Fabric and Automation are ARM resources (azurerm) or non-Kubernetes runtimes — Helm only targets Kubernetes APIs.
-Chart tests: `python3 -m pytest tests/charts -q` (lint `--strict`, template, kubeconform against the AKS Kubernetes
-version, rendered-manifest assertions, schema rejections, Terraform-rendered values). The applications pipeline packages
-and pushes the chart (`helm package` → `helm push oci://<acr>/helm`); see the chart README.
+Kubernetes workloads use the generic chart [`applications/charts/hello-service`](../charts/hello-service/README.md):
+AKS via one `helm_release` per workload (`core-aks`), ARO via `scripts/deploy-aro.sh` (`specialized`). Every other
+runtime is an ARM resource, so Helm does not apply.
 
 ## Conventions (all roots)
 
@@ -98,12 +86,5 @@ Post-apply order per root: `terraform apply` → `deploy-zip.sh` (if `deploy_ste
 
 ## Validation
 
-```bash
-for d in applications/deployments/modules/* applications/deployments/*/; do bash tools/validate/terraform.sh "$d"; done
-checkov -d applications/deployments --framework terraform --quiet   # 0 failed; skips are justified inline
-python3 -m pytest tests/charts -q                                    # hello-service chart (helm + kubeconform)
-```
-
-Docs: https://learn.microsoft.com/azure/container-apps/ , https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan ,
-https://learn.microsoft.com/azure/aks/workload-identity-overview , https://learn.microsoft.com/azure/container-apps/managed-identity#control-managed-identity-availability ,
-https://learn.microsoft.com/azure/app-service/app-service-key-vault-references , https://learn.microsoft.com/azure/static-web-apps/
+`python3 tools/validate/all_terraform.py --workers 4` (fmt, validate, `terraform test` with mock providers),
+`checkov -d applications/deployments --framework terraform --quiet`, `python3 -m pytest tests/charts -q`.

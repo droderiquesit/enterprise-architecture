@@ -1,30 +1,16 @@
-# Telemetry transport and collection: authoritative paths, robustness, duplicate prevention (4.0.0)
+# Telemetry transport and collection: authoritative paths, robustness, duplicate prevention
 
 This page is the single reference for **who collects what, where** in the portable Datadog package (`observability/`).
 The decisions come from `config/fleet-policy.yaml` (`modules/fleet-policy`, `modules/fleet-inventory`). Every rule
 below is enforced by code and covered by a test; the test is named in brackets.
 
-Status (ADR §11): everything is **implemented**. The following are **locally verified** with docker
-(`tests/transport/`):
-
-* the VRL programs;
-* Fluent Bit -> Worker forward;
-* the Worker bootstrap (fail closed);
-* the APM gateway Agent (DSV secret backend, non-local traces, health);
-* the OTel gateway;
-* the DBM checks;
-* the ACI Datadog Agent sidecar and the Container Apps serverless-init sidecar (`test_agent_sidecar.py`, docker opt-in);
-* the Datadog chart rendered with the layered values + dsv-fetch post-renderer (`tests/kubernetes/`, helm);
-* the VM Application Linux installer (`modules/host-agent-package/tests`, ubuntu:24.04) and the dsv-fetch binary
-  (conformance suite, `images/dsv-fetch/tests`).
-
-Nothing is **deployed** or **verified** live: this sandbox has no Azure or Datadog credentials.
+Status (implemented / locally verified / not live): see `../README.md`.
 
 ## 1. Authoritative path per resource type (package defaults)
 
 `log_pipeline = observability_pipelines`, `logs.collector` per architecture (agent / agent_sidecar / serverless_init /
 azure / fluent_bit), `apm.mode = datadog`, `apm.managed_runtime_path = agent_gateway` (Container Apps:
-serverless_init, ACI: agent_sidecar). The 2.x paths come back with `fluent_bit_direct` and `otel`. Every Datadog Agent
+serverless_init, ACI: agent_sidecar). `fluent_bit_direct` and `otel` select the fallback paths. Every Datadog Agent
 reads the API key through the ONE secret path `ENC[dsv://...]` + the static dsv-fetch binary as
 `secret_backend_command`.
 
@@ -63,7 +49,7 @@ One inventory drives the plan. `modules/fleet-inventory` takes every resource (`
 **Processor group `app`**
 
 * VRL normalisation of the record.
-* Sensitive Data Scanner redaction (the same patterns as the 2.x Fluent Bit `eh_redact` filter).
+* Sensitive Data Scanner redaction (the same patterns as the Fluent Bit `eh_redact` filter).
 * VRL tag policy: defaults for missing tags, value maps and normalisation. It never overwrites a value the client set.
 
 **Processor group `azure`**
@@ -125,7 +111,7 @@ without their DSV-resolved values. No hop falls back to a key in env or config.
 
 | Rule | Where enforced |
 |---|---|
-| One application-log collector per line (fleet policy `logs.collector` per architecture): when the Agent / sidecar / serverless-init collects, no Fluent Bit runs (DaemonSet release count 0; no Fluent Bit sidecar or host service - hosts never get Fluent Bit in 4.0.0); with `fluent_bit_direct` the Agent-side log collection is off on AKS / ACA / ACI (hosts keep the Agent, shipping to the intake) | `modules/kubernetes` [`fleet_default_agent_logs_to_op_ssi_profiling`, `op_with_fluent_bit_node_collector`], `modules/host-agent-package` [package.tftest `fluent_bit_direct_skips_worker`], `modules/instrumentation` [instrumentation.tftest] |
+| One application-log collector per line (fleet policy `logs.collector` per architecture): when the Agent / sidecar / serverless-init collects, no Fluent Bit runs (DaemonSet release count 0; no Fluent Bit sidecar or host service - hosts never get Fluent Bit); with `fluent_bit_direct` the Agent-side log collection is off on AKS / ACA / ACI (hosts keep the Agent, shipping to the intake) | `modules/kubernetes` [`fleet_default_agent_logs_to_op_ssi_profiling`, `op_with_fluent_bit_node_collector`], `modules/host-agent-package` [package.tftest `fluent_bit_direct_skips_worker`], `modules/instrumentation` [instrumentation.tftest] |
 | Apps never export OTLP logs (`OTEL_LOGS_EXPORTER=none` in otel mode; no OTel variables at all in datadog mode) | `modules/instrumentation` [`datadog_mode_aks_ssi`] |
 | One tracer per process: datadog mode emits `TELEMETRY_SDK=datadog` and `DD_TRACE_OTEL_ENABLED=true` (manual OTel-API / Activity spans go into the Datadog tracer); never `OTEL_EXPORTER_OTLP_*`, `OTEL_SDK_DISABLED` or `OTEL_RESOURCE_ATTRIBUTES` (Datadog maps that to `DD_TAGS`, which would duplicate tags) | `modules/fleet-policy`, `modules/instrumentation` |
 | Diagnostic settings export app-log categories only for the `eventhub` route; platform categories are an allow list per type | `modules/diagnostic-settings` [diagnostics.tftest] |

@@ -72,33 +72,13 @@ Branch policies on `main` (and `release/*`) are applied idempotently by `tools/a
 
 ## Fast PR builds
 
-* **Test impact selection** (`python3 -m tools.ci plan`): only the suites that cover the changed components and
-  their consumers, plus suites whose inputs changed; docs-only changes run the link check and the gates.
-* **Test result cache**: a suite whose fingerprint (sources + dependencies + tool versions) already passed is
-  skipped as a "cached pass"; nightly and `release/*` runs ignore the cache.
-* **Fan-out**: suites are packed into duration-balanced legs (bounded `maxParallel`), pytest suites sharded by
-  file, pytest-xdist inside each leg, Terraform roots in parallel against a read-only provider mirror. Cheap gates
-  cancel the run on failure.
-* **Build once per fingerprint**: an artifact whose source fingerprint was already built (any branch) is reused
-  by digest; images are tagged `src-<fingerprint>` plus the version and deployed by digest.
-* Every PR gets a **time-budget report** (docs-only <= 2 min, single component <= 10 min, otherwise 20 min) in the
-  run summary. Details: [pipelines/README.md "Fast CI"](../../pipelines/README.md#fast-ci).
+Only the suites covering the changed components and their consumers run, a suite whose fingerprint already passed is
+a cached pass (ignored by nightly and `release/*` runs), suites fan out over duration-balanced legs, and artifacts are
+built once per source fingerprint. Budgets: docs-only <= 2 min, single component <= 10 min. Details:
+[pipelines/README.md "Fast CI"](../../pipelines/README.md#fast-ci); local commands: [CONTRIBUTING](../../CONTRIBUTING.md#before-you-push).
 
 ## Versions
 
 `<semver from <component>/VERSION, else 0.1.0>+<build>.<sha7>` for every branch build; a clean `<semver>` only for a
 tag `<component>-v<semver>` matching `VERSION` (`tools/deploy/versioning.py`). Docker tags replace `+` with `-`.
 The version is metadata (OCI label, `DD_VERSION`); deployments always reference the image digest.
-
-## Local development
-
-```bash
-pip install pre-commit && pre-commit install       # the cheap gates on every commit (.pre-commit-config.yaml)
-python3 -m tools.changeset explain --branch         # what this branch / working tree would run
-python3 -m tools.ci run --changed --jobs 8          # the same selected suites as the PR build, in parallel
-python3 -m tools.ci run --all                       # everything (what the nightly run does)
-```
-
-Generated files (`pipelines/generated/*`, `.github/CODEOWNERS`, compiled requirement files) are deterministic and
-sorted; on a merge conflict **regenerate them, never hand-merge** (`python3 tools/pipeline/generate.py`,
-`python3 tools/ado/codeowners.py`, `uv pip compile ...` as noted in each file's header). CI fails when they are stale.

@@ -61,14 +61,7 @@ variable "datadog" {
 }
 
 variable "secrets" {
-  description = <<-EOT
-    Delinea DSV runtime settings (ADR-0001 section 14). Collectors and app sidecars read their keys directly from
-    DSV with their managed identity through the dsv-fetch helper (init container), never from Key Vault:
-      tenant / tld / base_url : DSV endpoint (base_url default https://<tenant>.secretsvaultcloud.<tld>/v1)
-      auth                    : DSV_AUTH for workloads (azure = managed identity)
-      fetch_image             : digest-pinned dsv-fetch image (registry artifact img-dsv-fetch); pulled with the
-                                collector identity when it lives in a private registry
-  EOT
+  description = "Delinea DSV runtime settings (endpoint, DSV_AUTH, digest-pinned dsv-fetch image pulled with the collector identity)."
   type = object({
     tenant      = optional(string)
     tld         = optional(string, "com")
@@ -97,17 +90,7 @@ variable "collector_identity" {
 }
 
 variable "event_hub" {
-  description = <<-EOT
-    Event Hubs used by diagnostic settings (app-logs / platform-logs hubs, read by the aggregator Kafka input).
-    mode = create   : Standard namespace (Kafka endpoint), 3 hubs (app-logs, platform-logs, activity-logs),
-                      consumer group per hub, SAS rules
-    mode = existing : bring your own namespace; provide namespace_id, send_authorization_rule_id plus the hub names
-    listen_connection_string_ref : DSV reference of the Listen-rule connection string the aggregator reads
-                      (mode = create: the module outputs the generated value as the SENSITIVE output
-                      generated_secrets["eventhub-fluentbit-listen"]; tools/secrets/publish.py writes it to DSV
-                      at this path after apply)
-    mode = none     : no Event Hub route (App Service/Functions app logs then need another collector)
-  EOT
+  description = "Event Hubs for diagnostic settings: mode create | existing | none; listen_connection_string_ref is the DSV reference of the Listen connection string (create: publish generated_secrets to it after apply)."
   type = object({
     mode                              = optional(string, "create")
     sku                               = optional(string, "Standard")
@@ -317,18 +300,7 @@ variable "default_tags" {
 }
 
 variable "observability_pipelines" {
-  description = <<-EOT
-    Datadog Observability Pipelines (log_pipeline = observability_pipelines):
-      pipeline_id   : existing pipeline (created in the Datadog UI / elsewhere); null = this module creates it
-                      (datadog_observability_pipeline via modules/observability-pipeline)
-      hosting       : container_app (Worker on the Container Apps environment, internal ingress) | none (Worker
-                      elsewhere, e.g. modules/kubernetes on AKS: give external_endpoint)
-      workload_profile_name: profile of the Worker app (null = container_apps.workload_profile_name). On a Dedicated
-                      profile dsv-fetch runs as a refresher sidecar (init containers get no managed identity there).
-      buffer_storage: emptydir (replica-scoped) | azure_files (an ACA environment storage you provide; one data dir
-                      per replica) - disk buffers of the destinations live there
-      archive / azure / redaction: passed to modules/observability-pipeline
-  EOT
+  description = "Observability Pipelines: existing pipeline_id (null = create), Worker hosting (container_app | none), workload profile (Dedicated = dsv-fetch refresher), buffer_storage (emptydir | azure_files), archive / azure / redaction."
   type = object({
     pipeline_id           = optional(string)
     name                  = optional(string)

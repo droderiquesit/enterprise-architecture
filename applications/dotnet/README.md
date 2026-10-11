@@ -29,7 +29,7 @@ here (MSBuild discovers them by walking up from the project directory).
 | HTTP clients | `AddHelloHttpClient<T>` — `SocketsHttpHandler` pooling (5 min lifetime), `hello.http.dependency.duration` handler, `AddStandardResilienceHandler` (total/attempt timeouts, retries with exponential backoff + jitter **for safe methods only** unless opted in, circuit breaker), innermost `dependency_timeout` fault handler |
 | Problems | RFC 7807 everywhere (`AddProblemDetails`, `HelloExceptionHandler`, status-code pages), `type = urn:enterprise-hello:problem:<code>`, `trace_id` extension |
 | Idempotency | `IdempotencyKey` (header validation, request fingerprint) |
-| Secrets (Delinea DSV, ADR-0001 §14) | `builder.Configuration.AddDsvSecrets()` (called first by `AddHelloServiceDefaults`; explicitly in hello-durable `Program.cs`) — every configuration value starting with `dsv://<path>#<element>` is resolved at host build time and overlaid under the same key; fail-fast `DsvSecretResolutionException` naming keys only; values never logged. `DsvSecretResolver`: `ManagedIdentityCredential(AZURE_CLIENT_ID)` / `WorkloadIdentityCredential` (when `AZURE_FEDERATED_TOKEN_FILE`) → token for `https://management.azure.com/.default` → DSV `POST /v1/token` azure grant (or `client_credentials` locally) → `GET /v1/secrets/<path>`; DSV token refreshed at 80 % of `expiresIn`, secret cache `DSV_CACHE_TTL_SECONDS` (900), `DSV_TIMEOUT_SECONDS` (5), bounded jittered retries on connection errors/timeouts/429/5xx only (`DSV_MAX_ATTEMPTS` 3), optional `DSV_REFRESH_SECONDS` periodic re-resolution with configuration reload. `DSV_AUTH=none` + any dsv:// value = start-up error; `http://` base URL only for loopback or `DSV_ALLOW_INSECURE_HTTP=true`. Functions: only worker-read settings may be dsv:// (the host reads `AzureWebJobsStorage`/trigger connections itself — use identity-based connections) |
+| Secrets (Delinea DSV, ADR-0001 §14) | `builder.Configuration.AddDsvSecrets()` (called by `AddHelloServiceDefaults`; explicitly in hello-durable) resolves every `dsv://<path>#<element>` configuration value at host build time with the workload identity (`DsvSecretResolver`: Entra ARM token → DSV azure grant → `GET /v1/secrets/<path>`; token cache, `DSV_CACHE_TTL_SECONDS`, bounded retries on transient errors, optional `DSV_REFRESH_SECONDS`). Fails fast with `DsvSecretResolutionException` naming keys only; values never logged. Functions: only worker-read settings may be `dsv://` |
 | Identity | `AzureCredentialFactory` — WorkloadIdentityCredential (AKS) → ManagedIdentityCredential(`AZURE_CLIENT_ID`) → DefaultAzureCredential |
 | Metrics | `HelloMetrics` (meter `Hello.App`): `hello.orders.created`, `hello.orders.publish_failures`, `hello.orders.status_transitions`, `hello.http.dependency.duration` (s), `hello.inventory.reservations`, `hello.workflow.completed`, `hello.workflow.duration` (ms), `hello.faults.injected`, `hello.idempotency.replays` — bounded attributes only |
 | Web defaults | `AddHelloServiceDefaults` / `UseHelloServiceDefaults` / `MapHelloServiceEndpoints` (PORT binding, Kestrel limits, snake_case JSON, `traceparent` response header) |
@@ -60,8 +60,7 @@ mode with `HelloTelemetryMode` and returns `null` (no `OpenTelemetryBuilder`) wh
 Log correlation (`HelloJsonLogWriter`) and the `traceparent` response header / Service Bus `traceparent` /
 problem `trace_id` use the **active Datadog span** first (`DatadogCorrelation`: reflection on the auto-instrumentation
 `Datadog.Trace` assembly — `Tracer.Instance.ActiveScope.Span` TraceId/SpanId + 128-bit `RawTraceId`; no NuGet
-reference), then `Activity.Current`; no span ⇒ fields omitted. (Without this, ASP.NET Core's own Activity — not the
-Datadog span — would be reported: observed locally before the fix.)
+reference), then `Activity.Current`; no span ⇒ fields omitted.
 
 Recommended deployment defaults for datadog mode (observability instrumentation module): `TELEMETRY_SDK=datadog`,
 `DD_TRACE_OTEL_ENABLED=true`, `DD_ENV/DD_SERVICE/DD_VERSION`, `DD_TAGS=team:…,domain:…,tier:…` (instead of
@@ -107,19 +106,12 @@ durable on `mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated1
 `Dockerfile.windows` (`aspnet:10.0.12-nanoserver-ltsc2025`, not buildable on Linux). Optional build secret
 `ca_bundle` for TLS-intercepting proxies (never copied into the image).
 
-## Local verification record (2026-10-09, this sandbox)
+## Local verification (2026-10-09, this sandbox)
 
-| Check | Command / result |
-|---|---|
-| Release build | `dotnet build EnterpriseHello.sln -c Release` → 0 warnings, 0 errors |
-| Tests | `dotnet test --solution EnterpriseHello.sln -c Release` → 79 passed (Common 25, orders 16, inventory 6, bff 10, durable 22) |
-| Pipeline script | `VERSION=0.1.0-ci ./build.sh all` → exit 0, 5 zips + build-info.json |
-| Images | `docker build` bff / orders-api / inventory-api / durable → OK (245 / 339 / 280 MB uncompressed; durable ≈1.3 GB base) |
-| E2E (memory) | bff → orders-api (`STORAGE_MODE=memory MESSAGING_MODE=log PRICE_FALLBACK=true`) + inventory-api: `/healthz` 200, `/version` JSON, `POST /api/orders` 202 with `traceparent` continuing the caller's trace id, replay → `Idempotent-Replayed: true`, GET by id/list, CORS preflight headers, catalog unset → 503 problem; orders logs carry `dd.trace_id=11803532876627986230` for trace `4bf92f3577b34da6a3ce929d0e0e4736` |
-| SQL | orders-api against `mcr.microsoft.com/mssql/server:2022-latest`: migration applied, re-applied after restart (no-op), idempotent create, 409 on key reuse, PATCH status |
-| Log file sink | `LOG_FILE_PATH` on a bind mount → JSON lines written |
-| OTLP | OTLP/HTTP sink received `/v1/traces` + `/v1/metrics` from orders-api and hello-durable (no `/v1/logs` from the ASP.NET services) |
-| Functions | `func` 4.15.2 via npm + Azurite + SQL container: batch (12 items) Completed, rows in `fulfillment.batch_runs`; reconciliation Completed; `OrderProcessing` happy path → order `Fulfilled`, inventory reserved, SQL fulfillment row; insufficient stock → `Failed`; unreachable partner with `PAYMENT_TIMEOUT_SECONDS=5` → `payment_timeout`, reservation released, order `Failed`. Durable container image: batch Completed against Azurite. |
+Release build, tests, `./build.sh all` and docker images for all four services; bff → orders-api → inventory-api E2E in
+memory mode (traceparent continuity, idempotent replay, problems); orders-api against SQL Server 2022; OTLP/HTTP sink
+(traces + metrics, no logs); Functions host (Core Tools 4.15.2 + Azurite + SQL) for batch, reconciliation and the
+order happy/failure/timeout paths.
 
 Not verified here: Azure SQL/Cosmos/Service Bus with managed identity, Entra JWT validation with real tokens, the
 Windows image, Flex Consumption deployment (no Azure credentials in the sandbox).

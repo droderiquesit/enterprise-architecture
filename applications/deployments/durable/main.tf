@@ -17,7 +17,7 @@ locals {
   rg       = local.fx.resource_group_name
   fx_loc   = coalesce(local.fx.location, local.location)
   task_hub = coalesce(var.settings.task_hub, "hellodurable${local.env_name}")
-  suffix   = module.naming.suffix
+  suffix   = module.common.suffix
 
   y1_enabled = local.fx.consumption_windows != null && var.settings.windows_consumption_enabled
   y1_ident   = local.y1_enabled ? var.foundation_identity.identities[local.fx.consumption_windows.identity] : null

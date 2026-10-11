@@ -31,15 +31,9 @@ variable "foundation_identity" {
 variable "foundation_network" {
   description = "foundation-network contract v1 (optional; only needed for settings.network_mode = \"vnet\")."
   type = object({
-    subnets = map(object({
-      id = string
-    }))
-    private_dns_zones = optional(map(object({
-      id = string
-    })), {})
-    egress = optional(object({
-      public_ips = optional(list(string), [])
-    }), {})
+    subnets           = map(object({ id = string }))
+    private_dns_zones = optional(map(object({ id = string })), {})
+    egress            = optional(object({ public_ips = optional(list(string), []) }), {})
   })
   default = null
 }

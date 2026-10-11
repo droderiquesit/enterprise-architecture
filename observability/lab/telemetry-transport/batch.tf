@@ -1,18 +1,7 @@
-# Azure Batch log collection (ADR-0001 §13 amendment): observability owns the Fluent Bit setup content for Batch
-# nodes and publishes it in this contract (`batch_log_setup`). The application deployment root that submits the
-# Batch job (deploy-jobs, scripts/submit-batch-job.sh) runs it as the job's *job preparation task* (elevated,
-# once per node per job, re-run after reboot). Batch pools have no VM extensions and platform-batch is upstream
-# of this root, so neither the pool start task nor platform-batch reference observability (no dependency cycle).
-#
-# The script is the Batch-specific installer scripts/batch-log-setup.sh.tftpl (package 4.0.0; pinned Fluent Bit from
-# packages.fluentbit.io, systemd unit fluent-bit-eh, linux-host config; no Datadog Agent - Batch is, with
-# log_pipeline = fluent_bit_direct, the only place Fluent Bit remains). Values only known on the node are passed as
-# job-preparation environment:
-#   EH_IDENTITY_CLIENT_ID - pool user-assigned identity (a DSV user with read on datadog-api-key)
-#   EH_LOG_PATHS          - "$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt" (Batch task stdout files)
-# No secret is rendered. With Observability Pipelines the node forwards to the Worker and needs no key. Otherwise the
-# static dsv-fetch binary (release zip of artifacts["img-dsv-fetch"], sha256-pinned, downloaded with the pool identity)
-# reads the Datadog API key from Delinea DSV on the node (IMDS) when fluent-bit-eh starts (ExecStartPre -> tmpfs file).
+# Batch log setup (ADR-0001 §13): published in the contract as `batch_log_setup`; deploy-jobs runs it as the job
+# preparation task (pools have no VM extensions, and platform-batch is upstream of this root). Node-only values come
+# from the job-preparation environment: EH_IDENTITY_CLIENT_ID (pool identity), EH_LOG_PATHS (Batch task stdout).
+# No secret is rendered; with fluent_bit_direct the node reads the API key from DSV with the dsv-fetch release binary.
 module "batch_flb" {
   source       = "../../modules/fluent-bit"
   count        = var.settings.batch_log_setup_enabled ? 1 : 0

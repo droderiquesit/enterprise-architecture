@@ -10,16 +10,10 @@ internal ingress). The Fluent Bit aggregator replaces the Worker only with `log_
   * `foundation_identity` v2 (`identities["obs-collector"]`, `secrets.{tenant, tld, base_url, base_path, refs}`)
   * `artifacts["img-dsv-fetch"].image` (digest-pinned dsv-fetch image, registry artifact)
   * `platform_containerapps` (environment_id, default_domain, workload_profiles)
-* **Produces:** `obs-telemetry-transport` **v3** (`output "contract"`, `catalog/contracts/obs-telemetry-transport.v3.schema.json`;
-  v3 formalises the 3.0.0 fleet fields: `aggregator.{kind, log_pipeline, pipeline_id, agent_logs_url, eventhub_consumer}`,
-  `gateway.apm`, `env.fleet` (`EH_LOG_PIPELINE`, `EH_APM_MODE`, `EH_PROFILING_ENABLED`) and `env.apm_gateway`
-  (`DD_TRACE_AGENT_URL`); v2 is kept for 2.x package producers / rollback). As in v2:
-  DSV references (`api_key_ref`, `otlp.headers_ref`, `fluentbit.forward_shared_key_ref`) and `secrets` (DSV endpoint +
-  `fetch_image`) instead of Key Vault ids. Earlier optional additions: `otlp.{ default_protocol, node_agent_*_port, host_agent_grpc_endpoint,
-  gateway_distribution, internal_only, logs_policy}`, `fluentbit.{sidecar_forward_config, sidecar_parsers,
-  sidecar_lua, sidecar_mode, logs_intake_host, forward_tls, metrics_port,
-  aca_console_allow}`, `event_hub.{kafka_endpoint, consumer_group, location, activity_logs_hub}`, `log_routes`, `aggregator`,
-  `gateway`.
+* **Produces:** `obs-telemetry-transport` **v3** (`output "contract"`, schema
+  `catalog/contracts/obs-telemetry-transport.v3.schema.json`): fleet fields (`aggregator.*`, `gateway.apm`, `env.fleet`,
+  `env.apm_gateway`), DSV references (`api_key_ref`, `otlp.headers_ref`, `fluentbit.forward_shared_key_ref`) and
+  `secrets` (DSV endpoint + `fetch_image`).
 
 ## Settings (`components.obs-telemetry-transport`)
 * `datadog_site`, `api_key_secret_name`, `forward_shared_key_secret_name` (default `fluentbit-shared-key`; the
@@ -30,7 +24,7 @@ internal ingress). The Fluent Bit aggregator replaces the Worker only with `log_
   `gateway_sampling_percentage`, `gateway_otlp_logs` (drop)
 * `*_max_replicas` (≤ 5 in the lab), `workload_profile_name`, `sidecar_mode`
 * `aca_console_allow` (default `["<prefix>-caj-*"]`: jobs only)
-* package 3.0.0 fleet collection:
+* fleet collection:
   * `fleet`: per-environment overrides of `observability/config/fleet-policy.yaml`, merged as `environments.<env>`
     (e.g. `{log_pipeline: fluent_bit_direct}`, `{apm: {mode: otel}}`, `{profiling: {enabled: false}}`); null = policy as committed
   * `op_pipeline_id` (existing Observability Pipelines pipeline; null = create it), `op_hosting` (`container_app`),
@@ -48,8 +42,7 @@ internal ingress). The Fluent Bit aggregator replaces the Worker only with `log_
 ## Batch log setup (`batch_log_setup`)
 ADR-0001 §13: the contract carries a gzip+base64 Linux installer rendered from the Batch-specific
 `scripts/batch-log-setup.sh.tftpl` with the `linux-host` Fluent Bit config (`batch.tf`): pinned Fluent Bit 5.1.3,
-no Datadog Agent (Batch is, besides `log_pipeline = fluent_bit_direct`, the only place Fluent Bit remains in 4.0.0),
-tail paths from `EH_LOG_PATHS` (`$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt`). deploy-jobs runs it as
+no Datadog Agent, tail paths from `EH_LOG_PATHS` (`$AZ_BATCH_NODE_ROOT_DIR/workitems/*/job-*/*/stdout.txt`). deploy-jobs runs it as
 the Batch job preparation task. No secrets are rendered.
 
 * Observability Pipelines (default): Fluent Bit forwards to the in-VNet Worker; no API key and no dsv-fetch on the node.
@@ -58,13 +51,10 @@ the Batch job preparation task. No secrets are rendered.
   Storage; the pool identity already reads the packages store for the svc-jobs package), checks the pinned
   `package_sha256` and `SHA256SUMS`, installs `dsv-fetch-linux-<arch>` root-only (0500) and the Fluent Bit unit's
   `ExecStartPre` reads the API key from Delinea DSV into a tmpfs file. The output precondition fails the plan when the
-  package URL/sha256 are missing. No Python is involved (package 4.0.0 retired the 1.x `dsv_fetch.py`).
+  package URL/sha256 are missing.
 
 ## Cost at defaults
-About $310/month (Consumption profile list prices). Event Hubs Standard 1 TU is about $22; the Observability Pipelines
-Worker (min 2 x 1 vCPU / 2 GiB) about $160; the APM gateway (1 vCPU / 2 GiB) about $80; the OTel gateway
-(0.5 vCPU / 1 GiB) about $40; the private endpoint about $7.5. With `fleet = {log_pipeline: fluent_bit_direct}` the
-0.5 vCPU / 1 GiB aggregator replaces the Worker (about $190 in total). Datadog ingestion is extra. See
+About $310/month (about $190 with `fluent_bit_direct`), plus Datadog ingestion. Breakdown:
 `modules/telemetry-transport/README.md`.
 
 ## Teardown / retention
@@ -83,10 +73,3 @@ retention, lost) and the apps. The DSV secret `eventhub-fluentbit-listen` is not
 * Secrets in state: the Event Hubs authorization rules' computed keys/connection strings (azurerm), and the sensitive
   output `generated_secrets` (same value). Nothing else; no Key Vault.
 * dsv-fetch init containers need the **Consumption** workload profile (managed identity for init containers).
-
-## Docs
-- `observability/modules/README-transport.md`
-- `observability/modules/telemetry-transport/README.md`
-
-## Test
-`terraform init -backend=false && terraform test` in this directory (mock providers, no credentials): `tests/lab.tftest.hcl`. From the repository root: `python3 tools/validate/all_terraform.py --only obs-telemetry-transport` (fmt, validate, test).

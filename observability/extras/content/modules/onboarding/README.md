@@ -11,4 +11,3 @@ Inputs: `services` (list of decoded rendered JSON), `routing` (decoded Notificat
 
 Resource scope = `subscription_id:<sub>,resource_group:<rg>,[server_name:<server>,]name:<name>` (lower-cased), the
 tag set used by Datadog's recommended Azure monitors. Creates only Datadog objects.
-Tests: `terraform test` (mock provider; fixtures rendered from `tests/fixtures/manifests`).

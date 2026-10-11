@@ -1,10 +1,6 @@
-# Fluent Bit aggregator and OTel gateway as Azure Container Apps with INTERNAL ingress only.
-# AzAPI gap (azurerm 5.9 azurerm_container_app): no ingress.additionalPortMappings and no secret-volume
-# item paths, both needed here (4317+4318 on one gateway, 24224+2020 on the aggregator; config files
-# mounted with real file names). API version Microsoft.App/containerApps@2025-07-01 (GA).
-# Secrets: dsv-fetch init containers read them from Delinea DSV with the collector identity into replica-scoped
-# EmptyDir volumes (Fluent Bit: env-yaml include; OTel: ${file:...}). Init containers can use managed identity
-# only in a workload-profiles environment on the Consumption profile (Microsoft Learn, ACA managed identity).
+# Fluent Bit aggregator and OTel gateway as Container Apps, internal ingress only. AzAPI: azurerm 5.9 lacks
+# ingress.additionalPortMappings and secret-volume item paths. Init containers get managed identity only on the
+# Consumption profile of a workload-profiles environment.
 module "tags" {
   source = "../tagging"
   policy = var.tag_policy

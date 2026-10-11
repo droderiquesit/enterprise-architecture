@@ -16,7 +16,7 @@ Inputs:
 * `telemetry.aggregator.agent_logs_url`: the Observability Pipelines Worker's Datadog Agent source; without it the
   Datadog sidecars collect no logs in observability_pipelines mode (plan warning, no bypass of the Worker)
 
-One Datadog collection path per platform (observability 4.0.0, fleet policy `logs.collector`):
+One Datadog collection path per platform (fleet policy `logs.collector`):
 
 * **ACI** (`agent_sidecar`): a pinned Datadog Agent sidecar (`agent.image:agent.version`, 0.25 vCPU / 0.5 GB) in the
   container group - traces `localhost:8126`, DogStatsD `udp://localhost:8125`, and `LOG_FILE_PATH` on the shared
@@ -123,6 +123,3 @@ Caveat: the Fluent Bit fallback on Container Apps mounts the config files from C
 because azurerm 5.9 has no secret-volume item paths. This is implemented and unit-tested, but not deployed. The ACI
 Agent sidecar and serverless-init were run locally with docker (`observability/tests/transport/test_agent_sidecar.py`),
 not on Azure.
-
-Tests: `tests/instrumentation.tftest.hcl` covers 25 runs (ACI Agent sidecar, serverless-init, Fluent Bit fallback,
-plan warning without a Worker URL, overrides). `modules/telemetry-transport` tests feed a real contract into this module.

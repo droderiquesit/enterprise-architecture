@@ -1,4 +1,4 @@
-# Example: connect an EXISTING environment to Datadog with a versioned package release (4.1.0)
+# Example: connect an EXISTING environment to Datadog with a versioned package release
 
 Standalone consumer root. It needs nothing from the source repository except the released tarball. It connects
 existing resources to Datadog with the package tag policy. It creates no monitors, SLOs or dashboards: those already
@@ -28,7 +28,7 @@ platforms or databases are created. Fault injection is disabled and validated.
    `python3 .vendor/observability-4.1.0/tools/onboarding/validate.py --manifests manifests/prod --env prod --strict`
    and `python3 .vendor/observability-4.1.0/tools/onboarding/render.py render --manifests manifests/prod --env prod --out rendered/prod`.
    Commit `rendered/prod`.
-4. Secrets (one path, package 4.0.0): everything is read from Delinea DSV at runtime with workload identity
+4. Secrets: everything is read from Delinea DSV at runtime with workload identity
    `kubernetes.identity_client_id` (required). Ask your identity team to federate it with the service accounts
    `datadog/datadog`, `datadog/datadog-cluster-agent`, `datadog/datadog-cluster-checks` and
    `observability-pipelines/opw-observability-pipelines-worker`, and to grant its DSV user read on the API key and the
@@ -50,18 +50,13 @@ platforms or databases are created. Fault injection is disabled and validated.
    Datadog library the image must contain). Hand `terraform output rum` to the frontend owners. This root never
    changes application settings.
 
-Tests: `terraform test` (after `./vendor.sh`) runs plan-only checks with mocked providers.
-
 ## Upgrade
 
 1. Set the new version and sha256 in `package.lock.json`.
 2. Run `./vendor.sh --update-sources` (it rewrites the `./.vendor/observability-<old>/` module sources).
 3. Re-render the manifests and run `terraform plan`.
 
-A MINOR/PATCH upgrade updates objects in place. For 3.x -> 4.0.0 read the package `UPGRADING.md` (removed
-`kubernetes.api_key` / `cluster_agent_secret_name` / `op_worker.api_key_secret_name`; `op_worker.secret_env` values
-are `dsv://` references; `kubernetes.identity_client_id` required). For 2.x -> 3.0.0: `tools/onboarding/migrate_v1.py`
-and `tools/tags/derive_from_monitors.py` before you adopt the tag policy.
+A MINOR/PATCH upgrade updates objects in place. For a MAJOR upgrade read the package `UPGRADING.md` first.
 
 ## Removal safety
 

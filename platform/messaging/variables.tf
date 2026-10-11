@@ -18,21 +18,10 @@ variable "environment" {
 variable "foundation_network" {
   description = "foundation-network contract v1 (only the fields this root uses)."
   type = object({
-    resource_group_name = string
-    location            = string
-    subnets = map(object({
-      id             = string
-      name           = string
-      address_prefix = string
-    }))
-    private_dns_zones = optional(map(object({
-      id   = string
-      name = string
-    })), {})
-    egress = optional(object({
-      type       = string
-      public_ips = optional(list(string), [])
-    }), { type = "nat-gateway", public_ips = [] })
+    location          = string
+    subnets           = map(object({ id = string, name = string }))
+    private_dns_zones = optional(map(object({ id = string, name = string })), {})
+    egress            = optional(object({ public_ips = optional(list(string), []) }), { type = "nat-gateway", public_ips = [] })
   })
 }
 
@@ -42,7 +31,6 @@ variable "foundation_identity" {
     identities = map(object({
       id           = string
       principal_id = string
-      client_id    = string
       name         = string
     }))
   })

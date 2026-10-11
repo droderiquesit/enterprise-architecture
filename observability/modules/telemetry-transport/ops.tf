@@ -1,12 +1,5 @@
-# Fleet collection tier of the transport (package 3.0.0; dsv-fetch static binary since 4.0.0):
-#  * Datadog Observability Pipelines (log_pipeline = observability_pipelines, default): pipeline definition
-#    (modules/observability-pipeline) + the Worker as a Container App with INTERNAL ingress (24224 fluent source for
-#    Fluent Bit edge collectors, 8282 Datadog Agent source, 8686 API/health). Event Hubs are read by the Worker's
-#    kafka source; the Fluent Bit aggregator is not deployed in this mode (no double consumption of the hubs).
-#  * Datadog Agent APM gateway (apm.managed_runtime_path = agent_gateway): an Agent Container App receiving Datadog
-#    tracer payloads and profiles on 8126 for managed runtimes without a node Agent.
-# Secrets: Delinea DSV only. The Worker sources a dsv-fetch dotenv file (init container on the Consumption profile,
-# refresher container elsewhere); the APM gateway Agent resolves ENC[dsv://...] with dsv-fetch as its secret backend.
+# Observability Pipelines Worker (pipeline + Container App; reads the hubs, so no Fluent Bit aggregator in this mode)
+# and the Datadog Agent APM gateway (8126) for managed runtimes without a node Agent.
 module "fleet" {
   source = "../fleet-policy"
   policy = var.fleet_policy

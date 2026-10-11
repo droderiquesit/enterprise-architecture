@@ -1,7 +1,7 @@
 # Contributing
 
-Trunk-based: short-lived branches, small pull requests into `main`, squash merge. The full model, who approves
-what, and how CI stays fast with many commits per hour: [docs/guides/branching-and-development.md](docs/guides/branching-and-development.md).
+Trunk-based: short-lived branches, small pull requests into `main`, squash merge. Full model and who approves what:
+[docs/guides/branching-and-development.md](docs/guides/branching-and-development.md).
 
 ## Before you push
 
@@ -9,6 +9,7 @@ what, and how CI stays fast with many commits per hour: [docs/guides/branching-a
 pip install pre-commit && pre-commit install        # cheap gates on every commit
 python3 -m tools.changeset explain --branch          # what your branch may do; what a run would validate/build/plan
 python3 -m tools.ci run --changed                    # the tests the PR build will run, locally and in parallel
+python3 -m tools.ci run --all                        # everything (what the nightly run does)
 ```
 
 ## Branches
@@ -27,9 +28,8 @@ dev, test/prod receive the same build by promotion.
 
 * Link a work item; resolve every comment, including GitHub Copilot code review threads (requested automatically,
   advisory; [automated PR review](docs/guides/automated-pr-review.md)).
-* One approval plus the automated reviewer's required status `eh-review/policy`. Low-risk allowlisted changes can
-  complete with the bot's approval; everything else needs a human, and protected areas (reviewer policy,
-  pipelines/registry, identity/secrets, network, prod config) need their owner group
+* One approval plus the automated reviewer's required status `eh-review/policy`: low-risk allowlisted changes can
+  complete with the bot's approval, everything else needs a human, protected areas need their owner group
   ([CODEOWNERS](.github/CODEOWNERS), generated from `catalog/components.yaml` `owners`).
 * Validation expires when `main` moves: rebase or let auto-complete re-validate.
 

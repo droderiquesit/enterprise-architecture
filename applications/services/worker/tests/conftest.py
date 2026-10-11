@@ -5,31 +5,6 @@ os.environ.setdefault("DD_SERVICE", "hello-worker")
 os.environ.setdefault("DD_VERSION", "1.0.0-test")
 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
 
-import pytest
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from hello_common.testing import clear_faults, span_capture  # noqa: F401
 
-from hello_common.config import service_info
-from hello_common.telemetry import setup_telemetry
-
-EXPORTER = InMemorySpanExporter()
-PROVIDER = setup_telemetry(service_info("hello-worker"), span_exporter=EXPORTER)
-
-
-@pytest.fixture
-def spans():
-    EXPORTER.clear()
-
-    def _get():
-        PROVIDER.force_flush()
-        return EXPORTER.get_finished_spans()
-
-    return _get
-
-
-@pytest.fixture(autouse=True)
-def _clear_faults():
-    from hello_common.faults import REGISTRY
-
-    REGISTRY.clear()
-    yield
-    REGISTRY.clear()
+EXPORTER, PROVIDER, spans = span_capture("hello-worker")

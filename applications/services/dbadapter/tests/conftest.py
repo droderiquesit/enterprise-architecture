@@ -5,16 +5,7 @@ os.environ.setdefault("DD_VERSION", "1.0.0-test")
 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
 os.environ.pop("DB_SERVICE_NAME", None)
 
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def _clear_faults():
-    from hello_common.faults import REGISTRY
-
-    REGISTRY.clear()
-    yield
-    REGISTRY.clear()
+from hello_common.testing import clear_faults  # noqa: F401
 
 
 async def exercise_contract(driver, *, check_list: bool = True):

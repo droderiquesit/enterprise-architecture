@@ -45,16 +45,7 @@ variable "architecture" {
 }
 
 variable "telemetry" {
-  description = <<-EOT
-    The obs-telemetry-transport contract v3 (catalog/contracts/obs-telemetry-transport.v3.schema.json) or an
-    equivalent object built by hand for an existing environment. Only non-secret values and Delinea DSV
-    references (dsv://<path>#<element>) are read; secret VALUES never pass through this module.
-      secrets    : DSV runtime env for workloads (DSV_TENANT/DSV_TLD/DSV_BASE_URL/DSV_AUTH) and the dsv-fetch image
-                   (2.0.0: static binary /opt/dsv-fetch/dsv-fetch) whose init container installs the binary for the
-                   Datadog sidecars (ACI Agent, Container Apps serverless-init).
-      aggregator : the Observability Pipelines Worker (agent_logs_url = its Datadog Agent source, e.g.
-                   http://<worker>:8282) the Datadog sidecars send logs to in observability_pipelines mode.
-  EOT
+  description = "The obs-telemetry-transport v3 contract (or an equivalent object): non-secret values and dsv:// references only."
   type = object({
     datadog_site = string
     api_key_ref  = string
@@ -267,7 +258,7 @@ variable "agent_sidecar" {
 }
 
 variable "serverless_init" {
-  description = "Container Apps serverless-init sidecar (fleet policy default for aca: traces, DogStatsD, app log file): Azure context and optional image/sizing overrides (null = fleet policy agent.serverless_init). The Datadog API key is read from Delinea DSV (telemetry.api_key_ref) by the dsv-fetch binary in the sidecar's start command (no Container Apps secret)."
+  description = "Container Apps serverless-init sidecar: Azure context and optional image / sizing overrides (null = fleet policy agent.serverless_init)."
   type = object({
     image           = optional(string)
     cpu             = optional(number)

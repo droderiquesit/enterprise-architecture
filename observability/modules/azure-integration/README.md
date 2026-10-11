@@ -15,13 +15,10 @@ custom_metrics, resource_collection, cspm, usage_metrics, app_service_plan and c
 Output: `integration_id`, which is the integration id (`<tenant>:<client>`) or the monitor resource id.
 
 ## Secrets
-* `auth = secretless` is the **default** (no secret anywhere). `client_secret` (auth = secret only) is a sensitive input the
-  pipeline reads from Delinea DSV just in time (never tfvars). The module never outputs it.
-  `datadog_integration_azure.client_secret` is stored (encrypted) in state. This is a provider limitation: there
-  is no write-only variant in datadog 4.25.
-* `auth = secretless` uses Datadog's secretless (workload identity federation) auth, so no secret is involved.
-  You must create the federated credential on the Entra app as Datadog documents it. azurerm cannot manage Entra
-  objects, so the lab does this in `bootstrap/`.
+* `auth = secretless` (default) uses workload identity federation: no secret. Create the federated credential on
+  the Entra app as Datadog documents it (azurerm cannot manage Entra objects, so the lab does this in `bootstrap/`).
+* `auth = secret`: `client_secret` is a sensitive input read from Delinea DSV just in time (never tfvars), never
+  output, but stored (encrypted) in state - datadog 4.25 has no write-only variant.
 * Linking a **new** native monitor requires `native_org_keys` (API + application key, sensitive, kept in state).
   Prefer `existing_monitor_id`.
 
@@ -43,10 +40,7 @@ section 6.
   resource, which duplicates the Event Hub, sidecar and DaemonSet routes (README-transport.md §2.5).
 * Datadog **automated log forwarding** (ARM template: control-plane Function Apps, forwarders on Container Apps
   jobs plus storage, and diagnostic settings created automatically on discovered resources) is not used for the
-  same reason. It also conflicts with ADR rule 4, which says diagnostic settings are owned by obs-diagnostics.
-  The Event Hub path is implemented in `telemetry-transport` + `diagnostic-settings`. Datadog now labels its
-  own legacy Event Hub forwarder "existing deployments only". This package's Event Hub consumer is Fluent Bit,
-  not Datadog's Function forwarder.
+  same reason, and because ADR rule 4 makes obs-diagnostics the owner of diagnostic settings.
 
 ## Known limitations
 * `resource_provider_configs` (per-namespace metric switches) is not wired. With datadog provider 4.25,
@@ -54,17 +48,4 @@ section 6.
   instead.
 * AzAPI gap: `Microsoft.Datadog/monitors/monitoredSubscriptions` (API 2025-06-11) has no azurerm resource.
 
-## Tests
-`tests/integration.tftest.hcl` covers app_registration, secretless, native new and existing monitors, `none`, the
-native log block (subscription, resource and Entra logs, tag filters), and negative tests (secret mode without a
-secret, bad subscription id, native + Event Hubs Activity Log on the same subscription, native resource logs +
-diagnostic settings, native + Event Hubs Entra).
-
-## References (checked 2026-10-09)
-- https://docs.datadoghq.com/integrations/guide/azure-programmatic-management
-- https://docs.datadoghq.com/integrations/guide/azure-portal (Azure Native integration)
-- https://docs.datadoghq.com/logs/guide/azure-automated-log-forwarding/ and https://docs.datadoghq.com/logs/guide/azure-automated-logs-architecture
-- https://docs.datadoghq.com/integrations/guide/azure-advanced-configuration/
-- https://learn.microsoft.com/azure/templates/microsoft.datadog/2025-06-11/monitors/monitoredsubscriptions
-- https://registry.terraform.io/providers/DataDog/datadog/4.25.0/docs/resources/integration_azure
-- https://learn.microsoft.com/azure/partner-solutions/metrics-logs (native tag rules for logs)
+Reference: [Azure programmatic management](https://docs.datadoghq.com/integrations/guide/azure-programmatic-management).

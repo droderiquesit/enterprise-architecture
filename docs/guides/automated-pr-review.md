@@ -69,11 +69,9 @@ with **HTTP Basic** credentials (`eh-review` + secret). The Functions auth level
 3. replay: `createdDate` within 10 min (2 min clock skew) and the event `id` not seen before (per-instance cache;
    duplicates answer `200 duplicate`, so Azure DevOps retries do not double-queue).
 
-Microsoft Learn notes that `httpHeaders` of a subscription are "viewable by anyone who has access to the service hook
-subscription"; Basic credentials are therefore used instead of a custom header, `resourceDetailsToSend = minimal`, and
-the payload is only used to pick *which* PR to re-read. Inbound traffic is additionally restricted to the
-`AzureDevOps` **service tag** (Microsoft Learn, *Allowed IP addresses and domain URLs*: service tags are supported for
-inbound connections from Azure DevOps, including service hooks), with an opt-out setting.
+Subscription `httpHeaders` are visible to anyone with access to the subscription, hence Basic credentials instead of
+a custom header; `resourceDetailsToSend = minimal`, and the payload only selects *which* PR to re-read. Inbound
+traffic is also restricted to the `AzureDevOps` **service tag** (opt-out setting).
 
 ### Identity and least privilege
 
@@ -83,9 +81,7 @@ inbound connections from Azure DevOps, including service hooks), with an opt-out
   project **Readers** group, plus a repository-scoped ACE: **Read + Contribute to pull requests** on the lab repository
   only (status posting requires *Contribute to pull requests*). No Build, Release, policy-edit or bypass permissions;
   never a member of a required-reviewer group.
-- Tokens: Entra access token for Azure DevOps — resource `499b84ac-1321-427f-aa17-267ca6975798`, scope
-  `499b84ac-1321-427f-aa17-267ca6975798/.default` (equivalently `https://app.vssps.visualstudio.com/.default`),
-  verified on Microsoft Learn *Use service principals & managed identities in Azure DevOps* / *Issue Entra tokens*.
+- Tokens: Entra access token for Azure DevOps, scope `499b84ac-1321-427f-aa17-267ca6975798/.default`.
 - Secrets: `WEBHOOK_SECRET=dsv://<prefix>/<env>/pr-reviewer-webhook-secret#value` and optional
   `ANTHROPIC_API_KEY=dsv://<prefix>/<env>/anthropic-api-key#value`, resolved at start-up by `hello_common` with the
   Function's managed identity (ADR-0001 §14). The DSV user + `read` permission on exactly those two paths are in the
@@ -138,12 +134,11 @@ runs exactly the same engine on a local checkout (policy/registry from `--base`)
      iteration; the job re-checks while waiting;
    - commits pushed after Copilot's newest comment ⇒ the summary says **"request a fresh Copilot review"**
      (Copilot does not re-review new commits automatically).
-   Detection is a heuristic: there is no documented Copilot review-status API, so "reviewed the current iteration" =
-   Copilot's newest comment is not older than the latest iteration's `createdDate` (Copilot appears as a reviewer with
-   vote 0). A Copilot review that leaves no comment on a new iteration looks like "not reviewed yet": request a review
-   or have a human approve. A user whose display name equals the matcher could fake a Copilot thread; it can only
-   withhold or (for allowlisted classes) satisfy the Copilot gate, never approve - set `copilot.reviewer_ids` once the
-   real id is observed. Copilot comment text is never interpreted (prompt injection in it changes nothing).
+   Detection is a heuristic (no documented Copilot review-status API): "reviewed the current iteration" = Copilot's
+   newest comment is not older than the latest iteration's `createdDate`, so a review without comments looks like
+   "not reviewed yet" (request one or have a human approve). A user whose display name matches could fake a Copilot
+   thread but only withhold or satisfy the gate, never approve - set `copilot.reviewer_ids` once the real id is known.
+   Copilot comment text is never interpreted.
 
    **Alternative provider `claude`** (`ai.provider: claude`, `ai.enabled: true`, `ANTHROPIC_API_KEY` from DSV): the
    bot's own Claude review (`tools/review/ai.py`, official `anthropic` SDK 1.13.0,
@@ -207,13 +202,9 @@ Limits (Microsoft Learn): PR must be Active with no merge conflicts; ≤ 100 cha
 one review per merge commit; 5 concurrent reviews per organization. Larger PRs never get a Copilot review, so with
 `required_before_auto_approve` they are never bot-approved (they exceed `max_files_for_auto_approve` anyway).
 
-What Copilot cannot do: approve, request changes, satisfy required reviewers or block merge (only the required
-comment-resolution policy makes its comments binding); re-review new commits automatically; run on self-hosted or
-Windows pools; read instructions from the PR source branch (instructions come from the target branch - a PR cannot
-weaken them for its own review; `.azuredevops/**` is a never-auto-approved `review-governance` path).
-
-Cost: no fixed fee; token-based per review. Budget the meter rather than estimate per PR (token use depends on diff
-size and instructions). The bot itself adds ≈ $0-2/month (Flex Consumption) - see `foundation/pr-reviewer/README.md`.
+Copilot reads its instructions from the target branch (a PR cannot weaken them; `.azuredevops/**` is a
+`review-governance` path) and does not re-review new commits automatically. Cost is token-based per review - budget
+the meter; the bot itself adds about $0-2/month (`foundation/pr-reviewer/README.md`).
 
 ## 5. Setup (operator, once per organization)
 

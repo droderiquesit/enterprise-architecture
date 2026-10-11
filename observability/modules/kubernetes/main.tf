@@ -1,30 +1,10 @@
-# Datadog Agent (Helm chart, DaemonSet + Cluster Agent + cluster-checks runners) on an EXISTING cluster - the fleet
-# collector of the node: metrics, APM (Single Step Instrumentation of the Datadog libraries, profiler), OTLP for
-# otel-mode workloads, DBM cluster checks and, with the fleet policy defaults (log_pipeline = observability_pipelines,
-# Agent log collection), container logs shipped to the Observability Pipelines Worker. One log collector per node: the
-# Fluent Bit DaemonSet is installed only for the fallback (node collector fluent_bit / log_pipeline =
-# fluent_bit_direct), and then the Agent's log collection is off (README-transport.md).
-#
-# Chart values are layered YAML (values = [base, fleet, distribution?, overrides...], later wins):
-#   values/base.yaml       static, reviewed defaults (sizing, OTLP, dsv-fetch volume wiring)
-#   local.fleet_values     computed here from the fleet / tag policies and the inputs only (site, cluster name, tags,
-#                          log collector, SSI targets, versions, OP Worker URL, DSV references, feature flags; the
-#                          distribution-dependent keys: kubelet TLS, providers.aks, APM socket)
-#   values/openshift.yaml  distribution = "openshift" only: static OpenShift / ARO requirements (SCCs, CRI-O socket,
-#                          DogStatsD host port, admission controller hostip mode, worker-node selector)
-#   var.values_overrides   per-cluster YAML documents (validated: they cannot change the secret path)
-#
-# Secrets (ADR-0001 section 14): ONE path, nothing secret passes through Terraform or a Kubernetes Secret. The node
-# Agent, the Cluster Agent and the cluster-checks runners resolve api_key ENC[dsv://...] (and DB passwords of cluster
-# checks) with secret_backend_command = the static dsv-fetch binary (`agent-backend`), copied by the init container
-# dsv-fetch-install (postrender/dsv-fetch-init.sh) into an in-memory emptyDir, authenticating to Delinea DSV with
-# Microsoft Entra workload identity (AKS, or a managed-identity ARO cluster: same webhook contract). The Fluent Bit fallback and the optional in-cluster OP Worker get the key from a dsv-fetch `init`
-# container (in-memory emptyDir); the chart Secrets hold only the ENC[] reference.
+# Datadog Agent chart (+ optional Fluent Bit fallback DaemonSet and OP Worker) on an existing cluster. Chart values
+# are layered (base, fleet, openshift?, overrides; later wins) - README.md. Secrets: chart Secrets hold only
+# ENC[dsv://...]; the dsv-fetch binary resolves them with workload identity.
 module "fleet" {
   source = "../fleet-policy"
   policy = var.fleet_policy
-  # fleet-policy architecture "aks" = Kubernetes nodes with the Datadog node Agent; OpenShift (ARO) clusters use the
-  # same collection decision (node Agent logs, SSI, profiler) - the distribution only changes chart values
+  # OpenShift uses the same collection decision; the distribution only changes chart values
   architecture = "aks"
   env          = var.datadog.env
   overrides    = var.log_pipeline == null ? {} : { log_pipeline = var.log_pipeline }
@@ -40,23 +20,21 @@ module "tags" {
 
 locals {
   openshift = var.distribution == "openshift"
-  # kubelet TLS: AKS default = serving-certificate rotation (providers.aks); OpenShift = tlsVerify false (Datadog's
-  # documented OpenShift setting: kubelet serving certificates are not signed by a CA mounted in the Agent pod)
+  # OpenShift kubelet serving certificates are not signed by a CA mounted in the Agent pod
   kubelet_mode   = coalesce(var.features.kubelet_tls_mode, local.openshift ? "insecure" : "aks_rotation")
   op_mode        = module.fleet.log_pipeline == "observability_pipelines"
   agent_logs     = module.fleet.node_collector == "agent"
   fluent_bit_on  = !local.agent_logs
-  op_svc_url     = var.op_worker.enabled ? "http://opw-observability-pipelines-worker.${var.op_worker.namespace}.svc.cluster.local:8282" : null
-  op_logs_url    = coalesce(local.op_svc_url, var.op_logs_url, "unset")
-  op_fluent_host = var.op_worker.enabled ? "opw-observability-pipelines-worker.${var.op_worker.namespace}.svc.cluster.local" : try(regex("^https?://([^:/]+)", var.op_logs_url)[0], "unset")
+  op_svc_host    = "opw-observability-pipelines-worker.${var.op_worker.namespace}.svc.cluster.local"
+  op_logs_url    = var.op_worker.enabled ? "http://${local.op_svc_host}:8282" : coalesce(var.op_logs_url, "unset")
+  op_fluent_host = var.op_worker.enabled ? local.op_svc_host : try(regex("^https?://([^:/]+)", var.op_logs_url)[0], "unset")
   apm_datadog    = try(module.fleet.sections.apm.mode, "datadog") == "datadog"
   libs           = module.fleet.apm.library_versions
   agent_cfg      = module.fleet.agent
-  # single Agent pin: fleet policy agent.version (versions.yaml images.datadog_agent carries the same version); no
-  # fallback - a policy without it fails the plan (precondition on helm_release.datadog)
+  # single Agent pin, no fallback (precondition on helm_release.datadog)
   agent_version  = try(tostring(module.fleet.agent.version), null)
   agent_registry = try(regex("^(.+)/agent$", module.fleet.agent.image)[0], null)
-  # SSI library versions: chart format "v<major>" (datadog chart values example)
+  # chart format "v<major>"
   dd_trace_versions = { for lang, v in local.libs : lang => startswith(v, "v") ? v : "v${v}" }
   profiling_on      = try(module.fleet.sections.profiling.enabled, true)
   ssi_targets = [{
@@ -99,12 +77,10 @@ locals {
     "azure.workload.identity/client-id" = coalesce(var.dsv.cluster_checks_identity_client_id, var.dsv.identity_client_id)
   }
 
-  # Agent log shipping to the Observability Pipelines Worker (Datadog Agent source) - Datadog-documented env
   agent_log_env = local.agent_logs && local.op_mode ? [
     { name = "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED", value = "true" },
     { name = "DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL", value = local.op_logs_url },
   ] : []
-  # trace-agent drops health-probe resources (fleet policy apm.ignore_resources)
   apm_ignore_env = length(module.fleet.agent_apm_ignore_resources) == 0 ? [] : [
     { name = "DD_APM_IGNORE_RESOURCES", value = join(",", module.fleet.agent_apm_ignore_resources) },
   ]
@@ -132,9 +108,8 @@ locals {
         site        = var.datadog.site
         clusterName = var.cluster_name
         tags        = local.dd_tags
-        # one log collector per node: the Agent (-> Observability Pipelines Worker) or the Fluent Bit DaemonSet
-        logs = { enabled = local.agent_logs, containerCollectAll = local.agent_logs }
-        # pod label -> tag mapping of the tag policy (team, domain, tier, ...); every value is also in ad.datadoghq.com/tags
+        # one log collector per node: the Agent or the Fluent Bit DaemonSet
+        logs            = { enabled = local.agent_logs, containerCollectAll = local.agent_logs }
         podLabelsAsTags = module.tags.pod_labels_as_tags
         apm = merge(
           # OpenShift: no APM Unix socket (it needs a hostPath volume in every application pod) - host port 8126 only
@@ -158,20 +133,17 @@ locals {
           arguments = "agent-backend"
           timeout   = 30
         }
-        # datadog.env reaches the node Agent containers only (helm template verified); the Cluster Agent and the
-        # runners get the DSV env through their own env lists below
+        # node Agent containers only; the Cluster Agent and the runners get their own env lists below
         env = concat(local.dsv_env, local.agent_log_env, local.apm_ignore_env)
       },
       # the collectors' own namespaces are never collected (no feedback loops / duplicates)
       local.agent_logs ? { containerExcludeLogs = join(" ", [for ns in var.fluent_bit.exclude_namespaces : "kube_namespace:${ns}"]) } : {},
       length(local.kubelet) > 0 ? { kubelet = local.kubelet } : {},
     )
-    # Remote Configuration (Fleet Automation, APM sampling / SSI policies); preferred top-level key of the chart
     remoteConfiguration = { enabled = try(local.agent_cfg.remote_configuration, true) }
     providers           = { aks = { enabled = var.features.is_aks && !local.openshift } }
     agents = {
-      image = { tag = local.agent_version }
-      # workload identity for dsv-fetch (service account "datadog")
+      image            = { tag = local.agent_version }
       rbac             = { serviceAccountAnnotations = local.wi_annotations }
       additionalLabels = local.wi_labels
     }
@@ -192,14 +164,13 @@ locals {
   }
 
   datadog_values = concat(
-    # Agent registry from the fleet policy agent.image (<registry>/agent); the chart default otherwise
     [file("${path.module}/values/base.yaml"), yamlencode(merge(local.fleet_values, local.agent_registry == null ? {} : { registry = local.agent_registry }))],
     local.openshift ? [file("${path.module}/values/openshift.yaml")] : [],
     var.values_overrides,
   )
   # workloads that receive the dsv-fetch-install init container (postrender/dsv-fetch-init.sh --expect)
   backend_workloads = var.features.cluster_checks_runner ? 3 : 2
-  # OpenShift: --distribution openshift - the Cluster Agent / runner init containers take the SCC-assigned UID
+  # OpenShift: the Cluster Agent / runner init containers take the SCC-assigned UID
   postrender_args = concat(
     ["${path.module}/postrender/dsv-fetch-init.sh", "--image", var.dsv.fetch_image, "--expect", tostring(local.backend_workloads)],
     local.openshift ? ["--distribution", "openshift"] : [],
@@ -219,11 +190,9 @@ module "flb" {
 }
 
 locals {
-  flb_cm_name = "fluent-bit-obs-config"
-  # dsv-fetch `init` containers (Fluent Bit fallback, OP Worker): non-root, read-only rootfs, no capabilities
+  flb_cm_name            = "fluent-bit-obs-config"
   fetch_security_context = { runAsNonRoot = true, allowPrivilegeEscalation = false, readOnlyRootFilesystem = true, capabilities = { drop = ["ALL"] } }
-  # Fluent Bit fallback DaemonSet. Direct mode: dsv-fetch writes /dsv-secrets/fluentbit-env.yaml (DD_API_KEY) from DSV
-  # with workload identity; observability_pipelines: no key on the edge -> no dsv-fetch.
+  # observability_pipelines mode: no key on the edge -> no dsv-fetch
   fb_needs_key = !local.op_mode
   fluent_bit_values = {
     kind              = "DaemonSet"
@@ -277,8 +246,7 @@ locals {
     resources   = { requests = { cpu = var.fluent_bit.cpu_request, memory = var.fluent_bit.memory_request }, limits = { memory = var.fluent_bit.memory_limit } }
     tolerations = var.fluent_bit.tolerations
     podAnnotations = {
-      # roll pods when config changes. Fluent Bit self-metrics are pushed over OTLP to the node Agent
-      # (fluentbit_metrics input -> opentelemetry output) so names keep _total, e.g. fluentbit_output_errors_total.
+      # roll pods when the config changes
       "checksum/obs-config" = module.flb.files_sha256
     }
     livenessProbe  = { httpGet = { path = "/api/v1/health", port = "http" } }
@@ -320,8 +288,7 @@ resource "helm_release" "datadog" {
   timeout          = 900
   max_history      = 5
   values           = local.datadog_values
-  # adds the dsv-fetch-install init container (the chart has no hook for extra init containers); POSIX sh + awk on
-  # the deploy agent. Relative path: the helm provider runs it from the root module's directory.
+  # adds the dsv-fetch-install init container (the chart has no hook for extra init containers); needs sh + awk
   postrender = {
     binary_path = "/bin/sh"
     args        = local.postrender_args
@@ -377,7 +344,6 @@ locals {
   opw_values = {
     image = { tag = var.op_worker.image_tag }
     datadog = {
-      # the chart Secret holds only the reference; the real values come from the dsv-fetch env file below
       apiKey     = "ENC[${var.dsv.api_key_ref}]"
       pipelineId = coalesce(var.op_worker.pipeline_id, "unset")
       site       = var.datadog.site
@@ -394,8 +360,7 @@ locals {
       requests = { cpu = var.op_worker.cpu_request, memory = var.op_worker.memory_request }
       limits   = { memory = var.op_worker.memory_limit }
     }
-    # DSV values (API key, e.g. the Event Hubs SASL password) from a dsv-fetch dotenv file on an in-memory emptyDir,
-    # exported by the start command (the Worker image has /bin/sh; verified with 2.22.0) - no Kubernetes Secret
+    # DSV values come from a dsv-fetch dotenv file on an in-memory emptyDir, exported by the start command
     serviceAccount = { create = true, annotations = local.wi_annotations }
     podLabels      = local.wi_labels
     initContainers = [{

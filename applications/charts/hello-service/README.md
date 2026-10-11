@@ -4,22 +4,16 @@
   `helm lint --strict`, `helm template` + `kubeconform -strict` (Kubernetes 1.36.0 schemas, the platform-aks default),
   pytest assertions (`tests/charts`) and a kind v1.36.4 smoke (install, probes, BFF → catalog, upgrade, rollback).
   Not deployed to AKS/ARO from this sandbox (no Azure credentials).
-- **Chart version** `2.1.2` (2.1.2: comments/docs only - ARO uses workload identity + `secretsMode: dsv` like AKS, `existingSecretEnv` documented for kind only, rendered output unchanged; 2.1.1: comments/docs only - log-collector wording for observability 4.0.0, rendered output unchanged apart from a YAML comment; 2.1.0: additive `service.tags` (tag policy), `telemetry.agentLogSource`, `telemetry.singleStepInstrumentation` for the Datadog fleet collection; 2.0.0: Key Vault / CSI removed, secrets as DSV references - breaking values change) (semver of the chart, independent of the applications). The application version is
-  `service.version` (set per release by the deployer); `appVersion` is informational only (`helm package --app-version` may override it).
+- **Chart version** `2.1.2` (chart semver, independent of the applications; 2.0.0 removed Key Vault / CSI in favour
+  of DSV references). The application version is `service.version`; `appVersion` is informational only.
 - **Engines**: Helm 4 CLI (pinned `v4.3.0`) and the Terraform `hashicorp/helm` 3.3 provider (Helm v3 SDK); rendering is
   tested to be identical with Helm `v3.22.0`. `kubeVersion: >=1.30.0-0`.
 
 ## Why one generic chart (and no umbrella chart)
 
-Every Enterprise Hello workload on Kubernetes has the same shape (digest-pinned image, workload identity, the
-instrumentation contract env, hardened pod, probes, PDB/HPA), so one chart with three `kind`s replaces per-service
-manifests. An umbrella chart (`enterprise-hello` with aliased `hello-service` dependencies) was **rejected**:
-
-- one release per workload gives independent upgrade, `helm rollback` and failure blast radius; an umbrella makes a
-  bad catalog image roll back the BFF too, and one slow rollout time out all workloads;
-- Terraform already composes the set (`for_each` over `settings.apps`) with values from typed contracts; an umbrella
-  would duplicate that composition in YAML and add `helm dependency update`/lock/packaging steps;
-- the same chart is reused unchanged on ARO (`deploy-aro.sh`) and kind, which an umbrella tied to the AKS set is not.
+Every workload has the same shape, so one chart with three `kind`s replaces per-service manifests. One release per
+workload keeps upgrades, `helm rollback` and failures independent; Terraform already composes the set, and the same
+chart is reused unchanged on ARO and kind.
 
 ## What it renders
 
@@ -54,8 +48,7 @@ ARO managed-identity clusters the OpenShift pod-identity webhook, which honours 
 Azure users by the managed identity's resource id (`xms_mirid` claim) - that it accepts a workload-identity-federated
 token is not verified yet. Documented fallback `secretsMode: synced`: the Delinea DSV Kubernetes syncer (dsv-k8s)
 maintains the Secret `secretsSync.secretName` (default `<fullname>-dsv`, one key per `secretEnv` name) and the chart
-references it with `secretKeyRef`. `existingSecretEnv` references other Secrets created out of band (kind smoke tests only;
-ARO reads DSV directly since chart 2.1.2).
+references it with `secretKeyRef`. `existingSecretEnv` references other Secrets created out of band (kind smoke tests only).
 The schema accepts secret-looking names (`*PASSWORD`, `*SECRET`, `*TOKEN`, `*API_KEY`, `*ACCESS_KEY`, `*PRIVATE_KEY`,
 `OTEL_EXPORTER_OTLP_HEADERS`) in `env` only with a `dsv://` value, and rejects inline credentials (`Password=`,
 `AccountKey=`, `SharedAccessKey=`, `Secret=`), `@Microsoft.KeyVault(` values and Key Vault URLs.
@@ -178,9 +171,3 @@ pipeline so the next `terraform plan` shows no drift. A failed upgrade rolls bac
 | CKV_K8S_35 secrets as env | the application contract reads `FAULT_TOKEN` from env; the env value is a `dsv://` reference resolved by the app (or a dsv-k8s syncer Secret in secretsMode synced) |
 | CKV_K8S_38 SA token mounted | required by workload identity (AKS, ARO); disabled when `identity.workloadIdentity: false` |
 
-Docs: https://helm.sh/docs/topics/charts/ , https://helm.sh/docs/topics/registries/ ,
-https://learn.microsoft.com/azure/container-registry/container-registry-helm-repos ,
-https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster ,
-https://learn.microsoft.com/azure/aks/app-routing ,
-https://docs.datadoghq.com/getting_started/tagging/unified_service_tagging/ ,
-https://docs.openshift.com/container-platform/latest/authentication/managing-security-context-constraints.html

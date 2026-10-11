@@ -19,7 +19,6 @@ a reviewed re-run. State-lock failures are handed to tools/deploy/lock_doctor.py
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import os
 import random
@@ -35,6 +34,9 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
+
+from tools.common import utc_now  # noqa: E402
+
 RULES_FILE = Path(__file__).with_name("retry_rules.yaml")
 TAIL_BYTES = 200_000
 
@@ -110,7 +112,7 @@ def _log_path() -> Optional[Path]:
 
 
 def log_event(event: dict) -> None:
-    event = dict(event, at=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    event = dict(event, at=utc_now())
     p = _log_path()
     if p:
         p.parent.mkdir(parents=True, exist_ok=True)

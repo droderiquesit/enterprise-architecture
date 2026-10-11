@@ -1,12 +1,6 @@
-# Datadog Observability Pipelines: the central, Datadog-managed log pipeline of the package (fleet policy
-# log_pipeline = observability_pipelines). The pipeline DEFINITION is a Datadog object (datadog_observability_pipeline);
-# the Worker that runs it is deployed by modules/telemetry-transport (Container Apps) or modules/kubernetes (Helm) with
-# the env contract output here. Graph:
-#   fluent_bit (24224) + datadog_agent (8282) [+ opentelemetry] -> group "app": normalise JSON, redact, tag policy
-#   eventhub (Kafka 9093)                                        -> group "azure": unwrap batch, split records,
-#                                                                   Datadog-forwarder shape, drop duplicates/foreign
-#                                                                   categories, dedupe, sample, quota, tag policy
-#   both groups -> datadog_logs (disk buffer) [+ azure_storage archive]
+# Datadog Observability Pipelines definition (the Worker runs in modules/telemetry-transport or modules/kubernetes):
+#   fluent_bit + datadog_agent [+ opentelemetry] -> group "app"; eventhub (Kafka) -> group "azure";
+#   both -> datadog_logs (disk buffer) [+ azure_storage archive]
 locals {
   dir = "${path.module}/../../config/observability-pipelines"
   eh  = try(var.sources.eventhub, null) != null ? try(var.sources.eventhub.enabled, true) : false

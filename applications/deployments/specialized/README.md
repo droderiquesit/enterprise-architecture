@@ -42,10 +42,3 @@ failed upgrade; manual `helm -n hello rollback hello-catalog-api <revision> --wa
 
 ## Cost
 No billable resources of its own beyond the runbook (Automation free minutes cover an hourly probe).
-
-## Test
-`bash tools/validate/terraform.sh applications/deployments/specialized` (fmt -check, init -backend=false, validate,
-`terraform test` with mock providers: `tests/specialized.tftest.hcl`).
-
-Docs: https://learn.microsoft.com/azure/service-fabric/service-fabric-guest-executables-introduction , https://learn.microsoft.com/azure/openshift/ ,
-https://learn.microsoft.com/azure/automation/automation-runbook-types

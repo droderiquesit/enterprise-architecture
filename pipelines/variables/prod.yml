@@ -1,19 +1,8 @@
 # Compile-time settings of environment "prod" (template variables file).
-# Service connection NAMES must be known when the pipeline is compiled (they cannot come from a
-# variable group), so they live here. Nothing in this file is secret: service connection ids,
-# storage account names and pool names are identifiers, not credentials.
-# Replace every placeholder before the first run (pipelines/README.md "ADO setup").
+# Service connection names must be known at compile time, so they live here. Nothing here is secret
+# (identifiers only). Replace every placeholder before the first run (pipelines/README.md "ADO setup").
 variables:
-  # Workload identity federation service connections (Azure Resource Manager, WIF):
-  #   (granted by bootstrap/identities.tf; see bootstrap/README.md "Pipeline identities and least privilege")
-  #   plan  identity: Reader on the lab subscription + Storage Blob Data Contributor on the
-  #                   tfstate container (blob-lease locking), Data Reader on contracts,
-  #                   Data Contributor on deployments, plans and evidence
-  #   apply identity: Contributor + Role Based Access Control Administrator (ABAC-constrained: cannot assign
-  #                   Owner / User Access Administrator / RBAC Administrator) + Resource Policy Contributor on
-  #                   the lab subscription, Storage Blob Data Contributor on all six bootstrap containers
-  #   build identity: AcrPush on the lab registry (platform-shared), Data Contributor on packages,
-  #                   Data Reader on deployments
+  # Workload identity federation service connections; roles: bootstrap/README.md "Pipeline identities and least privilege"
   planServiceConnection: sc-lab-prod-plan
   planServiceConnectionId: "00000000-0000-0000-0002-000000000001"
   applyServiceConnection: sc-lab-prod-apply
@@ -24,17 +13,13 @@ variables:
   containerRegistry: ehacrprod00000
   # agent pool on the deploy-agents subnet (foundation-deploy-agents) reaching private endpoints
   deployPool: foundation-deploy-agents
-  # Delinea DevOps Secrets Vault (ADR-0001 section 14) - identifiers, not secrets; must equal the `secrets` section of
-  # environments/prod/environment.yaml (pipeline_templates ENV004). No variable group carries secrets: steps that need
-  # one resolve it with tools/secrets/fetch.py on the self-hosted deploy pool (deploy agent managed identity).
+  # Delinea DSV identifiers; must equal the `secrets` section of environments/prod/environment.yaml (ENV004)
   dsvTenant: example-lab
   dsvTld: com
   dsvAuthProvider: azure-eh
   datadogSite: datadoghq.com
-  # Promotion (environments/promotion.yaml): '' = this environment builds artifacts from source.
-  # Otherwise the Build stage promotes the exact digests recorded by `promoteFrom` (never rebuilds); the
-  # build identity of THIS environment needs AcrPull on promoteFromContainerRegistry and Storage Blob Data
-  # Reader on promoteFromStateStorageAccount containers `deployments` and `packages`.
+  # Promotion: '' = this environment builds; otherwise the Build stage promotes the digests `promoteFrom` recorded
+  # (this environment's build identity needs AcrPull / Blob Data Reader on the source registry / deployments, packages)
   promoteFrom: test
   promoteFromStateStorageAccount: ehsttesttfstate00000
   promoteFromContainerRegistry: ehacrtest00000

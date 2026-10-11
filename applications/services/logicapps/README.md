@@ -25,8 +25,6 @@ queue `batch-items` with `MessageId` = `<batchId>-<n>` (duplicate-detection frie
 for a managed API connection with **managed identity** (`ManagedServiceIdentity`, user-assigned).
 
 ## Tests
-`pytest` (11): JSON well-formedness of every file; Consumption definition validates against the **official**
-Workflow Definition Language schema (2016-06-01, vendored in `tests/schemas/`, fetched 2026-10-09); Standard
-workflow validates against the same schema extended only with the Standard-only `ServiceProvider` operation type,
-plus cross-checks (connection names, app settings, parameters, runAfter). Not deployed/validated by the Logic Apps
+`pytest` validates both workflow definitions against the official WDL schema (2016-06-01, vendored in
+`tests/schemas/`; Standard adds only the `ServiceProvider` type) plus cross-checks. Not validated by the Logic Apps
 service itself.

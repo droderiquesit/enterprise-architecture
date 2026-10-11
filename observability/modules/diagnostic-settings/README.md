@@ -17,12 +17,11 @@ Inputs:
 * `destination`: `{ authorization_rule_id (namespace rule, Manage+Send+Listen), app_logs_hub, platform_logs_hub, location }`
 * `platform_log_tier` (`security` | `standard` (default) | `verbose`), `platform_log_allowlist_overrides`
   (type -> categories, replaces the tier list for that type), `category_policy` (replace the whole policy)
-* `app_log_categories`; `platform_log_allowlist` (1.0 input: when set, it replaces the policy for every type)
+* `app_log_categories`; `platform_log_allowlist` (legacy: when set, it replaces the policy for every type)
 
 ## Category policy (`category-policy.json`)
 A maintained map: resource type -> categories per tier (cumulative), `supersedes`, a cost note and the Microsoft
-Learn "supported categories" page. Every name was checked against that page on 2026-10-09; the snapshot
-`supported-categories.snapshot.json` and `observability/tests/transport/test_category_policy.py` keep it honest.
+Learn "supported categories" page. The snapshot `supported-categories.snapshot.json` and `observability/tests/transport/test_category_policy.py` keep it honest.
 Refresh both when Microsoft adds categories.
 
 * `security`: audit essentials (Key Vault `AuditEvent`, SQL `SQLSecurityAuditEvents`, AKS `kube-audit-admin` +
@@ -44,14 +43,3 @@ Constraints:
 * Azure allows at most 5 diagnostic settings per resource. This module uses 2.
 * Event Hubs with public access denied must allow trusted Microsoft services. `telemetry-transport` configures
   this.
-
-Tests: `tests/diagnostics.tftest.hcl` covers routes, the category intersection, unsupported types, the tiers
-(cumulative, `supersedes`, per-resource tier, type overrides, the legacy allow-list), the self-referencing
-namespace, and negative tests (bad route, region mismatch, hub-level rule id, unknown tier).
-
-References:
-- https://learn.microsoft.com/azure/azure-monitor/reference/logs-index (per-type pages: `learn_page` in category-policy.json)
-- https://learn.microsoft.com/azure/azure-monitor/essentials/diagnostic-settings
-- https://learn.microsoft.com/azure/azure-monitor/reference/tables/containerappconsolelogs
-- https://learn.microsoft.com/azure/event-hubs/private-link-service#trusted-microsoft-services
-- https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/monitor_diagnostic_categories

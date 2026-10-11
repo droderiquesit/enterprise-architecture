@@ -14,7 +14,6 @@ Emits ##vso output `contract_changed` ('true' when the data differs from the pre
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import os
 import subprocess
@@ -26,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from tools.changeset.registry import load_registry  # noqa: E402
 from tools.changeset.store import open_store  # noqa: E402
 from tools.changeset.trees import WorkTree  # noqa: E402
+from tools.common import utc_now  # noqa: E402
 from tools.contracts.lib import (  # noqa: E402
     ContractError,
     envelope_key,
@@ -60,7 +60,7 @@ def build_envelope(tree, env: str, component, contract: str, data, commit: str, 
             "component": component.id,
             "commit": commit,
             "run_id": run_id,
-            "produced_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "produced_at": utc_now(),
         },
         "data": data,
     }

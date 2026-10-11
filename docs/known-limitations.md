@@ -1,8 +1,7 @@
 # Known limitations
 
-Collected from every layer README, `catalog/services/*.yaml`, `catalog/provider-gaps.yaml` and a review of the code
-on 2026-10-09. Each item names its source so it can be re-checked. Status words per
-[ADR-0001 section 11](architecture/ADR-0001-design-contract.md#11-testing-levels-and-evidence-vocabulary).
+Collected from the layer READMEs, `catalog/services/*.yaml` and `catalog/provider-gaps.yaml`; each item names its
+source. Status words per [ADR-0001 section 11](architecture/ADR-0001-design-contract.md#11-testing-levels-and-evidence-vocabulary).
 
 ## Nothing is deployed or verified
 
@@ -35,17 +34,8 @@ on 2026-10-09. Each item names its source so it can be re-checked. Status words 
 
 ## Provider gaps (AzAPI)
 
-Listed in `catalog/provider-gaps.yaml` (resolution `azapi`): Durable Task Scheduler (`Microsoft.DurableTask/schedulers`,
-`/taskHubs` @2026-02-01), HorizonDB (`Microsoft.HorizonDb/clusters`, `/administrators` @2026-05-01-preview, schema
-validation off), Functions on Container Apps (`Microsoft.App/containerApps` @2026-01-01, `kind = functionapp`; 2026-07-01
-exists in ARM but is not embedded in azapi 2.13), Cosmos Table data-plane RBAC
-(`Microsoft.DocumentDB/databaseAccounts/tableRoleAssignments` @2026-03-15), SQL MI free offer
-(`Microsoft.Sql/managedInstances` @2025-01-01, `pricingModel`), Logic Apps managed-identity API connection
-(`Microsoft.Web/connections` @2016-06-01, schema validation off), observability telemetry transport
-(`Microsoft.App/containerApps` @2025-07-01: `additionalPortMappings` and secret-volume item paths, owner
-obs-telemetry-transport) and the Datadog native integration (`Microsoft.Datadog/monitors/monitoredSubscriptions`
-@2025-06-11, owner obs-azure-integration, catalog entry `datadog-azure-native-integration`). Catalog-only gaps: Cloud
-Services ES, MongoDB Atlas, Confluent (other providers), Fabric items and retired services (not IaC-deployable).
+AzAPI is used only for the gaps listed in [`catalog/provider-gaps.yaml`](../catalog/provider-gaps.yaml) (resource
+type, API version, owner); catalog-only gaps (other providers, Fabric items, retired services) are listed there too.
 
 Other provider limitations: DocumentDB Entra user can only get role `root` (least-privilege gap); Managed Redis custom
 access policies not modelled (key-prefix boundaries by convention only); Service Fabric managed-cluster NSG rules not
@@ -215,9 +205,8 @@ key fallback) in their READMEs.
   Routing host) explicitly.
 * Two-pass settings: BFF `cors_allowed_origins` needs the SWA hostname (known after `deploy-frontend`); BFF
   `adapters` must be copied from `deploy-dbadapters` `adapters_json`; firewall egress switch is three applies.
-* Budgets alert only; they never cap spend. dev has no consumption budget at all (`budget.enabled: false`, owner
-  decision), so there are no cost alerts in dev; the minimal-profile estimate is ~600-650/month
-  ([deployment profiles](guides/deployment-profiles.md#minimal)).
+* Budgets alert only; they never cap spend, and dev has none (`budget.enabled: false`): no cost alerts in dev for a
+  ~600-650/month minimal profile ([deployment profiles](guides/deployment-profiles.md#minimal)).
 
 ## Application and telemetry limitations
 
@@ -238,34 +227,21 @@ key fallback) in their READMEs.
   `servicebus.process`; optional monitoring content: RUM monitor syntax not validated by the Datadog API; DBM per-node behaviour on PostgreSQL elastic
   clusters unverified; synthetic browser steps limited to simple assertions.
 * `telemetry_verify.py` is tested only against recorded API responses.
-* DogStatsD on managed runtimes (Datadog mode, observability 4.0.0): Container Apps use the serverless-init sidecar and
-  ACI container groups a Datadog Agent sidecar (both DogStatsD on `udp://localhost:8125`) - the 3.x ACI DogStatsD gap is
-  closed. Residual gaps where the tracer goes through the TCP-only APM gateway and DogStatsD (`hello.*` custom metrics,
-  runtime metrics) is unavailable: Container Apps jobs (run-to-completion, no sidecar), App Service workloads that opt
-  into `apm.mode = datadog` (the package has no Datadog App Service sidecar integration; App Service defaults to
-  OpenTelemetry instead), and Container Apps / ACI workloads that opt out with `managed_runtime_path = agent_gateway`.
-  Use `apm.mode = otel` for such a workload when its custom metrics matter.
-* ACI Datadog Agent sidecar (default on ACI): Datadog documents no ACI-specific integration; the package runs the
-  standard Agent image as a sidecar without a container runtime socket (no container autodiscovery / live containers /
-  container metrics - only its own checks, APM, DogStatsD and the file log source). Verified locally with Agent 7.84.2
-  and docker (`observability/tests/transport/test_agent_sidecar.py`: traces, DogStatsD, file logs to an OP Worker
-  stand-in, key from a mock DSV through the dsv-fetch secret backend); **not verified on Azure**: the uid 65532 init
-  container writing the binary into an ACI emptyDir, IMDS tokens from inside the Agent container, Agent hostname /
-  metadata detection on ACI. Each container group reports as one Datadog infrastructure host (and one APM host with
-  traces) - Datadog host-based billing; the sidecar adds 0.25 vCPU / 0.5 GB per group to the ACI bill (about USD 11 per
-  group-month at Linux pay-as-you-go rates; check current Azure pricing for the region).
-* Container Apps serverless-init (default on Container Apps): in **sidecar mode** serverless-init tails the app's log
-  file (`DD_SERVERLESS_LOG_PATH` on a shared EmptyDir); it cannot capture another container's stdout/stderr (that needs
-  the in-container wrapper mode, which the package does not use because the images would have to embed
-  `/datadog-init`). The apps therefore keep writing `LOG_FILE_PATH` on Container Apps. Sending these logs to the
-  Observability Pipelines Worker (`DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_*`) is not documented by Datadog for
-  serverless-init; it was verified locally with serverless-init 1.10.4 against the Worker's Datadog Agent source engine
-  (Vector `datadog_agent` source) - not on Azure. Without `aggregator.agent_logs_url` in the transport contract the
-  sidecars do not collect logs in observability_pipelines mode (no direct-to-intake bypass) and the plan warns.
+* No DogStatsD (custom / runtime metrics) where the tracer goes through the TCP-only APM gateway: Container Apps jobs,
+  App Service workloads that opt into `apm.mode = datadog`, and Container Apps / ACI workloads with
+  `managed_runtime_path = agent_gateway`. Use `apm.mode = otel` for such a workload when its custom metrics matter.
+* ACI Agent sidecar and Container Apps serverless-init (defaults, design in
+  [fleet collection](guides/datadog-fleet-collection.md#aci-agent-sidecar-and-container-apps-serverless-init)): verified
+  locally with docker only. Not documented by Datadog: an ACI-specific Agent integration and serverless-init shipping
+  to the Observability Pipelines Worker (`DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_*`). Not verified on Azure: IMDS /
+  `IDENTITY_ENDPOINT` tokens from the sidecars, Agent hostname detection on ACI, and the uid 65532 `dsv-fetch-install`
+  init container writing into ACI / Container Apps EmptyDir volumes.
+* Not verified live (needs a Datadog org): the Worker running the pipeline (it needs Remote Configuration), Kafka SASL
+  to Event Hubs, SSI and profiler injection in a real cluster, the APM gateway on Azure Container Apps.
 * Fluent Bit fallback (`log_pipeline = fluent_bit_direct`) on ACI and on Dedicated Container Apps profiles runs the
   dsv-fetch refresher container in loop mode (`dsv-fetch init --refresh-seconds 3600 --retry-seconds 30`, implemented
   and unit-tested in the 2.0.0 binary; the distroless image has no shell to loop in). Not run on Azure.
-* **Observability 4.0.0 items not verified on Azure** (implemented, mock-provider / local tests only):
+* **Observability 4.x items not verified on Azure** (mock-provider / local tests only):
   * VM / VMSS policy remediation: the ARM template's `reference(..., 'Full')` + filter lambda over
     `applicationProfile.galleryApplications` and the **partial PUT** (location + identity + application profile only)
     on VMs and especially VMSS (uniform and Flexible) - Microsoft documents the pattern, but the effect on every
@@ -278,23 +254,16 @@ key fallback) in their READMEs.
     Windows Server - cross-compiled and `go vet`-ed only; the PowerShell installer runs under `pwsh` on Linux in tests.
   * Apply identity rights for `obs-hosts`: role-definition write for the custom remediation role is not part of
     bootstrap's apply rights (deliberately); an operator grants it or pre-creates the role (observability/lab/hosts/README.md).
-  * ACI: the `dsv-fetch-install` init container (uid 65532, distroless nonroot) writing into the group's `emptyDir`
-    (writability by a non-root uid on ACI), the Agent re-installing it as root, IMDS from the Agent container.
   * Kubernetes: the Helm post-renderer (`postrender/dsv-fetch-init.sh`, POSIX sh + awk) on the real deploy agents and
     with Helm versions other than the tested ones; DSV accepting AKS workload-identity tokens (`xms_mirid`).
   * Batch: the job preparation task downloading the dsv-fetch release zip with the pool identity (only with
     `fluent_bit_direct`).
   * VMSS uniform keeps `upgrade_mode = Manual`: existing instances get the policy-added VM Application on the next
     per-instance update / reimage (new instances at once).
-* Accepted risk - VM / VMSS host identity: the per-environment user-assigned identity that the Azure Policy attaches to
-  tagged VMs / VMSS can be used by **any process on the host** (IMDS is reachable by every local process), not only by
-  the Datadog Agent. It can read exactly one DSV path - the Datadog API key, an ingest-only credential (it can submit
-  telemetry but cannot read data or change the Datadog org). Mitigations: one key per environment, rotation in DSV
-  (Agents re-read it through the secret backend), Datadog usage attribution / audit trail to spot misuse. Hosts that
-  need stronger isolation use a golden image with a host-specific key path (optional, docs/guides/datadog-fleet-collection.md).
-* Remote Configuration stays on for every Agent (required by the OP Worker; used for Fleet Automation inventory and
-  remote sampling). Who may change remote settings is governed in Datadog (RBAC permissions, Audit Trail), not in this
-  repository - see docs/guides/datadog-fleet-collection.md section 7.
+* Accepted risk: the VM / VMSS DSV-reader identity is usable by any process on the host (it reads only the ingest-only
+  API key) - [fleet collection section 8](guides/datadog-fleet-collection.md#8-accepted-risk-the-vm--vmss-dsv-reader-identity).
+  Remote Configuration stays on; who may change remote settings is governed in Datadog
+  ([section 7](guides/datadog-fleet-collection.md#7-remote-configuration-governance)).
 
 ## Documentation and links
 

@@ -1,25 +1,8 @@
 #!/usr/bin/env python3
 """Datadog-Agent variant of the local e2e run: TELEMETRY_SDK=datadog through a REAL Datadog Agent (7.84.2).
 
-Stack (tests/integration/datadog_agent/docker-compose.yml, project eh-dd): hello-catalog-api (Python; ddtrace enabled
-by hello_common, Continuous Profiler on), hello-orders-api (.NET; Datadog CLR profiler from a tracer home baked into a
-TEST-ONLY derived image), datadog/agent:7.84.2 (fake API key, every intake URL -> tap), tap (records + decodes payloads,
-forwards) -> intake (the existing mock intake, unmodified).
-
-Proves, against what the Agent actually sent:
-  dd-1  Agent healthy (version), app containers healthy
-  dd-2  traces from both tracers (ddtrace 4.15.6 / dd-trace-dotnet 3.55.1) reached the intake through the Agent
-  dd-3  one distributed trace spans .NET -> Python (same 128-bit trace id, catalog server span parented by the orders
-        HTTP client span)
-  dd-4  System.Diagnostics Activity span (Hello.App ActivitySource "send order-events") recorded by the Datadog .NET
-        tracer (DD_TRACE_OTEL_ENABLED=true) in the same trace
-  dd-5  health probes are not traced by the Python app (hello_common probe filter)
-  dd-6  log correlation: Agent-collected container logs carry trace_id/span_id/dd.trace_id/dd.span_id of received
-        traces, for both services; lines outside a span carry none
-  dd-7  hello.* custom metrics (DogStatsD -> Agent -> /api/v2/series) for both services, env tag, no id tags
-  dd-8  Continuous Profiler: profiles from both runtimes through the Agent's profiling proxy (/api/v2/profile)
-  dd-9  no OpenTelemetry SDK/exporter in datadog mode (start-up lines; no OTLP export attempts to the bogus endpoint)
-  dd-10 every Agent payload carried the (fake) API key; no payload left for a real Datadog endpoint
+Stack: tests/integration/datadog_agent/docker-compose.yml (project eh-dd); checks: CHECKS below; details:
+tests/integration/README.md "Datadog Agent variant".
 
 Usage: python3 tests/integration/run_dd_agent_e2e.py [--keep] [--reuse] [--rebuild]
 Evidence: docs/evidence/local/<UTC>-datadog-agent/ + docs/evidence/local/LATEST-datadog-agent.md
@@ -29,15 +12,15 @@ Status produced: locally-verified (real Datadog Agent, mock intake) - nothing re
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
-import subprocess
+import os
 import sys
 import time
-import urllib.error
-import urllib.request
+import traceback
 import uuid
 from pathlib import Path
+
+from e2elib import http, image_exists, logger, poll, sh, utc_iso, utc_stamp
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -65,38 +48,11 @@ CHECKS = [
 ]
 
 
-def log(msg: str) -> None:
-    print(f"[dd-e2e {dt.datetime.now(dt.UTC).strftime('%H:%M:%S')}] {msg}", flush=True)
-
-
-def sh(*args: str, check: bool = True, capture: bool = True, cwd: Path | None = None, timeout: int = 1800) -> str:
-    proc = subprocess.run(list(args), cwd=cwd, capture_output=capture, text=True, timeout=timeout, check=False)  # noqa: S603
-    if check and proc.returncode != 0:
-        raise RuntimeError(f"{' '.join(args)} failed ({proc.returncode}): {(proc.stderr or '')[-2000:]}")
-    return proc.stdout if capture else ""
+log = logger("dd-e2e")
 
 
 def compose(*args: str, check: bool = True) -> str:
-    return sh("docker", "compose", "-p", PROJECT, "-f", str(COMPOSE_DIR / "docker-compose.yml"), *args, check=check)
-
-
-def http(method: str, url: str, body: dict | None = None, headers: dict | None = None, timeout: float = 10) -> tuple[int, dict | list | str, dict]:
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method, headers={"content-type": "application/json", **(headers or {})})  # noqa: S310 - local test endpoints only
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-            raw = resp.read().decode()
-            status, hdrs = resp.status, dict(resp.headers)
-    except urllib.error.HTTPError as exc:
-        raw, status, hdrs = exc.read().decode(), exc.code, dict(exc.headers)
-    try:
-        return status, json.loads(raw), hdrs
-    except ValueError:
-        return status, raw, hdrs
-
-
-def image_exists(ref: str) -> bool:
-    return subprocess.run(["docker", "image", "inspect", ref], capture_output=True, check=False).returncode == 0  # noqa: S603, S607
+    return sh("docker", "compose", "-p", PROJECT, "-f", str(COMPOSE_DIR / "docker-compose.yml"), *args, check=check, timeout=1800).stdout
 
 
 def build(rebuild: bool) -> None:
@@ -106,38 +62,26 @@ def build(rebuild: bool) -> None:
         sh(str(HERE / "build_images.sh"), *missing, capture=False)
     if rebuild or missing or not image_exists(DERIVED):
         log(f"building {DERIVED} (Datadog .NET tracer home, sha256-verified download)")
-        import os
-
-        args = [
-            "docker",
-            "build",
-            "-q",
-            "-f",
-            str(COMPOSE_DIR / "Dockerfile.orders-api-ddtrace"),
-            "--build-arg",
-            f"BASE=hello-orders-api:{VERSION}",
-            "-t",
-            DERIVED,
-        ]
+        args = ["docker", "build", "-q", "-f", str(COMPOSE_DIR / "Dockerfile.orders-api-ddtrace"),
+                "--build-arg", f"BASE=hello-orders-api:{VERSION}", "-t", DERIVED]
         proxy = os.environ.get("HTTPS_PROXY")
         if proxy:
             args += ["--network", "host", "--build-arg", f"HTTPS_PROXY={proxy}", "--build-arg", f"https_proxy={proxy}"]
         ca = os.environ.get("CA_BUNDLE") or ("/root/.ccr/ca-bundle.crt" if Path("/root/.ccr/ca-bundle.crt").exists() else "")
         if ca:
             args += ["--secret", f"id=ca_bundle,src={ca}"]
-        sh(*args, str(COMPOSE_DIR))
+        sh(*args, str(COMPOSE_DIR), timeout=1800)
+
+
+def wait(fn, seconds: int, interval: float = 2) -> bool:
+    try:
+        return bool(poll(fn, seconds, interval))
+    except TimeoutError:
+        return False
 
 
 def wait_http(url: str, seconds: int) -> bool:
-    deadline = time.time() + seconds
-    while time.time() < deadline:
-        try:
-            if http("GET", url, timeout=3)[0] == 200:
-                return True
-        except OSError:
-            pass
-        time.sleep(2)
-    return False
+    return wait(lambda: http("GET", url, timeout=3)[0] == 200, seconds)
 
 
 def journey() -> dict:
@@ -150,12 +94,12 @@ def journey() -> dict:
         rec(f"catalog GET {path}", http("GET", CATALOG + path)[0])
     rec("catalog GET /products", http("GET", CATALOG + "/products?limit=5")[0])
     for _ in range(2):
-        status, _, hdrs = http("GET", CATALOG + "/products/SKU-0003")
+        status, hdrs, _ = http("GET", CATALOG + "/products/SKU-0003")
         rec("catalog GET /products/SKU-0003", status, {"x_cache": hdrs.get("X-Cache") or hdrs.get("x-cache")})
     orders = []
     for i in range(2):
         key = f"dd-e2e-{uuid.uuid4().hex[:16]}"
-        status, body, hdrs = http(
+        status, hdrs, body = http(
             "POST", ORDERS + "/orders", {"sku": f"SKU-000{i + 1}", "quantity": 2, "customer_ref": f"dd-e2e-{i}"}, {"Idempotency-Key": key}
         )
         rec("orders POST /orders", status, {"traceparent": hdrs.get("traceparent")})
@@ -173,7 +117,7 @@ def journey() -> dict:
 
 
 def tap_records() -> list[dict]:
-    return http("GET", TAP + "/_tap", timeout=20)[1]["records"]
+    return http("GET", TAP + "/_tap", timeout=20)[2]["records"]
 
 
 def all_spans(records: list[dict]) -> list[dict]:
@@ -188,7 +132,7 @@ def all_spans(records: list[dict]) -> list[dict]:
 
 
 def intake_logs() -> list[dict]:
-    events = http("GET", INTAKE + "/_received", timeout=20)[1]["events"]
+    events = http("GET", INTAKE + "/_received", timeout=20)[2]["events"]
     out = []
     for e in events:
         try:
@@ -347,7 +291,7 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
                 },
             )
             fam[family]["uploads"] += 1
-    mock_profiles = [o for o in http("GET", INTAKE + "/_received", timeout=20)[1]["others"] if o["path"].startswith("/api/v2/profile")]
+    mock_profiles = [o for o in http("GET", INTAKE + "/_received", timeout=20)[2]["others"] if o["path"].startswith("/api/v2/profile")]
     put("dd-8", "python" in fam and "dotnet" in fam and bool(mock_profiles), {"families": fam, "profile_posts_at_mock_intake": len(mock_profiles)})
 
     cat_log, ord_log = container_logs.get("catalog-api", ""), container_logs.get("orders-api", "")
@@ -368,7 +312,7 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
         },
     )
 
-    posts = [r for r in records]
+    posts = records
     keyless = [r["path"] for r in posts if not r.get("api_key_present") and not r["path"].startswith("/api/v2/profile")]
     profile_keyless = [r["path"] for r in profiles if not r.get("api_key_present")]
     agent_log = container_logs.get("datadog-agent", "")
@@ -387,8 +331,7 @@ def evaluate(meta: dict, records: list[dict], logs: list[dict], container_logs: 
 
 
 def write_evidence(meta: dict, results: dict, records: list[dict], logs: list[dict], journey_doc: dict, container_logs: dict[str, str]) -> Path:  # noqa: PLR0917
-    stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
-    ev = EVIDENCE_ROOT / f"{stamp}-datadog-agent"
+    ev = EVIDENCE_ROOT / f"{utc_stamp()}-datadog-agent"
     ev.mkdir(parents=True, exist_ok=True)
     passed = sum(1 for r in results.values() if r["result"] == "pass")
     summary = {"meta": meta, "passed": passed, "total": len(CHECKS), "results": results, "journey": journey_doc}
@@ -422,7 +365,7 @@ def write_evidence(meta: dict, results: dict, records: list[dict], logs: list[di
 
 
 def run(keep: bool = False, reuse: bool = False, rebuild: bool = False) -> dict:
-    meta: dict = {"started": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}
+    meta: dict = {"started": utc_iso()}
     results: dict = {}
     records: list[dict] = []
     logs: list[dict] = []
@@ -434,19 +377,13 @@ def run(keep: bool = False, reuse: bool = False, rebuild: bool = False) -> dict:
             compose("down", "-v", "--remove-orphans", check=False)
             log("starting stack")
             compose("up", "-d")
-        meta["agent_healthy"] = False
-        deadline = time.time() + 180
-        while time.time() < deadline:
-            status = sh("docker", "inspect", "-f", "{{.State.Health.Status}}", f"{PROJECT}-datadog-agent-1", check=False).strip()
-            if status == "healthy":
-                meta["agent_healthy"] = True
-                break
-            time.sleep(3)
+        meta["agent_healthy"] = wait(lambda: sh("docker", "inspect", "-f", "{{.State.Health.Status}}", f"{PROJECT}-datadog-agent-1",
+                                                check=False).stdout.strip() == "healthy", 180, 3)
         meta["agent_version"] = compose("exec", "-T", "datadog-agent", "agent", "version", "-n", check=False).strip()[-80:]
         meta["catalog_ready"] = wait_http(CATALOG + "/readyz", 120)
         meta["orders_ready"] = wait_http(ORDERS + "/readyz", 120)
         meta["images"] = {
-            ref: sh("docker", "image", "inspect", "-f", "{{.Id}}", ref, check=False).strip()[:19]
+            ref: sh("docker", "image", "inspect", "-f", "{{.Id}}", ref, check=False).stdout.strip()[:19]
             for ref in (f"hello-catalog-api:{VERSION}", DERIVED, "datadog/agent:7.84.2")
         }
         http("DELETE", TAP + "/_tap")
@@ -454,12 +391,7 @@ def run(keep: bool = False, reuse: bool = False, rebuild: bool = False) -> dict:
         log("journey")
         journey_doc = journey()
         log("waiting for traces, logs, metrics and profiles to flush through the Agent (<= 150 s)")
-        deadline = time.time() + 150
-        while time.time() < deadline:
-            records, logs = tap_records(), intake_logs()
-            if ready(records, logs):
-                time.sleep(5)
-                break
+        if wait(lambda: ready(tap_records(), intake_logs()), 150, 5):
             time.sleep(5)
         records, logs = tap_records(), intake_logs()
         # start-up lines were emitted before the reset: re-read them from the container output for dd-6/dd-9
@@ -473,13 +405,11 @@ def run(keep: bool = False, reuse: bool = False, rebuild: bool = False) -> dict:
         logs += [{"agent_service": None, "ddsource": "container-stdout", "ddtags": None, "line": s} for s in startup]
         results = evaluate(meta, records, logs, container_logs, journey_doc)
     except Exception as exc:  # report, then tear down
-        import traceback
-
         meta["error"] = f"{type(exc).__name__}: {exc}"
         meta["traceback"] = traceback.format_exc()[-3000:]
         log(f"ERROR {meta['error']}")
     finally:
-        meta["finished"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+        meta["finished"] = utc_iso()
         ev = write_evidence(meta, results, records, logs, journey_doc, container_logs)
         if not keep:
             compose("down", "-v", "--remove-orphans", check=False)

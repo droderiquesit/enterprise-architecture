@@ -1,10 +1,5 @@
-# Datadog Agent on the lab VMs / VMSS (observability 4.0.0) through modules/host-agents:
-#   VM Applications datadog-agent-linux / datadog-agent-windows in this environment's Compute Gallery, enforced by an
-#   Azure Policy initiative on every VM / VMSS tagged datadog:enabled = true (platform roots set the tag). No
-#   per-host Terraform, no run commands, no CustomScript. settings.mode = direct is the escape hatch for
-#   environments without Azure Policy rights.
-# No secret passes through this root: the Agent on each host resolves api_key: ENC[dsv://...] with the dsv-fetch
-# binary (secret backend) and the per-environment DSV-reader identity foundation-identity identities["obs-host-agent"].
+# Datadog Agent on the lab VMs / VMSS through modules/host-agents (VM Applications + Azure Policy on hosts tagged
+# datadog:enabled = true). No secret passes through this root.
 module "naming" {
   source          = "../../../foundation/modules/naming"
   prefix          = var.environment.name_prefix

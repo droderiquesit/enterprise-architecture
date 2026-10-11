@@ -1,22 +1,14 @@
 # Azure platform and control-plane logs in Datadog
 
-Status (ADR-0001 §11): **implemented** and **locally-verified**. That covers:
+The logs Azure writes about your subscriptions and resources: the subscription **Activity Log**, **resource logs**
+(Key Vault audit, AKS control plane, SQL audit, Storage, WAF, ...) and, optionally, **Microsoft Entra ID** logs.
+Application logs are a separate path ([README-transport.md](../../observability/modules/README-transport.md)). The
+default consumer of the hubs is the **Observability Pipelines Worker**; the Fluent Bit aggregator is the
+`fluent_bit_direct` alternative with the same shaping, and exactly one of them reads the hubs.
 
-* Terraform `test` with mock providers;
-* the Observability Pipelines VRL programs executed with the Vector CLI on recorded Event Hubs batches;
-* the 2.x Fluent Bit aggregator end to end in docker against a local Kafka broker and a mock Datadog intake.
-
-Nothing here has been **deployed** or **verified** against a live Azure subscription or Datadog organisation. The
-Worker's Kafka source against Event Hubs in particular is unverified.
-
-Since package 3.0.0 (current: 4.0.0) the default consumer of the hubs is the **Datadog Observability Pipelines Worker**
-(`log_pipeline = observability_pipelines`). The Fluent Bit aggregator described in parts of this guide is the
-`fluent_bit_direct` alternative. Both apply the same shaping. Exactly one of them reads the hubs.
-
-This guide covers the logs that Azure itself writes about your subscriptions and resources: the subscription
-**Activity Log**, **resource logs** (Key Vault audit, AKS control plane, SQL audit, Storage, WAF, ...) and,
-optionally, **Microsoft Entra ID** logs. Application logs are a separate path
-([README-transport.md](../../observability/modules/README-transport.md)).
+Status: implemented and locally verified (mock-provider tests, the VRL run with the Vector CLI on recorded Event Hubs
+batches, the Fluent Bit aggregator in docker against a local Kafka broker). Not deployed; the Worker's Kafka source
+against Event Hubs is unverified.
 
 ## 1. How the logs travel
 
@@ -43,16 +35,11 @@ resource logs ─────────────(per-resource settings, mod
 | Resource-scope tags (platform logs carry the owner's team, service, ...) | onboarding manifests | `modules/fleet-inventory` `scope_tags` -> pipeline `azure.scope_tags` |
 | Datadog dashboard, log-based metrics, index, monitors | your organisation (not the package since 3.0.0) | optional 2.x content: `observability/extras/content/modules/log-management`, archetype `azure-platform-logs` |
 
-**Why a dedicated `activity-logs` hub.** Control-plane logs are low volume but security relevant. Resource logs (HTTP
-logs, storage reads, AKS API server) can burst by orders of magnitude. With separate hubs a data-plane burst cannot
-fill the partitions, retention or consumer lag that audit events depend on, the subscription and tenant settings
-target a fixed hub, and the hub can be given a different retention. Cost: an extra hub in an Event Hubs Standard
-namespace has no hub charge (you pay throughput units and ingress events, which are the same events either way). Set
-`activity_logs_hub = ""` to share the platform hub instead.
-
-The Activity Log and Entra ID are not regional resources, so their Event Hub may be in any region of the tenant
-(Microsoft: the same-region rule applies "if the resource is regional"). Resource logs must use a hub in the
-resource's region; `modules/diagnostic-settings` enforces this when locations are known.
+**Why a dedicated `activity-logs` hub:** a burst of resource logs cannot fill the partitions, retention or consumer
+lag that low-volume, security-relevant audit events depend on; an extra hub in a Standard namespace costs nothing
+extra. `activity_logs_hub = ""` shares the platform hub. The Activity Log and Entra ID are not regional, so their hub
+may be in any region; resource logs need a hub in the resource's region (enforced by `modules/diagnostic-settings`
+when locations are known).
 
 ## 2. What is collected
 
@@ -66,10 +53,8 @@ resource's region; `modules/diagnostic-settings` enforces this when locations ar
 ### 2.2 Resource logs: tier policy
 
 `modules/diagnostic-settings/category-policy.json` maps each resource type to categories in three cumulative tiers.
-Every category was checked against Microsoft Learn's *Supported resource log categories* page for the type on
-2026-10-09 (`learn_page` in the file; snapshot in `supported-categories.snapshot.json`, enforced by
-`observability/tests/transport/test_category_policy.py`). At plan time the list is intersected with
-`azurerm_monitor_diagnostic_categories`, so a category a resource does not offer is skipped.
+Categories are checked against Microsoft Learn's per-type page (`learn_page`; snapshot enforced by
+`test_category_policy.py`) and intersected at plan time with `azurerm_monitor_diagnostic_categories`.
 
 | Resource type | security (audit essentials) | + standard | + verbose (high volume) |
 |---|---|---|---|
@@ -128,14 +113,9 @@ Both are server parameters owned by the platform roots.
 
 ### 2.4 Not collected
 
-* **NSG and VNet flow logs.** These are Network Watcher features written to a Storage account only; they cannot
-  stream to Event Hubs. NSG flow logs retire on 2027-09-30 and no new ones can be created since 2025-06-30. The
-  package does not fake this path. Options:
-  1. Datadog **automated log forwarding**, which reads storage accounts (`ddlogstorage*`) with forwarders running as
-     Container Apps jobs. It creates its own diagnostic settings, which conflicts with ADR rule 4.
-  2. A custom blob-triggered forwarder on the flow-log storage account.
-
-  Neither is implemented here.
+* **NSG and VNet flow logs:** Network Watcher writes them to Storage only (no Event Hubs; NSG flow logs retire
+  2027-09-30). Options, neither implemented: Datadog automated log forwarding (creates its own diagnostic settings,
+  conflicting with ADR rule 4) or a custom blob-triggered forwarder.
 * Application Insights and Log Analytics tables (no LAW data export path is configured).
 * Metrics: platform metrics come from the Datadog Azure integration, never from diagnostic settings.
 
@@ -157,12 +137,9 @@ expect.
 | `aks_audit.*` | additive copy of `verb`, `objectRef.{resource,subresource,namespace,name}`, `user.username`, `responseStatus.code`, `auditID` from the kube-audit JSON string; `properties.log` itself is untouched |
 | `message` | only from non-JSON text fields (e.g. `resultDescription`, `properties.Log`); a JSON `properties.log` is never copied into `message` (the parser would lift audit fields to the top level) |
 
-Verified convention: Datadog's Entra ID integration pipeline (`integrations-core`
-`azure_active_directory/assets/logs/azure.activedirectory.yaml`) filters on `source:azure.activedirectory`, reads
-`operationName`, `category`, `callerIpAddress`, `properties.*` and `level`, and remaps them with
-`preserveSource: true`. Raw attributes therefore stay queryable next to `evt.name` / `evt.outcome`. The pipelines
-for other `azure.*` sources are not public; the package assumes the same behaviour, so its monitors query the raw
-attributes (`@operationName`, `@resultType`, `@category`).
+Datadog's Entra ID log pipeline remaps with `preserveSource: true`, so raw attributes stay queryable next to
+`evt.name` / `evt.outcome`; the other `azure.*` pipelines are not public, so queries use the raw attributes
+(`@operationName`, `@resultType`, `@category`).
 
 Other shaping behaviour (the pipeline's VRL and the aggregator's Lua implement the same rules):
 
@@ -253,11 +230,9 @@ obs-azure-integration:
   # log_management: accepted and ignored since 3.0.0 (content moved to extras/content)
 ```
 
-Monitors are not part of the package since 3.0.0. The 2.x lab content (`observability/extras/content/onboarding/dev/azure-platform-logs.yaml`, profile `azure-platform-logs`) defines:
-successful deletes in `eh-rg-*`, RBAC role-assignment changes, diagnostic setting deleted, Policy deny spike,
-Service Health for Sweden Central, Key Vault 401/403 burst, AKS exec / port-forward / attach, Entra sign-in failures
-(only when `params.entra_enabled`), and no Azure platform logs. The service is onboarded only when the
-`obs-telemetry-transport` Event Hub exists (`presence_ref`). Runbook anchors:
+Optional 2.x monitors for these logs (deletes, RBAC changes, diagnostic setting deleted, Policy deny spike, Service
+Health, Key Vault 401/403, AKS exec, Entra sign-in failures) are in
+`observability/extras/content/onboarding/dev/azure-platform-logs.yaml`; runbook anchors:
 [alerts/azure-platform-logs.md](../runbooks/alerts/azure-platform-logs.md).
 
 ## 8. Verification (after deploy)
@@ -291,23 +266,8 @@ own throughput, errors and buffer usage in Datadog Observability Pipelines.
 * Destroying the pipeline definition (`modules/observability-pipeline`) stops processing. Logs already in Datadog
   follow the index retention; archived files stay in the storage account.
 
-## 10. References (checked 2026-10-09)
+## 10. Key references
 
-* Datadog Azure forwarder source: https://github.com/DataDog/datadog-serverless-functions/blob/master/azure/activity_logs_monitoring/index.js
-* Datadog Entra ID log pipeline: https://github.com/DataDog/integrations-core/blob/master/azure_active_directory/assets/logs/azure.activedirectory.yaml
-* Datadog Entra ID integration: https://docs.datadoghq.com/integrations/azure_active_directory/
-* Datadog automated log forwarding: https://docs.datadoghq.com/logs/guide/azure-automated-log-forwarding/
-* Datadog Event Hub log forwarding: https://docs.datadoghq.com/logs/guide/azure-event-hub-log-forwarding/
-* Datadog logs API limits (1 MB per log, 5 MB payload, 1000 entries): https://docs.datadoghq.com/api/latest/logs/
-* Datadog Cloud SIEM rule "Azure diagnostic setting deleted or disabled" (`@evt.name`, `@resourceId`): https://docs.datadoghq.com/security/default_rules/azure-diagnostic-setting-deleted-or-disabled
-* Activity Log schema (Event Hubs format, Service Health properties): https://learn.microsoft.com/azure/azure-monitor/platform/activity-log-schema
-* Diagnostic settings (regional destination rule): https://learn.microsoft.com/azure/azure-monitor/platform/diagnostic-settings
-* Supported resource log categories: https://learn.microsoft.com/azure/azure-monitor/reference/logs-index (per-type pages in `category-policy.json`)
-* Entra diagnostic settings (Security Administrator): https://learn.microsoft.com/entra/identity/monitoring-health/howto-configure-diagnostic-settings
-* Entra log categories and volume note: https://learn.microsoft.com/entra/identity/monitoring-health/concept-diagnostic-settings-logs-options and https://learn.microsoft.com/entra/identity/monitoring-health/howto-stream-logs-to-event-hub
-* Entra licensing for monitoring and health: https://learn.microsoft.com/entra/fundamentals/licensing#microsoft-entra-monitoring-and-health
-* Sign-in log export needs P1/P2 (Sentinel connector prerequisites): https://learn.microsoft.com/azure/sentinel/connect-azure-active-directory
-* SQL auditing to Event Hubs / master database: https://learn.microsoft.com/azure/templates/microsoft.sql/servers/auditingsettings
-* AKS resource logs (kube-audit vs kube-audit-admin): https://learn.microsoft.com/azure/aks/monitor-aks-reference
-* NSG flow logs retirement and VNet flow logs: https://learn.microsoft.com/azure/network-watcher/nsg-flow-logs-overview
-* Azure Native integration logs and tag rules: https://learn.microsoft.com/azure/partner-solutions/metrics-logs
+* Datadog Azure forwarder (record shape ported to VRL / Lua): https://github.com/DataDog/datadog-serverless-functions/blob/master/azure/activity_logs_monitoring/index.js
+* Entra diagnostic settings and licensing: https://learn.microsoft.com/entra/identity/monitoring-health/howto-configure-diagnostic-settings
+* Per-type log categories: https://learn.microsoft.com/azure/azure-monitor/reference/logs-index (pages in `category-policy.json`)
