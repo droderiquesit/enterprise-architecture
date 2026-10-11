@@ -140,7 +140,7 @@ run "datadog_identity_on_node_type" {
   }
   assert {
     condition     = length(azurerm_role_assignment.sfrp_subnet) == 1 && azapi_resource.cluster[0].body.properties.subnetId == var.foundation_network.subnets["sfmc"].id
-    error_message = "byo_vnet unset: the SFRP principal keeps the pre-4.1 BYO VNet behaviour."
+    error_message = "byo_vnet unset: the SFRP principal implies BYO VNet."
   }
 }
 

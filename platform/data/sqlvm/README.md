@@ -7,7 +7,7 @@
 ## Purpose
 Windows Server 2022 VM from the Marketplace image **MicrosoftSQLServer : sql2022-ws2022 : sqldev-gen2 : latest**
 (SQL Server 2022 Developer — free license for dev/test, PAYG license type), registered with the SQL IaaS Agent
-extension (`azurerm_mssql_virtual_machine`; management modes were removed in March 2023), private connectivity only,
+extension (`azurerm_mssql_virtual_machine`), private connectivity only,
 separate data (F:) and log (G:) disks, daily auto-shutdown, and database `adapter` + least-privileged SQL login
 `dbadapter` created by `scripts/init-adapter-db.ps1` (VM run command).
 

@@ -13,8 +13,8 @@
 - Workload-profiles environment injected into `aca-infra` with profiles **`Consumption`** and
   **`dedicated-d4`** (type `D4`, min 0 / max 1 by default).
 - `logs_destination = "azure-monitor"`: system/console logs flow only where diagnostic settings send them
-  (owned by obs-diagnostics → `ContainerAppSystemLogs`; application logs are tailed by Datadog serverless-init inside each app, ADR-0001 §13
-  observability 4.0.0; the Fluent Bit sidecar only with `log_pipeline = fluent_bit_direct`).
+  (owned by obs-diagnostics → `ContainerAppSystemLogs`; application logs are tailed by Datadog serverless-init inside each app, ADR-0001 §13;
+  the Fluent Bit sidecar only with `log_pipeline = fluent_bit_direct`).
 - Internal mode: a private DNS zone named after the generated `default_domain` with `*` and `@` A records →
   environment static IP, linked to the spoke (and hub) VNets. The zone name only exists after the environment
   is created, so it is owned here (not by foundation-network) and dies with the environment.

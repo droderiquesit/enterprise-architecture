@@ -19,7 +19,7 @@ Ubuntu 24.04, `Standard_B2s_v2`, OS baseline cloud-init (shared module), no publ
 boot diagnostics, extension operations enabled (VM agent). `lifecycle.ignore_changes` covers `instances` (owned by
 autoscale), `extension` (never managed here) and, on the uniform set, `gallery_application`.
 
-**Datadog Agent enrolment** (observability 4.0.0, ADR-0001 §3 rule 3 amendment): both sets carry the tag
+**Datadog Agent enrolment** (ADR-0001 §3 rule 3): both sets carry the tag
 `datadog:enabled = "true"` and keep the DSV-reader identity `obs-host-agent` in `identity_ids`; the `obs-hosts` Azure
 Policy adds the pinned Datadog Agent VM Application to the model (azurerm has no `gallery_application` block on
 orchestrated sets, so there is nothing to ignore there). `datadog.enabled = false` opts out.

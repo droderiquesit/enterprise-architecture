@@ -32,8 +32,7 @@ identity needs Contributor on the scale set (the apply identity has it at subscr
 
 ### Managed DevOps Pools
 
-**No AzAPI needed**: azurerm 5.9 provides `azurerm_managed_devops_pool`, `azurerm_dev_center`, `azurerm_dev_center_project`
-(the "azurerm gap" in the original brief no longer exists). Inputs: `organization_url`, `projects`, `parallelism`,
+azurerm 5.9 resources (`azurerm_managed_devops_pool`, `azurerm_dev_center`, `azurerm_dev_center_project`). Inputs: `organization_url`, `projects`, `parallelism`,
 `max_concurrency`, `sku_name` (default `Standard_D2ads_v5`), well-known image `ubuntu-24.04/latest`,
 `devops_infrastructure_principal_id` (`az ad sp list --display-name DevOpsInfrastructure --query "[].id" -o tsv`).
 The identity that creates the pool must be a member of the Azure DevOps organization with pool-management permission;

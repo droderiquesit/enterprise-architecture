@@ -22,7 +22,7 @@
   `admin_ssh_public_key` is set, otherwise `random_password` kept **only in state** (never output).
 - `patch_mode = AutomaticByPlatform`, boot diagnostics (managed storage), `allow_extension_operations = true`
   (the Entra login extension and VM Applications need the VM agent).
-- **Datadog Agent enrolment** (observability 4.0.0, ADR-0001 §3 rule 3 amendment): hosts carry the tag
+- **Datadog Agent enrolment** (ADR-0001 §3 rule 3): hosts carry the tag
   `datadog:enabled = "true"` and keep the DSV-reader identity `obs-host-agent` in `identity_ids`; the `obs-hosts`
   Azure Policy (DeployIfNotExists) adds the pinned Datadog Agent VM Application, which this root ignores
   (`lifecycle.ignore_changes = [gallery_application]`). `datadog.enabled = false` opts the hosts out.

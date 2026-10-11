@@ -6,8 +6,7 @@
   section 14: all keys and secrets live in Delinea DSV; workloads read DSV directly with these identities). Secret
   **values** are never managed by Terraform.
 - **Consumes:** nothing (the global `secrets` section of `environments/<env>/environment.yaml`: DSV tenant, tld, auth provider).
-- **Produces:** `foundation-identity` **v2** ([schema](../../catalog/contracts/foundation-identity.v2.schema.json)); v1 (Key
-  Vault ids, `secret_ids`) was removed. Consumers: `foundation-secrets` (DSV users/permissions), platform roots
+- **Produces:** `foundation-identity` **v2** ([schema](../../catalog/contracts/foundation-identity.v2.schema.json)). Consumers: `foundation-secrets` (DSV users/permissions), platform roots
   (identities; data roots also `secrets.base_path`/`refs`), observability and application roots.
 - **Status:** implemented (validate + mock tests + `tests/test_no_secret_values.py`). Not deployed.
 
@@ -31,7 +30,7 @@ References are not secrets (ADR-0001 section 14) and may appear in contracts, st
 | hello-bff, hello-orders-api, hello-catalog-api, hello-functions | `fault-token`, `datadog-api-key` (dsv-fetch for Datadog serverless-init on Container Apps; the Fluent Bit sidecar only with `log_pipeline = fluent_bit_direct`) |
 | hello-inventory-api, hello-dbadapter | `fault-token`, `datadog-api-key` (Container Apps serverless-init as above; on VMs / VMSS the policy-enrolled Agent uses `obs-host-agent`); hello-dbadapter also the adapter secrets |
 | hello-durable, hello-traffic | `fault-token` |
-| hello-worker | — (runs on AKS / VM / VMSS: the node Agent uses `obs-collector`, policy-enrolled host Agents use `obs-host-agent`; observability 4.0.0 installs no Fluent Bit on hosts) |
+| hello-worker | — (runs on AKS / VM / VMSS: the node Agent uses `obs-collector`, policy-enrolled host Agents use `obs-host-agent`) |
 | hello-partner-sim | `fault-token`, `datadog-api-key` (the `dsv-fetch` init container of the ACI Datadog Agent sidecar reads it with this identity) |
 | hello-jobs | `datadog-api-key` (Batch job preparation task installs Fluent Bit with the pool identity, ADR-0001 §13) |
 | obs-collector (Fluent Bit aggregator / OTel gateway) | `datadog-api-key`, `fluentbit-shared-key` (aggregator forward input), `eventhub-fluentbit-listen` (kafka input) |
@@ -67,8 +66,7 @@ DBM authentication per engine (Datadog [managed authentication guide](https://do
 **MySQL Flexible** and **SQL Server on VM** → SQL auth passwords above (`settings.dbm_sql_auth_engines`).
 
 Set and rotate values with the DSV CLI (`dsv secret create|update --path <prefix>/<env>/<name> --data @file.json`) -
-[docs/runbooks/secret-rotation.md](../../docs/runbooks/secret-rotation.md). The former `scripts/set-secrets.sh` (Key Vault)
-was removed.
+[docs/runbooks/secret-rotation.md](../../docs/runbooks/secret-rotation.md).
 
 ## Settings (`components.foundation-identity`)
 
@@ -84,8 +82,7 @@ Global `secrets` (environment.yaml, rendered as `var.secrets`): `provider = deli
 
 ## Cost at defaults
 
-≈ USD 0/month in Azure: managed identities and role assignments are free (the former Key Vault + private endpoint,
-≈ USD 8/month, is gone). Delinea DSV is a separate subscription (catalog entry `delinea-dsv`).
+≈ USD 0/month in Azure: managed identities and role assignments are free. Delinea DSV is a separate subscription (catalog entry `delinea-dsv`).
 
 ## Teardown and data retention
 

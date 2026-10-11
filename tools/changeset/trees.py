@@ -180,6 +180,7 @@ class GitTree(Tree):
 
     def __del__(self):
         batch = getattr(self, "_batch", None)
-        if batch is not None and batch.poll() is None:
+        if batch is not None:
             batch.stdin.close()
+            batch.stdout.close()
             batch.wait()

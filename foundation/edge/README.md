@@ -51,7 +51,7 @@ No application data. App Gateway/Front Door/APIM/Firewall delete in 5–30 minut
 
 ## TLS certificate (Delinea DSV)
 
-Key Vault certificate references are no longer available (ADR-0001 section 14: all secrets live in Delinea DSV). The
+No Key Vault certificate references (ADR-0001 section 14: all secrets live in Delinea DSV). The
 App Gateway listener certificate is the DSV secret `<prefix>/<env>/appgw-tls-pfx` (element `value` = base64 PFX,
 element `password` = PFX password), fetched by the pipeline (`tools/secrets/fetch.py exec`, deploy agent identity) and
 passed as `TF_VAR_tls_certificate_pfx` / `TF_VAR_tls_certificate_password` to the terraform process only.
